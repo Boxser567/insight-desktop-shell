@@ -2,10 +2,26 @@
   "name": "dsh-desktop",
   "version": "0.1.0",
   "description": "A cross-platform desktop shell for DeepSeek Harness.",
+  "private": true,
   "type": "module",
   "main": "./out/main/index.js",
-  "author": "DSH Desktop contributors",
+  "author": "DataElement",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dataelement/dsh-desktop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dataelement/dsh-desktop/issues"
+  },
+  "homepage": "https://github.com/dataelement/dsh-desktop#readme",
+  "keywords": [
+    "deepseek",
+    "harness",
+    "electron",
+    "desktop",
+    "agent"
+  ],
   "scripts": {
     "postinstall": "patch-package && install-electron --no",
     "dev": "electron-vite dev",
