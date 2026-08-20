@@ -155,7 +155,7 @@ build/                Application icon assets
 
 ## Upstream version and patches
 
-The project currently pins `@deepseek-ai/dsh@0.1.0-rc.8`. The initial provider list and desktop preset-transfer surface are captured with [`patch-package`](https://github.com/ds300/patch-package) under [`patches/`](patches/) rather than relying on untracked changes in `node_modules`. Sidebar branding and the phone-pairing entry now fill the `sidebar.brand.*` and `sidebar.footer.action` slots that Harness exposes, so they need no patch at all.
+The project currently pins `@deepseek-ai/dsh@0.1.0-rc.8`. The initial provider list and desktop preset-transfer surface are captured with [`patch-package`](https://github.com/ds300/patch-package) under [`patches/`](patches/) rather than relying on untracked changes in `node_modules`.
 
 When upgrading DSH:
 

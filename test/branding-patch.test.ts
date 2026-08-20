@@ -1,9 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { hasPatch, patchPath, projectRoot } from './patch-path'
 
-const shellClient = path.join(projectRoot, 'packages', 'dsh-desktop-shell', 'client.js')
+const projectRoot = path.resolve(import.meta.dirname, '..')
 
 describe('DSH Desktop sidebar branding', () => {
   it('matches the native window surface to the initial Harness theme', async () => {
@@ -24,42 +23,34 @@ describe('DSH Desktop sidebar branding', () => {
     expect(main).toContain("height: '24px'")
   })
 
-  it('leaves the official single-occupant brand slots to Harness', async () => {
-    const client = await readFile(shellClient, 'utf8')
-
-    expect(client).not.toContain("name: 'sidebar.brand.mark'")
-    expect(client).not.toContain("name: 'sidebar.brand.name'")
-    expect(client).toContain("name: 'sidebar.footer.action'")
-  })
-
-  it('keeps the desktop shell out of ui-sidebar so upgrades carry no patch', async () => {
-    const composition = await readFile(
-      path.join(projectRoot, 'build', 'dsh-desktop.patch.yml'),
+  it('pairs the DSH logo with the original Harness wordmark in the expanded sidebar', async () => {
+    const patch = await readFile(
+      path.join(projectRoot, 'patches', '@deepseek-ai+dsh-client-ui-sidebar+0.1.0-rc.8.patch'),
       'utf8'
     )
-    const manifest = JSON.parse(
-      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
-    ) as { dependencies: Record<string, string> }
 
-    expect(composition).toContain('name: dsh-desktop-shell')
-    expect(manifest.dependencies['dsh-desktop-shell']).toBe('file:packages/dsh-desktop-shell')
-    expect(hasPatch('@deepseek-ai/dsh-client-ui-sidebar')).toBe(false)
-  })
-
-  it('registers the shell plugin where the profile link farm can find it', async () => {
-    // Harness builds $DSH_HOME/profiles/node_modules by walking the *dsh*
-    // package manifest, not this project's. A local plugin that is only a
-    // dependency here resolves during tests and fails at runtime with
-    // ERR_MODULE_NOT_FOUND, so it has to be named in that manifest too.
-    const dshPatch = await readFile(patchPath('@deepseek-ai/dsh'), 'utf8')
-
-    expect(dshPatch).toContain('+    "dsh-desktop-shell": "0.1.0",')
-    expect(dshPatch).toContain('+    "dsh-desktop-market-installer": "0.1.0",')
+    expect(patch).toContain('DshDesktopLogo')
+    expect(patch).toContain('DshDesktopBrand')
+    expect(patch).toContain('BrandWordmark')
+    expect(patch).toContain('/dsh-desktop-logo-light.png')
+    expect(patch).toContain('/dsh-desktop-logo-dark.png')
+    expect(patch).toContain('brandWordmark')
+    expect(patch).toContain('gap:4px')
+    expect(patch).toContain('transform:translateX(-24px)')
+    expect(patch).not.toContain('children: "DSH Desktop"')
+    expect(patch).toContain('height = 20')
+    expect(patch).toContain('height: 18')
+    expect(patch).toContain('.hHd-Xa_brand:hover')
+    expect(patch).toContain('padding-top:32px')
+    expect(patch).toContain('navigator.userAgent.includes("Macintosh")')
+    expect(patch).toContain('.hHd-Xa_root.hHd-Xa_collapsed{padding:46px 22px 6px}')
+    expect(patch).toContain('body[data-ds-dark-theme] .dshDesktopLogoLight')
+    expect(patch).toContain('body[data-ds-dark-theme] .dshDesktopLogoDark')
   })
 
   it('uses an 80px macOS rail that clears the traffic lights', async () => {
     const patch = await readFile(
-      patchPath('@deepseek-ai/dsh-client-ui-layout'),
+      path.join(projectRoot, 'patches', '@deepseek-ai+dsh-client-ui-layout+0.1.0-rc.8.patch'),
       'utf8'
     )
 
@@ -68,19 +59,19 @@ describe('DSH Desktop sidebar branding', () => {
   })
 
   it('provides a sidebar phone entry that follows expanded and connected state', async () => {
-    const client = await readFile(shellClient, 'utf8')
+    const patch = await readFile(
+      path.join(projectRoot, 'patches', '@deepseek-ai+dsh-client-ui-sidebar+0.1.0-rc.8.patch'),
+      'utf8'
+    )
     const preload = await readFile(path.join(projectRoot, 'src', 'preload', 'index.ts'), 'utf8')
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
 
-    expect(client).toContain("name: 'sidebar.footer.action'")
-    expect(client).toContain('if (!wide && !connected) return null')
-    expect(client).toContain('bridge.openPhonePairing()')
-    expect(client).toContain('bridge.phoneStatus()')
-    expect(preload).toContain("openPhonePairing: (): Promise<void> => ipcRenderer.invoke('mobile:open-pairing')")
-    expect(preload).toContain("phoneStatus: (): Promise<{ connected?: boolean }> => ipcRenderer.invoke('mobile:status')")
-    expect(preload).not.toContain('data-dsh-sidebar-root')
-    expect(preload).not.toContain('mountMobileButton')
-    expect(preload).not.toContain('refreshMobileStatus')
+    expect(patch).toContain('data-dsh-sidebar-root')
+    expect(patch).toContain('data-dsh-sidebar-wide')
+    expect(patch).toContain('data-dsh-sidebar-footer')
+    expect(preload).toContain("button.hidden = !wide && !phoneConnected")
+    expect(preload).toContain("button.classList.toggle('is-connected', phoneConnected)")
+    expect(preload).toContain("ipcRenderer.invoke('mobile:open-pairing')")
     expect(main).toContain("ipcMain.handle('mobile:open-pairing'")
     expect(main).toContain("ipcMain.handle('mobile:status'")
   })
