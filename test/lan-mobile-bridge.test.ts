@@ -50,14 +50,78 @@ describe('LAN mobile bridge pairing surface', () => {
     expect(await response.text()).toContain('Connect your phone')
   })
 
-  it('does not expose the mobile UI before pairing', async () => {
+  it('offers a reconnect page without exposing mobile APIs before approval', async () => {
     const bridge = new LanMobileBridge({
       harnessUrl: () => 'http://127.0.0.1:9999'
     })
     bridges.push(bridge)
     const snapshot = await bridge.start()
     const response = await fetch(`http://127.0.0.1:${snapshot.port}/`)
-    expect(response.status).toBe(401)
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('Reconnect')
+    const blocked = await fetch(`http://127.0.0.1:${snapshot.port}/api/status`)
+    expect(blocked.status).toBe(401)
+  })
+
+  it('retries an expired approval inside the same Home Screen browser context', async () => {
+    let reconnectRequests = 0
+    let now = Date.now()
+    const bridge = new LanMobileBridge({
+      harnessUrl: () => 'http://127.0.0.1:9999',
+      now: () => now,
+      onReconnectRequested: () => {
+        reconnectRequests += 1
+      }
+    })
+    bridges.push(bridge)
+    const snapshot = await bridge.start()
+    const reconnect = await fetch(`http://127.0.0.1:${snapshot.port}/reconnect`)
+    const reconnectHtml = await reconnect.text()
+    let pairingId = /let id="([^"]+)"/.exec(reconnectHtml)?.[1]
+    expect(pairingId).toBeTruthy()
+    expect(reconnectHtml).toContain('Approve this phone')
+    expect(reconnectRequests).toBe(1)
+
+    now += 5 * 60 * 1000 + 1
+    const expired = await fetch(
+      `http://127.0.0.1:${snapshot.port}/pair/status?id=${pairingId}`
+    )
+    expect(await expired.json()).toEqual({ expired: true })
+    const retried = await fetch(`http://127.0.0.1:${snapshot.port}/pair/retry`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: `http://127.0.0.1:${snapshot.port}`
+      },
+      body: '{}'
+    })
+    const retriedPairing = (await retried.json()) as { id: string }
+    expect(retriedPairing.id).toBeTruthy()
+    expect(retriedPairing.id).not.toBe(pairingId)
+    expect(reconnectRequests).toBe(2)
+    pairingId = retriedPairing.id
+
+    // Opening the desktop approval window starts the bridge again. That must
+    // not rotate away the pending request the phone is already polling.
+    const reopened = await bridge.start()
+    expect(reopened.port).toBe(snapshot.port)
+    const pending = await fetch(`http://127.0.0.1:${snapshot.port}/desktop/pending`)
+    expect(await pending.json()).toMatchObject({ id: pairingId })
+    await fetch(`http://127.0.0.1:${snapshot.port}/desktop/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: pairingId, approved: true })
+    })
+    const approved = await fetch(
+      `http://127.0.0.1:${snapshot.port}/pair/status?id=${pairingId}`
+    )
+    expect(await approved.clone().json()).toEqual({ approved: true })
+    const cookie = approved.headers.get('set-cookie')!.split(';', 1)[0]!
+    const mobile = await fetch(`http://127.0.0.1:${snapshot.port}/`, {
+      headers: { cookie }
+    })
+    expect(mobile.status).toBe(200)
+    expect(await mobile.text()).toContain('DSH Mobile')
   })
 
   it('requires approval, then forwards only allowlisted RPC methods', async () => {
@@ -85,7 +149,7 @@ describe('LAN mobile bridge pairing surface', () => {
     const token = new URL(snapshot.pairingUrl!).searchParams.get('token')
     const pairingPage = await fetch(`http://127.0.0.1:${snapshot.port}/pair?token=${token}`)
     const pairingHtml = await pairingPage.text()
-    const pairingId = /const id="([^"]+)"/.exec(pairingHtml)?.[1]
+    const pairingId = /let id="([^"]+)"/.exec(pairingHtml)?.[1]
     expect(pairingId).toBeTruthy()
     const pending = await fetch(`http://127.0.0.1:${snapshot.port}/desktop/pending`)
     expect(await pending.json()).toMatchObject({ id: pairingId, remoteAddress: '127.0.0.1' })
@@ -137,6 +201,11 @@ describe('LAN mobile bridge pairing surface', () => {
     })
     expect(mobileStatus.status).toBe(200)
     expect(await mobileStatus.json()).toEqual({ connected: true })
+    const samePhoneHomeScreen = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`
+    )
+    expect(samePhoneHomeScreen.status).toBe(200)
+    expect(await samePhoneHomeScreen.json()).toEqual({ connected: true })
 
     const blocked = await fetch(`http://127.0.0.1:${snapshot.port}/api/rpc`, {
       method: 'POST',
@@ -156,5 +225,61 @@ describe('LAN mobile bridge pairing surface', () => {
       headers: { cookie }
     })
     expect(disconnectedStatus.status).toBe(401)
+    const disconnectedHomeScreen = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`
+    )
+    expect(disconnectedHomeScreen.status).toBe(401)
+    const legacyHomeScreenCookie = `dsh_mobile=${'a'.repeat(43)}`
+    const unknownHomeScreenBeforeApproval = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`,
+      { headers: { cookie: legacyHomeScreenCookie } }
+    )
+    expect(unknownHomeScreenBeforeApproval.status).toBe(401)
+
+    const reconnectSnapshot = bridge.snapshot()
+    const reconnectToken = new URL(reconnectSnapshot.pairingUrl!).searchParams.get('token')
+    const reconnectPage = await fetch(
+      `http://127.0.0.1:${snapshot.port}/pair?token=${reconnectToken}`
+    )
+    const reconnectHtml = await reconnectPage.text()
+    const reconnectId = /let id="([^"]+)"/.exec(reconnectHtml)?.[1]
+    expect(reconnectId).toBeTruthy()
+    await fetch(`http://127.0.0.1:${snapshot.port}/desktop/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: reconnectId, approved: true })
+    })
+    const reapproved = await fetch(
+      `http://127.0.0.1:${snapshot.port}/pair/status?id=${reconnectId}`
+    )
+    expect(await reapproved.clone().json()).toEqual({ approved: true })
+    const newCookie = reapproved.headers.get('set-cookie')!.split(';', 1)[0]!
+
+    const restoredHomeScreen = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`,
+      { headers: { cookie } }
+    )
+    expect(restoredHomeScreen.status).toBe(200)
+    expect(await restoredHomeScreen.json()).toEqual({ connected: true })
+    const newlyPairedSafari = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`,
+      { headers: { cookie: newCookie } }
+    )
+    expect(newlyPairedSafari.status).toBe(200)
+    const homeScreenWithoutSharedCookies = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`
+    )
+    expect(homeScreenWithoutSharedCookies.status).toBe(200)
+    const restoredLegacyHomeScreen = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`,
+      { headers: { cookie: legacyHomeScreenCookie } }
+    )
+    expect(restoredLegacyHomeScreen.status).toBe(200)
+    const lateHomeScreenCookie = `dsh_mobile=${'b'.repeat(43)}`
+    const restoredAfterSafariPaired = await fetch(
+      `http://127.0.0.1:${snapshot.port}/api/status`,
+      { headers: { cookie: lateHomeScreenCookie } }
+    )
+    expect(restoredAfterSafariPaired.status).toBe(200)
   })
 })

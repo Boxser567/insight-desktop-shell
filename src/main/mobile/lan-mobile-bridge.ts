@@ -4,7 +4,12 @@ import { networkInterfaces } from 'node:os'
 import type { AddressInfo } from 'node:net'
 import { readFile } from 'node:fs/promises'
 import QRCode from 'qrcode'
-import { renderDesktopPairingPage, renderMobilePage, renderPairingWaitPage } from './lan-mobile-pages'
+import {
+  renderDesktopPairingPage,
+  renderMobilePage,
+  renderMobileReconnectPage,
+  renderPairingWaitPage
+} from './lan-mobile-pages'
 
 const MAX_BODY_BYTES = 64 * 1024
 const PAIRING_TTL_MS = 5 * 60 * 1000
@@ -25,6 +30,7 @@ export interface LanMobileBridgeOptions {
   appIconPath?: string
   port?: number
   now?: () => number
+  onReconnectRequested?: () => void
 }
 
 export interface LanMobileBridgeSnapshot {
@@ -38,6 +44,7 @@ export interface LanMobileBridgeSnapshot {
 
 interface MobileSession {
   token: string
+  remoteAddress: string
 }
 
 interface PendingPairing {
@@ -53,6 +60,7 @@ export class LanMobileBridge {
   private pairingToken?: string
   private pairingExpiresAt?: number
   private readonly sessions = new Map<string, MobileSession>()
+  private readonly suspendedSessions = new Map<string, MobileSession>()
   private readonly pendingPairings = new Map<string, PendingPairing>()
   private readonly now: () => number
 
@@ -62,8 +70,9 @@ export class LanMobileBridge {
 
   async start(): Promise<LanMobileBridgeSnapshot> {
     if (this.server) {
-      this.rotatePairingToken()
-      this.pendingPairings.clear()
+      if (!this.pairingToken || !this.pairingExpiresAt || this.pairingExpiresAt < this.now()) {
+        this.rotatePairingToken()
+      }
       return this.snapshot()
     }
     this.rotatePairingToken()
@@ -88,6 +97,7 @@ export class LanMobileBridge {
     this.pairingToken = undefined
     this.pairingExpiresAt = undefined
     this.sessions.clear()
+    this.suspendedSessions.clear()
     this.pendingPairings.clear()
     if (!server) return
     await new Promise<void>((resolve) => server.close(() => resolve()))
@@ -191,6 +201,7 @@ export class LanMobileBridge {
 
     if (request.method === 'POST' && url.pathname === '/desktop/disconnect') {
       if (!isLoopbackAddress(remoteAddress)) return this.text(response, 403, 'Desktop only.')
+      for (const [token, session] of this.sessions) this.suspendedSessions.set(token, session)
       this.sessions.clear()
       this.pendingPairings.clear()
       this.rotatePairingToken()
@@ -206,8 +217,25 @@ export class LanMobileBridge {
       return this.json(response, 200, { ok: true })
     }
 
+    if (request.method === 'GET' && url.pathname === '/disconnected') {
+      return this.html(response, renderMobileReconnectPage(this.locale()))
+    }
+
+    if (request.method === 'GET' && url.pathname === '/reconnect') {
+      const pending = this.reconnectPairing(remoteAddress)
+      this.options.onReconnectRequested?.()
+      return this.html(response, renderPairingWaitPage(pending.id, this.locale()))
+    }
+
+    if (request.method === 'POST' && url.pathname === '/pair/retry') {
+      this.verifySameOrigin(request)
+      const pending = this.reconnectPairing(remoteAddress)
+      this.options.onReconnectRequested?.()
+      return this.json(response, 200, { id: pending.id, expiresAt: pending.expiresAt })
+    }
+
     if (request.method === 'GET' && url.pathname === '/pair') {
-      if (this.authorized(request)) {
+      if (this.authorized(request, remoteAddress)) {
         response.statusCode = 302
         response.setHeader('location', '/')
         response.end()
@@ -239,8 +267,12 @@ export class LanMobileBridge {
       }
       if (pending.decision !== true) return this.json(response, 200, { pending: true })
       const token = randomBytes(32).toString('base64url')
-      this.sessions.clear()
-      this.sessions.set(token, { token })
+      for (const [savedToken, session] of this.suspendedSessions) {
+        if (session.remoteAddress !== pending.remoteAddress) continue
+        this.sessions.set(savedToken, session)
+        this.suspendedSessions.delete(savedToken)
+      }
+      this.sessions.set(token, { token, remoteAddress: pending.remoteAddress })
       this.pendingPairings.delete(pending.id)
       this.pairingToken = undefined
       this.pairingExpiresAt = undefined
@@ -248,7 +280,15 @@ export class LanMobileBridge {
       return this.json(response, 200, { approved: true })
     }
 
-    if (!this.authorized(request)) return this.text(response, 401, 'Pair your phone again.')
+    if (!this.authorized(request, remoteAddress)) {
+      this.rememberMobileContext(request, remoteAddress)
+      if (!this.authorized(request, remoteAddress)) {
+        if (request.method === 'GET' && url.pathname === '/') {
+          return this.html(response, renderMobileReconnectPage(this.locale()))
+        }
+        return this.text(response, 401, 'Pair your phone again.')
+      }
+    }
     if (request.method === 'GET' && url.pathname === '/api/status') {
       return this.json(response, 200, { connected: true })
     }
@@ -280,11 +320,50 @@ export class LanMobileBridge {
     return left.length === right.length && timingSafeEqual(left, right)
   }
 
-  private authorized(request: IncomingMessage): boolean {
+  private reconnectPairing(remoteAddress: string): PendingPairing {
+    const current = [...this.pendingPairings.values()].find(
+      (item) =>
+        item.remoteAddress === remoteAddress &&
+        item.decision === undefined &&
+        item.expiresAt >= this.now()
+    )
+    if (current) return current
+    const pending = {
+      id: randomUUID(),
+      remoteAddress,
+      expiresAt: this.now() + PAIRING_TTL_MS
+    }
+    this.pendingPairings.set(pending.id, pending)
+    return pending
+  }
+
+  private authorized(request: IncomingMessage, remoteAddress: string): boolean {
+    const token = this.mobileToken(request)
+    if (token && this.sessions.has(token)) return true
+    return [...this.sessions.values()].some((session) => session.remoteAddress === remoteAddress)
+  }
+
+  private mobileToken(request: IncomingMessage): string | undefined {
     const cookie = request.headers.cookie ?? ''
-    const match = /(?:^|;\s*)dsh_mobile=([^;]+)/.exec(cookie)
-    if (!match) return false
-    return this.sessions.has(match[1]!)
+    return /(?:^|;\s*)dsh_mobile=([^;]+)/.exec(cookie)?.[1]
+  }
+
+  private rememberMobileContext(request: IncomingMessage, remoteAddress: string): void {
+    const token = this.mobileToken(request)
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return
+    const sameDeviceIsActive = [...this.sessions.values()].some(
+      (session) => session.remoteAddress === remoteAddress
+    )
+    if (sameDeviceIsActive) {
+      this.sessions.set(token, { token, remoteAddress })
+      this.suspendedSessions.delete(token)
+      return
+    }
+    if (!this.suspendedSessions.has(token) && this.suspendedSessions.size >= 16) {
+      const oldest = this.suspendedSessions.keys().next().value
+      if (oldest) this.suspendedSessions.delete(oldest)
+    }
+    this.suspendedSessions.set(token, { token, remoteAddress })
   }
 
   private verifySameOrigin(request: IncomingMessage): void {
