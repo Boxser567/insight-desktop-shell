@@ -96,6 +96,7 @@ describe('agent preset package transfer', () => {
     expect(patch).toContain('https://www.dshdesktop.com/preset/')
     expect(patch).toContain('"_blank", "noopener,noreferrer"')
     expect(patch).toContain('AgentPresetSection_module_css_default.sectionActions')
+    expect(patch).toContain('.rtSEdW_hiddenInput{display:none}')
   })
 
   it('keeps a large mode roster searchable, grouped, compact, and connected to Awesome Presets', async () => {
