@@ -26,7 +26,11 @@ import {
   resetPluginProfile,
   uninstallPluginFromProfile
 } from './state/plugin-recovery'
-import { isAbortedNavigationError, shouldLoadHarnessUrl } from './window-navigation'
+import {
+  desktopHarnessUrl,
+  isAbortedNavigationError,
+  shouldLoadHarnessUrl
+} from './window-navigation'
 import {
   checkForUpdates,
   registerUpdateHandlers,
@@ -403,12 +407,13 @@ function createWindow(): BrowserWindow {
 
 async function openHarness(url: string): Promise<void> {
   const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
+  const rendererUrl = desktopHarnessUrl(url, process.platform)
   if (shouldLoadHarnessUrl(window.webContents.getURL(), url)) {
     const navigationVersion = ++mainWindowNavigationVersion
     rendererPluginFailureLogs = []
     window.webContents.stop()
     try {
-      await window.loadURL(url)
+      await window.loadURL(rendererUrl)
     } catch (error) {
       if (navigationVersion !== mainWindowNavigationVersion) return
       if (isAbortedNavigationError(error)) return
@@ -928,8 +933,12 @@ async function bootstrap(): Promise<void> {
       dark: dshBrandLogoPath('dark')
     },
     appIconPath: desktopIconPath(),
-    port: developmentBuild ? 43128 : 43127
+    port: developmentBuild ? 43128 : 43127,
+    onReconnectRequested: () => {
+      void showMobilePairing().catch(showUnexpectedError)
+    }
   })
+  void mobileBridge.start().catch(showUnexpectedError)
   ipcMain.handle('directory-picker:open', async (event) => {
     if (
       !mainWindow ||
