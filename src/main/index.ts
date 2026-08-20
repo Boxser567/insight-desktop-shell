@@ -13,20 +13,17 @@ import {
   type IpcMainInvokeEvent,
   type MessageBoxOptions
 } from 'electron'
-import {
-  extractDuplicateLoaderEntryId,
-  extractFailureCause,
-  extractPluginFailureReferences,
-  extractSlotConflictName,
-  HarnessRuntime
-} from './runtime/harness-runtime'
+import { extractFailureCause, HarnessRuntime } from './runtime/harness-runtime'
 import { removeProfilePluginWithDsh } from './runtime/profile-plugin-command'
 import { LanMobileBridge } from './mobile/lan-mobile-bridge'
+import {
+  detectPluginRecovery,
+  PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS
+} from './plugin-recovery-detection'
 import { secureWindow } from './security'
 import { ensureLaunchRoot } from './state/launch-root'
 import {
   resetPluginProfile,
-  resolveProfileRecoveryPlugins,
   uninstallPluginFromProfile
 } from './state/plugin-recovery'
 import { isAbortedNavigationError, shouldLoadHarnessUrl } from './window-navigation'
@@ -67,6 +64,15 @@ let mainWindowNavigationVersion = 0
 let rendererPluginFailureLogs: string[] = []
 let pluginRecoveryRemovedPlugins: string[] = []
 let pluginRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined
+
+function appendRendererPluginFailureLog(message: string): void {
+  const trimmed = message.trim()
+  if (!trimmed) return
+  const logLine = `[stderr] ${trimmed}`
+  if (rendererPluginFailureLogs.at(-1) === logLine) return
+  rendererPluginFailureLogs.push(logLine)
+  rendererPluginFailureLogs = rendererPluginFailureLogs.slice(-50)
+}
 
 function cancelPluginRecoverySessionReset(): void {
   if (pluginRecoveryResetTimer) clearTimeout(pluginRecoveryResetTimer)
@@ -350,10 +356,7 @@ function createWindow(): BrowserWindow {
     if (details.level !== 'error') return
     const sourceUrl = details.sourceId || window.webContents.getURL()
     if (!sourceUrl.startsWith('http://127.0.0.1:')) return
-    const message = details.message.trim()
-    if (!message) return
-    rendererPluginFailureLogs.push(`[stderr] ${message}`)
-    rendererPluginFailureLogs = rendererPluginFailureLogs.slice(-50)
+    appendRendererPluginFailureLog(details.message)
   })
   installPluginRecoveryNavigation(window)
   secureWindow(window)
@@ -580,6 +583,7 @@ function showUnexpectedError(error: unknown): void {
 async function showPluginRecovery(options?: {
   message?: string
   logs?: readonly string[]
+  followRendererLogs?: boolean
 }): Promise<void> {
   if (failureRecoveryVisible || quitting) return
   failureRecoveryVisible = true
@@ -589,33 +593,36 @@ async function showPluginRecovery(options?: {
   cancelPluginRecoverySessionReset()
   const removedPlugins = pluginRecoveryRemovedPlugins
   let notice: string | undefined
+  let waitForRendererEvidence = options?.followRendererLogs === true
 
   try {
     while (!quitting) {
-      let snapshot = runtime.snapshot()
-      const logs = options?.logs ?? snapshot.logs
+      const snapshot = runtime.snapshot()
       const message = options?.message ?? snapshot.message
-      const offendingPlugins = await resolveProfileRecoveryPlugins(
+      const detection = await detectPluginRecovery({
         dshHome,
-        extractPluginFailureReferences(logs),
-        extractDuplicateLoaderEntryId(logs),
-        extractSlotConflictName(logs),
-        removedPlugins
-      )
+        initialLogs: options?.logs ?? snapshot.logs,
+        readLatestLogs: options?.followRendererLogs ? () => rendererPluginFailureLogs : undefined,
+        excludedPlugins: removedPlugins,
+        slotProviderNodeModulesPaths: [join(app.getAppPath(), 'node_modules')],
+        timeoutMs: waitForRendererEvidence ? PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS : 0
+      })
+      waitForRendererEvidence = false
       const action = await waitForPluginRecoveryAction({
         snapshot: {
           ...snapshot,
-          message: message || snapshot.message
+          message: message || snapshot.message,
+          logs: detection.logs
         },
-        plugins: offendingPlugins,
+        plugins: detection.plugins,
         removedPlugins,
         notice
       })
       notice = undefined
 
-      if (action === 'uninstall' && offendingPlugins.length > 0) {
+      if (action === 'uninstall' && detection.plugins.length > 0) {
         const failedPlugins: string[] = []
-        for (const plugin of offendingPlugins) {
+        for (const plugin of detection.plugins) {
           const removed = await uninstallPluginFromProfile(dshHome, plugin, async (pluginName) => {
             const result = await removeProfilePluginWithDsh(
               {
@@ -641,7 +648,7 @@ async function showPluginRecovery(options?: {
           }
         }
 
-        if (failedPlugins.length === offendingPlugins.length) {
+        if (failedPlugins.length === detection.plugins.length) {
           notice = isChinese
             ? '未能修改插件配置。请打开 Harness 日志查看详情，或选择其他恢复方式。'
             : 'The plugin profile could not be updated. Open the Harness log for details or choose another recovery option.'
@@ -886,12 +893,10 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('harness:open-recovery', async (event, frontendErrorMessage?: unknown) => {
     assertTrustedMainWindowEvent(event)
     const message = typeof frontendErrorMessage === 'string' ? frontendErrorMessage : undefined
-    const logs = [
-      ...rendererPluginFailureLogs,
-      ...(message ? [`[stderr] ${message}`] : [])
-    ]
+    if (message) appendRendererPluginFailureLog(message)
+    const logs = [...rendererPluginFailureLogs]
     appendRendererPluginRecoveryLog(logs)
-    void showPluginRecovery({ message, logs })
+    void showPluginRecovery({ message, logs, followRendererLogs: true })
     return { ok: true }
   })
   ipcMain.removeHandler('recovery:action')

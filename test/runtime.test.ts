@@ -8,6 +8,7 @@ import {
   extractOffendingPlugin,
   extractOffendingPlugins,
   extractPluginFailureReferences,
+  extractSlotConflictName,
   formatExitCode,
   updateReadyStability
 } from '../src/main/runtime/harness-runtime'
@@ -252,6 +253,15 @@ describe('offending plugin extraction', () => {
       '@deepseek-ai/dsh-client-ui-directory-picker-browse'
     ])
     expect(extractOffendingPlugins(logs)).toEqual([])
+  })
+
+  it('extracts a generic renderer slot conflict without registration identities', () => {
+    const logs = [
+      '[stderr] UI slot "conversation.hero.workspace.directoryFlow" has duplicate registrations from conflicting plugins.'
+    ]
+    expect(extractSlotConflictName(logs)).toBe(
+      'conversation.hero.workspace.directoryFlow'
+    )
   })
 
   it('returns undefined when no plugin error is matched', () => {
