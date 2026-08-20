@@ -43,7 +43,7 @@ import {
 } from '../shared/desktop-menu'
 import { buildPluginRecoveryViewModel } from './plugin-recovery-view'
 
-type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart'
+type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh'
 
 const PLUGIN_RECOVERY_ACTIONS = new Set<PluginRecoveryAction>([
   'uninstall',
@@ -64,6 +64,8 @@ let mainWindowNavigationVersion = 0
 let rendererPluginFailureLogs: string[] = []
 let pluginRecoveryRemovedPlugins: string[] = []
 let pluginRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined
+let pendingFrontendPluginRecovery = false
+let pendingFrontendPluginRecoveryMessage: string | undefined
 
 function appendRendererPluginFailureLog(message: string): void {
   const trimmed = message.trim()
@@ -72,6 +74,23 @@ function appendRendererPluginFailureLog(message: string): void {
   if (rendererPluginFailureLogs.at(-1) === logLine) return
   rendererPluginFailureLogs.push(logLine)
   rendererPluginFailureLogs = rendererPluginFailureLogs.slice(-50)
+}
+
+function queuePendingFrontendPluginRecovery(message?: string): void {
+  pendingFrontendPluginRecovery = true
+  if (message) pendingFrontendPluginRecoveryMessage = message
+  resolvePluginRecoveryAction('refresh')
+}
+
+function takePendingFrontendPluginRecovery(): {
+  pending: boolean
+  message?: string
+} {
+  const pending = pendingFrontendPluginRecovery
+  const message = pendingFrontendPluginRecoveryMessage
+  pendingFrontendPluginRecovery = false
+  pendingFrontendPluginRecoveryMessage = undefined
+  return { pending, message }
 }
 
 function cancelPluginRecoverySessionReset(): void {
@@ -593,21 +612,35 @@ async function showPluginRecovery(options?: {
   cancelPluginRecoverySessionReset()
   const removedPlugins = pluginRecoveryRemovedPlugins
   let notice: string | undefined
-  let waitForRendererEvidence = options?.followRendererLogs === true
+  let recoveryMessage = options?.message
+  let recoveryLogs = options?.logs
+  let followRendererLogs = options?.followRendererLogs === true
+  let waitForRendererEvidence = followRendererLogs
+
+  const applyPendingFrontendEvidence = (): boolean => {
+    const pending = takePendingFrontendPluginRecovery()
+    if (!pending.pending) return false
+    recoveryMessage = pending.message ?? recoveryMessage
+    recoveryLogs = [...rendererPluginFailureLogs]
+    followRendererLogs = true
+    waitForRendererEvidence = false
+    return true
+  }
 
   try {
     while (!quitting) {
       const snapshot = runtime.snapshot()
-      const message = options?.message ?? snapshot.message
+      const message = recoveryMessage ?? snapshot.message
       const detection = await detectPluginRecovery({
         dshHome,
-        initialLogs: options?.logs ?? snapshot.logs,
-        readLatestLogs: options?.followRendererLogs ? () => rendererPluginFailureLogs : undefined,
+        initialLogs: recoveryLogs ?? snapshot.logs,
+        readLatestLogs: followRendererLogs ? () => rendererPluginFailureLogs : undefined,
         excludedPlugins: removedPlugins,
         slotProviderNodeModulesPaths: [join(app.getAppPath(), 'node_modules')],
         timeoutMs: waitForRendererEvidence ? PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS : 0
       })
       waitForRendererEvidence = false
+      if (applyPendingFrontendEvidence()) continue
       const action = await waitForPluginRecoveryAction({
         snapshot: {
           ...snapshot,
@@ -620,7 +653,10 @@ async function showPluginRecovery(options?: {
       })
       notice = undefined
 
-      if (action === 'uninstall' && detection.plugins.length > 0) {
+      if (action === 'refresh') {
+        applyPendingFrontendEvidence()
+        continue
+      } else if (action === 'uninstall' && detection.plugins.length > 0) {
         const failedPlugins: string[] = []
         for (const plugin of detection.plugins) {
           const removed = await uninstallPluginFromProfile(dshHome, plugin, async (pluginName) => {
@@ -660,6 +696,7 @@ async function showPluginRecovery(options?: {
             : `These plugins could not be removed: ${failedPlugins.join(', ')}`
         }
         await launchHarness()
+        if (applyPendingFrontendEvidence()) continue
         if (runtime.snapshot().phase === 'ready') {
           schedulePluginRecoverySessionReset()
           return
@@ -667,6 +704,7 @@ async function showPluginRecovery(options?: {
         continue
       } else if (action === 'restart') {
         await launchHarness()
+        if (applyPendingFrontendEvidence()) continue
         if (runtime.snapshot().phase === 'ready') {
           schedulePluginRecoverySessionReset()
           return
@@ -684,6 +722,16 @@ async function showPluginRecovery(options?: {
     showUnexpectedError(error)
   } finally {
     failureRecoveryVisible = false
+    const pending = takePendingFrontendPluginRecovery()
+    if (pending.pending && !quitting) {
+      queueMicrotask(() => {
+        void showPluginRecovery({
+          message: pending.message,
+          logs: [...rendererPluginFailureLogs],
+          followRendererLogs: true
+        })
+      })
+    }
   }
 }
 
@@ -896,6 +944,10 @@ async function bootstrap(): Promise<void> {
     if (message) appendRendererPluginFailureLog(message)
     const logs = [...rendererPluginFailureLogs]
     appendRendererPluginRecoveryLog(logs)
+    if (failureRecoveryVisible) {
+      queuePendingFrontendPluginRecovery(message)
+      return { ok: true }
+    }
     void showPluginRecovery({ message, logs, followRendererLogs: true })
     return { ok: true }
   })

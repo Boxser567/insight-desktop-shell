@@ -128,6 +128,18 @@ describe('GitHub release contract', () => {
     expect(main).toContain("} else if (action === 'restart') {")
   })
 
+  it('replays frontend plugin failures that arrive during an active recovery', async () => {
+    const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+
+    expect(main).toContain("resolvePluginRecoveryAction('refresh')")
+    expect(main).toContain('if (applyPendingFrontendEvidence()) continue')
+    expect(main).toMatch(
+      /if \(failureRecoveryVisible\) \{\s+queuePendingFrontendPluginRecovery\(message\)/
+    )
+    expect(main).toContain('queueMicrotask(() => {')
+    expect(main).toContain('logs: [...rendererPluginFailureLogs]')
+  })
+
   it('publishes update metadata for installed desktop builds', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
