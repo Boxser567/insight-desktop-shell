@@ -505,38 +505,49 @@ export class LanMobileBridge {
   }
 
   private async consumeMux(base: string, signal: AbortSignal): Promise<void> {
-    const response = await fetch(new URL('/api/events.mux', base), {
-      headers: { accept: 'text/event-stream' },
-      signal
-    })
-    if (!response.ok || !response.body) {
-      throw new Error(`Harness event stream returned HTTP ${response.status}.`)
-    }
-    this.pendingQuestions.clear()
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (!signal.aborted) {
-      const { done, value } = await reader.read()
-      if (done) return
-      buffer += decoder.decode(value, { stream: true })
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        this.consumeMuxFrame(frame)
-        boundary = buffer.indexOf('\n\n')
+    // The network Harness exposes mux events only as a downlink WebSocket;
+    // ordinary GET requests intentionally return 426 with no SSE fallback.
+    const url = new URL('/api/events.mux', base)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    await new Promise<void>((resolve, reject) => {
+      const socket = new WebSocket(url)
+      let settled = false
+      const cleanup = (): void => {
+        signal.removeEventListener('abort', handleAbort)
+        socket.removeEventListener('open', handleOpen)
+        socket.removeEventListener('message', handleMessage)
+        socket.removeEventListener('close', handleClose)
+        socket.removeEventListener('error', handleError)
       }
-    }
+      const finish = (error?: Error): void => {
+        if (settled) return
+        settled = true
+        cleanup()
+        if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+          socket.close()
+        }
+        if (error) reject(error)
+        else resolve()
+      }
+      const handleAbort = (): void => finish()
+      const handleOpen = (): void => this.pendingQuestions.clear()
+      const handleMessage = (event: MessageEvent): void => {
+        if (typeof event.data === 'string') this.consumeMuxEnvelope(event.data)
+      }
+      const handleClose = (): void => {
+        finish(signal.aborted ? undefined : new Error('Harness mux WebSocket closed.'))
+      }
+      const handleError = (): void => finish(new Error('Harness mux WebSocket failed.'))
+      socket.addEventListener('open', handleOpen)
+      socket.addEventListener('message', handleMessage)
+      socket.addEventListener('close', handleClose, { once: true })
+      socket.addEventListener('error', handleError, { once: true })
+      signal.addEventListener('abort', handleAbort, { once: true })
+      if (signal.aborted) handleAbort()
+    })
   }
 
-  private consumeMuxFrame(frame: string): void {
-    const data = frame
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart())
-      .join('\n')
-    if (!data) return
+  private consumeMuxEnvelope(data: string): void {
     let envelope: unknown
     try {
       envelope = JSON.parse(data)

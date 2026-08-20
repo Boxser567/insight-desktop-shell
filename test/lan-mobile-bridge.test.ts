@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createServer, type ServerResponse } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
+import { createRequire } from 'node:module'
 import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
 import {
   isPrivateAddress,
   LanMobileBridge,
@@ -9,9 +11,33 @@ import {
 
 const bridges: LanMobileBridge[] = []
 const servers: ReturnType<typeof createServer>[] = []
+interface TestWebSocket {
+  send(data: string): void
+}
+interface TestWebSocketServer {
+  handleUpgrade(
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    callback: (client: TestWebSocket) => void
+  ): void
+  close(callback: (error?: Error) => void): void
+}
+const WebSocketServer = createRequire(import.meta.url)('ws').WebSocketServer as new (options: {
+  noServer: boolean
+}) => TestWebSocketServer
+const webSocketServers: TestWebSocketServer[] = []
 
 afterEach(async () => {
   await Promise.all(bridges.splice(0).map((bridge) => bridge.stop()))
+  await Promise.all(
+    webSocketServers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve()))
+        )
+    )
+  )
   await Promise.all(
     servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
   )
@@ -315,18 +341,32 @@ describe('LAN mobile bridge pairing surface', () => {
 describe('LAN mobile bridge user questions', () => {
   it('replays pending questions and forwards the desktop answer protocol', async () => {
     const responses: unknown[] = []
-    const muxResponses: ServerResponse[] = []
+    const muxClients: TestWebSocket[] = []
     const harness = createServer(async (request, response) => {
       if (request.method === 'GET' && request.url === '/api/events.mux') {
-        muxResponses.push(response)
-        response.writeHead(200, {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-          connection: 'keep-alive'
-        })
-        response.write(': connected\n\n')
-        response.write(
-          `data: ${JSON.stringify({
+        response.statusCode = 426
+        response.end()
+        return
+      }
+      if (request.method === 'POST' && request.url === '/api/respond') {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        responses.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify({ accepted: true }))
+        return
+      }
+      response.statusCode = 404
+      response.end()
+    })
+    const muxServer = new WebSocketServer({ noServer: true })
+    webSocketServers.push(muxServer)
+    harness.on('upgrade', (request, socket, head) => {
+      if (request.url !== '/api/events.mux') return socket.destroy()
+      muxServer.handleUpgrade(request, socket, head, (client) => {
+        muxClients.push(client)
+        client.send(
+          JSON.stringify({
             type: 'server-request',
             rpcId: 'question-rpc-1',
             method: 'question/requested',
@@ -348,20 +388,9 @@ describe('LAN mobile bridge user questions', () => {
                 }
               ]
             }
-          })}\n\n`
+          })
         )
-        return
-      }
-      if (request.method === 'POST' && request.url === '/api/respond') {
-        const chunks: Buffer[] = []
-        for await (const chunk of request) chunks.push(Buffer.from(chunk))
-        responses.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
-        response.setHeader('content-type', 'application/json')
-        response.end(JSON.stringify({ accepted: true }))
-        return
-      }
-      response.statusCode = 404
-      response.end()
+      })
     })
     servers.push(harness)
     await new Promise<void>((resolve) => harness.listen(0, '127.0.0.1', resolve))
@@ -425,8 +454,8 @@ describe('LAN mobile bridge user questions', () => {
     expect(
       await waitForRpcValue(port, cookie, 'interaction.pending', { sessionId: 'session-1' })
     ).toMatchObject({ rpcId: 'question-rpc-1' })
-    muxResponses[0]?.write(
-      `data: ${JSON.stringify({
+    muxClients[0]?.send(
+      JSON.stringify({
         type: 'server-request',
         rpcId: 'resolved-rpc-1',
         method: 'question/resolved',
@@ -436,7 +465,7 @@ describe('LAN mobile bridge user questions', () => {
           questionRpcId: 'question-rpc-1',
           outcome: 'answered'
         }
-      })}\n\n`
+      })
     )
     await waitFor(async () => {
       const response = await mobileRpc(port, cookie, 'interaction.pending', {
@@ -450,20 +479,8 @@ describe('LAN mobile bridge user questions', () => {
     const responses: unknown[] = []
     const harness = createServer(async (request, response) => {
       if (request.method === 'GET' && request.url === '/api/events.mux') {
-        response.writeHead(200, { 'content-type': 'text/event-stream' })
-        response.write(
-          `data: ${JSON.stringify({
-            type: 'server-request',
-            rpcId: 'question-rpc-2',
-            payload: {
-              type: 'question/requested',
-              sessionId: 'session-2',
-              questions: [
-                { id: 'choice', question: '选择一个', options: [{ label: 'A' }] }
-              ]
-            }
-          })}\n\n`
-        )
+        response.statusCode = 426
+        response.end()
         return
       }
       if (request.method === 'POST' && request.url === '/api/respond') {
@@ -476,6 +493,24 @@ describe('LAN mobile bridge user questions', () => {
       }
       response.statusCode = 404
       response.end()
+    })
+    const muxServer = new WebSocketServer({ noServer: true })
+    webSocketServers.push(muxServer)
+    harness.on('upgrade', (request, socket, head) => {
+      if (request.url !== '/api/events.mux') return socket.destroy()
+      muxServer.handleUpgrade(request, socket, head, (client) => {
+        client.send(
+          JSON.stringify({
+            type: 'server-request',
+            rpcId: 'question-rpc-2',
+            payload: {
+              type: 'question/requested',
+              sessionId: 'session-2',
+              questions: [{ id: 'choice', question: '选择一个', options: [{ label: 'A' }] }]
+            }
+          })
+        )
+      })
     })
     servers.push(harness)
     await new Promise<void>((resolve) => harness.listen(0, '127.0.0.1', resolve))
