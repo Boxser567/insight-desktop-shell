@@ -74,18 +74,10 @@ describe('LAN mobile page', () => {
     expect(html).toContain('id="todoDock" class="todo-dock"')
     expect(html).toContain('function updateTodos(projections)')
     expect(html).toContain('projections?.values?.todos')
-    expect(html).toContain(
-      'id="turnStatus" class="turn-status" role="status" aria-live="polite" hidden>Deep diving...</div>'
-    )
-    expect(html.indexOf('id="turnStatus"')).toBeGreaterThan(html.indexOf('id="todoDock"'))
-    expect(html.indexOf('id="turnStatus"')).toBeLessThan(html.indexOf('class="composer-inner"'))
-    expect(html).toContain(
-      "function syncTurnStatus(){const visible=agentRunning&&!pendingQuestion;$('turnStatus').hidden=!visible;document.body.classList.toggle('turn-running',visible)}"
-    )
-    expect(html).toContain("box.innerHTML=messages.map(renderMessage).join('')")
-    expect(html).not.toContain("join('')+status")
-    expect(html).toContain('.turn-running .messages{padding-bottom:116px}')
-    expect(html).toContain('.turn-running.todo-open .messages{padding-bottom:162px}')
+    expect(html).toContain('Deep diving...</div>')
+    expect(html).toContain("box.innerHTML=messages.map(renderMessage).join('')+status")
+    expect(html).not.toContain('id="turnStatus"')
+    expect(html).toContain('.messages .turn-status{align-self:flex-start;flex:none;margin:3px 4px}')
     expect(html).not.toContain("||'<div class=\"empty\">'+L.noSessions+'</div>'")
     expect(html).toContain('.thinking[data-state=running] .activity-summary:after')
     expect(html).not.toContain('.thinking[data-state=running] summary:after')
