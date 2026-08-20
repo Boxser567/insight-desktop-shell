@@ -6,6 +6,8 @@ import {
   updateMessage,
   type UpdateLocale
 } from './update-view'
+import { isPluginLoadError } from './plugin-error-view'
+import { mountWindowsTitlebar } from './windows-titlebar'
 
 const ROOT_ID = 'dsh-desktop-update-root'
 const locale: UpdateLocale = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
@@ -17,14 +19,98 @@ let dismissedVersion: string | null = null
 let dismissedTransientPhase: UpdateStatus['phase'] | null = null
 let installing = false
 let receivedStatusEvent = false
+let bootFailureTriggered = false
+let bootFailureTimer: number | undefined
+const pendingBootFailureMessages: string[] = []
+
+const BOOT_FAILURE_SETTLE_MS = 400
+
+function currentBootFailureText(): string | undefined {
+  const root = document.body || document.documentElement
+  if (!root) return undefined
+
+  // The package list and loader detail are rendered in separate sibling
+  // containers on Harness's boot-failure page. Reading only the title's
+  // parent drops exactly the evidence Desktop needs to identify the second
+  // conflicting plugin, so capture the full failure page instead.
+  const text = document.body?.innerText || root.textContent
+  if (!text?.includes('Failed to load plugins')) return undefined
+  return text
+    ?.split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+function addBootFailureMessage(message: string | undefined): void {
+  const normalized = message?.trim()
+  if (!normalized || pendingBootFailureMessages.includes(normalized)) return
+  pendingBootFailureMessages.push(normalized)
+}
+
+function queueBootFailure(message?: string): void {
+  if (bootFailureTriggered) return
+
+  addBootFailureMessage(message)
+  addBootFailureMessage(currentBootFailureText())
+  if (pendingBootFailureMessages.length === 0) return
+
+  if (bootFailureTimer !== undefined) window.clearTimeout(bootFailureTimer)
+  bootFailureTimer = window.setTimeout(() => {
+    bootFailureTimer = undefined
+    if (bootFailureTriggered) return
+
+    // The web boot page renders the plugin name and detailed loader error after
+    // window.error/unhandledrejection fires. Read it one last time before leaving
+    // the page so recovery receives the richest available diagnostic evidence.
+    addBootFailureMessage(currentBootFailureText())
+    const errorText = pendingBootFailureMessages.join('\n')
+    if (!errorText) return
+
+    bootFailureTriggered = true
+    void ipcRenderer.invoke('harness:open-recovery', errorText)
+  }, BOOT_FAILURE_SETTLE_MS)
+}
+
+function checkBootFailureInDom(): void {
+  const errorText = currentBootFailureText()
+  if (!errorText) return
+  queueBootFailure(errorText)
+}
+
+const domObserver = new MutationObserver(checkBootFailureInDom)
 
 contextBridge.exposeInMainWorld('dshDesktopDirectoryPicker', {
   pick: (): Promise<string | null> => ipcRenderer.invoke('directory-picker:open')
 })
 
 function initializeUi(): void {
+  if (process.platform === 'win32') {
+    mountWindowsTitlebar({ document, ipcRenderer, locale })
+  }
   mount()
+  checkBootFailureInDom()
+  domObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  })
 }
+
+window.addEventListener('error', (event) => {
+  const err = event.error ?? event.message
+  if (isPluginLoadError(err)) {
+    const errorText = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err)
+    queueBootFailure(errorText)
+  }
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  if (isPluginLoadError(reason)) {
+    const errorText = typeof reason === 'string' ? reason : reason instanceof Error ? reason.message : String(reason)
+    queueBootFailure(errorText)
+  }
+})
 
 contextBridge.exposeInMainWorld(
   'dshDesktop',
@@ -32,6 +118,13 @@ contextBridge.exposeInMainWorld(
     restartHarness: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('harness:restart'),
     openPhonePairing: (): Promise<void> => ipcRenderer.invoke('mobile:open-pairing'),
     phoneStatus: (): Promise<{ connected?: boolean }> => ipcRenderer.invoke('mobile:status')
+  })
+)
+
+contextBridge.exposeInMainWorld(
+  'dshRecovery',
+  Object.freeze({
+    action: (action: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('recovery:action', action)
   })
 )
 
@@ -219,6 +312,10 @@ const styles = `
     border-radius: 999px;
     background: #4d6bfe;
     box-shadow: 0 0 0 4px rgba(77, 107, 254, 0.12);
+  }
+  .dot.warning {
+    background: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
   }
   .spinner {
     width: 17px;
