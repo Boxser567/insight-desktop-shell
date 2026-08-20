@@ -99,8 +99,8 @@ function mountMobileButton(): void {
     style.textContent = mobileButtonStyles
     document.head.appendChild(style)
   }
-  const footer = document.querySelector<HTMLElement>('[data-dsh-sidebar-footer]')
-  if (!footer) return
+  const settingsArea = document.querySelector<HTMLElement>('[data-dsh-sidebar-settings]')
+  if (!settingsArea) return
   let button = document.getElementById(MOBILE_BUTTON_ID) as HTMLButtonElement | null
   if (!button) {
     button = document.createElement('button')
@@ -113,7 +113,7 @@ function mountMobileButton(): void {
       })
     })
   }
-  if (button.parentElement !== footer) footer.appendChild(button)
+  if (button.parentElement !== settingsArea) settingsArea.appendChild(button)
   renderMobileButton()
 }
 
@@ -454,11 +454,12 @@ const styles = `
 const phoneIcon = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true"><rect x="7" y="2.75" width="10" height="18.5" rx="2.25" stroke="currentColor" stroke-width="1.7"/><path d="M10.2 5.5h3.6M10.5 18.35h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`
 
 const mobileButtonStyles = `
-  [data-dsh-sidebar-footer] { position: relative; }
-  [data-dsh-sidebar-root][data-dsh-sidebar-wide="true"] [data-dsh-sidebar-footer] > [class*="settingsArea"] { padding-right: 38px; }
+  [data-dsh-sidebar-settings] { position:relative; box-sizing:border-box; }
+  [data-dsh-sidebar-root][data-dsh-sidebar-wide="true"] [data-dsh-sidebar-settings] { padding-right:38px; }
   #${MOBILE_BUTTON_ID} { appearance:none; position:relative; width:32px; height:32px; color:var(--dsw-alias-label-secondary,#73777f); background:transparent; border:0; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
   [data-dsh-sidebar-root][data-dsh-sidebar-wide="true"] #${MOBILE_BUTTON_ID} { position:absolute; right:0; top:50%; transform:translateY(-50%); }
-  [data-dsh-sidebar-root][data-dsh-sidebar-wide="false"] #${MOBILE_BUTTON_ID} { margin-top:5px; }
+  [data-dsh-sidebar-root][data-dsh-sidebar-wide="false"] [data-dsh-sidebar-settings] { flex-direction:column; align-items:center; }
+  [data-dsh-sidebar-root][data-dsh-sidebar-wide="false"] #${MOBILE_BUTTON_ID} { flex:none; margin-top:5px; }
   #${MOBILE_BUTTON_ID}:hover { color:var(--dsw-alias-label-primary,#202124); background:var(--dsw-alias-interactive-bg-hover,rgba(32,33,36,.08)); }
   #${MOBILE_BUTTON_ID}:focus-visible { outline:2px solid #4d6bfe; outline-offset:1px; }
   #${MOBILE_BUTTON_ID}[hidden] { display:none; }
