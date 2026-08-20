@@ -17,6 +17,8 @@ export interface PluginRecoveryViewModel {
   safetyNote: string
   primaryLabel: string
   primaryBusyLabel: string
+  restartLabel: string
+  restartBusyLabel: string
   logLabel: string
   advancedLabel: string
   errorLabel: string
@@ -179,6 +181,8 @@ export function buildPluginRecoveryViewModel(options: {
         ? multiple ? `卸载这 ${plugins.length} 个插件并继续检测` : '卸载此插件并继续检测'
         : '打开 Harness 日志',
       primaryBusyLabel: canUninstall ? '正在处理并重新检测…' : '正在打开日志…',
+      restartLabel: '重启 Harness',
+      restartBusyLabel: '正在重启…',
       logLabel: '打开 Harness 日志',
       advancedLabel: '查看技术详情',
       errorLabel: '错误信息',
@@ -213,6 +217,8 @@ export function buildPluginRecoveryViewModel(options: {
       ? multiple ? `Remove these ${plugins.length} plugins and continue` : 'Remove this plugin and continue'
       : 'Open Harness log',
     primaryBusyLabel: canUninstall ? 'Removing and checking again…' : 'Opening log…',
+    restartLabel: 'Restart Harness',
+    restartBusyLabel: 'Restarting…',
     logLabel: 'Open Harness log',
     advancedLabel: 'View technical details',
     errorLabel: 'Error details',

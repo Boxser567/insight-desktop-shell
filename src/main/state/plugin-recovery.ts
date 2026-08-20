@@ -466,8 +466,75 @@ export async function resetPluginProfile(
       }
     }
 
+    // Remove stale pnpm-lock.yaml so pnpm regenerates a clean hoisted dependency graph
+    const lockfilePath = join(dshHome, 'profiles', 'web', 'pnpm-lock.yaml')
+    if (existsSync(lockfilePath)) {
+      await rm(lockfilePath, { force: true }).catch(() => undefined)
+    }
+
     return modified
   } catch {
     return false
   }
 }
+
+/**
+ * Automatically inspects the web profile manifest before launch.
+ * If any third-party bundle listed in `dsh.profile.bundles` is missing from `node_modules`,
+ * prunes it from `bundles` and `dependencies` to prevent Harness from failing with
+ * "cannot resolve profile bundle".
+ */
+export async function pruneMissingProfileBundles(dshHome: string): Promise<boolean> {
+  const manifestPath = profilePackageJsonPath(dshHome)
+  if (!existsSync(manifestPath)) return false
+
+  const profileDirectory = dirname(manifestPath)
+  const nodeModulesPath = join(profileDirectory, 'node_modules')
+
+  try {
+    const raw = await readFile(manifestPath, 'utf8')
+    const manifest = JSON.parse(raw) as ProfileManifest
+    let modified = false
+
+    if (manifest.dsh?.profile?.bundles) {
+      const origBundles = manifest.dsh.profile.bundles
+      const prunedBundles = origBundles.filter((bundle) => {
+        if (!isThirdPartyPackageName(bundle)) return true
+        const bundleDir = join(nodeModulesPath, bundle)
+        const exists = existsSync(bundleDir)
+        if (!exists) {
+          modified = true
+        }
+        return exists
+      })
+
+      if (modified) {
+        manifest.dsh.profile.bundles = prunedBundles
+      }
+    }
+
+    if (manifest.dependencies) {
+      for (const dep of Object.keys(manifest.dependencies)) {
+        if (!isThirdPartyPackageName(dep)) continue
+        const depDir = join(nodeModulesPath, dep)
+        if (!existsSync(depDir)) {
+          delete manifest.dependencies[dep]
+          modified = true
+        }
+      }
+    }
+
+    if (modified) {
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+      const lockfilePath = join(profileDirectory, 'pnpm-lock.yaml')
+      if (existsSync(lockfilePath)) {
+        await rm(lockfilePath, { force: true }).catch(() => undefined)
+      }
+    }
+
+    return modified
+  } catch {
+    return false
+  }
+}
+
