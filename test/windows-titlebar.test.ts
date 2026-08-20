@@ -54,6 +54,14 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain('if (!isDesktopMenuCommand(command))')
   })
 
+  it('shows the bundled Harness version and offers an update check from About', async () => {
+    const main = await readFile('src/main/index.ts', 'utf8')
+
+    expect(main).toContain('bundledHarnessVersion(app.getAppPath())')
+    expect(main).toContain('if (result.response === 0) await checkForUpdates(true)')
+    expect(main).toContain('void showAbout(mainWindow).catch(showUnexpectedError)')
+  })
+
   it('synchronizes the native controls with Harness light and dark themes', async () => {
     const main = await readFile('src/main/index.ts', 'utf8')
     const preload = await readFile('src/preload/windows-titlebar.ts', 'utf8')

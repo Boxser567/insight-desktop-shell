@@ -46,6 +46,7 @@ import {
   type DesktopMenuCommand
 } from '../shared/desktop-menu'
 import { buildPluginRecoveryViewModel } from './plugin-recovery-view'
+import { aboutDetail, bundledHarnessVersion } from './version-info'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh'
 
@@ -505,6 +506,26 @@ function assertTrustedMainWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
+async function showAbout(window: BrowserWindow): Promise<void> {
+  const locale = harnessLocale()
+  const checkForUpdatesLabel = locale === 'zh' ? '检查更新' : 'Check for Updates'
+  const result = await dialog.showMessageBox(window, {
+    type: 'info',
+    title: 'DSH Desktop',
+    message: locale === 'zh' ? '关于 DSH Desktop' : 'About DSH Desktop',
+    detail: aboutDetail(
+      app.getVersion(),
+      bundledHarnessVersion(app.getAppPath()),
+      locale
+    ),
+    buttons: [checkForUpdatesLabel, locale === 'zh' ? '关闭' : 'Close'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  })
+  if (result.response === 0) await checkForUpdates(true)
+}
+
 async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<void> {
   const window = mainWindow
   if (!window || window.isDestroyed()) return
@@ -560,14 +581,7 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<v
       window.setFullScreen(!window.isFullScreen())
       break
     case 'about':
-      await dialog.showMessageBox(window, {
-        type: 'info',
-        title: 'DSH Desktop',
-        message: `DSH Desktop ${app.getVersion()}`,
-        detail: 'A desktop application for DeepSeek Harness.',
-        buttons: ['OK'],
-        noLink: true
-      })
+      await showAbout(window)
       break
     case 'quit':
       app.quit()
@@ -769,7 +783,14 @@ function installMenu(): void {
           {
             label: app.name,
             submenu: [
-              { role: 'about' as const },
+              {
+                label: isChinese ? '关于 DSH Desktop' : 'About DSH Desktop',
+                click: () => {
+                  if (mainWindow && !mainWindow.isDestroyed()) {
+                    void showAbout(mainWindow).catch(showUnexpectedError)
+                  }
+                }
+              },
               {
                 label: checkForUpdatesLabel,
                 accelerator: 'CmdOrCtrl+U',
