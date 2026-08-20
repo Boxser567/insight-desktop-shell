@@ -96,6 +96,9 @@ describe('agent preset package transfer', () => {
     expect(patch).toContain('https://www.dshdesktop.com/preset/')
     expect(patch).toContain('"_blank", "noopener,noreferrer"')
     expect(patch).toContain('AgentPresetSection_module_css_default.sectionActions')
+    expect(patch).toContain('.rtSEdW_sectionHead{align-items:center;gap:16px;display:flex}')
+    expect(patch).toContain('justify-content:flex-end')
+    expect(patch).toContain('margin-left:auto')
     expect(patch).toContain('.rtSEdW_hiddenInput{display:none}')
   })
 
