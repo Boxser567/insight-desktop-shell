@@ -5,16 +5,9 @@ window.__ModuleLoader__.load({
     const exports = module.exports
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
     const React = require('react')
-    const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
 
     const NS = 'desktopShell'
     const STYLE_ID = 'dsh-desktop-shell-styles'
-    const LIGHT_LOGO_URL = '/dsh-desktop-logo-light.png'
-    const DARK_LOGO_URL = '/dsh-desktop-logo-dark.png'
-
-    // The logo art is a single wide lockup; these are its intrinsic bounds.
-    const LOGO_VIEW_BOX = { x: 150, y: 330, width: 1030, height: 590 }
-    const LOGO_ASPECT = LOGO_VIEW_BOX.width / LOGO_VIEW_BOX.height
 
     const en = {
       connect: 'Connect phone',
@@ -26,9 +19,6 @@ window.__ModuleLoader__.load({
     }
 
     const styles = `
-      .dshDesktopLogoDark { display: none; }
-      body[data-ds-dark-theme] .dshDesktopLogoLight { display: none; }
-      body[data-ds-dark-theme] .dshDesktopLogoDark { display: inline; }
       .dshDesktopPhoneButton {
         appearance: none; position: relative; width: 32px; height: 32px;
         color: var(--dsw-alias-label-secondary, #73777f); background: transparent;
@@ -56,49 +46,6 @@ window.__ModuleLoader__.load({
       tag.id = STYLE_ID
       tag.textContent = styles
       document.head.appendChild(tag)
-    }
-
-    /**
-     * The dark and light artwork ship as separate PNGs. Both are drawn and CSS
-     * picks one, so the swap costs no re-render when the theme attribute flips.
-     */
-    function DshDesktopLogo({ height = 18 }) {
-      const image = (className, href) =>
-        React.createElement('image', {
-          key: className,
-          className,
-          href,
-          x: LOGO_VIEW_BOX.x,
-          y: LOGO_VIEW_BOX.y,
-          width: LOGO_VIEW_BOX.width,
-          height: LOGO_VIEW_BOX.height,
-          preserveAspectRatio: 'xMidYMid meet'
-        })
-      return React.createElement(
-        'svg',
-        {
-          width: Math.round(height * LOGO_ASPECT),
-          height,
-          viewBox: `${LOGO_VIEW_BOX.x} ${LOGO_VIEW_BOX.y} ${LOGO_VIEW_BOX.width} ${LOGO_VIEW_BOX.height}`,
-          fill: 'none',
-          'aria-hidden': 'true'
-        },
-        image('dshDesktopLogoLight', LIGHT_LOGO_URL),
-        image('dshDesktopLogoDark', DARK_LOGO_URL)
-      )
-    }
-
-    /**
-     * `sidebar.brand.mark` renders in both the expanded lockup and the collapsed
-     * rail, and hands us the icon box it expects. The lockup is wider than it is
-     * tall, so scale off the height rather than filling the square.
-     */
-    function BrandMark({ size = 24 }) {
-      return React.createElement(DshDesktopLogo, { height: Math.round(size * 0.75) })
-    }
-
-    function BrandName() {
-      return React.createElement(primitives.BrandWordmark, {})
     }
 
     const phoneIcon = () =>
@@ -182,12 +129,6 @@ window.__ModuleLoader__.load({
         'dsh-desktop-shell: copy dictionaries'
       )
       const t = ctx.locale.bind(NS)
-      ctx.slots.inject('sidebar.brand.mark', () =>
-        ctx.slots.register({ name: 'sidebar.brand.mark', id: 'desktop-brand-mark' }, BrandMark)
-      )
-      ctx.slots.inject('sidebar.brand.name', () =>
-        ctx.slots.register({ name: 'sidebar.brand.name', id: 'desktop-brand-name' }, BrandName)
-      )
       ctx.slots.inject('sidebar.footer.action', () =>
         ctx.slots.register(
           {

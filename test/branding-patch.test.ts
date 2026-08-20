@@ -24,16 +24,12 @@ describe('DSH Desktop sidebar branding', () => {
     expect(main).toContain("height: '24px'")
   })
 
-  it('pairs the DSH logo with the original Harness wordmark through the sidebar slots', async () => {
+  it('leaves the official single-occupant brand slots to Harness', async () => {
     const client = await readFile(shellClient, 'utf8')
 
-    expect(client).toContain("ctx.slots.register({ name: 'sidebar.brand.mark'")
-    expect(client).toContain("ctx.slots.register({ name: 'sidebar.brand.name'")
-    expect(client).toContain('/dsh-desktop-logo-light.png')
-    expect(client).toContain('/dsh-desktop-logo-dark.png')
-    expect(client).toContain('primitives.BrandWordmark')
-    expect(client).toContain('body[data-ds-dark-theme] .dshDesktopLogoLight')
-    expect(client).toContain('body[data-ds-dark-theme] .dshDesktopLogoDark')
+    expect(client).not.toContain("name: 'sidebar.brand.mark'")
+    expect(client).not.toContain("name: 'sidebar.brand.name'")
+    expect(client).toContain("name: 'sidebar.footer.action'")
   })
 
   it('keeps the desktop shell out of ui-sidebar so upgrades carry no patch', async () => {
