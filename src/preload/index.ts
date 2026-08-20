@@ -22,7 +22,6 @@ let installing = false
 let receivedStatusEvent = false
 let phoneConnected = false
 let mobileStatusTimer: number | undefined
-
 let bootFailureTriggered = false
 let bootFailureTimer: number | undefined
 const pendingBootFailureMessages: string[] = []

@@ -159,12 +159,68 @@ async function pluginMatchesSlot(
   return false
 }
 
+async function packagesProvidingSlot(
+  nodeModulesPath: string,
+  slotName: string
+): Promise<string[]> {
+  const scopeDirectory = join(nodeModulesPath, '@deepseek-ai')
+  const providers: string[] = []
+
+  try {
+    const entries = await readdir(scopeDirectory, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.name.startsWith('dsh-client-ui-')) continue
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+
+      const packageName = `@deepseek-ai/${entry.name}`
+      for (const file of ['client.js', 'lib/client.js', 'dist/client.js']) {
+        try {
+          const content = await readFile(join(scopeDirectory, entry.name, file), 'utf8')
+          if (content.includes(slotName)) {
+            providers.push(packageName)
+            break
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return providers
+}
+
+async function pluginReferencesPackage(
+  profileDirectory: string,
+  plugin: string,
+  packageNames: ReadonlySet<string>
+): Promise<boolean> {
+  const packageDirectory = join(profileDirectory, 'node_modules', plugin)
+
+  try {
+    const rawManifest = await readFile(join(packageDirectory, 'package.json'), 'utf8')
+    const manifest = JSON.parse(rawManifest) as BundleManifest
+    const declaredPackages = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.optionalDependencies ?? {})
+    ])
+    if ([...packageNames].some((packageName) => declaredPackages.has(packageName))) return true
+  } catch {}
+
+  for (const file of ['cordis.patch.yml', 'index.js', 'lib/index.js', 'dist/index.js']) {
+    try {
+      const content = await readFile(join(packageDirectory, file), 'utf8')
+      if ([...packageNames].some((packageName) => content.includes(packageName))) return true
+    } catch {}
+  }
+  return false
+}
+
 export async function resolveProfileRecoveryPlugins(
   dshHome: string,
   detectedPlugins: readonly string[],
   duplicateLoaderEntryId?: string,
   slotConflictName?: string,
-  excludedPlugins: readonly string[] = []
+  excludedPlugins: readonly string[] = [],
+  slotProviderNodeModulesPaths: readonly string[] = []
 ): Promise<string[]> {
   const manifestPath = profilePackageJsonPath(dshHome)
 
@@ -195,6 +251,23 @@ export async function resolveProfileRecoveryPlugins(
     }
     if (matchedPlugins.size === 1) return [...matchedPlugins]
 
+    // A frontend loader error often names an official leaf package that a
+    // third-party bundle creates dynamically. Attribute that exact package
+    // reference back to the configured root without depending on the app's
+    // node_modules tree being available yet. This is especially important
+    // immediately after an install followed by a page refresh.
+    const dynamicallyReferencedOwners = new Set<string>()
+    for (const detected of detectedPlugins) {
+      if (!PACKAGE_NAME_PATTERN.test(detected) || configuredSet.has(detected)) continue
+      const packageNames = new Set([detected])
+      for (const configured of configuredPlugins) {
+        if (await pluginReferencesPackage(profileDirectory, configured, packageNames)) {
+          dynamicallyReferencedOwners.add(configured)
+        }
+      }
+    }
+    if (dynamicallyReferencedOwners.size === 1) return [...dynamicallyReferencedOwners]
+
     // 2. Duplicate loader entry matching
     if (duplicateLoaderEntryId) {
       let offendingPlugin: string | undefined
@@ -215,6 +288,29 @@ export async function resolveProfileRecoveryPlugins(
         }
       }
       if (slotMatched.size === 1) return [...slotMatched]
+
+      // Some plugins create official UI packages dynamically instead of
+      // containing the slot literal themselves. Attribute those packages back
+      // to the configured root bundle using its runtime code/dependencies.
+      const providerPackages = new Set<string>()
+      const searchPaths = [
+        join(profileDirectory, 'node_modules'),
+        ...slotProviderNodeModulesPaths
+      ]
+      for (const nodeModulesPath of searchPaths) {
+        for (const packageName of await packagesProvidingSlot(nodeModulesPath, slotConflictName)) {
+          providerPackages.add(packageName)
+        }
+      }
+      if (providerPackages.size > 0) {
+        const providerOwners = new Set<string>()
+        for (const plugin of configuredPlugins) {
+          if (await pluginReferencesPackage(profileDirectory, plugin, providerPackages)) {
+            providerOwners.add(plugin)
+          }
+        }
+        if (providerOwners.size === 1) return [...providerOwners]
+      }
     }
 
     // Never guess. A recovery action is only safe when one or more packages

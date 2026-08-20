@@ -30,14 +30,22 @@ describe('GitHub release contract', () => {
       packages: Record<string, { dev?: boolean; peer?: boolean }>
     }
 
+    // A lock location is a path, so nested installs read as
+    // `node_modules/<host>/node_modules/<name>`. Only the segment after the
+    // last `node_modules/` names the package: without that, a third-party peer
+    // that npm nested under a DSH package (rc.8 gives ui-trajectory its own
+    // React 19) reads as a DSH package and trips this guard.
+    const packageNameOf = (location: string): string =>
+      location.slice(location.lastIndexOf('node_modules/') + 'node_modules/'.length)
+
     const peerOnlyRuntimePackages = Object.entries(packageLock.packages)
       .filter(
         ([location, metadata]) =>
-          location.startsWith('node_modules/@deepseek-ai/') &&
+          packageNameOf(location).startsWith('@deepseek-ai/') &&
           metadata.peer === true &&
           metadata.dev !== true
       )
-      .map(([location]) => location.replace('node_modules/', ''))
+      .map(([location]) => packageNameOf(location))
 
     expect(peerOnlyRuntimePackages).toEqual([])
   })
@@ -118,6 +126,18 @@ describe('GitHub release contract', () => {
     expect(main).toMatch(/case 'restart-harness':\s+await restartHarness\(\)/)
     expect(main).toContain('click: () => void restartHarness().catch(showUnexpectedError)')
     expect(main).toContain("} else if (action === 'restart') {")
+  })
+
+  it('replays frontend plugin failures that arrive during an active recovery', async () => {
+    const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+
+    expect(main).toContain("resolvePluginRecoveryAction('refresh')")
+    expect(main).toContain('if (applyPendingFrontendEvidence()) continue')
+    expect(main).toMatch(
+      /if \(failureRecoveryVisible\) \{\s+queuePendingFrontendPluginRecovery\(message\)/
+    )
+    expect(main).toContain('queueMicrotask(() => {')
+    expect(main).toContain('logs: [...rendererPluginFailureLogs]')
   })
 
   it('publishes update metadata for installed desktop builds', async () => {
