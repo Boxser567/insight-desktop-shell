@@ -16,6 +16,7 @@ describe('Harness launch contract', () => {
   it('binds the web server to a random loopback port', () => {
     expect(buildHarnessArguments(43127)).toEqual([
       'web',
+      '--no-open',
       '--host',
       '127.0.0.1',
       '--port',
@@ -23,11 +24,16 @@ describe('Harness launch contract', () => {
     ])
   })
 
+  it('keeps Harness from handing the loopback URL to the system browser', () => {
+    expect(buildHarnessArguments(43127)).toContain('--no-open')
+  })
+
   it('applies the desktop composition patch before web arguments', () => {
     expect(buildHarnessArguments(43127, 'C:\\app\\dsh-desktop.patch.yml')).toEqual([
       'web',
       '--patch',
       'C:\\app\\dsh-desktop.patch.yml',
+      '--no-open',
       '--host',
       '127.0.0.1',
       '--port',
@@ -75,6 +81,7 @@ describe('Harness launch contract', () => {
       'web',
       '--patch',
       'C:\\app\\dsh-desktop.patch.yml',
+      '--no-open',
       '--host',
       '127.0.0.1',
       '--port',

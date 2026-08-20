@@ -25,6 +25,9 @@ export function buildHarnessArguments(port: number, patchPath?: string): string[
   return [
     'web',
     ...(patchPath ? ['--patch', patchPath] : []),
+    // The desktop window is the only intended surface. Without this, Harness
+    // hands the same loopback URL to the system browser on every launch.
+    '--no-open',
     '--host',
     '127.0.0.1',
     '--port',
