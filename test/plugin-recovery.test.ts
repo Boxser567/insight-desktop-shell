@@ -5,6 +5,7 @@ import { parse, stringify } from 'yaml'
 import {
   isThirdPartyPackageName,
   profilePackageJsonPath,
+  pruneMissingProfileBundles,
   resetPluginProfile,
   resolveProfileRecoveryPlugins,
   uninstallPluginFromProfile
@@ -627,4 +628,74 @@ describe('plugin-recovery', () => {
       )
     ).resolves.toEqual([])
   })
+
+  it('prunes missing third-party bundles and broken dependencies while preserving core and installed packages', async () => {
+    const pkgPath = profilePackageJsonPath(testDir)
+    const existingPluginDir = join(testDir, 'profiles', 'web', 'node_modules', 'dsh-existing-plugin')
+    await mkdir(existingPluginDir, { recursive: true })
+    await writeFile(join(existingPluginDir, 'package.json'), JSON.stringify({ name: 'dsh-existing-plugin' }))
+
+    const lockfilePath = join(testDir, 'profiles', 'web', 'pnpm-lock.yaml')
+    await writeFile(lockfilePath, 'lockfile-content')
+
+    await writeFile(
+      pkgPath,
+      JSON.stringify({
+        dependencies: {
+          'dsh-existing-plugin': '^1.0.0',
+          'dsh-full-remote': '^1.0.0'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              'dshmarket',
+              'dsh-existing-plugin',
+              'dsh-full-remote'
+            ]
+          }
+        }
+      })
+    )
+
+    const modified = await pruneMissingProfileBundles(testDir)
+    expect(modified).toBe(true)
+
+    const updated = JSON.parse(await readFile(pkgPath, 'utf8'))
+    expect(updated.dependencies).toEqual({
+      'dsh-existing-plugin': '^1.0.0'
+    })
+    expect(updated.dsh.profile.bundles).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      'dshmarket',
+      'dsh-existing-plugin'
+    ])
+  })
+
+  it('leaves clean profile manifests unmodified when pruning missing bundles', async () => {
+    const pkgPath = profilePackageJsonPath(testDir)
+    await writeFile(
+      pkgPath,
+      JSON.stringify({
+        dependencies: {
+          dshmarket: '1.16.0'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              'dshmarket'
+            ]
+          }
+        }
+      })
+    )
+
+    const modified = await pruneMissingProfileBundles(testDir)
+    expect(modified).toBe(false)
+  })
 })
+
