@@ -60,6 +60,7 @@ describe('LAN mobile page', () => {
     expect(html).not.toContain('class="preset-control"')
     expect(html).toContain('id="settings" class="settings-trigger"')
     expect(html).toContain('id="sessionSettings" class="session-settings" hidden')
+    expect(html).toContain('#composer .session-settings{z-index:1;bottom:76px}')
     expect(html).toContain("rpc('agentPreset.list',{})")
     expect(html).toContain("rpc('agentPreset.select',{sessionId:activeSession,agentPreset:next})")
     expect(html).toContain("rpc('session.models',{sessionId})")
