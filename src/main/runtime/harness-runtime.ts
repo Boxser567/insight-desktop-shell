@@ -1,4 +1,5 @@
-import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from 'node:child_process'
+import type { SpawnOptionsWithoutStdio } from 'node:child_process'
+import type { EventEmitter } from 'node:events'
 import { createWriteStream, existsSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -16,9 +17,16 @@ export interface HarnessRuntimeOptions {
     executablePath: string,
     args: string[],
     options: SpawnOptionsWithoutStdio
-  ): ChildProcessWithoutNullStreams
+  ): HarnessChildProcess
   startupTimeoutMs?: number
   onChanged(snapshot: RuntimeSnapshot): void
+}
+
+export interface HarnessChildProcess extends EventEmitter {
+  readonly stdout: NodeJS.ReadableStream
+  readonly stderr: NodeJS.ReadableStream
+  readonly exitCode: number | null
+  kill(signal?: NodeJS.Signals): boolean
 }
 
 export function buildHarnessArguments(port: number, patchPath?: string): string[] {
@@ -86,7 +94,7 @@ export function updateReadyStability(
 }
 
 export class HarnessRuntime {
-  private child?: ChildProcessWithoutNullStreams
+  private child?: HarnessChildProcess
   private logStream?: WriteStream
   private phase: RuntimePhase = 'idle'
   private message = 'Harness is not running.'
@@ -148,7 +156,7 @@ export class HarnessRuntime {
     this.writeLog(`[desktop] endpoint ${url}`)
     this.setState('starting', 'Starting DeepSeek Harness…')
 
-    let child: ChildProcessWithoutNullStreams
+    let child: HarnessChildProcess
     try {
       child = this.options.launchProcess(
         this.options.nodeExecutablePath,
@@ -228,7 +236,7 @@ ${cause}`
     this.setState('idle', 'Harness is not running.')
   }
 
-  private async stopChild(child: ChildProcessWithoutNullStreams): Promise<void> {
+  private async stopChild(child: HarnessChildProcess): Promise<void> {
     if (child.exitCode !== null) return
     const exitPromise = new Promise<boolean>((resolve) =>
       child.once('exit', () => resolve(true))
