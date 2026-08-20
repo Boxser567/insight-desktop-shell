@@ -251,6 +251,23 @@ export async function resolveProfileRecoveryPlugins(
     }
     if (matchedPlugins.size === 1) return [...matchedPlugins]
 
+    // A frontend loader error often names an official leaf package that a
+    // third-party bundle creates dynamically. Attribute that exact package
+    // reference back to the configured root without depending on the app's
+    // node_modules tree being available yet. This is especially important
+    // immediately after an install followed by a page refresh.
+    const dynamicallyReferencedOwners = new Set<string>()
+    for (const detected of detectedPlugins) {
+      if (!PACKAGE_NAME_PATTERN.test(detected) || configuredSet.has(detected)) continue
+      const packageNames = new Set([detected])
+      for (const configured of configuredPlugins) {
+        if (await pluginReferencesPackage(profileDirectory, configured, packageNames)) {
+          dynamicallyReferencedOwners.add(configured)
+        }
+      }
+    }
+    if (dynamicallyReferencedOwners.size === 1) return [...dynamicallyReferencedOwners]
+
     // 2. Duplicate loader entry matching
     if (duplicateLoaderEntryId) {
       let offendingPlugin: string | undefined

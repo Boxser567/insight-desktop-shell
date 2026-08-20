@@ -158,4 +158,46 @@ describe('plugin recovery detection', () => {
 
     expect(detection.plugins).toEqual(['dsh-full-remote'])
   })
+
+  it('attributes a reported leaf package without relying on app node_modules discovery', async () => {
+    const profileDirectory = join(testDir, 'profiles', 'web')
+    const dynamicPluginDirectory = join(profileDirectory, 'node_modules', 'dynamic-plugin')
+
+    await mkdir(join(dynamicPluginDirectory, 'lib'), { recursive: true })
+    await writeFile(
+      profilePackageJsonPath(testDir),
+      JSON.stringify({
+        dependencies: {
+          'dynamic-plugin': '^1.0.0'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              'dynamic-plugin'
+            ]
+          }
+        }
+      })
+    )
+    await writeFile(
+      join(dynamicPluginDirectory, 'package.json'),
+      JSON.stringify({ name: 'dynamic-plugin' })
+    )
+    await writeFile(
+      join(dynamicPluginDirectory, 'lib', 'index.js'),
+      'const UI_PACKAGE = "@deepseek-ai/dsh-client-ui-directory-picker-browse";'
+    )
+
+    const logs = [
+      '[stderr] failed to apply loader entry abc123 (@deepseek-ai/dsh-client-ui-directory-picker-browse): single slot "conversation.hero.workspace.directoryFlow" already has a registration'
+    ]
+    const detection = await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: logs
+    })
+
+    expect(detection.plugins).toEqual(['dynamic-plugin'])
+  })
 })

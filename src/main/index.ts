@@ -129,6 +129,19 @@ function appendRendererPluginRecoveryLog(logs: readonly string[]): void {
   }
 }
 
+function appendPluginRecoveryDetectionLog(plugins: readonly string[]): void {
+  try {
+    const result = plugins.length > 0 ? plugins.join(', ') : 'unresolved'
+    appendFileSync(
+      join(app.getPath('logs'), 'harness.log'),
+      `[desktop] plugin recovery detection: ${result}\n`,
+      'utf8'
+    )
+  } catch (error) {
+    console.warn('[desktop] failed to persist plugin recovery detection', error)
+  }
+}
+
 function isDevelopmentBuild(): boolean {
   if (!app.isPackaged) return true
 
@@ -639,6 +652,7 @@ async function showPluginRecovery(options?: {
         slotProviderNodeModulesPaths: [join(app.getAppPath(), 'node_modules')],
         timeoutMs: waitForRendererEvidence ? PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS : 0
       })
+      appendPluginRecoveryDetectionLog(detection.plugins)
       waitForRendererEvidence = false
       if (applyPendingFrontendEvidence()) continue
       const action = await waitForPluginRecoveryAction({
