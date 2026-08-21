@@ -2,6 +2,18 @@ import { existsSync } from 'node:fs'
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { parse } from 'yaml'
+import { removeTree } from './remove-tree'
+
+/**
+ * Directories under the profile's node_modules that no longer belong to any
+ * package: pnpm's `<pkg>_tmp_<pid>_<n>` staging left by an interrupted run,
+ * and the `<pkg>.dsh-old-<ts>` copies the packaged pnpm runner moves aside
+ * when Windows refuses to replace a directory still held open. Both are only
+ * safely removable before Harness starts, which is when this sweep runs.
+ */
+export function isDisposableModuleDirectory(name: string): boolean {
+  return name.includes('_tmp_') || name.includes('.dsh-old-')
+}
 
 export function profilePackageJsonPath(dshHome: string): string {
   return join(dshHome, 'profiles', 'web', 'package.json')
@@ -450,7 +462,7 @@ export async function resetPluginProfile(
     if (existsSync(nodeModulesPath)) {
       if (failingPlugin) {
         const pluginDir = join(nodeModulesPath, failingPlugin)
-        await rm(pluginDir, { recursive: true, force: true }).catch(() => undefined)
+        await removeTree(pluginDir).catch(() => undefined)
         if (failingPlugin.startsWith('@')) {
           const scope = failingPlugin.split('/')[0]
           if (scope) {
@@ -458,7 +470,7 @@ export async function resetPluginProfile(
             try {
               const files = await readdir(scopeDir)
               if (files.length === 0) {
-                await rm(scopeDir, { recursive: true, force: true }).catch(() => undefined)
+                await removeTree(scopeDir).catch(() => undefined)
               }
             } catch {}
           }
@@ -495,8 +507,8 @@ export async function pruneMissingProfileBundles(dshHome: string): Promise<boole
     try {
       const entries = await readdir(nodeModulesPath, { withFileTypes: true })
       for (const entry of entries) {
-        if (entry.isDirectory() && entry.name.includes('_tmp_')) {
-          await rm(join(nodeModulesPath, entry.name), { recursive: true, force: true }).catch(() => undefined)
+        if (entry.isDirectory() && isDisposableModuleDirectory(entry.name)) {
+          await removeTree(join(nodeModulesPath, entry.name)).catch(() => undefined)
         }
       }
     } catch {

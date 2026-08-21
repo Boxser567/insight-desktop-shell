@@ -14,7 +14,8 @@ import {
   ensurePnpmShim,
   isTrustedRequest,
   readMarketInstallation,
-  resolvePnpmEntry
+  resolvePnpmEntry,
+  stagePnpmRunner
 } from '../packages/dsh-desktop-market-installer/index.js'
 
 describe('desktop plugin market installer', () => {
@@ -26,10 +27,10 @@ describe('desktop plugin market installer', () => {
       'web',
       'add',
       '--save-exact',
-      'dshmarket@1.9.0'
+      'dshmarket@1.15.0'
     ])
     expect(MARKET_PACKAGE).toBe('dshmarket')
-    expect(RECOMMENDED_MARKET_VERSION).toBe('1.9.0')
+    expect(RECOMMENDED_MARKET_VERSION).toBe('1.15.0')
     expect(STATUS_PATH).toBe('/dsh-desktop/market-installer/status')
     expect(INSTALL_PATH).toBe('/dsh-desktop/market-installer/install')
     expect(UNINSTALL_PATH).toBe('/dsh-desktop/market-installer/uninstall')
@@ -52,18 +53,33 @@ describe('desktop plugin market installer', () => {
     const binDir = await ensurePnpmShim(home)
     expect(binDir).toBe(join(home, '.desktop-bin'))
 
+    const runner = await readFile(join(binDir, 'pnpm-runner.mjs'), 'utf8')
+    expect(runner).toContain('runWithLockRecovery')
+    await expect(stagePnpmRunner(binDir)).resolves.toBe(join(binDir, 'pnpm-runner.mjs'))
+    // A directory that cannot hold the staged copy still leaves pnpm reachable
+    // through the packaged original rather than taking the shims down.
+    await expect(stagePnpmRunner(join(binDir, 'missing', 'deeper'))).resolves.toMatch(
+      /packages[/\\]dsh-desktop-market-installer[/\\]pnpm-runner\.mjs$/u
+    )
+
     if (process.platform === 'win32') {
       const pnpmCmd = await readFile(join(binDir, 'pnpm.cmd'), 'utf8')
       const nodeCmd = await readFile(join(binDir, 'node.cmd'), 'utf8')
       expect(pnpmCmd).toContain(process.execPath)
       expect(pnpmCmd).toContain('pnpm')
+      expect(pnpmCmd).toContain(join(binDir, 'pnpm-runner.mjs'))
+      expect(pnpmCmd).toContain('set ELECTRON_RUN_AS_NODE=1')
       expect(nodeCmd).toContain(process.execPath)
+      expect(nodeCmd).toContain('set ELECTRON_RUN_AS_NODE=1')
     } else {
       const pnpmScript = await readFile(join(binDir, 'pnpm'), 'utf8')
       const nodeScript = await readFile(join(binDir, 'node'), 'utf8')
       expect(pnpmScript).toContain(process.execPath)
       expect(pnpmScript).toContain('pnpm')
+      expect(pnpmScript).toContain(join(binDir, 'pnpm-runner.mjs'))
+      expect(pnpmScript).toContain('export ELECTRON_RUN_AS_NODE=1')
       expect(nodeScript).toContain(process.execPath)
+      expect(nodeScript).toContain('export ELECTRON_RUN_AS_NODE=1')
     }
 
     const npmrc = await readFile(join(home, 'profiles', 'web', '.npmrc'), 'utf8')
@@ -71,19 +87,61 @@ describe('desktop plugin market installer', () => {
     expect(npmrc).toContain('child-concurrency=1')
   })
 
-  it('cleans up stale _tmp_ directories left by interrupted installations', async () => {
+  it('cleans up staging and sidelined directories left by interrupted installations', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-market-clean-'))
     const nodeModules = join(home, 'profiles', 'web', 'node_modules')
     const staleTmpDir = join(nodeModules, 'argparse_tmp_12345_1')
+    const sidelinedDir = join(nodeModules, 'argparse.dsh-old-1787317710932')
     const validDir = join(nodeModules, 'argparse')
     await mkdir(staleTmpDir, { recursive: true })
+    await mkdir(sidelinedDir, { recursive: true })
     await mkdir(validDir, { recursive: true })
 
     await cleanStaleTemporaryDirectories(home)
 
     const { existsSync } = await import('node:fs')
     expect(existsSync(staleTmpDir)).toBe(false)
+    expect(existsSync(sidelinedDir)).toBe(false)
     expect(existsSync(validDir)).toBe(true)
+  })
+
+  it('cleans the leftovers inside a package’s own node_modules', async () => {
+    // A replaced dependency of a dependency stages under the dependent, so a
+    // sweep that stops at the top level leaves one copy behind per attempt.
+    const home = await mkdtemp(join(tmpdir(), 'dsh-market-clean-nested-'))
+    const nodeModules = join(home, 'profiles', 'web', 'node_modules')
+    const nested = join(nodeModules, 'cytoscape-fcose', 'node_modules')
+    const scoped = join(nodeModules, '@deepseek-ai')
+    const nestedStale = join(nested, 'cose-base.dsh-old-1787327060846')
+    const scopedStale = join(scoped, 'dsh-settings_tmp_7408_2')
+    const kept = join(nested, 'cose-base')
+    await mkdir(nestedStale, { recursive: true })
+    await mkdir(scopedStale, { recursive: true })
+    await mkdir(kept, { recursive: true })
+    await writeFile(join(kept, 'package.json'), JSON.stringify({ name: 'cose-base' }), 'utf8')
+
+    await cleanStaleTemporaryDirectories(home)
+
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(nestedStale)).toBe(false)
+    expect(existsSync(scopedStale)).toBe(false)
+    expect(existsSync(kept)).toBe(true)
+  })
+
+  it('clears a tree whose path is not ASCII', async () => {
+    // Node's recursive `rm` reports success and removes nothing under such a
+    // path on Windows. A profile lives under the user's home, so one non-ASCII
+    // character in the account name used to disable this sweep entirely.
+    const home = join(await mkdtemp(join(tmpdir(), 'dsh-market-unicode-')), '数据项素')
+    const nodeModules = join(home, 'profiles', 'web', 'node_modules')
+    const stale = join(nodeModules, 'dshmarket_tmp_7408_13', 'lib')
+    await mkdir(stale, { recursive: true })
+    await writeFile(join(stale, 'index.js'), 'export default 1', 'utf8')
+
+    await cleanStaleTemporaryDirectories(home)
+
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(nodeModules, 'dshmarket_tmp_7408_13'))).toBe(false)
   })
 
   it('reports both the requested dependency and installed package version', async () => {

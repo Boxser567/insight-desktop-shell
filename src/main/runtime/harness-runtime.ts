@@ -1,6 +1,6 @@
 import type { SpawnOptionsWithoutStdio } from 'node:child_process'
 import type { EventEmitter } from 'node:events'
-import { createWriteStream, existsSync, type WriteStream } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
@@ -52,6 +52,10 @@ export function buildHarnessSpawnOptions(
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...parentEnvironment } = environment
   const pathKey = platform === 'win32' ? 'Path' : 'PATH'
 
+  // ELECTRON_RUN_AS_NODE must not reach the Harness process itself: the macOS
+  // utility process is launched with Chromium switches (--type=utility, …)
+  // that Node rejects as bad options. The Harness entry re-declares Node mode
+  // from the inside, for its children only.
   return {
     cwd: launchDirectory,
     env: {
@@ -141,7 +145,7 @@ export class HarnessRuntime {
 
     await mkdir(this.options.dshHome, { recursive: true })
     await mkdir(dirname(this.options.logPath), { recursive: true })
-    this.logStream = createWriteStream(this.options.logPath, { flags: 'a' })
+    this.logStream ??= createWriteStream(this.options.logPath, { flags: 'a' })
 
     const port = await reservePort()
     const url = `http://127.0.0.1:${port}`
@@ -262,6 +266,23 @@ ${cause}`
     for (const line of chunk.toString('utf8').split(/\r?\n/)) {
       if (line.length > 0) this.writeLog(`[${source}] ${line}`)
     }
+  }
+
+  /**
+   * Record a line the desktop wants in the Harness log, including before a
+   * launch: what happens to the profile between launches is exactly what
+   * someone reading the log after a failed install needs to see.
+   */
+  note(line: string): void {
+    if (!this.logStream) {
+      try {
+        mkdirSync(dirname(this.options.logPath), { recursive: true })
+        this.logStream = createWriteStream(this.options.logPath, { flags: 'a' })
+      } catch {
+        // Keep the line in the in-memory buffer regardless.
+      }
+    }
+    this.writeLog(line)
   }
 
   private writeLog(line: string): void {

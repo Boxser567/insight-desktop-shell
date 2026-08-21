@@ -1,11 +1,15 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-export const RECOMMENDED_MARKET_VERSION = '1.9.0'
+import { SIDELINE_MARKER } from './pnpm-runner.mjs'
+import { removeTree } from './remove-tree.mjs'
+
+export const RECOMMENDED_MARKET_VERSION = '1.15.0'
 export const MARKET_PACKAGE = 'dshmarket'
 export const MARKET_PROFILE = 'web'
 export const STATUS_PATH = '/dsh-desktop/market-installer/status'
@@ -26,19 +30,40 @@ export function profileDirectory(home = dshHome()) {
   return join(home, 'profiles', MARKET_PROFILE)
 }
 
+/** Leftovers of an interrupted pnpm run, or of a Windows locked-rename recovery. */
+export function isDisposableModuleDirectory(name) {
+  return name.includes('_tmp_') || name.includes(SIDELINE_MARKER)
+}
+
+/**
+ * Sweep the leftovers of interrupted pnpm runs from a profile's node_modules.
+ *
+ * A package's own node_modules is swept too. Once the package being replaced
+ * is a dependency of a dependency, that is where the leftovers land —
+ * `cytoscape-fcose/node_modules/cose-base.dsh-old-…` — and a sweep that stops
+ * at the top level leaves one copy behind per attempt.
+ */
 export async function cleanStaleTemporaryDirectories(home = dshHome()) {
   const directory = profileDirectory(home)
-  const nodeModulesPath = join(directory, 'node_modules')
-  try {
-    const entries = await readdir(nodeModulesPath, { withFileTypes: true })
-    for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.includes('_tmp_')) {
-        await rm(join(nodeModulesPath, entry.name), { recursive: true, force: true }).catch(() => undefined)
-      }
+  const sweep = async (nodeModulesPath) => {
+    let entries
+    try {
+      entries = await readdir(nodeModulesPath, { withFileTypes: true })
+    } catch {
+      // node_modules directory may not exist yet
+      return
     }
-  } catch {
-    // node_modules directory may not exist yet
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+      const path = join(nodeModulesPath, entry.name)
+      if (isDisposableModuleDirectory(entry.name)) {
+        await removeTree(path).catch(() => undefined)
+        continue
+      }
+      await sweep(entry.name.startsWith('@') ? path : join(path, 'node_modules'))
+    }
   }
+  await sweep(join(directory, 'node_modules'))
 }
 
 function readObject(text) {
@@ -128,37 +153,73 @@ export function resolvePnpmEntry(requireFrom = import.meta.url) {
   return entry
 }
 
+/**
+ * Put the lock-recovery runner where the shims can invoke it.
+ * @returns the staged runner path, or undefined when neither the staged copy
+ * nor the packaged original can be used — the shims then call pnpm directly.
+ */
+export async function stagePnpmRunner(directory) {
+  const source = fileURLToPath(new URL('./pnpm-runner.mjs', import.meta.url))
+  const staged = join(directory, 'pnpm-runner.mjs')
+  try {
+    await copyFile(source, staged)
+    return staged
+  } catch {
+    return existsSync(source) ? source : undefined
+  }
+}
+
 export async function ensurePnpmShim(home = dshHome()) {
   const directory = join(home, '.desktop-bin')
   await mkdir(directory, { recursive: true })
   const pnpmEntry = resolvePnpmEntry()
   const executable = process.execPath
 
+  // pnpm is reached through this shim by every profile package operation —
+  // DSH Desktop's installer and the community market alike — so the runner it
+  // points at is where a Windows locked rename gets recovered for both. A
+  // runner that cannot be staged must not take the shims down with it: pnpm
+  // still has to be reachable, just without the recovery, and the harness log
+  // has to say so rather than leaving a stale shim to be mistaken for a fresh
+  // one.
+  const runnerPath = await stagePnpmRunner(directory)
+  const pnpmCommand = runnerPath === undefined ? [pnpmEntry] : [runnerPath, pnpmEntry]
+  process.stdout.write(
+    runnerPath === undefined
+      ? 'dsh-desktop: pnpm shim written without the lock-recovery runner\n'
+      : `dsh-desktop: pnpm shim written via ${runnerPath}\n`
+  )
+
+  // The packaged executable is Electron on macOS, where Harness runs as a
+  // utility process. Anything invoked through these shims expects Node
+  // semantics — a leading node flag included — so the shims declare Node mode
+  // themselves instead of relying on the caller's environment. The real Node
+  // runtime bundled on the other platforms ignores the variable.
   if (process.platform === 'win32') {
     const pnpmPath = join(directory, 'pnpm.cmd')
     await writeFile(
       pnpmPath,
-      `@chcp 65001 >nul\r\n@echo off\r\n\"${executable}\" \"${pnpmEntry}\" %*\r\n`,
+      `@chcp 65001 >nul\r\n@echo off\r\n@set ELECTRON_RUN_AS_NODE=1\r\n\"${executable}\" ${pnpmCommand.map((part) => `\"${part}\"`).join(' ')} %*\r\n`,
       'utf8'
     )
     const nodePath = join(directory, 'node.cmd')
     await writeFile(
       nodePath,
-      `@chcp 65001 >nul\r\n@echo off\r\n\"${executable}\" %*\r\n`,
+      `@chcp 65001 >nul\r\n@echo off\r\n@set ELECTRON_RUN_AS_NODE=1\r\n\"${executable}\" %*\r\n`,
       'utf8'
     )
   } else {
     const pnpmPath = join(directory, 'pnpm')
     await writeFile(
       pnpmPath,
-      `#!/bin/sh\nexec ${shellQuote(executable)} ${shellQuote(pnpmEntry)} \"$@\"\n`,
+      `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec ${shellQuote(executable)} ${pnpmCommand.map(shellQuote).join(' ')} \"$@\"\n`,
       { encoding: 'utf8', mode: 0o755 }
     )
     await chmod(pnpmPath, 0o755)
     const nodePath = join(directory, 'node')
     await writeFile(
       nodePath,
-      `#!/bin/sh\nexec ${shellQuote(executable)} \"$@\"\n`,
+      `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec ${shellQuote(executable)} \"$@\"\n`,
       { encoding: 'utf8', mode: 0o755 }
     )
     await chmod(nodePath, 0o755)

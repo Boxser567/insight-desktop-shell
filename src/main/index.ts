@@ -16,7 +16,11 @@ import {
 } from 'electron'
 import { extractFailureCause, HarnessRuntime } from './runtime/harness-runtime'
 import { launchDisclaimedUtilityProcess } from './runtime/disclaimed-utility-process'
-import { removeProfilePluginWithDsh } from './runtime/profile-plugin-command'
+import {
+  installProfileDependenciesWithDsh,
+  removeProfilePluginWithDsh
+} from './runtime/profile-plugin-command'
+import { clearDamagedPackageDirectories, hasProfile } from './state/profile-repair'
 import { LanMobileBridge } from './mobile/lan-mobile-bridge'
 import {
   detectPluginRecovery,
@@ -261,6 +265,21 @@ function bundledNodePath(): string {
   return join(app.getAppPath(), 'node_modules', 'node', 'bin', executable)
 }
 
+/**
+ * The packaged lock-recovery runner. The Harness-side installer stages its own
+ * copy into .desktop-bin; the desktop writes shims to that same directory, so
+ * it points at the same runner rather than replacing them with a plain pnpm
+ * call that would silently drop the recovery.
+ */
+function bundledPnpmRunnerPath(): string {
+  return join(
+    app.getAppPath(),
+    'node_modules',
+    'dsh-desktop-market-installer',
+    'pnpm-runner.mjs'
+  )
+}
+
 function bundledPnpmEntryPath(): string {
   const root = join(app.getAppPath(), 'node_modules', 'pnpm', 'bin')
   const candidates = [join(root, 'pnpm.cjs'), join(root, 'pnpm.mjs')]
@@ -445,13 +464,56 @@ async function showSplash(): Promise<void> {
   window.focus()
 }
 
+/**
+ * Clear what an earlier failed package operation left behind, then put the
+ * packages back — both while Harness is stopped, the only moment either is
+ * safe. A profile damaged by an older build heals on the first launch of this
+ * one; an undamaged profile costs a directory scan. Failure here is not fatal:
+ * the prune below still keeps the profile bootable, and Harness reports
+ * whatever remains.
+ */
+async function repairProfilePackages(dshHome: string): Promise<void> {
+  try {
+    if (!hasProfile(dshHome)) return
+    const removed = await clearDamagedPackageDirectories(dshHome)
+    if (removed.length === 0) return
+
+    runtime.note(
+      `[desktop] repairing profile: cleared ${removed.length} damaged package ${
+        removed.length === 1 ? 'directory' : 'directories'
+      }`
+    )
+    const result = await installProfileDependenciesWithDsh({
+      dshHome,
+      dshEntryPath: dshEntryPath(),
+      nodeExecutablePath: bundledNodePath(),
+      pnpmEntryPath: bundledPnpmEntryPath(),
+      pnpmRunnerPath: bundledPnpmRunnerPath()
+    })
+    runtime.note(
+      result.ok
+        ? '[desktop] profile repair completed'
+        : `[desktop] profile repair failed: ${result.detail ?? 'unknown error'}`
+    )
+  } catch (error) {
+    runtime.note(
+      `[desktop] profile repair failed: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+}
+
 function launchHarness(): Promise<void> {
   if (harnessLaunchOperation) return harnessLaunchOperation
 
   harnessLaunchOperation = (async () => {
     const dshHome = join(app.getPath('userData'), 'harness')
-    await pruneMissingProfileBundles(dshHome).catch(() => false)
     await showSplash()
+    // The repair only holds on a stopped Harness, and a restart still has the
+    // previous one running: start() stops it, but that is after the repair.
+    // Stopping here is what makes the window this launch path assumes.
+    await runtime.stop()
+    await repairProfilePackages(dshHome)
+    await pruneMissingProfileBundles(dshHome).catch(() => false)
     await runtime.start(launchDirectory)
   })().finally(() => {
     harnessLaunchOperation = undefined
@@ -705,6 +767,7 @@ async function showPluginRecovery(options?: {
                 dshEntryPath: dshEntryPath(),
                 nodeExecutablePath: bundledNodePath(),
                 pnpmEntryPath: bundledPnpmEntryPath(),
+                pnpmRunnerPath: bundledPnpmRunnerPath(),
                 environment: process.env
               },
               pluginName
