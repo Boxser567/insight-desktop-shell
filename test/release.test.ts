@@ -283,6 +283,9 @@ describe('GitHub release contract', () => {
     expect(workflow).toMatch(
       /macos-intel:\r?\n\s+name: macOS Intel\r?\n(?:[\s\S]*?)runs-on: macos-15-intel\r?\n\s+steps:/
     )
+    expect(workflow).toMatch(
+      /windows-x64:\r?\n\s+name: Windows x64\r?\n(?:[\s\S]*?)runs-on: windows-2022\r?\n\s+steps:/
+    )
   })
 
   it('routes the published download through the official website', async () => {
