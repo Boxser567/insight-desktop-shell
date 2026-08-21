@@ -293,12 +293,10 @@ function render(): void {
 
   row.appendChild(body)
 
-  if (status.phase !== 'downloaded') {
-    const close = button('×', 'close')
-    close.setAttribute('aria-label', locale === 'zh' ? '关闭' : 'Close')
-    close.addEventListener('click', dismissCurrent)
-    row.appendChild(close)
-  }
+  const close = button('×', 'close')
+  close.setAttribute('aria-label', locale === 'zh' ? '关闭' : 'Close')
+  close.addEventListener('click', dismissCurrent)
+  row.appendChild(close)
 
   card.appendChild(row)
   content.replaceChildren(card)

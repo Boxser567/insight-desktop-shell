@@ -40,8 +40,10 @@ describe('desktop update card visibility', () => {
     )
   })
 
-  it('keeps a downloaded update visible until the user installs it', () => {
-    expect(isUpdateDismissed(downloaded, '1.1.0')).toBe(false)
+  it('dismisses a downloaded update when the user closes the card', () => {
+    expect(isUpdateDismissed(downloaded, null)).toBe(false)
+    expect(isUpdateDismissed(downloaded, '1.0.0')).toBe(false)
+    expect(isUpdateDismissed(downloaded, '1.1.0')).toBe(true)
   })
 
   it('formats localized progress copy', () => {
