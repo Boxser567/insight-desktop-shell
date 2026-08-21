@@ -10,10 +10,12 @@ import {
   Menu,
   nativeTheme,
   shell,
+  utilityProcess,
   type IpcMainInvokeEvent,
   type MessageBoxOptions
 } from 'electron'
 import { extractFailureCause, HarnessRuntime } from './runtime/harness-runtime'
+import { launchDisclaimedUtilityProcess } from './runtime/disclaimed-utility-process'
 import { removeProfilePluginWithDsh } from './runtime/profile-plugin-command'
 import { LanMobileBridge } from './mobile/lan-mobile-bridge'
 import {
@@ -940,7 +942,10 @@ async function bootstrap(): Promise<void> {
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
     dshHome: join(app.getPath('userData'), 'harness'),
     logPath: join(app.getPath('logs'), 'harness.log'),
-    launchProcess: (executablePath, args, options) => spawn(executablePath, args, options),
+    launchProcess: (executablePath, args, options) =>
+      process.platform === 'darwin'
+        ? launchDisclaimedUtilityProcess(utilityProcess, args, options)
+        : spawn(executablePath, args, options),
     onChanged: (snapshot) => {
       if (snapshot.phase === 'ready' && snapshot.url) {
         void openHarness(snapshot.url).catch(showUnexpectedError)

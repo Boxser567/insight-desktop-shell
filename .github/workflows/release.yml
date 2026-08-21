@@ -27,6 +27,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -78,12 +80,13 @@ jobs:
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
         run: npm run package:mac:arm64
-      - name: Build unsigned Apple Silicon verification package
+      - name: Build isolated Apple Silicon development package
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run package:mac:arm64
+        run: npm run package:dev:mac:arm64
       - name: Preserve Apple Silicon update metadata
+        if: startsWith(github.ref, 'refs/tags/v')
         run: mv dist/latest-mac.yml dist/latest-mac-arm64.yml
       - name: Sign, notarize, and staple Apple Silicon DMG
         if: startsWith(github.ref, 'refs/tags/v')
@@ -130,6 +133,7 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=4 dist/dsh-desktop-mac-arm64.dmg
           xcrun stapler validate dist/dsh-desktop-mac-arm64.dmg
       - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: macos-apple-silicon
           path: |
@@ -138,6 +142,15 @@ jobs:
             dist/dsh-desktop-mac-arm64.zip.blockmap
             dist/latest-mac-arm64.yml
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        with:
+          name: macos-apple-silicon-dev
+          path: |
+            dist-dev/dsh-desktop-dev-mac-arm64.dmg
+            dist-dev/dsh-desktop-dev-mac-arm64.zip
+            dist-dev/dsh-desktop-dev-mac-arm64.zip.blockmap
+          if-no-files-found: error
 
   macos-intel:
     name: macOS Intel
@@ -145,6 +158,8 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -196,12 +211,13 @@ jobs:
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
         run: npm run package:mac:x64
-      - name: Build unsigned Intel verification package
+      - name: Build isolated Intel development package
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run package:mac:x64
+        run: npm run package:dev:mac:x64
       - name: Preserve Intel update metadata
+        if: startsWith(github.ref, 'refs/tags/v')
         run: mv dist/latest-mac.yml dist/latest-mac-x64.yml
       - name: Sign, notarize, and staple Intel DMG
         if: startsWith(github.ref, 'refs/tags/v')
@@ -248,6 +264,7 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=4 dist/dsh-desktop-mac-x64.dmg
           xcrun stapler validate dist/dsh-desktop-mac-x64.dmg
       - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: macos-intel
           path: |
@@ -256,6 +273,15 @@ jobs:
             dist/dsh-desktop-mac-x64.zip.blockmap
             dist/latest-mac-x64.yml
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        with:
+          name: macos-intel-dev
+          path: |
+            dist-dev/dsh-desktop-dev-mac-x64.dmg
+            dist-dev/dsh-desktop-dev-mac-x64.zip
+            dist-dev/dsh-desktop-dev-mac-x64.zip.blockmap
+          if-no-files-found: error
 
   windows-x64:
     name: Windows x64
@@ -263,6 +289,8 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -410,6 +438,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
