@@ -183,7 +183,10 @@ describe('GitHub release contract', () => {
       'package:mac',
       'package:mac:arm64',
       'package:mac:x64',
-      'package:win'
+      'package:win',
+      'package:dev:mac:arm64',
+      'package:dev:mac:x64',
+      'package:dev:win'
     ]) {
       expect(packageJson.scripts[script]).toContain('--publish never')
     }
@@ -201,6 +204,10 @@ describe('GitHub release contract', () => {
 
     expect(packageJson.scripts['package:dev:dir']).toContain('npm run build')
     expect(packageJson.scripts['package:dev:dir']).toContain('electron-builder.dev.cjs')
+    expect(packageJson.scripts['package:dev:mac:arm64']).toContain('verify-target.mjs darwin arm64')
+    expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder.dev.cjs')
+    expect(packageJson.scripts['package:dev:mac:x64']).toContain('verify-target.mjs darwin x64')
+    expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
@@ -208,6 +215,9 @@ describe('GitHub release contract', () => {
     expect(developmentConfig).toContain("productName: 'DSH Desktop Dev'")
     expect(developmentConfig).toContain("output: 'dist-dev'")
     expect(developmentConfig).toContain("dshDesktopChannel: 'development'")
+    expect(developmentConfig).toContain(
+      "artifactName: 'dsh-desktop-dev-${os}-${arch}.${ext}'"
+    )
     expect(developmentConfig).toContain(
       "artifactName: 'dsh-desktop-dev-windows-${arch}-setup.${ext}'"
     )
