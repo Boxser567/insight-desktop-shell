@@ -88,9 +88,6 @@ jobs:
       - name: Preserve Apple Silicon update metadata
         if: startsWith(github.ref, 'refs/tags/v')
         run: mv dist/latest-mac.yml dist/latest-mac-arm64.yml
-      - name: Preserve Apple Silicon development update metadata
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: mv dist-dev/latest-mac.yml dist-dev/latest-mac-arm64.yml
       - name: Sign, notarize, and staple Apple Silicon DMG
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -153,7 +150,6 @@ jobs:
             dist-dev/dsh-desktop-dev-mac-arm64.dmg
             dist-dev/dsh-desktop-dev-mac-arm64.zip
             dist-dev/dsh-desktop-dev-mac-arm64.zip.blockmap
-            dist-dev/latest-mac-arm64.yml
           if-no-files-found: error
 
   macos-intel:
@@ -223,9 +219,6 @@ jobs:
       - name: Preserve Intel update metadata
         if: startsWith(github.ref, 'refs/tags/v')
         run: mv dist/latest-mac.yml dist/latest-mac-x64.yml
-      - name: Preserve Intel development update metadata
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: mv dist-dev/latest-mac.yml dist-dev/latest-mac-x64.yml
       - name: Sign, notarize, and staple Intel DMG
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -288,7 +281,6 @@ jobs:
             dist-dev/dsh-desktop-dev-mac-x64.dmg
             dist-dev/dsh-desktop-dev-mac-x64.zip
             dist-dev/dsh-desktop-dev-mac-x64.zip.blockmap
-            dist-dev/latest-mac-x64.yml
           if-no-files-found: error
 
   windows-x64:
