@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createServer } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
+import { createRequire } from 'node:module'
 import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
 import {
   isPrivateAddress,
   LanMobileBridge,
@@ -9,9 +11,33 @@ import {
 
 const bridges: LanMobileBridge[] = []
 const servers: ReturnType<typeof createServer>[] = []
+interface TestWebSocket {
+  send(data: string): void
+}
+interface TestWebSocketServer {
+  handleUpgrade(
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    callback: (client: TestWebSocket) => void
+  ): void
+  close(callback: (error?: Error) => void): void
+}
+const WebSocketServer = createRequire(import.meta.url)('ws').WebSocketServer as new (options: {
+  noServer: boolean
+}) => TestWebSocketServer
+const webSocketServers: TestWebSocketServer[] = []
 
 afterEach(async () => {
   await Promise.all(bridges.splice(0).map((bridge) => bridge.stop()))
+  await Promise.all(
+    webSocketServers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve()))
+        )
+    )
+  )
   await Promise.all(
     servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
   )
@@ -126,6 +152,11 @@ describe('LAN mobile bridge pairing surface', () => {
 
   it('requires approval, then forwards only allowlisted RPC methods', async () => {
     const harness = createServer(async (request, response) => {
+      if (request.method === 'GET' && request.url === '/api/events.mux') {
+        response.statusCode = 404
+        response.end()
+        return
+      }
       const chunks: Buffer[] = []
       for await (const chunk of request) chunks.push(Buffer.from(chunk))
       const envelope = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { rpcId: string }
@@ -182,6 +213,29 @@ describe('LAN mobile bridge pairing surface', () => {
       ok: true,
       value: { items: [], archivedSessionIds: [] }
     })
+
+    const presetList = await fetch(`http://127.0.0.1:${snapshot.port}/api/rpc`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ method: 'agentPreset.list', payload: {} })
+    })
+    expect(presetList.status).toBe(200)
+
+    for (const [method, payload] of [
+      ['agentPreset.select', { sessionId: 'session-1', agentPreset: 'standard' }],
+      ['session.models', { sessionId: 'session-1' }],
+      [
+        'session.selectModel',
+        { sessionId: 'session-1', provider: 'provider-1', model: 'model-1' }
+      ]
+    ] as const) {
+      const response = await fetch(`http://127.0.0.1:${snapshot.port}/api/rpc`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ method, payload })
+      })
+      expect(response.status, method).toBe(200)
+    }
 
     const sameBridge = await bridge.start()
     expect(sameBridge.port).toBe(snapshot.port)
@@ -283,3 +337,273 @@ describe('LAN mobile bridge pairing surface', () => {
     expect(restoredAfterSafariPaired.status).toBe(200)
   })
 })
+
+describe('LAN mobile bridge user questions', () => {
+  it('replays pending questions and forwards the desktop answer protocol', async () => {
+    const responses: unknown[] = []
+    const muxClients: TestWebSocket[] = []
+    const harness = createServer(async (request, response) => {
+      if (request.method === 'GET' && request.url === '/api/events.mux') {
+        response.statusCode = 426
+        response.end()
+        return
+      }
+      if (request.method === 'POST' && request.url === '/api/respond') {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        responses.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify({ accepted: true }))
+        return
+      }
+      response.statusCode = 404
+      response.end()
+    })
+    const muxServer = new WebSocketServer({ noServer: true })
+    webSocketServers.push(muxServer)
+    harness.on('upgrade', (request, socket, head) => {
+      if (request.url !== '/api/events.mux') return socket.destroy()
+      muxServer.handleUpgrade(request, socket, head, (client) => {
+        muxClients.push(client)
+        client.send(
+          JSON.stringify({
+            type: 'server-request',
+            rpcId: 'question-rpc-1',
+            method: 'question/requested',
+            payload: {
+              type: 'question/requested',
+              sessionId: 'session-1',
+              questions: [
+                {
+                  id: 'domain',
+                  header: '领域确认',
+                  question: '你说的持续学习指哪个领域？',
+                  options: [
+                    {
+                      label: '机器学习中的 Continual Learning (推荐)',
+                      description: '终身学习与抗灾难性遗忘'
+                    },
+                    { label: '教育学中的持续学习' }
+                  ]
+                }
+              ]
+            }
+          })
+        )
+      })
+    })
+    servers.push(harness)
+    await new Promise<void>((resolve) => harness.listen(0, '127.0.0.1', resolve))
+    const harnessPort = (harness.address() as AddressInfo).port
+    const bridge = new LanMobileBridge({
+      harnessUrl: () => `http://127.0.0.1:${harnessPort}`
+    })
+    bridges.push(bridge)
+    const { port, cookie } = await pairBridge(bridge)
+
+    const pending = await waitForRpcValue(port, cookie, 'interaction.pending', {
+      sessionId: 'session-1'
+    })
+    expect(pending).toMatchObject({
+      rpcId: 'question-rpc-1',
+      sessionId: 'session-1',
+      questions: [
+        {
+          id: 'domain',
+          header: '领域确认',
+          question: '你说的持续学习指哪个领域？'
+        }
+      ]
+    })
+
+    const answer = await mobileRpc(port, cookie, 'interaction.answer', {
+      rpcId: 'question-rpc-1',
+      sessionId: 'session-1',
+      answers: [
+        {
+          id: 'domain',
+          selected: ['机器学习中的 Continual Learning (推荐)']
+        }
+      ]
+    })
+    expect(answer.status).toBe(200)
+    expect(await answer.json()).toEqual({ ok: true, value: { accepted: true } })
+    expect(responses).toEqual([
+      {
+        type: 'client-response',
+        rpcId: 'question-rpc-1',
+        result: {
+          ok: true,
+          value: {
+            sessionId: 'session-1',
+            answer: {
+              answers: [
+                {
+                  id: 'domain',
+                  selected: ['机器学习中的 Continual Learning (推荐)']
+                }
+              ]
+            }
+          }
+        }
+      }
+    ])
+
+    // The Harness remains authoritative: an accepted response does not clear
+    // the question until the resolved event arrives on the mux stream.
+    expect(
+      await waitForRpcValue(port, cookie, 'interaction.pending', { sessionId: 'session-1' })
+    ).toMatchObject({ rpcId: 'question-rpc-1' })
+    muxClients[0]?.send(
+      JSON.stringify({
+        type: 'server-request',
+        rpcId: 'resolved-rpc-1',
+        method: 'question/resolved',
+        payload: {
+          type: 'question/resolved',
+          sessionId: 'session-1',
+          questionRpcId: 'question-rpc-1',
+          outcome: 'answered'
+        }
+      })
+    )
+    await waitFor(async () => {
+      const response = await mobileRpc(port, cookie, 'interaction.pending', {
+        sessionId: 'session-1'
+      })
+      return (await response.json()).value === null
+    })
+  })
+
+  it('rejects answers that were not offered by the pending question', async () => {
+    const responses: unknown[] = []
+    const harness = createServer(async (request, response) => {
+      if (request.method === 'GET' && request.url === '/api/events.mux') {
+        response.statusCode = 426
+        response.end()
+        return
+      }
+      if (request.method === 'POST' && request.url === '/api/respond') {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        responses.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify({ accepted: true }))
+        return
+      }
+      response.statusCode = 404
+      response.end()
+    })
+    const muxServer = new WebSocketServer({ noServer: true })
+    webSocketServers.push(muxServer)
+    harness.on('upgrade', (request, socket, head) => {
+      if (request.url !== '/api/events.mux') return socket.destroy()
+      muxServer.handleUpgrade(request, socket, head, (client) => {
+        client.send(
+          JSON.stringify({
+            type: 'server-request',
+            rpcId: 'question-rpc-2',
+            payload: {
+              type: 'question/requested',
+              sessionId: 'session-2',
+              questions: [{ id: 'choice', question: '选择一个', options: [{ label: 'A' }] }]
+            }
+          })
+        )
+      })
+    })
+    servers.push(harness)
+    await new Promise<void>((resolve) => harness.listen(0, '127.0.0.1', resolve))
+    const harnessPort = (harness.address() as AddressInfo).port
+    const bridge = new LanMobileBridge({
+      harnessUrl: () => `http://127.0.0.1:${harnessPort}`
+    })
+    bridges.push(bridge)
+    const { port, cookie } = await pairBridge(bridge)
+    await waitForRpcValue(port, cookie, 'interaction.pending', { sessionId: 'session-2' })
+    const answer = await mobileRpc(port, cookie, 'interaction.answer', {
+      rpcId: 'question-rpc-2',
+      sessionId: 'session-2',
+      answers: [{ id: 'choice', selected: ['B'] }]
+    })
+    expect(answer.status).toBe(500)
+    expect(await answer.json()).toMatchObject({ ok: false, error: 'Answer contains an unknown option.' })
+
+    const cancel = await mobileRpc(port, cookie, 'interaction.cancel', {
+      rpcId: 'question-rpc-2',
+      sessionId: 'session-2'
+    })
+    expect(cancel.status).toBe(200)
+    expect(responses).toEqual([
+      {
+        type: 'client-response',
+        rpcId: 'question-rpc-2',
+        result: {
+          ok: false,
+          error: {
+            code: 'cancelled',
+            message: 'the user closed this question request',
+            details: {}
+          }
+        }
+      }
+    ])
+  })
+})
+
+async function pairBridge(bridge: LanMobileBridge): Promise<{ port: number; cookie: string }> {
+  const snapshot = await bridge.start()
+  const token = new URL(snapshot.pairingUrl!).searchParams.get('token')
+  const pairingPage = await fetch(`http://127.0.0.1:${snapshot.port}/pair?token=${token}`)
+  const pairingId = /let id="([^"]+)"/.exec(await pairingPage.text())?.[1]
+  await fetch(`http://127.0.0.1:${snapshot.port}/desktop/decide`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id: pairingId, approved: true })
+  })
+  const paired = await fetch(
+    `http://127.0.0.1:${snapshot.port}/pair/status?id=${pairingId}`,
+    { redirect: 'manual' }
+  )
+  return {
+    port: snapshot.port!,
+    cookie: paired.headers.get('set-cookie')!.split(';', 1)[0]!
+  }
+}
+
+function mobileRpc(
+  port: number,
+  cookie: string,
+  method: string,
+  payload: unknown
+): Promise<Response> {
+  return fetch(`http://127.0.0.1:${port}/api/rpc`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ method, payload })
+  })
+}
+
+async function waitForRpcValue(
+  port: number,
+  cookie: string,
+  method: string,
+  payload: unknown
+): Promise<unknown> {
+  let value: unknown = null
+  await waitFor(async () => {
+    const response = await mobileRpc(port, cookie, method, payload)
+    value = (await response.json()).value
+    return value !== null
+  })
+  return value
+}
+
+async function waitFor(check: () => Promise<boolean>, timeoutMs = 2_000): Promise<void> {
+  const end = Date.now() + timeoutMs
+  while (Date.now() < end) {
+    if (await check()) return
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error('Timed out waiting for condition.')
+}

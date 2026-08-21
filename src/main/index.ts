@@ -25,6 +25,7 @@ import {
 import { secureWindow } from './security'
 import { ensureLaunchRoot } from './state/launch-root'
 import {
+  pruneMissingProfileBundles,
   resetPluginProfile,
   uninstallPluginFromProfile
 } from './state/plugin-recovery'
@@ -55,7 +56,8 @@ type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'ref
 const PLUGIN_RECOVERY_ACTIONS = new Set<PluginRecoveryAction>([
   'uninstall',
   'show-log',
-  'quit'
+  'quit',
+  'restart'
 ])
 
 let mainWindow: BrowserWindow | undefined
@@ -447,6 +449,8 @@ function launchHarness(): Promise<void> {
   if (harnessLaunchOperation) return harnessLaunchOperation
 
   harnessLaunchOperation = (async () => {
+    const dshHome = join(app.getPath('userData'), 'harness')
+    await pruneMissingProfileBundles(dshHome).catch(() => false)
     await showSplash()
     await runtime.start(launchDirectory)
   })().finally(() => {

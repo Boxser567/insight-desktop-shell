@@ -425,7 +425,7 @@ index 84b746e..6983d4a 100644
  			tag.dataset.plugin = "@deepseek-ai/dsh-client-ui-agent-preset";
  			tag.dataset.pluginCss = tagId;
 -			tag.textContent = css;
-+			tag.textContent = `${css}.rtSEdW_sectionActions{flex:none;align-items:center;gap:8px;margin-right:12px;display:flex}`;
++			tag.textContent = `${css}.rtSEdW_sectionHead{align-items:center;gap:16px;display:flex}.rtSEdW_sectionActions{flex:none;align-items:center;justify-content:flex-end;gap:8px;margin-left:auto;display:flex}.rtSEdW_hiddenInput{display:none}`;
  			document.head.appendChild(tag);
  		}
  		var AgentPresetSection_module_css_default = {

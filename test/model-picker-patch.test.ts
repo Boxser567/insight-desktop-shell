@@ -49,3 +49,34 @@ describe('DSH Desktop available-model picker', () => {
     expect(patch).not.toContain('fetchSelectAll: "Select all"')
   })
 })
+
+describe('DSH Desktop model image-input declarations', () => {
+  it('renders one shared per-model control for both adapter field names', async () => {
+    const client = await readFile(settingsModelsClient, 'utf8')
+
+    expect(client).toContain('function ModelImageInputToggle(props)')
+    expect(client).toContain('field: "inputModalities"')
+    expect(client).toContain('field: "input"')
+    expect(client).toContain('return enabled ? ["text", "image"] : ["text"]')
+  })
+
+  it('ships localized capability copy and an endpoint warning', async () => {
+    const client = await readFile(settingsModelsClient, 'utf8')
+
+    expect(client).toContain('modelImageInput: "Image input"')
+    expect(client).toContain('the endpoint must support them')
+    expect(client).toContain('modelImageInput: "支持图片输入"')
+    expect(client).toContain('请确认接口实际支持')
+  })
+
+  it('captures the image-input control in the reproducible dependency patch', async () => {
+    const patch = await readFile(
+      patchPath('@deepseek-ai/dsh-client-ui-settings-models'),
+      'utf8'
+    )
+
+    expect(patch).toContain('ModelImageInputToggle')
+    expect(patch).toContain('field: "inputModalities"')
+    expect(patch).toContain('field: "input"')
+  })
+})

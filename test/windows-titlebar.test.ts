@@ -38,6 +38,9 @@ describe('Windows titlebar menu', () => {
     expect(preload).toContain('-webkit-app-region: drag')
     expect(preload).toContain('-webkit-app-region: no-drag')
     expect(preload).toContain('env(titlebar-area-width')
+    expect(preload).toContain("const CAPTION_WIDTH_PROPERTY = '--dsh-desktop-windows-caption-width'")
+    expect(preload).toContain('[data-slot="conversation.session.header"] > header')
+    expect(preload).toContain('padding-right: calc(var(${CAPTION_WIDTH_PROPERTY}, 140px) + 52px) !important')
   })
 
   it('accepts only the fixed menu command allowlist', async () => {
