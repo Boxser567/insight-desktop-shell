@@ -15,6 +15,13 @@ const downloading: UpdateStatus = {
   manual: false
 }
 
+const downloaded: UpdateStatus = {
+  phase: 'downloaded',
+  currentVersion: '1.0.0',
+  availableVersion: '1.1.0',
+  manual: false
+}
+
 describe('desktop update card visibility', () => {
   it('shows automatic downloads but keeps automatic background checks quiet', () => {
     expect(shouldShowUpdate(downloading)).toBe(true)
@@ -31,6 +38,10 @@ describe('desktop update card visibility', () => {
     expect(isUpdateDismissed({ ...downloading, availableVersion: '1.2.0' }, '1.1.0')).toBe(
       false
     )
+  })
+
+  it('keeps a downloaded update visible until the user installs it', () => {
+    expect(isUpdateDismissed(downloaded, '1.1.0')).toBe(false)
   })
 
   it('formats localized progress copy', () => {

@@ -287,9 +287,7 @@ function render(): void {
         render()
       })
     })
-    const later = button(locale === 'zh' ? '稍后' : 'Later', 'secondary')
-    later.addEventListener('click', dismissCurrent)
-    actions.append(install, later)
+    actions.append(install)
     body.appendChild(actions)
   }
 

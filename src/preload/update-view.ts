@@ -12,6 +12,7 @@ export function isUpdateDismissed(
   dismissedVersion: string | null,
   dismissedTransientPhase: UpdateStatus['phase'] | null = null
 ): boolean {
+  if (status.phase === 'downloaded') return false
   if (status.availableVersion) return status.availableVersion === dismissedVersion
   return status.phase === dismissedTransientPhase
 }
