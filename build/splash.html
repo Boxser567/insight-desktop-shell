@@ -10,7 +10,7 @@
       html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
       body { display: grid; place-items: center; color: #17181a; background: #f8f8f6; }
       main { display: grid; justify-items: center; gap: 12px; padding: 32px; text-align: center; }
-      .mark { width: 196px; height: auto; image-rendering: pixelated; }
+      .mark { width: min(280px, 80vw); height: auto; }
       .title { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -0.02em; }
       .status { margin: -4px 0 0; color: #777a80; font-size: 13px; }
       @media (prefers-color-scheme: dark) {
@@ -22,14 +22,14 @@
   </head>
   <body>
     <main>
-      <img class="mark" src="dsh-loader.gif" alt="" />
-      <h1 class="title" id="title">Starting DSH Desktop</h1>
-      <p class="status" id="status">First launch may take a moment.</p>
+      <img class="mark" src="insight-logo.svg" alt="因赛AI" />
+      <h1 class="title" id="title">Starting 因赛AI</h1>
+      <p class="status" id="status">一站搞掂电商生意</p>
     </main>
     <script>
       if (navigator.language.toLowerCase().startsWith('zh')) {
-        document.getElementById('title').textContent = '正在启动 DSH Desktop'
-        document.getElementById('status').textContent = '首次启动可能需要一点时间。'
+        document.getElementById('title').textContent = '正在启动因赛AI'
+        document.getElementById('status').textContent = '一站搞掂电商生意'
       }
     </script>
   </body>

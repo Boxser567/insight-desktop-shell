@@ -28,6 +28,7 @@ import {
 } from './plugin-recovery-detection'
 import { secureWindow } from './security'
 import { ensureLaunchRoot } from './state/launch-root'
+import { insightDataPath } from './state/insight-data'
 import {
   pruneMissingProfileBundles,
   resetPluginProfile,
@@ -179,17 +180,17 @@ function applyWindowChromeTheme(window: BrowserWindow, isDark: boolean): void {
 
 function configureAppIdentity(): void {
   if (developmentBuild) {
-    app.setName('DSH Desktop Dev')
-    app.setPath('userData', join(app.getPath('appData'), 'dsh-desktop-dev'))
+    app.setName('因赛AI Dev')
+    app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))
     return
   }
 
-  app.setName('DSH Desktop')
+  app.setName('因赛AI')
   // Keep the historical lowercase directory stable across product-name and
   // branding changes. Harness stores workspaces, sessions, credentials, and
   // custom presets below userData, so deriving this path from app.getName()
   // would make an ordinary upgrade look like a fresh installation.
-  app.setPath('userData', join(app.getPath('appData'), 'dsh-desktop'))
+  app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))
 }
 
 async function syncNativeTheme(window: BrowserWindow): Promise<void> {
@@ -281,7 +282,7 @@ function desktopIconPath(): string {
 function harnessLocale(): 'en' | 'zh' {
   try {
     const settings = parse(
-      readFileSync(join(app.getPath('userData'), 'harness', 'settings.yaml'), 'utf8')
+      readFileSync(join(insightDataPath(app.getPath('userData')), 'harness', 'settings.yaml'), 'utf8')
     ) as { locale?: { preference?: unknown } }
     return resolveHarnessLocale(
       settings.locale?.preference,
@@ -299,7 +300,7 @@ function configureApplicationLocale(): void {
 function harnessThemePreference(): 'light' | 'dark' | 'system' {
   try {
     const settings = parse(
-      readFileSync(join(app.getPath('userData'), 'harness', 'settings.yaml'), 'utf8')
+      readFileSync(join(insightDataPath(app.getPath('userData')), 'harness', 'settings.yaml'), 'utf8')
     ) as { 'ui-theme'?: { preference?: unknown } }
     const preference = settings['ui-theme']?.preference
     return preference === 'light' || preference === 'dark' || preference === 'system'
@@ -488,7 +489,7 @@ function launchHarness(): Promise<void> {
   if (harnessLaunchOperation) return harnessLaunchOperation
 
   harnessLaunchOperation = (async () => {
-    const dshHome = join(app.getPath('userData'), 'harness')
+    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
     await showSplash()
     // The repair only holds on a stopped Harness, and a restart still has the
     // previous one running: start() stops it, but that is after the repair.
@@ -665,7 +666,7 @@ async function showPluginRecovery(options?: {
   if (failureRecoveryVisible || quitting) return
   failureRecoveryVisible = true
 
-  const dshHome = join(app.getPath('userData'), 'harness')
+  const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
   const isChinese = harnessLocale() === 'zh'
   cancelPluginRecoverySessionReset()
   const removedPlugins = pluginRecoveryRemovedPlugins
@@ -872,14 +873,14 @@ function installMenu(): void {
 
 async function bootstrap(): Promise<void> {
   if (process.platform === 'darwin') app.dock?.setIcon(desktopIconPath())
-  launchDirectory = await ensureLaunchRoot(app.getPath('userData'))
+  launchDirectory = await ensureLaunchRoot(insightDataPath(app.getPath('userData')))
   createWindow()
   runtime = new HarnessRuntime({
     dshEntryPath: dshEntryPath(),
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
-    dshHome: join(app.getPath('userData'), 'harness'),
+    dshHome: join(insightDataPath(app.getPath('userData')), 'harness'),
     logPath: join(app.getPath('logs'), 'harness.log'),
     launchProcess: (executablePath, args, options) =>
       process.platform === 'darwin'
@@ -944,7 +945,7 @@ async function bootstrap(): Promise<void> {
     if (pluginName !== undefined && typeof pluginName !== 'string') {
       throw new Error('The failing plugin name must be a string.')
     }
-    const dshHome = join(app.getPath('userData'), 'harness')
+    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
     await resetPluginProfile(dshHome, pluginName)
     await launchHarness()
     return { ok: runtime.snapshot().phase === 'ready' }

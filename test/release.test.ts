@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
 const projectRoot = path.resolve(import.meta.dirname, '..')
 
 const releaseAssets = [
-  'dsh-desktop-mac-arm64.dmg',
-  'dsh-desktop-mac-x64.dmg',
-  'dsh-desktop-windows-x64-setup.exe'
+  'insight-mac-arm64.dmg',
+  'insight-mac-x64.dmg',
+  'insight-windows-x64-setup.exe'
 ]
 
 describe('GitHub release contract', () => {
@@ -63,7 +63,7 @@ describe('GitHub release contract', () => {
       }
     }
 
-    expect(packageJson.build.artifactName).toBe('dsh-desktop-${os}-${arch}.${ext}')
+    expect(packageJson.build.artifactName).toBe('insight-${os}-${arch}.${ext}')
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/app-icon.png',
       to: 'icon.png'
@@ -73,15 +73,15 @@ describe('GitHub release contract', () => {
       to: 'splash.html'
     })
     expect(packageJson.build.extraResources).toContainEqual({
-      from: 'build/dsh-loader.gif',
-      to: 'dsh-loader.gif'
+      from: 'build/insight-logo.svg',
+      to: 'insight-logo.svg'
     })
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/dsh-desktop.patch.yml',
       to: 'dsh-desktop.patch.yml'
     })
     expect(packageJson.build.nsis.artifactName).toBe(
-      'dsh-desktop-windows-${arch}-setup.${ext}'
+      'insight-windows-${arch}-setup.${ext}'
     )
     expect(packageJson.build.nsis.include).toBe('build/installer.nsh')
     expect(packageJson.build.win.target).toEqual([{ target: 'nsis', arch: ['x64'] }])
@@ -111,8 +111,8 @@ describe('GitHub release contract', () => {
 
     expect(main).toContain("desktopResourcePath('splash.html')")
     expect(main).toContain('await showSplash()')
-    expect(splash).toContain('Starting DSH Desktop')
-    expect(splash).toContain('src="dsh-loader.gif"')
+    expect(splash).toContain('Starting 因赛AI')
+    expect(splash).toContain('src="insight-logo.svg"')
     expect(splash).not.toContain('class="track"')
     expect(patch).not.toMatch(/id:\s*directory-picker/)
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-host-directory-picker-native'")
@@ -192,18 +192,18 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
-    expect(developmentConfig).toContain("appId: 'io.dsh.desktop.dev'")
-    expect(developmentConfig).toContain("productName: 'DSH Desktop Dev'")
+    expect(developmentConfig).toContain("appId: 'com.insight.desktop.dev'")
+    expect(developmentConfig).toContain("productName: '因赛AI Dev'")
     expect(developmentConfig).toContain("output: 'dist-dev'")
     expect(developmentConfig).toContain("dshDesktopChannel: 'development'")
     expect(developmentConfig).toContain(
-      "artifactName: 'dsh-desktop-dev-${os}-${arch}.${ext}'"
+      "artifactName: 'insight-dev-${os}-${arch}.${ext}'"
     )
     expect(developmentConfig).toContain(
-      "artifactName: 'dsh-desktop-dev-windows-${arch}-setup.${ext}'"
+      "artifactName: 'insight-dev-windows-${arch}-setup.${ext}'"
     )
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'dsh-desktop-dev'))")
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'dsh-desktop'))")
+    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))")
+    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
     expect(main).toContain('const developmentBuild = isDevelopmentBuild()')
   })
 
@@ -218,7 +218,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('runs-on: windows-2022')
     expect(workflow).toContain('npm run package:dev:win')
     expect(workflow).toContain('Smoke test packaged Windows Harness')
-    expect(workflow).toContain("$executable = 'dist-dev\\win-unpacked\\DSH Desktop Dev.exe'")
+    expect(workflow).toContain("$executable = 'dist-dev\\win-unpacked\\因赛AI Dev.exe'")
     expect(workflow).toContain('Packaged Windows Harness smoke test passed.')
     expect(workflow).toContain("Invoke-HarnessRpc 'workspace.create'")
     expect(workflow).toContain("Invoke-HarnessRpc 'session.create'")
@@ -228,7 +228,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('gh release create $env:PRERELEASE_TAG')
     expect(workflow).toContain('--prerelease')
     expect(workflow).toContain('name: windows-x64-dev')
-    expect(workflow).toContain('dist-dev/dsh-desktop-dev-windows-x64-setup.exe')
+    expect(workflow).toContain('dist-dev/insight-dev-windows-x64-setup.exe')
     for (const asset of releaseAssets) expect(workflow).toContain(asset)
     expect(
       workflow.match(

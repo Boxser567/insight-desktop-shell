@@ -1,7 +1,7 @@
 {
-  "name": "dsh-desktop",
+  "name": "insight-desktop",
   "version": "0.1.1",
-  "description": "A cross-platform desktop shell for DeepSeek Harness.",
+  "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -85,8 +85,8 @@
     "koffi": "3.1.5"
   },
   "build": {
-    "appId": "io.dsh.desktop",
-    "productName": "DSH Desktop",
+    "appId": "com.insight.desktop",
+    "productName": "因赛AI",
     "asar": false,
     "npmRebuild": false,
     "compression": "maximum",
@@ -130,11 +130,15 @@
         "to": "dsh-loader.gif"
       },
       {
+        "from": "build/insight-logo.svg",
+        "to": "insight-logo.svg"
+      },
+      {
         "from": "build/plugin-recovery.html",
         "to": "plugin-recovery.html"
       }
     ],
-    "artifactName": "dsh-desktop-${os}-${arch}.${ext}",
+    "artifactName": "insight-${os}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
@@ -161,7 +165,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "dsh-desktop-windows-${arch}-setup.${ext}",
+      "artifactName": "insight-windows-${arch}-setup.${ext}",
       "include": "build/installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
