@@ -60,6 +60,8 @@ DeepSeek Harness already provides a complete agent runtime and Web UI. DSH Deskt
 - Listens only on a random `127.0.0.1` port for each launch
 - Removes Node.js privileges from the renderer and enables `contextIsolation`, sandboxing, and navigation restrictions
 - Includes a production DSH app icon in macOS ICNS and Windows ICO formats
+- Preinstalls `dsh-better-sidebar@0.16.1` in new Harness profiles without overwriting existing profiles
+- Imports trusted local plugin folders or `.tgz` archives from the `Plugins` application menu; local plugins run with the same permissions as the desktop app
 
 ## Quick start
 
@@ -102,7 +104,7 @@ npm run package:mac:x64
 npm run package:win
 ```
 
-Harness includes architecture-specific native modules. Dependencies must be reinstalled and built on the matching platform for macOS ARM64, macOS Intel, and Windows x64. The architecture-specific scripts validate the current `platform/arch` before packaging to prevent artifacts that appear successful but are missing native dependencies.
+Harness includes architecture-specific native modules. Packaging also prepares an offline default profile containing `dsh-better-sidebar@0.16.1` and its resolved dependencies. Dependencies must be reinstalled and built on the matching platform for macOS ARM64, macOS Intel, and Windows x64. The architecture-specific scripts validate the current `platform/arch` before packaging to prevent artifacts that appear successful but are missing native dependencies.
 
 ## Runtime architecture
 

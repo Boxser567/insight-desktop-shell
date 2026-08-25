@@ -80,6 +80,11 @@ describe('GitHub release contract', () => {
       from: 'build/dsh-desktop.patch.yml',
       to: 'dsh-desktop.patch.yml'
     })
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/bundled-profile',
+      to: 'bundled-profile',
+      filter: ['**/*', '!**/.DS_Store', '!**/__MACOSX/**']
+    })
     expect(packageJson.build.nsis.artifactName).toBe(
       'insight-windows-${arch}-setup.${ext}'
     )
@@ -111,12 +116,22 @@ describe('GitHub release contract', () => {
 
     expect(main).toContain("desktopResourcePath('splash.html')")
     expect(main).toContain('await showSplash()')
+    expect(main).toContain("initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)")
     expect(splash).toContain('Starting 因赛AI')
     expect(splash).toContain('src="insight-logo.svg"')
     expect(splash).not.toContain('class="track"')
     expect(patch).not.toMatch(/id:\s*directory-picker/)
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-host-directory-picker-native'")
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-ui-directory-picker-native'")
+  })
+
+  it('exposes trusted local plugin import without configuring a marketplace', async () => {
+    const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+
+    expect(main).toContain("label: isChinese ? '导入本地插件…' : 'Import Local Plugin…'")
+    expect(main).toContain('resolveLocalPluginImport(selectedPath)')
+    expect(main).toContain('addProfilePluginWithDsh(')
+    expect(main).not.toMatch(/marketplace|plugin market/i)
   })
 
   it('routes manual restarts through the active plugin recovery flow', async () => {
@@ -189,6 +204,8 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('verify-target.mjs darwin x64')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder.dev.cjs')
+    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac dmg --arm64')
+    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac zip --arm64')
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')

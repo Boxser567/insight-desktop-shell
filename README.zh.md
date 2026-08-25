@@ -60,6 +60,8 @@ DeepSeek Harness 本身提供完整的 Agent Runtime 与 Web UI。DSH Desktop �
 - 每次启动仅监听随机的 `127.0.0.1` 端口
 - Renderer 关闭 Node.js 权限，启用 `contextIsolation`、sandbox 与导航限制
 - 正式 DSH 应用图标，支持 macOS ICNS 与 Windows ICO
+- 为新的 Harness Profile 预装 `dsh-better-sidebar@0.16.1`，且不会覆盖已有 Profile
+- 可从应用菜单“插件”导入可信的本地插件目录或 `.tgz` 压缩包；本地插件拥有与桌面应用相同的执行权限
 
 ## 快速开始
 
@@ -102,7 +104,7 @@ npm run package:mac:x64
 npm run package:win
 ```
 
-Harness 包含架构相关原生模块。macOS ARM64、macOS Intel 与 Windows x64 应在对应平台上重新安装依赖并构建。架构专用脚本会在打包前检查当前 `platform/arch`，避免生成看似成功、实际缺少原生依赖的安装包。
+Harness 包含架构相关原生模块。打包时还会生成一个包含 `dsh-better-sidebar@0.16.1` 及其完整依赖的离线默认 Profile。macOS ARM64、macOS Intel 与 Windows x64 应在对应平台上重新安装依赖并构建。架构专用脚本会在打包前检查当前 `platform/arch`，避免生成看似成功、实际缺少原生依赖的安装包。
 
 ## 运行架构
 

@@ -39,6 +39,14 @@ export function buildProfilePluginRemoveArguments(
   return [dshEntryPath, 'plugin', '--profile', PROFILE, 'remove', pluginName]
 }
 
+/** Build the DSH command that installs one user-selected local package. */
+export function buildProfilePluginAddArguments(
+  dshEntryPath: string,
+  packagePath: string
+): string[] {
+  return [dshEntryPath, 'plugin', '--profile', PROFILE, 'add', '--save-exact', packagePath]
+}
+
 /**
  * Reinstall everything the profile manifest asks for. This runs before Harness
  * starts, which is the only moment the packages it would otherwise hold open
@@ -177,6 +185,19 @@ export async function removeProfilePluginWithDsh(
   pluginName: string
 ): Promise<ProfilePluginCommandResult> {
   return runProfileCommand(options, buildProfilePluginRemoveArguments(options.dshEntryPath, pluginName), 'Plugin removal', OPERATION_TIMEOUT_MS)
+}
+
+/** Install a local directory or tarball after the caller has stopped Harness. */
+export async function addProfilePluginWithDsh(
+  options: ProfilePluginCommandOptions,
+  packagePath: string
+): Promise<ProfilePluginCommandResult> {
+  return runProfileCommand(
+    options,
+    buildProfilePluginAddArguments(options.dshEntryPath, packagePath),
+    'Plugin import',
+    OPERATION_TIMEOUT_MS
+  )
 }
 
 /**

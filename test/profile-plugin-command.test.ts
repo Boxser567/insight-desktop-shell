@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   buildPnpmShimCommand,
+  buildProfilePluginAddArguments,
   diagnosticLine,
   removeProfilePluginWithDsh
 } from '../src/main/runtime/profile-plugin-command'
@@ -62,6 +63,18 @@ describe('profile-plugin-command', () => {
 })
 
 describe('profile pnpm shim and failure reporting', () => {
+  it('passes a local package path to DSH without rewriting it', () => {
+    expect(buildProfilePluginAddArguments('/app/dsh/bin.js', '/Users/me/plugin.tgz')).toEqual([
+      '/app/dsh/bin.js',
+      'plugin',
+      '--profile',
+      'web',
+      'add',
+      '--save-exact',
+      '/Users/me/plugin.tgz'
+    ])
+  })
+
   it('uses the bundled pnpm executable without the removed market runner', () => {
     const base = {
       dshHome: '/home/.dsh',

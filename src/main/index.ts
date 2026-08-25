@@ -16,6 +16,7 @@ import {
 import { extractFailureCause, HarnessRuntime } from './runtime/harness-runtime'
 import { launchDisclaimedUtilityProcess } from './runtime/disclaimed-utility-process'
 import {
+  addProfilePluginWithDsh,
   installProfileDependenciesWithDsh,
   removeProfilePluginWithDsh
 } from './runtime/profile-plugin-command'
@@ -29,6 +30,8 @@ import {
 import { secureWindow } from './security'
 import { ensureLaunchRoot } from './state/launch-root'
 import { insightDataPath } from './state/insight-data'
+import { initializeBundledProfile } from './state/bundled-profile'
+import { resolveLocalPluginImport } from './state/local-plugin-import'
 import {
   pruneMissingProfileBundles,
   resetPluginProfile,
@@ -467,6 +470,78 @@ async function repairProfilePackages(dshHome: string): Promise<void> {
   }
 }
 
+function showMainMessageBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  return mainWindow && !mainWindow.isDestroyed()
+    ? dialog.showMessageBox(mainWindow, options)
+    : dialog.showMessageBox(options)
+}
+
+function showMainOpenDialog(options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
+  return mainWindow && !mainWindow.isDestroyed()
+    ? dialog.showOpenDialog(mainWindow, options)
+    : dialog.showOpenDialog(options)
+}
+
+async function importLocalPlugin(): Promise<void> {
+  const isChinese = harnessLocale() === 'zh'
+  const selection = await showMainMessageBox({
+    type: 'warning',
+    title: isChinese ? '导入本地插件' : 'Import Local Plugin',
+    message: isChinese ? '本地插件可执行与因赛AI相同权限的代码。请仅导入可信来源。' : 'Local plugins can run code with the same permissions as Insight AI. Import only trusted packages.',
+    buttons: isChinese ? ['选择插件目录', '选择 .tgz 文件', '取消'] : ['Choose Plugin Folder', 'Choose .tgz File', 'Cancel'],
+    defaultId: 2,
+    cancelId: 2
+  })
+  if (selection.response === 2) return
+
+  const picker = await showMainOpenDialog(selection.response === 0
+    ? {
+        title: isChinese ? '选择插件目录' : 'Choose Plugin Folder',
+        properties: ['openDirectory']
+      }
+    : {
+        title: isChinese ? '选择插件压缩包' : 'Choose Plugin Archive',
+        properties: ['openFile'],
+        filters: [{ name: 'npm package', extensions: ['tgz'] }]
+      })
+  const selectedPath = picker.filePaths[0]
+  if (picker.canceled || !selectedPath) return
+
+  try {
+    const plugin = await resolveLocalPluginImport(selectedPath)
+    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+    await showSplash()
+    await runtime.stop()
+    const result = await addProfilePluginWithDsh(
+      {
+        dshHome,
+        dshEntryPath: dshEntryPath(),
+        nodeExecutablePath: bundledNodePath(),
+        pnpmEntryPath: bundledPnpmEntryPath()
+      },
+      plugin.path
+    )
+    if (!result.ok) {
+      await launchHarness()
+      await showMainMessageBox({
+        type: 'error',
+        title: isChinese ? '导入插件失败' : 'Plugin Import Failed',
+        message: result.detail ?? (isChinese ? '无法安装所选插件。' : 'The selected plugin could not be installed.')
+      })
+      return
+    }
+    runtime.note(`[desktop] imported local ${plugin.kind} plugin: ${plugin.path}`)
+    await launchHarness()
+  } catch (error) {
+    await launchHarness()
+    await showMainMessageBox({
+      type: 'error',
+      title: isChinese ? '导入插件失败' : 'Plugin Import Failed',
+      message: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
+
 /**
  * Name what the profile contradicts about itself, once the repair above has
  * had its turn. A dangling declaration does not throw — it leaves a service
@@ -495,6 +570,8 @@ function launchHarness(): Promise<void> {
     // previous one running: start() stops it, but that is after the repair.
     // Stopping here is what makes the window this launch path assumes.
     await runtime.stop()
+    const initialized = await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
+    if (initialized) runtime.note('[desktop] initialized bundled web profile')
     // Before anything else runs pnpm: a store the profile does not pin makes
     // every package operation fail, repairs included.
     const pinned = await ensureStoreDirPinned(dshHome).catch(() => undefined)
@@ -836,6 +913,15 @@ function installMenu(): void {
         ...(process.platform === 'darwin'
           ? []
           : [{ type: 'separator' as const }, { role: 'quit' as const }])
+      ]
+    },
+    {
+      label: isChinese ? '插件' : 'Plugins',
+      submenu: [
+        {
+          label: isChinese ? '导入本地插件…' : 'Import Local Plugin…',
+          click: () => void importLocalPlugin().catch(showUnexpectedError)
+        }
       ]
     },
     {
