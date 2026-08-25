@@ -81,6 +81,10 @@ describe('GitHub release contract', () => {
       to: 'dsh-desktop.patch.yml'
     })
     expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/runtime-manifest.json',
+      to: 'runtime-manifest.json'
+    })
+    expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/bundled-profile',
       to: 'bundled-profile',
       filter: ['**/*', '!**/.DS_Store', '!**/__MACOSX/**']
@@ -117,6 +121,7 @@ describe('GitHub release contract', () => {
     expect(main).toContain("desktopResourcePath('splash.html')")
     expect(main).toContain('await showSplash()')
     expect(main).toContain("initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)")
+    expect(main).toContain("readRuntimeManifest(desktopResourcePath('runtime-manifest.json'))")
     expect(splash).toContain('Starting 因赛AI')
     expect(splash).toContain('src="insight-logo.svg"')
     expect(splash).not.toContain('class="track"')
@@ -168,6 +173,18 @@ describe('GitHub release contract', () => {
     expect(packageJson.dependencies['electron-updater']).toBeUndefined()
     expect(packageJson.build.publish).toBeUndefined()
     expect(packageJson.build.win.verifyUpdateCodeSignature).toBe(false)
+  })
+
+  it('generates the runtime manifest before development and production builds', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as { scripts: Record<string, string> }
+
+    expect(packageJson.scripts['prepare:runtime-manifest']).toBe(
+      'node scripts/prepare-runtime-manifest.mjs'
+    )
+    expect(packageJson.scripts.dev).toContain('prepare:runtime-manifest')
+    expect(packageJson.scripts.build).toContain('prepare:runtime-manifest')
   })
 
   it('keeps builder jobs from attempting implicit tag publishing', async () => {

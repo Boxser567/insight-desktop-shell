@@ -106,6 +106,8 @@ npm run package:win
 
 Harness 包含架构相关原生模块。打包时还会生成一个包含 `dsh-better-sidebar@0.16.1` 及其完整依赖的离线默认 Profile。macOS ARM64、macOS Intel 与 Windows x64 应在对应平台上重新安装依赖并构建。架构专用脚本会在打包前检查当前 `platform/arch`，避免生成看似成功、实际缺少原生依赖的安装包。
 
+每次构建还会生成 `build/runtime-manifest.json`。macOS 安装包会将同一文件放入 `因赛AI.app/Contents/Resources/runtime-manifest.json`，记录来自 Registry 的 DSH 版本、其 lockfile integrity 校验和、内置 Node 版本以及目标平台/架构。当前仍处于 Registry Runtime 过渡阶段，`core.commit` 有意为 `null`。
+
 ## 运行架构
 
 ```text

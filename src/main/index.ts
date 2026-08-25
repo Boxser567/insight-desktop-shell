@@ -32,6 +32,7 @@ import { ensureLaunchRoot } from './state/launch-root'
 import { insightDataPath } from './state/insight-data'
 import { initializeBundledProfile } from './state/bundled-profile'
 import { resolveLocalPluginImport } from './state/local-plugin-import'
+import { readRuntimeManifest } from './state/runtime-manifest'
 import {
   pruneMissingProfileBundles,
   resetPluginProfile,
@@ -982,6 +983,7 @@ async function bootstrap(): Promise<void> {
       }
     }
   })
+  runtime.note(`[desktop] runtime manifest: ${JSON.stringify(readRuntimeManifest(desktopResourcePath('runtime-manifest.json')))}`)
   registerHarnessHandlers()
   ipcMain.handle('directory-picker:open', async (event) => {
     if (

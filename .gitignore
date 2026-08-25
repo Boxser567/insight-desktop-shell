@@ -9,6 +9,7 @@ build/icon.iconset/
 build/app-icon.iconset/
 build/icon-1024.png
 build/bundled-profile/
+build/runtime-manifest.json
 .env
 .env.*
 !.env.example

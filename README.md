@@ -106,6 +106,8 @@ npm run package:win
 
 Harness includes architecture-specific native modules. Packaging also prepares an offline default profile containing `dsh-better-sidebar@0.16.1` and its resolved dependencies. Dependencies must be reinstalled and built on the matching platform for macOS ARM64, macOS Intel, and Windows x64. The architecture-specific scripts validate the current `platform/arch` before packaging to prevent artifacts that appear successful but are missing native dependencies.
 
+Every build also creates `build/runtime-manifest.json`. Packaged macOS applications include the same file at `因赛AI.app/Contents/Resources/runtime-manifest.json`; it records the registry-supplied DSH version, its lockfile integrity checksum, bundled Node version, and target platform/architecture. During this registry transition, `core.commit` is intentionally `null`.
+
 ## Runtime architecture
 
 ```text
