@@ -69,6 +69,16 @@ DeepSeek Harness already provides a complete agent runtime and Web UI. DSH Deskt
 
 [dsh-market](https://github.com/dsh-market/dsh-market) — the DeepSeek Harness plugin market: browse and search 900+ community plugins, preview screenshots, and install, update, enable or disable plugins, or switch themes with one click. Most plugins take effect instantly without a restart.
 
+### Safe Mode
+
+If a third-party plugin interferes with normal use, choose **Restart as Safe Mode…** from the `Harness` menu. DSH Desktop starts Harness with an isolated profile containing only official core bundles, so the Agent, sessions, model settings, and workspaces remain available while third-party plugins from the normal web profile stay blocked. Use the Safe Mode banner to manage those plugins or return to a normal launch.
+
+If the normal interface cannot be reached, launch DSH Desktop with `--safe-mode`. On macOS, for example:
+
+```sh
+open -a "DSH Desktop" --args --safe-mode
+```
+
 ## Quick start
 
 ### Requirements

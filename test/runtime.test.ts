@@ -5,6 +5,7 @@ import {
   buildHarnessArguments,
   buildHarnessSpawnOptions,
   buildNodeArguments,
+  extractDshEntryFailureCause,
   extractDuplicateLoaderEntryId,
   extractFailureCause,
   extractOffendingPlugin,
@@ -54,6 +55,22 @@ describe('Harness launch contract', () => {
   it('applies the desktop composition patch before web arguments', () => {
     expect(buildHarnessArguments(43127, 'C:\\app\\dsh-desktop.patch.yml')).toEqual([
       'web',
+      '--patch',
+      'C:\\app\\dsh-desktop.patch.yml',
+      '--no-open',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      '43127'
+    ])
+  })
+
+  it('boots an isolated profile while preserving the web server arguments', () => {
+    expect(
+      buildHarnessArguments(43127, 'C:\\app\\dsh-desktop.patch.yml', 'desktop-safe-mode')
+    ).toEqual([
+      '--profile',
+      'desktop-safe-mode',
       '--patch',
       'C:\\app\\dsh-desktop.patch.yml',
       '--no-open',
@@ -239,6 +256,7 @@ describe('harness failure cause extraction', () => {
       '[stderr] AggregateError: loader entries failed to apply',
     ]
     expect(extractFailureCause(logs)).toBe('Error: dsh: plugin tree failed to load')
+    expect(extractDshEntryFailureCause(logs)).toBe('Error: dsh: plugin tree failed to load')
   })
 
   it('extracts uncaught exception messages from stderr', () => {
@@ -301,6 +319,7 @@ describe('harness failure cause extraction', () => {
       '[stderr] [harness-node] DSH entry failed: Error: second plugin failed'
     ]
     expect(extractFailureCause(logs)).toBe('Error: second plugin failed')
+    expect(extractDshEntryFailureCause(logs)).toBe('Error: second plugin failed')
   })
 
   it('ignores long error lines (>200 chars) when falling back', () => {
@@ -327,6 +346,14 @@ describe('offending plugin extraction', () => {
       '[stderr] [harness-node] DSH entry failed: Error: dsh: plugin tree failed to load: failed to apply loader entry abc (@linxin666/dsh-web-ui-all): error message'
     ]
     expect(extractOffendingPlugin(logs)).toBe('@linxin666/dsh-web-ui-all')
+  })
+
+  it('extracts the third-party plugin nested under the internal include entry', () => {
+    const logs = [
+      '[stderr] [harness-node] DSH entry failed: Error: dsh: plugin tree failed to load: failed to apply loader entry include (cordis:include): failed to apply loader entry db-connector (dsh-db-connector): cannot get property "commands" without inject'
+    ]
+    expect(extractPluginFailureReferences(logs)).toEqual(['dsh-db-connector'])
+    expect(extractOffendingPlugins(logs)).toEqual(['dsh-db-connector'])
   })
 
   it('extracts plugin name from cannot resolve profile bundle error', () => {
