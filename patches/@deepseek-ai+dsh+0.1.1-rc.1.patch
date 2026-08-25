@@ -2,7 +2,7 @@ diff --git a/node_modules/@deepseek-ai/dsh/package.json b/node_modules/@deepseek
 index 881bb2a..e355fb5 100644
 --- a/node_modules/@deepseek-ai/dsh/package.json
 +++ b/node_modules/@deepseek-ai/dsh/package.json
-@@ -20,6 +20,8 @@
+@@ -20,5 +20,6 @@
    ],
    "license": "MIT",
    "dependencies": {
