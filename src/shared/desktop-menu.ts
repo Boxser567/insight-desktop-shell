@@ -1,10 +1,8 @@
 export const WINDOWS_TITLEBAR_HEIGHT = 36
 
 export const desktopMenuCommands = [
-  'connect-phone',
   'restart-harness',
   'show-harness-log',
-  'check-for-updates',
   'undo',
   'redo',
   'cut',
@@ -17,7 +15,6 @@ export const desktopMenuCommands = [
   'zoom-in',
   'zoom-out',
   'toggle-fullscreen',
-  'about',
   'quit'
 ] as const
 

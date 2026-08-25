@@ -6,7 +6,6 @@ import {
 
 const HOST_ID = 'dsh-desktop-windows-titlebar'
 const LAYOUT_STYLE_ID = `${HOST_ID}-layout`
-const SIDEBAR_WIDTH_PROPERTY = '--dsh-desktop-windows-sidebar-width'
 const CAPTION_WIDTH_PROPERTY = '--dsh-desktop-windows-caption-width'
 
 type MenuEntry =
@@ -26,11 +25,9 @@ export function mountWindowsTitlebar(options: TitlebarMountOptions): void {
   if (!document.body || document.getElementById(HOST_ID)) return
 
   installLayout(document)
-  trackSidebarLayout(document)
-
   const host = document.createElement('div')
   host.id = HOST_ID
-  host.setAttribute('aria-label', locale === 'zh' ? 'DSH Desktop 标题栏' : 'DSH Desktop title bar')
+  host.setAttribute('aria-label', locale === 'zh' ? '应用标题栏' : 'Application title bar')
   const shadow = host.attachShadow({ mode: 'closed' })
   const style = document.createElement('style')
   style.textContent = titlebarStyles
@@ -127,9 +124,6 @@ function installLayout(document: Document): void {
       height: 100% !important;
       min-height: 0 !important;
     }
-    body.dsh-desktop-windows-titlebar-layout [data-dsh-sidebar-root][data-dsh-sidebar-wide="true"] {
-      padding-top: 6px !important;
-    }
     body.dsh-desktop-windows-titlebar-layout [data-slot="conversation.session.header"] > header {
       padding-right: calc(var(${CAPTION_WIDTH_PROPERTY}, 140px) + 52px) !important;
     }
@@ -144,36 +138,6 @@ function installLayout(document: Document): void {
     }
   `
   document.head.appendChild(style)
-}
-
-function trackSidebarLayout(document: Document): void {
-  let observedSidebarColumn: HTMLElement | null = null
-  const resizeObserver = new ResizeObserver(() => updateSidebarWidth())
-
-  const updateSidebarWidth = (): void => {
-    if (!observedSidebarColumn) {
-      document.documentElement.style.setProperty(SIDEBAR_WIDTH_PROPERTY, '0px')
-      return
-    }
-    const width = observedSidebarColumn.getBoundingClientRect().width
-    document.documentElement.style.setProperty(SIDEBAR_WIDTH_PROPERTY, `${Math.max(0, width)}px`)
-  }
-
-  const sync = (): void => {
-    const sidebarRoot = document.querySelector<HTMLElement>('[data-dsh-sidebar-root]')
-    const sidebarColumn = sidebarRoot?.parentElement ?? null
-
-    if (sidebarColumn !== observedSidebarColumn) {
-      if (observedSidebarColumn) resizeObserver.unobserve(observedSidebarColumn)
-      observedSidebarColumn = sidebarColumn
-      if (sidebarColumn) resizeObserver.observe(sidebarColumn)
-    }
-    updateSidebarWidth()
-  }
-
-  const observer = new MutationObserver(sync)
-  observer.observe(document.documentElement, { childList: true, subtree: true })
-  sync()
 }
 
 function renderMenu(
@@ -276,12 +240,6 @@ function menuEntries(locale: 'en' | 'zh'): MenuEntry[] {
     { kind: 'label', label: 'HARNESS' },
     {
       kind: 'command',
-      command: 'connect-phone',
-      label: zh ? '连接手机…' : 'Connect Phone…',
-      shortcut: 'Ctrl+Shift+M'
-    },
-    {
-      kind: 'command',
       command: 'restart-harness',
       label: zh ? '重启 Harness' : 'Restart Harness',
       shortcut: 'Ctrl+Shift+R'
@@ -290,12 +248,6 @@ function menuEntries(locale: 'en' | 'zh'): MenuEntry[] {
       kind: 'command',
       command: 'show-harness-log',
       label: zh ? '显示 Harness 日志' : 'Show Harness Log'
-    },
-    {
-      kind: 'command',
-      command: 'check-for-updates',
-      label: zh ? '检查更新…' : 'Check for Updates…',
-      shortcut: 'Ctrl+U'
     },
     { kind: 'separator' },
     { kind: 'label', label: zh ? '编辑' : 'EDIT' },
@@ -325,12 +277,6 @@ function menuEntries(locale: 'en' | 'zh'): MenuEntry[] {
       command: 'toggle-fullscreen',
       label: zh ? '切换全屏' : 'Toggle Full Screen',
       shortcut: 'F11'
-    },
-    { kind: 'separator' },
-    {
-      kind: 'command',
-      command: 'about',
-      label: zh ? '关于 DSH Desktop' : 'About DSH Desktop'
     },
     { kind: 'command', command: 'quit', label: zh ? '退出' : 'Exit' }
   ]

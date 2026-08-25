@@ -68,6 +68,7 @@ describe('desktop HMR fallback', () => {
     const service = Object.create(ConfigWatchHmr.prototype)
     service.ctx = { logger: { warn: () => undefined } }
     const dispose = await service.registerConfig(watched, refresh)
+    await new Promise((resolve) => setTimeout(resolve, 150))
 
     await writeFile(join(directory, 'unrelated.yml'), 'x\n', 'utf8')
     await new Promise((resolve) => setTimeout(resolve, 250))

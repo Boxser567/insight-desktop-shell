@@ -1,6 +1,6 @@
-import { watch } from 'node:fs'
+import { unwatchFile, watchFile } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 
 /**
@@ -61,16 +61,16 @@ export class ConfigWatchHmr extends Service {
         })
         .catch((error) => this.ctx.logger?.warn?.(error))
     }
-    const watcher = watch(dirname(target), { persistent: false }, () => {
+    watchFile(target, { interval: DEBOUNCE_MS, persistent: false }, (current, previous) => {
+      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return
       clearTimeout(pending)
       pending = setTimeout(check, DEBOUNCE_MS)
       pending.unref?.()
     })
-    watcher.on('error', () => undefined)
 
     return async () => {
       clearTimeout(pending)
-      watcher.close()
+      unwatchFile(target)
       await queue.catch(() => undefined)
     }
   }

@@ -23,7 +23,7 @@
     "agent"
   ],
   "scripts": {
-    "postinstall": "patch-package && node scripts/install-brand-assets.mjs && install-electron --no",
+    "postinstall": "patch-package && install-electron --no",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "icons:generate": "node scripts/generate-app-icons.mjs",
@@ -64,8 +64,6 @@
     "@deepseek-ai/dsh-timeout": "0.1.1-rc.1",
     "@deepseek-ai/dsh-workflow": "0.1.1-rc.1",
     "dsh-desktop-hmr-fallback": "file:packages/dsh-desktop-hmr-fallback",
-    "dsh-desktop-market-installer": "file:packages/dsh-desktop-market-installer",
-    "electron-updater": "^6.8.9",
     "node": "24.9.0",
     "pnpm": "10.34.5",
     "qrcode": "^1.5.4",
@@ -134,12 +132,6 @@
       {
         "from": "build/plugin-recovery.html",
         "to": "plugin-recovery.html"
-      }
-    ],
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://dshdesktop.com/updates/latest/"
       }
     ],
     "artifactName": "dsh-desktop-${os}-${arch}.${ext}",

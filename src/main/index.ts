@@ -11,8 +11,7 @@ import {
   nativeTheme,
   shell,
   utilityProcess,
-  type IpcMainInvokeEvent,
-  type MessageBoxOptions
+  type IpcMainInvokeEvent
 } from 'electron'
 import { extractFailureCause, HarnessRuntime } from './runtime/harness-runtime'
 import { launchDisclaimedUtilityProcess } from './runtime/disclaimed-utility-process'
@@ -23,7 +22,6 @@ import {
 import { clearDamagedPackageDirectories, hasProfile } from './state/profile-repair'
 import { inspectProfileConsistency } from './state/profile-consistency'
 import { ensureStoreDirPinned, inspectStoreConsistency } from './state/profile-store'
-import { LanMobileBridge } from './mobile/lan-mobile-bridge'
 import {
   detectPluginRecovery,
   PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS
@@ -40,12 +38,6 @@ import {
   isAbortedNavigationError,
   shouldLoadHarnessUrl
 } from './window-navigation'
-import {
-  checkForUpdates,
-  registerUpdateHandlers,
-  startUpdateManager,
-  stopUpdateManager
-} from './update/update-manager'
 import type { RuntimeSnapshot } from '../shared/contracts'
 import { resolveHarnessLocale } from './application-locale'
 import { installContextMenu } from './context-menu'
@@ -55,7 +47,6 @@ import {
   type DesktopMenuCommand
 } from '../shared/desktop-menu'
 import { buildPluginRecoveryViewModel } from './plugin-recovery-view'
-import { aboutDetail, bundledHarnessVersion } from './version-info'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh'
 
@@ -67,9 +58,7 @@ const PLUGIN_RECOVERY_ACTIONS = new Set<PluginRecoveryAction>([
 ])
 
 let mainWindow: BrowserWindow | undefined
-let mobileWindow: BrowserWindow | undefined
 let runtime: HarnessRuntime
-let mobileBridge: LanMobileBridge
 let launchDirectory: string
 let quitting = false
 let failureRecoveryVisible = false
@@ -267,21 +256,6 @@ function bundledNodePath(): string {
   return join(app.getAppPath(), 'node_modules', 'node', 'bin', executable)
 }
 
-/**
- * The packaged lock-recovery runner. The Harness-side installer stages its own
- * copy into .desktop-bin; the desktop writes shims to that same directory, so
- * it points at the same runner rather than replacing them with a plain pnpm
- * call that would silently drop the recovery.
- */
-function bundledPnpmRunnerPath(): string {
-  return join(
-    app.getAppPath(),
-    'node_modules',
-    'dsh-desktop-market-installer',
-    'pnpm-runner.mjs'
-  )
-}
-
 function bundledPnpmEntryPath(): string {
   const root = join(app.getAppPath(), 'node_modules', 'pnpm', 'bin')
   const candidates = [join(root, 'pnpm.cjs'), join(root, 'pnpm.mjs')]
@@ -302,17 +276,6 @@ function desktopIconPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'icon.png')
     : join(app.getAppPath(), 'build', 'app-icon.png')
-}
-
-function dshBrandLogoPath(variant: 'light' | 'dark'): string {
-  return join(
-    app.getAppPath(),
-    'node_modules',
-    '@deepseek-ai',
-    'dsh-web-frontend',
-    'dist',
-    `dsh-desktop-logo-${variant}.png`
-  )
 }
 
 function harnessLocale(): 'en' | 'zh' {
@@ -489,8 +452,7 @@ async function repairProfilePackages(dshHome: string): Promise<void> {
       dshHome,
       dshEntryPath: dshEntryPath(),
       nodeExecutablePath: bundledNodePath(),
-      pnpmEntryPath: bundledPnpmEntryPath(),
-      pnpmRunnerPath: bundledPnpmRunnerPath()
+      pnpmEntryPath: bundledPnpmEntryPath()
     })
     runtime.note(
       result.ok
@@ -599,43 +561,17 @@ function assertTrustedMainWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
-async function showAbout(window: BrowserWindow): Promise<void> {
-  const locale = harnessLocale()
-  const checkForUpdatesLabel = locale === 'zh' ? '检查更新' : 'Check for Updates'
-  const result = await dialog.showMessageBox(window, {
-    type: 'info',
-    title: 'DSH Desktop',
-    message: locale === 'zh' ? '关于 DSH Desktop' : 'About DSH Desktop',
-    detail: aboutDetail(
-      app.getVersion(),
-      bundledHarnessVersion(app.getAppPath()),
-      locale
-    ),
-    buttons: [checkForUpdatesLabel, locale === 'zh' ? '关闭' : 'Close'],
-    defaultId: 1,
-    cancelId: 1,
-    noLink: true
-  })
-  if (result.response === 0) await checkForUpdates(true)
-}
-
 async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<void> {
   const window = mainWindow
   if (!window || window.isDestroyed()) return
   const contents = window.webContents
 
   switch (command) {
-    case 'connect-phone':
-      await showMobilePairing()
-      break
     case 'restart-harness':
       await restartHarness()
       break
     case 'show-harness-log':
       shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
-      break
-    case 'check-for-updates':
-      await checkForUpdates(true)
       break
     case 'undo':
       contents.undo()
@@ -672,9 +608,6 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<v
       break
     case 'toggle-fullscreen':
       window.setFullScreen(!window.isFullScreen())
-      break
-    case 'about':
-      await showAbout(window)
       break
     case 'quit':
       app.quit()
@@ -792,7 +725,6 @@ async function showPluginRecovery(options?: {
                 dshEntryPath: dshEntryPath(),
                 nodeExecutablePath: bundledNodePath(),
                 pnpmEntryPath: bundledPnpmEntryPath(),
-                pnpmRunnerPath: bundledPnpmRunnerPath(),
                 environment: process.env
               },
               pluginName
@@ -873,29 +805,12 @@ async function showRuntimeFailure(snapshot: RuntimeSnapshot): Promise<void> {
 
 function installMenu(): void {
   const isChinese = app.getLocale().toLowerCase().startsWith('zh')
-  const checkForUpdatesLabel = isChinese
-    ? '检查更新…'
-    : 'Check for Updates…'
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin'
       ? [
           {
             label: app.name,
             submenu: [
-              {
-                label: isChinese ? '关于 DSH Desktop' : 'About DSH Desktop',
-                click: () => {
-                  if (mainWindow && !mainWindow.isDestroyed()) {
-                    void showAbout(mainWindow).catch(showUnexpectedError)
-                  }
-                }
-              },
-              {
-                label: checkForUpdatesLabel,
-                accelerator: 'CmdOrCtrl+U',
-                click: () => void checkForUpdates(true).catch(showUnexpectedError)
-              },
-              { type: 'separator' as const },
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
               { role: 'unhide' as const },
@@ -909,12 +824,6 @@ function installMenu(): void {
       label: 'Harness',
       submenu: [
         {
-          label: isChinese ? '连接手机…' : 'Connect Phone…',
-          accelerator: 'CmdOrCtrl+Shift+M',
-          click: () => void showMobilePairing().catch(showUnexpectedError)
-        },
-        { type: 'separator' },
-        {
           label: isChinese ? '重启 Harness' : 'Restart Harness',
           accelerator: 'CmdOrCtrl+Shift+R',
           click: () => void restartHarness().catch(showUnexpectedError)
@@ -923,16 +832,6 @@ function installMenu(): void {
           label: isChinese ? '查看 Harness 日志' : 'Show Harness Log',
           click: () => shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
         },
-        ...(process.platform === 'darwin'
-          ? []
-          : [
-              { type: 'separator' as const },
-              {
-                label: checkForUpdatesLabel,
-                accelerator: 'CmdOrCtrl+U',
-                click: () => void checkForUpdates(true).catch(showUnexpectedError)
-              }
-            ]),
         ...(process.platform === 'darwin'
           ? []
           : [{ type: 'separator' as const }, { role: 'quit' as const }])
@@ -971,67 +870,9 @@ function installMenu(): void {
   }
 }
 
-async function showMobilePairing(): Promise<void> {
-  if (runtime.snapshot().phase !== 'ready') {
-    const options: MessageBoxOptions = {
-      type: 'info',
-      message: 'Harness is still starting.',
-      detail: 'Wait until DSH Desktop is ready, then connect your phone again.',
-      buttons: ['OK']
-    }
-    await (mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options))
-    return
-  }
-
-  let snapshot = await mobileBridge.start()
-  if (!snapshot.desktopUrl) {
-    await mobileBridge.stop()
-    const options: MessageBoxOptions = {
-      type: 'warning',
-      message: 'Failed to start mobile bridge.',
-      detail: 'Please try again.',
-      buttons: ['OK']
-    }
-    await (mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options))
-    return
-  }
-
-  if (!snapshot.pairingUrl && !snapshot.tunnelActive) {
-    snapshot = await mobileBridge.toggleTunnel(true)
-  }
-
-  if (mobileWindow && !mobileWindow.isDestroyed()) mobileWindow.destroy()
-  nativeTheme.themeSource = harnessThemePreference()
-  mobileWindow = new BrowserWindow({
-    width: 560,
-    height: 720,
-    minWidth: 420,
-    minHeight: 560,
-    title: harnessLocale() === 'zh' ? '连接移动设备' : 'Connect Mobile Device',
-    icon: desktopIconPath(),
-    parent: mainWindow,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141416' : '#ffffff',
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true
-    }
-  })
-  secureWindow(mobileWindow)
-  mobileWindow.on('closed', () => {
-    mobileWindow = undefined
-  })
-  if (!snapshot.desktopUrl) return
-  await mobileWindow.loadURL(snapshot.desktopUrl)
-  mobileWindow.show()
-  mobileWindow.focus()
-}
-
 async function bootstrap(): Promise<void> {
   if (process.platform === 'darwin') app.dock?.setIcon(desktopIconPath())
   launchDirectory = await ensureLaunchRoot(app.getPath('userData'))
-  registerUpdateHandlers()
   createWindow()
   runtime = new HarnessRuntime({
     dshEntryPath: dshEntryPath(),
@@ -1055,21 +896,6 @@ async function bootstrap(): Promise<void> {
     }
   })
   registerHarnessHandlers()
-  mobileBridge = new LanMobileBridge({
-    harnessUrl: () => runtime.snapshot().url,
-    locale: harnessLocale,
-    brandLogoPaths: {
-      light: dshBrandLogoPath('light'),
-      dark: dshBrandLogoPath('dark')
-    },
-    appIconPath: desktopIconPath(),
-    cloudflaredCacheDir: join(app.getPath('userData'), 'bin'),
-    port: developmentBuild ? 43128 : 43127,
-    onReconnectRequested: () => {
-      void showMobilePairing().catch(showUnexpectedError)
-    }
-  })
-  void mobileBridge.start().catch(showUnexpectedError)
   ipcMain.handle('directory-picker:open', async (event) => {
     if (
       !mainWindow ||
@@ -1086,8 +912,6 @@ async function bootstrap(): Promise<void> {
     })
     return result.canceled ? null : result.filePaths[0] ?? null
   })
-  ipcMain.handle('mobile:open-pairing', () => showMobilePairing())
-  ipcMain.handle('mobile:status', () => ({ connected: mobileBridge.snapshot().connected }))
   ipcMain.handle('harness:show-log', () => {
     shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
   })
@@ -1127,15 +951,6 @@ async function bootstrap(): Promise<void> {
   })
   installMenu()
   await launchHarness()
-  if (!developmentBuild) {
-    startUpdateManager({
-      prepareToInstall: async () => {
-        await runtime.stop()
-        quitting = true
-        stopUpdateManager()
-      }
-    })
-  }
 }
 
 configureAppIdentity()
@@ -1169,7 +984,6 @@ if (!singleInstance) {
     if (quitting || !runtime) return
     event.preventDefault()
     quitting = true
-    stopUpdateManager()
-    void Promise.all([runtime.stop(), mobileBridge?.stop()]).finally(() => app.quit())
+    void runtime.stop().finally(() => app.quit())
   })
 }

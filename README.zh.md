@@ -31,8 +31,6 @@ DSH Desktop 把 DeepSeek Harness 的本地 Web 体验封装为桌面应用：应
 
 请前往 [DSH Desktop 官网](https://www.dshdesktop.com/#download)下载 macOS 和 Windows 安装包。
 
-已安装的 macOS 和 Windows 版本会在启动后及每六小时自动检查更新。更新将在后台下载，准备完成后提示重启安装；也可以从应用菜单选择 **检查更新…** 手动检查。
-
 ## 加入社区
 
 <p align="center">
@@ -61,13 +59,7 @@ DeepSeek Harness 本身提供完整的 Agent Runtime 与 Web UI。DSH Desktop �
 - 退出桌面应用时优雅终止 Harness 子进程
 - 每次启动仅监听随机的 `127.0.0.1` 端口
 - Renderer 关闭 Node.js 权限，启用 `contextIsolation`、sandbox 与导航限制
-- 在桌面窗口与 Harness 侧栏统一使用 DSH 品牌 Logo
-- 可把完整的自定义 Agent 预设导入/导出为便携的 [`.dshpreset` 压缩包](docs/preset-packages.md)，安装前会检查命名冲突并提示信任风险
 - 正式 DSH 应用图标，支持 macOS ICNS 与 Windows ICO
-
-## 友情链接
-
-[dsh-market](https://github.com/dsh-market/dsh-market) — DeepSeek Harness 插件市场：浏览、搜索社区 900+ 插件，截图预览、一键安装 / 更新 / 启停 / 换主题，多数插件免重启即时生效。
 
 ## 快速开始
 
@@ -86,7 +78,7 @@ npm install
 npm run dev
 ```
 
-`npm install` 会运行 `patch-package`，重放 DSH Desktop 对 Harness 首次模型配置、Preset 压缩包导入导出和侧栏品牌的定制，安装品牌静态资源，然后安装 Electron Runtime。
+`npm install` 会运行 `patch-package` 应用固定 Harness 版本的兼容性补丁，然后安装 Electron Runtime。
 
 ### 质量检查
 

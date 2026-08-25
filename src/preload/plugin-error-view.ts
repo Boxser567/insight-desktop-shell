@@ -1,4 +1,4 @@
-import type { UpdateLocale } from './update-view'
+type Locale = 'en' | 'zh'
 
 export function isPluginLoadError(error: unknown): boolean {
   if (!error) return false
@@ -41,7 +41,7 @@ export function extractPluginName(error: unknown): string | undefined {
 }
 
 export function pluginErrorMessage(
-  locale: UpdateLocale,
+  locale: Locale,
   pluginName?: string
 ): { title: string; message: string } {
   const zh = locale === 'zh'

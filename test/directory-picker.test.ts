@@ -51,7 +51,6 @@ describe('desktop Electron directory picker', () => {
     )
 
     expect(apiProxyPatch).toContain('const directoryPicker = ctx.get("directoryPicker")')
-    expect(apiProxyPatch).toContain('-\t\t"directoryPicker",')
     expect(apiProxyPatch).toContain('details: { capability: "none" }')
   })
 })

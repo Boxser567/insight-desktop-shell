@@ -31,8 +31,6 @@ DSH Desktop packages the local DeepSeek Harness web experience as a desktop appl
 
 Download DSH Desktop for macOS and Windows from the [official website](https://www.dshdesktop.com/#download).
 
-Installed macOS and Windows builds check for updates automatically after startup and every six hours. Updates download in the background and prompt you to restart when they are ready. You can also choose **Check for Updates…** from the application menu.
-
 ## Community
 
 <p align="center">
@@ -61,13 +59,7 @@ DeepSeek Harness already provides a complete agent runtime and Web UI. DSH Deskt
 - Gracefully terminates the Harness child process when the desktop app exits
 - Listens only on a random `127.0.0.1` port for each launch
 - Removes Node.js privileges from the renderer and enables `contextIsolation`, sandboxing, and navigation restrictions
-- Uses the DSH brand logo consistently in the desktop window and Harness sidebar
-- Imports and exports complete custom Agent presets as portable [`.dshpreset` packages](docs/preset-packages.md), with conflict checks and a trust warning before installation
 - Includes a production DSH app icon in macOS ICNS and Windows ICO formats
-
-## Friends
-
-[dsh-market](https://github.com/dsh-market/dsh-market) — the DeepSeek Harness plugin market: browse and search 900+ community plugins, preview screenshots, and install, update, enable or disable plugins, or switch themes with one click. Most plugins take effect instantly without a restart.
 
 ## Quick start
 
@@ -86,7 +78,7 @@ npm install
 npm run dev
 ```
 
-`npm install` runs `patch-package` to reapply DSH Desktop's model-provider onboarding, preset package transfer, and sidebar branding, installs the brand asset, and then installs the Electron runtime.
+`npm install` runs `patch-package` to apply the pinned Harness compatibility patches and then installs the Electron runtime.
 
 ### Quality checks
 

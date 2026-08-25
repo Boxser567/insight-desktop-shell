@@ -27,10 +27,8 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain("color: '#00000000'")
     expect(preload).not.toContain(`padding-top: \${WINDOWS_TITLEBAR_HEIGHT}px !important`)
     expect(preload).toContain('padding-top: 0 !important')
-    expect(preload).toContain('[data-dsh-sidebar-root][data-dsh-sidebar-wide="true"]')
-    expect(preload).toContain('padding-top: 6px !important')
-    expect(preload).toContain('trackSidebarLayout(document)')
-    expect(preload).toContain("document.documentElement.style.setProperty(SIDEBAR_WIDTH_PROPERTY")
+    expect(preload).not.toContain('[data-dsh-sidebar-root]')
+    expect(preload).not.toContain('trackSidebarLayout(document)')
     expect(preload).toContain('background: transparent')
     expect(preload).toContain('.safeArea::before')
     expect(preload).toContain('height: ${WINDOWS_TITLEBAR_HEIGHT}px')
@@ -39,14 +37,13 @@ describe('Windows titlebar menu', () => {
     expect(preload).toContain('pointer-events: none')
     expect(preload).toContain('body.dsh-desktop-windows-titlebar-layout button')
     expect(preload).toContain('-webkit-app-region: no-drag !important')
-    expect(preload).toContain("document.documentElement.style.setProperty(SIDEBAR_WIDTH_PROPERTY, '0px')")
   })
 
   it('accepts only the fixed menu command allowlist', async () => {
     const main = await readFile('src/main/index.ts', 'utf8')
 
-    expect(desktopMenuCommands).toContain('connect-phone')
-    expect(desktopMenuCommands).toContain('check-for-updates')
+    expect(desktopMenuCommands).not.toContain('connect-phone')
+    expect(desktopMenuCommands).not.toContain('check-for-updates')
     expect(desktopMenuCommands).toContain('toggle-fullscreen')
     expect(isDesktopMenuCommand('copy')).toBe(true)
     expect(isDesktopMenuCommand('run-shell-command')).toBe(false)
@@ -56,12 +53,12 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain('if (!isDesktopMenuCommand(command))')
   })
 
-  it('shows the bundled Harness version and offers an update check from About', async () => {
+  it('omits the removed updater and DSH-specific About command', async () => {
     const main = await readFile('src/main/index.ts', 'utf8')
 
-    expect(main).toContain('bundledHarnessVersion(app.getAppPath())')
-    expect(main).toContain('if (result.response === 0) await checkForUpdates(true)')
-    expect(main).toContain('void showAbout(mainWindow).catch(showUnexpectedError)')
+    expect(desktopMenuCommands).not.toContain('about')
+    expect(main).not.toContain('checkForUpdates')
+    expect(main).not.toContain('showAbout')
   })
 
   it('synchronizes the native controls with Harness light and dark themes', async () => {
