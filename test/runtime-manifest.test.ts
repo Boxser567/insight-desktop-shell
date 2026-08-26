@@ -42,8 +42,8 @@ describe('runtime manifest', () => {
         source: 'release',
         repository: 'Boxser567/insight-harness-core',
         version: '0.1.1-rc.2',
-          commit: 'c36eadb9f9e51419e14de991b4a0523e58542622',
-        releaseTag: 'insight-runtime-v0.1.1-rc.6'
+        commit: 'c97f4a90ef2ed28800339657d47e64b5843df85b',
+        releaseTag: 'insight-runtime-v0.1.1-rc.7'
       },
       harness: { entry: 'node_modules/@deepseek-ai/dsh/lib/bin.js' },
       node: { version: '24.9.0' },
