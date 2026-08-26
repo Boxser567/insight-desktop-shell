@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs'
 export interface RuntimeManifest {
   schemaVersion: 1
   core: {
-    source: 'registry'
-    commit: null
+    source: 'release'
+    repository: string
+    version: string
+    commit: string
+    releaseTag: string
   }
   harness: {
-    package: '@deepseek-ai/dsh'
-    version: string
+    entry: string
   }
   node: {
     version: string
@@ -18,7 +20,7 @@ export interface RuntimeManifest {
     arch: string
   }
   checksums: {
-    dshPackage: string
+    archiveSha256: string
   }
 }
 
@@ -40,13 +42,15 @@ function isRuntimeManifest(value: unknown): value is RuntimeManifest {
 
   return (
     manifest.schemaVersion === 1 &&
-    core?.source === 'registry' &&
-    core.commit === null &&
-    harness?.package === '@deepseek-ai/dsh' &&
-    typeof harness.version === 'string' &&
+    core?.source === 'release' &&
+    typeof core.repository === 'string' &&
+    typeof core.version === 'string' &&
+    typeof core.commit === 'string' &&
+    typeof core.releaseTag === 'string' &&
+    typeof harness?.entry === 'string' &&
     typeof node?.version === 'string' &&
     typeof target?.platform === 'string' &&
     typeof target.arch === 'string' &&
-    typeof checksums?.dshPackage === 'string'
+    typeof checksums?.archiveSha256 === 'string'
   )
 }

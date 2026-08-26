@@ -33,6 +33,7 @@ import { insightDataPath } from './state/insight-data'
 import { initializeBundledProfile } from './state/bundled-profile'
 import { resolveLocalPluginImport } from './state/local-plugin-import'
 import { readRuntimeManifest } from './state/runtime-manifest'
+import { resolveCoreRuntime } from './state/core-runtime'
 import {
   pruneMissingProfileBundles,
   resetPluginProfile,
@@ -242,29 +243,19 @@ async function syncNativeTheme(window: BrowserWindow): Promise<void> {
 }
 
 function dshEntryPath(): string {
-  if (app.isPackaged) {
-    return join(
-      process.resourcesPath,
-      'app',
-      'node_modules',
-      '@deepseek-ai',
-      'dsh',
-      'lib',
-      'bin.js'
-    )
-  }
-  return join(app.getAppPath(), 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  return coreRuntime().dshEntryPath
 }
 
 function bundledNodePath(): string {
-  const executable = process.platform === 'win32' ? 'node.exe' : 'node'
-  return join(app.getAppPath(), 'node_modules', 'node', 'bin', executable)
+  return coreRuntime().nodeExecutablePath
 }
 
 function bundledPnpmEntryPath(): string {
-  const root = join(app.getAppPath(), 'node_modules', 'pnpm', 'bin')
-  const candidates = [join(root, 'pnpm.cjs'), join(root, 'pnpm.mjs')]
-  return candidates.find((candidate) => existsSync(candidate)) ?? join(root, 'pnpm.cjs')
+  return coreRuntime().pnpmEntryPath
+}
+
+function coreRuntime() {
+  return resolveCoreRuntime(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'build'))
 }
 
 function harnessNodeEntryPath(): string {

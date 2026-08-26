@@ -3,41 +3,49 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const dshPackagePath = 'node_modules/@deepseek-ai/dsh'
 
 /**
  * Builds the immutable runtime description shipped with one desktop target.
  *
- * @param {{ dependencies?: Record<string, unknown> }} packageJson
- * @param {{ packages?: Record<string, { integrity?: unknown, version?: unknown }> }} packageLock
+ * @param {{ releaseTag?: unknown, targets?: Record<string, unknown> }} runtimeLock
+ * @param {{ core?: unknown, entry?: unknown, node?: unknown, target?: unknown }} runtimeMetadata
  * @param {{ platform: string, arch: string }} target
- * @returns {{ schemaVersion: 1, core: { source: 'registry', commit: null }, harness: { package: '@deepseek-ai/dsh', version: string }, node: { version: string }, target: { platform: string, arch: string }, checksums: { dshPackage: string } }}
+ * @returns {{ schemaVersion: 1, core: { source: 'release', repository: string, version: string, commit: string, releaseTag: string }, harness: { entry: string }, node: { version: string }, target: { platform: string, arch: string }, checksums: { archiveSha256: string } }}
  */
-export function createRuntimeManifest(packageJson, packageLock, target) {
-  const harnessVersion = packageJson.dependencies?.['@deepseek-ai/dsh']
-  const nodeVersion = packageJson.dependencies?.node
-  const dsh = packageLock.packages?.[dshPackagePath]
+export function createRuntimeManifest(runtimeLock, runtimeMetadata, target) {
+  const selected = runtimeLock.targets?.[`${target.platform}-${target.arch}`]
+  const core = runtimeMetadata.core
 
-  if (typeof harnessVersion !== 'string' || !harnessVersion) {
-    throw new Error('package.json must declare @deepseek-ai/dsh as a production dependency.')
+  if (!selected || typeof selected !== 'object' || typeof selected.sha256 !== 'string') {
+    throw new Error(`core-runtime.lock.json has no selected Runtime for ${target.platform}-${target.arch}.`)
   }
-  if (typeof nodeVersion !== 'string' || !nodeVersion) {
-    throw new Error('package.json must declare the bundled node runtime as a production dependency.')
+  if (!core || typeof core !== 'object' || typeof runtimeMetadata.entry !== 'string' || typeof runtimeMetadata.node?.version !== 'string') {
+    throw new Error('The prepared Core Runtime metadata is invalid.')
   }
-  if (dsh?.version !== harnessVersion) {
-    throw new Error(`package-lock.json must pin ${dshPackagePath} to ${harnessVersion}.`)
-  }
-  if (typeof dsh.integrity !== 'string' || !dsh.integrity) {
-    throw new Error(`package-lock.json must include an integrity checksum for ${dshPackagePath}.`)
+  if (
+    core.repository !== selected.core?.repository ||
+    core.version !== selected.core?.version ||
+    core.commit !== selected.core?.commit ||
+    runtimeMetadata.node.version !== selected.node?.version ||
+    runtimeMetadata.target?.platform !== target.platform ||
+    runtimeMetadata.target?.arch !== target.arch
+  ) {
+    throw new Error('The prepared Core Runtime metadata does not match core-runtime.lock.json.')
   }
 
   return {
     schemaVersion: 1,
-    core: { source: 'registry', commit: null },
-    harness: { package: '@deepseek-ai/dsh', version: harnessVersion },
-    node: { version: nodeVersion },
+    core: {
+      source: 'release',
+      repository: core.repository,
+      version: core.version,
+      commit: core.commit,
+      releaseTag: runtimeLock.releaseTag
+    },
+    harness: { entry: runtimeMetadata.entry },
+    node: { version: runtimeMetadata.node.version },
     target,
-    checksums: { dshPackage: dsh.integrity }
+    checksums: { archiveSha256: selected.sha256 }
   }
 }
 
@@ -54,11 +62,11 @@ export async function writeRuntimeManifest(outputPath, manifest) {
 }
 
 async function main() {
-  const [packageJson, packageLock] = await Promise.all([
-    readFile(join(projectRoot, 'package.json'), 'utf8').then(JSON.parse),
-    readFile(join(projectRoot, 'package-lock.json'), 'utf8').then(JSON.parse)
+  const [runtimeLock, runtimeMetadata] = await Promise.all([
+    readFile(join(projectRoot, 'core-runtime.lock.json'), 'utf8').then(JSON.parse),
+    readFile(join(projectRoot, 'build', 'core-runtime', 'runtime.json'), 'utf8').then(JSON.parse)
   ])
-  const manifest = createRuntimeManifest(packageJson, packageLock, {
+  const manifest = createRuntimeManifest(runtimeLock, runtimeMetadata, {
     platform: process.platform,
     arch: process.arch
   })

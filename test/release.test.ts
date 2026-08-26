@@ -23,31 +23,14 @@ describe('GitHub release contract', () => {
     expect(packageLock.packages['']?.version).toBe(packageJson.version)
   })
 
-  it('declares required DSH peer packages as production dependencies', async () => {
-    const packageLock = JSON.parse(
-      await readFile(path.join(projectRoot, 'package-lock.json'), 'utf8')
-    ) as {
-      packages: Record<string, { dev?: boolean; peer?: boolean }>
-    }
+  it('does not reinstall the Core Runtime from the npm registry', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as { dependencies: Record<string, string> }
 
-    // A lock location is a path, so nested installs read as
-    // `node_modules/<host>/node_modules/<name>`. Only the segment after the
-    // last `node_modules/` names the package: without that, a third-party peer
-    // that npm nested under a DSH package (rc.8 gives ui-trajectory its own
-    // React 19) reads as a DSH package and trips this guard.
-    const packageNameOf = (location: string): string =>
-      location.slice(location.lastIndexOf('node_modules/') + 'node_modules/'.length)
-
-    const peerOnlyRuntimePackages = Object.entries(packageLock.packages)
-      .filter(
-        ([location, metadata]) =>
-          packageNameOf(location).startsWith('@deepseek-ai/') &&
-          metadata.peer === true &&
-          metadata.dev !== true
-      )
-      .map(([location]) => packageNameOf(location))
-
-    expect(peerOnlyRuntimePackages).toEqual([])
+    expect(Object.keys(packageJson.dependencies).filter(name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'))).toEqual([])
+    expect(packageJson.dependencies.node).toBeUndefined()
+    expect(packageJson.dependencies.pnpm).toBeUndefined()
   })
 
   it('uses stable platform-specific artifact names', async () => {
@@ -83,6 +66,14 @@ describe('GitHub release contract', () => {
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/runtime-manifest.json',
       to: 'runtime-manifest.json'
+    })
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/core-runtime',
+      to: 'runtime'
+    })
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/core-runtime/node_modules',
+      to: 'runtime/node_modules'
     })
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/bundled-profile',
@@ -183,6 +174,11 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['prepare:runtime-manifest']).toBe(
       'node scripts/prepare-runtime-manifest.mjs'
     )
+    expect(packageJson.scripts['prepare:core-runtime']).toBe(
+      'node scripts/prepare-core-runtime.mjs'
+    )
+    expect(packageJson.scripts.dev).toContain('prepare:core-runtime')
+    expect(packageJson.scripts.build).toContain('prepare:core-runtime')
     expect(packageJson.scripts.dev).toContain('prepare:runtime-manifest')
     expect(packageJson.scripts.build).toContain('prepare:runtime-manifest')
   })

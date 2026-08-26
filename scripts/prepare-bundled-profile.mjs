@@ -10,12 +10,13 @@ const SIDEBAR_VERSION = '0.16.1'
 const projectRoot = process.cwd()
 const bundledProfileRoot = join(projectRoot, 'build', 'bundled-profile')
 const bundledProfileDirectory = join(bundledProfileRoot, PROFILE)
+const coreRuntimeRoot = join(projectRoot, 'build', 'core-runtime')
 const bundledNode = process.platform === 'win32'
-  ? join(projectRoot, 'node_modules', 'node', 'bin', 'node.exe')
-  : join(projectRoot, 'node_modules', 'node', 'bin', 'node')
-const nodeExecutable = existsSync(bundledNode) ? bundledNode : process.execPath
-const dshEntry = join(projectRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-const pnpmEntry = join(projectRoot, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
+  ? join(coreRuntimeRoot, 'node_modules', 'node', 'bin', 'node.exe')
+  : join(coreRuntimeRoot, 'node_modules', 'node', 'bin', 'node')
+const nodeExecutable = bundledNode
+const dshEntry = join(coreRuntimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+const pnpmEntry = join(coreRuntimeRoot, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
 
 async function removeHarnessHomeResidue() {
   // `bundled-profile` is a template root, not a DSH home. A diagnostic run
@@ -91,7 +92,7 @@ async function runDsh(home, workingDirectory, shimDirectory) {
 }
 
 if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
-  throw new Error('The installed DSH or pnpm runtime was not found. Run npm install before preparing the bundled profile.')
+  throw new Error('The locked Core Runtime was not found. Run npm run prepare:core-runtime before preparing the bundled profile.')
 }
 
 await removeHarnessHomeResidue()
