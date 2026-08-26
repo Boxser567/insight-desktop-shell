@@ -248,6 +248,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('runs-on: windows-2022')
     expect(workflow).toContain('npm run package:dev:win')
     expect(workflow).toContain('Smoke test packaged Windows Harness')
+    expect(workflow).toContain("Join-Path $env:APPDATA 'insight-desktop-dev'")
     expect(workflow).toContain("$executable = 'dist-dev\\win-unpacked\\因赛AI Dev.exe'")
     expect(workflow).toContain('Packaged Windows Harness smoke test passed.')
     expect(workflow).toContain("Invoke-HarnessRpc 'workspace.create'")
