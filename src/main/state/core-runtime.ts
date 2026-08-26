@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
 
 export interface CoreRuntimePaths {
   root: string
@@ -11,6 +11,7 @@ export interface CoreRuntimePaths {
 
 /** Resolve the selected Core Runtime embedded below an Electron resource root. */
 export function resolveCoreRuntime(resourceRoot: string, platform: NodeJS.Platform = process.platform): CoreRuntimePaths {
+  const join = platform === 'win32' ? win32.join : posix.join
   const root = join(resourceRoot, 'runtime')
   const pnpmRoot = join(root, 'node_modules', 'pnpm', 'bin')
   const pnpmCjs = join(pnpmRoot, 'pnpm.cjs')

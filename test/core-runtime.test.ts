@@ -12,9 +12,9 @@ describe('embedded Core Runtime paths', () => {
     })
   })
 
-  it('uses the Windows Node executable', () => {
+  it('uses Windows path separators and the Windows Node executable', () => {
     expect(resolveCoreRuntime('C:\\Program Files\\Insight AI\\resources', 'win32').nodeExecutablePath).toBe(
-      'C:\\Program Files\\Insight AI\\resources/runtime/node_modules/node/bin/node.exe'
+      'C:\\Program Files\\Insight AI\\resources\\runtime\\node_modules\\node\\bin\\node.exe'
     )
   })
 })
