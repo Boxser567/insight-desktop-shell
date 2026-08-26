@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,6 +31,16 @@ export function selectCoreRuntime(lock, target) {
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
+}
+
+/** Move a prepared Runtime, copying only when the source and destination are on different volumes. */
+export async function moveRuntimeDirectory(source, destination, operations = { copyDirectory: cp, renameDirectory: rename }) {
+  try {
+    await operations.renameDirectory(source, destination)
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'EXDEV') throw error
+    await operations.copyDirectory(source, destination, { recursive: true })
+  }
 }
 
 function run(command, args, cwd) {
@@ -78,7 +88,7 @@ async function main() {
     await run('tar', ['-xzf', archive, '-C', extracted], projectRoot)
     await assertRuntime(extracted, runtime, target)
     await rm(outputDirectory, { recursive: true, force: true })
-    await rename(extracted, outputDirectory)
+    await moveRuntimeDirectory(extracted, outputDirectory)
     console.log(`Prepared locked Core Runtime: ${target}`)
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true })
