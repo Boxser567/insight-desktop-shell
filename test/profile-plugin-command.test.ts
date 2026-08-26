@@ -19,7 +19,9 @@ describe('profile-plugin-command', () => {
     const profileDirectory = join(testDir, 'profiles', 'web')
     const reportPath = join(testDir, 'report.json')
     const dshEntryPath = join(testDir, 'fake-dsh.mjs')
+    const pnpmEntryPath = join(testDir, 'fake-pnpm.cjs')
     await mkdir(profileDirectory, { recursive: true })
+    await writeFile(pnpmEntryPath, "console.log('test-pnpm')\n", 'utf8')
     await writeFile(
       dshEntryPath,
       `
@@ -46,7 +48,7 @@ describe('profile-plugin-command', () => {
         dshHome: testDir,
         dshEntryPath,
         nodeExecutablePath: process.execPath,
-        pnpmEntryPath: join(process.cwd(), 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+        pnpmEntryPath,
         environment: process.env
       },
       '@example/plugin'
@@ -56,7 +58,7 @@ describe('profile-plugin-command', () => {
     expect(JSON.parse(await readFile(reportPath, 'utf8'))).toEqual({
       argv: ['plugin', '--profile', 'web', 'remove', '@example/plugin'],
       dshHome: testDir,
-      pnpmVersion: '10.34.5',
+      pnpmVersion: 'test-pnpm',
       pnpmStatus: 0
     })
   })
