@@ -1,22 +1,42 @@
-import { execFile } from 'node:child_process'
-import { rm, writeFile } from 'node:fs/promises'
-import { promisify } from 'node:util'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { readRuntimeManifest } from '../src/main/state/runtime-manifest'
+// @ts-expect-error The build script is JavaScript and has no declaration file.
+import { createRuntimeManifest, writeRuntimeManifest } from '../scripts/prepare-runtime-manifest.mjs'
 
-const run = promisify(execFile)
-const manifestPath = 'build/runtime-manifest.json'
+const temporaryDirectories: string[] = []
+
+async function temporaryManifestPath(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'insight-runtime-manifest-'))
+  temporaryDirectories.push(directory)
+  return join(directory, 'runtime-manifest.json')
+}
 
 afterEach(async () => {
-  await rm(manifestPath, { force: true })
+  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
 describe('runtime manifest', () => {
   it('records the locked Core Runtime for the active build target', async () => {
-    await run(process.execPath, ['scripts/prepare-runtime-manifest.mjs'])
+    const runtimeLock = JSON.parse(await readFile('core-runtime.lock.json', 'utf8'))
+    const target = { platform: process.platform, arch: process.arch }
+    const selected = runtimeLock.targets[`${target.platform}-${target.arch}`]
+    const manifestPath = await temporaryManifestPath()
+    const manifest = createRuntimeManifest(
+      runtimeLock,
+      {
+        core: selected.core,
+        entry: 'node_modules/@deepseek-ai/dsh/lib/bin.js',
+        node: selected.node,
+        target
+      },
+      target
+    )
+    await writeRuntimeManifest(manifestPath, manifest)
 
-    const manifest = readRuntimeManifest(manifestPath)
-    expect(manifest).toMatchObject({
+    expect(readRuntimeManifest(manifestPath)).toMatchObject({
       schemaVersion: 1,
       core: {
         source: 'release',
@@ -33,6 +53,7 @@ describe('runtime manifest', () => {
   })
 
   it('rejects a malformed bundled resource', async () => {
+    const manifestPath = await temporaryManifestPath()
     await writeFile(manifestPath, '{"schemaVersion":1}\n', 'utf8')
     expect(() => readRuntimeManifest(manifestPath)).toThrow('runtime-manifest.json')
   })
