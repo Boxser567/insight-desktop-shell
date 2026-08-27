@@ -34,14 +34,17 @@ describe('bundled profile initialization', () => {
       JSON.stringify({
         dependencies: { 'dsh-better-sidebar': '0.16.1' },
         dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-better-sidebar'] } },
-        insightDesktop: { defaultProfileVersion: 1 }
+        insightDesktop: { defaultProfileVersion: 2 }
       }),
       'utf8'
     )
     await mkdir(profile, { recursive: true })
     await writeFile(
       join(profile, 'package.json'),
-      JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } } }),
+      JSON.stringify({
+        dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } },
+        insightDesktop: { defaultProfileVersion: 1 }
+      }),
       'utf8'
     )
 

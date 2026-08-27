@@ -28,7 +28,7 @@ async function removeHarnessHomeResidue() {
 
 function hasPinnedSidebar(manifest) {
   return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
-    manifest.insightDesktop?.defaultProfileVersion === 1
+    manifest.insightDesktop?.defaultProfileVersion === 2
 }
 
 async function readManifest(path) {
@@ -96,7 +96,7 @@ async function markDefaultProfile(directory) {
   const manifestPath = join(directory, 'package.json')
   const manifest = await readManifest(manifestPath)
   if (!manifest) throw new Error('The bundled profile manifest could not be read.')
-  manifest.insightDesktop = { defaultProfileVersion: 1 }
+  manifest.insightDesktop = { defaultProfileVersion: 2 }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 }
 

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { profilePackageJsonPath } from './plugin-recovery'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 1
+const DEFAULT_PROFILE_VERSION = 2
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 
 interface ProfileManifest {
