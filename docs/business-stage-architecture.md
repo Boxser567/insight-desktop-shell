@@ -3,6 +3,8 @@
 > 状态：proposed（2026-08-27）
 > 依据：`docs/architecture.md`、`docs/phase-2-handoff.md`，以及知识库 2026-08-26 的登录与业务阶段记录。
 > 本文不定义身份供应商、令牌字段、后端 API 或首个电商 Brief；这些仍须由产品与后端确认。
+>
+> 认证方案更新：`docs/plans/2026-08-28-desktop-auth-architecture-design.md` 已取代本文的系统浏览器登录、OIDC 优先、账号 Profile 与插件安装设计。本文其余业务阶段边界继续有效。
 
 ## 结论
 

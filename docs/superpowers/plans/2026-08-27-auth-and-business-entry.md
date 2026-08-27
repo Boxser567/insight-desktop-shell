@@ -1,5 +1,7 @@
 # 登录与业务入口架构 Implementation Plan
 
+> **状态：superseded。** 本计划基于尚未确认的系统浏览器登录、OIDC/Control Plane 和插件按账号安装假设，不得继续执行。已批准的首版设计见 `docs/plans/2026-08-28-desktop-auth-architecture-design.md`；新的实施计划将以现有手机号登录 API、Main 会话管理和设备级插件包共享为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不改变 Core Runtime 所有权的前提下，为因赛AI建立服务端控制的登录、会话恢复、受保护业务入口和按账号范围隔离的 Harness 工作区。
