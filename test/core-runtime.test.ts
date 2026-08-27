@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { resolveCoreRuntime } from '../src/main/state/core-runtime'
 
 describe('embedded Core Runtime paths', () => {
-  it('resolves the packaged DSH, Node, and pnpm entries below Resources/runtime', () => {
-    expect(resolveCoreRuntime('/Applications/因赛AI.app/Contents/Resources', 'darwin')).toEqual({
-      root: '/Applications/因赛AI.app/Contents/Resources/runtime',
-      runtimeManifestPath: '/Applications/因赛AI.app/Contents/Resources/runtime/runtime.json',
-      dshEntryPath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js',
-      nodeExecutablePath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/node/bin/node',
-      pnpmEntryPath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/pnpm/bin/pnpm.cjs'
+  it('uses the pnpm ESM fallback when the legacy CommonJS entry is absent', () => {
+    expect(resolveCoreRuntime('/tmp/insight-runtime-test/Resources', 'darwin')).toEqual({
+      root: '/tmp/insight-runtime-test/Resources/runtime',
+      runtimeManifestPath: '/tmp/insight-runtime-test/Resources/runtime/runtime.json',
+      dshEntryPath: '/tmp/insight-runtime-test/Resources/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js',
+      nodeExecutablePath: '/tmp/insight-runtime-test/Resources/runtime/node_modules/node/bin/node',
+      pnpmEntryPath: '/tmp/insight-runtime-test/Resources/runtime/node_modules/pnpm/bin/pnpm.mjs'
     })
   })
 
