@@ -31,7 +31,7 @@
     "prepare:bundled-profile": "node scripts/prepare-bundled-profile.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir",
@@ -52,6 +52,8 @@
   "devDependencies": {
     "@types/node": "24.10.1",
     "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",

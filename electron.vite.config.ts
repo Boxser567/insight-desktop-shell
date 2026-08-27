@@ -11,12 +11,20 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/preload/index.ts'),
+          shell: resolve('src/preload/shell.ts'),
           'windows-menu': resolve('src/preload/windows-menu.ts')
         },
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs'
         }
+      }
+    }
+  },
+  renderer: {
+    build: {
+      rollupOptions: {
+        input: resolve('src/renderer/index.html')
       }
     }
   }
