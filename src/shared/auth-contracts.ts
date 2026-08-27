@@ -45,3 +45,12 @@ export type AuthCommandResult =
       reason: 'invalid-input' | 'rejected' | 'offline' | 'service-error'
       message: string
     }
+
+/** Result returned when the password form requests a captcha. */
+export type CaptchaCommandResult =
+  | { ok: true; captcha: CaptchaView }
+  | {
+      ok: false
+      reason: 'offline' | 'service-error'
+      message: string
+    }
