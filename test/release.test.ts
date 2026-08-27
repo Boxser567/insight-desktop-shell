@@ -23,6 +23,18 @@ describe('GitHub release contract', () => {
     expect(packageLock.packages['']?.version).toBe(packageJson.version)
   })
 
+  it('locks the Intel macOS Rollup binary used by the release runner', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as { optionalDependencies?: Record<string, string> }
+    const packageLock = JSON.parse(
+      await readFile(path.join(projectRoot, 'package-lock.json'), 'utf8')
+    ) as { packages: Record<string, { version?: string }> }
+
+    expect(packageJson.optionalDependencies?.['@rollup/rollup-darwin-x64']).toBe('4.62.4')
+    expect(packageLock.packages['node_modules/@rollup/rollup-darwin-x64']?.version).toBe('4.62.4')
+  })
+
   it('does not reinstall the Core Runtime from the npm registry', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
