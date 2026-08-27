@@ -335,6 +335,15 @@ describe('GitHub release contract', () => {
     )
   })
 
+  it('permits Better Sidebar’s required native build during profile preparation', async () => {
+    const script = await readFile(
+      path.join(projectRoot, 'scripts', 'prepare-bundled-profile.mjs'),
+      'utf8'
+    )
+
+    expect(script).toContain("'--allow-build=node-pty'")
+  })
+
   it('documents the locked Core Runtime distribution policy', async () => {
     const readmes = await Promise.all(
       ['README.md', 'README.zh.md'].map((file) =>

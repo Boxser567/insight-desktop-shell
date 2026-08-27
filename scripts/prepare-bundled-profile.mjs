@@ -81,7 +81,7 @@ async function runDsh(home, workingDirectory, shimDirectory) {
     npm_config_side_effects_cache: 'false'
   }
   await new Promise((resolve, reject) => {
-    const child = spawn(nodeExecutable, [dshEntry, 'plugin', '--profile', PROFILE, 'add', '--save-exact', `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`], {
+    const child = spawn(nodeExecutable, [dshEntry, 'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty', `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`], {
       cwd: workingDirectory,
       env: environment,
       stdio: 'inherit',
