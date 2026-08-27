@@ -191,19 +191,21 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 使用 `.github/workflows/release.yml` 的 `Release desktop installers`，按发布范围选择 `macos`、`windows` 或 `all`。
 - Windows x64 由 `windows-2022` runner 负责；macOS 由相应原生 runner 构建。
+- 当前 `workflow_dispatch` 的 macOS 路径生成未签名的 `因赛AI Dev` artifact：它显式设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，只用于目标 runner 构建证明，不得进入阶段 10。只有 `v*` 标签路径在配置完整 secrets 后导入 `Developer ID Application`、签名、公证、stapling 并执行 Gatekeeper 验证。
 - 观察失败发生在 install、test、Runtime、Profile、builder、签名/公证、blockmap 还是 upload；只重跑基础设施型失败的受影响 job。
 
-**通过条件：** 目标 job 成功，预期安装包与伴随文件存在，文件名、架构、签名和公证状态符合发布类型。
+**通过条件：** 目标 job 成功，预期安装包与伴随文件存在，文件名和架构符合目标；macOS 若要进入阶段 10，还必须来自签名发布链并通过 workflow 中的签名、公证、stapling 与 Gatekeeper 检查。
 
 **失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 run 下载的确切 DMG、zip 或 Windows installer。
+**输入：** 从阶段 9 对应 run 下载的确切安装包。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 DMG；未签名 DEV artifact 不是本阶段输入。`Apple Development` 身份不能替代外部分发身份。
 
 **执行：**
 
 - 记录 workflow URL、artifact 文件名、文件大小和对外发布时的 SHA-256。
+- macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `spctl --assess --type execute --verbose=4`，再用 `xcrun stapler validate` 检查应用与 DMG；任一失败即停止安装验收。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、设置和插件清单检查。
 - macOS 正式包额外验证签名、公证和 stapling；Windows 验证安装、启动、卸载及需要的签名状态。
@@ -236,6 +238,7 @@ npm run package:mac:arm64
 | 无限启动页 | Harness Utility Process、Profile 安装标记、Runtime 身份 | 阶段 8 |
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
 | Windows Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | 根 `optionalDependencies` 与 lockfile 的 Windows package 节点 | 阶段 2/9，修复后只跑 Windows |
+| macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | DMG 成功、zip/blockmap 失败 | 独立分发格式与 artifact 命名，不先否定应用行为 | 阶段 7/9，格式问题单独跟踪 |
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |

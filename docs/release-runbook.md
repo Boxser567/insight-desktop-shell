@@ -29,7 +29,9 @@
 - `windows`：使用 `windows-2022` runner 构建 Windows x64 包；
 - `all`：构建全部上述目标。
 
-macOS 正式标签发布需要有效的 Apple 签名和 notarization 凭据。运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
+手动运行当前只生成未签名的 macOS DEV artifact，用于原生 runner 构建证明，不能作为可直接安装的候选包。macOS 阶段 10 必须来自 `v*` 标签签名链，并需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。
+
+运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
 
 CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明安装后的 Sidebar、用户数据或启动行为正确。
 
@@ -37,6 +39,7 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 
 从本次 workflow run 下载确切安装包后，在目标平台完成：
 
+- macOS DMG 校验、完整 bundle 签名、Gatekeeper、notarization 和 stapling 检查；
 - 干净安装和覆盖安装；
 - 首次启动与既有 Profile 升级；
 - Markdown/HTML 在 Sidebar 内打开；
