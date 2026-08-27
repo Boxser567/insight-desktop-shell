@@ -45,7 +45,6 @@
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
-    "dsh-desktop-hmr-fallback": "file:packages/dsh-desktop-hmr-fallback",
     "qrcode": "^1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -56,7 +55,6 @@
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
-    "patch-package": "^8.0.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.10",
     "yaml": "^2.8.3"

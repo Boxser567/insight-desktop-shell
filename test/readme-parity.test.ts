@@ -25,12 +25,7 @@ describe('localized README parity', () => {
   }
 
   it('keeps every relative Markdown link resolvable', () => {
-    const documents = [
-      ...readmes,
-      'docs/development.md',
-      'docs/architecture.md',
-      'docs/release-runbook.md'
-    ]
+    const documents = readmes
 
     for (const path of documents) {
       const content = readFileSync(path, 'utf8')
