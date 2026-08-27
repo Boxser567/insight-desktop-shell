@@ -8,7 +8,7 @@ describe('embedded Core Runtime paths', () => {
       runtimeManifestPath: '/Applications/因赛AI.app/Contents/Resources/runtime/runtime.json',
       dshEntryPath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js',
       nodeExecutablePath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/node/bin/node',
-      pnpmEntryPath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/pnpm/bin/pnpm.mjs'
+      pnpmEntryPath: '/Applications/因赛AI.app/Contents/Resources/runtime/node_modules/pnpm/bin/pnpm.cjs'
     })
   })
 

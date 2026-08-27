@@ -27,7 +27,8 @@ async function removeHarnessHomeResidue() {
 }
 
 function hasPinnedSidebar(manifest) {
-  return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION
+  return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
+    manifest.insightDesktop?.defaultProfileVersion === 1
 }
 
 async function readManifest(path) {
@@ -91,11 +92,24 @@ async function runDsh(home, workingDirectory, shimDirectory) {
   })
 }
 
+async function markDefaultProfile(directory) {
+  const manifestPath = join(directory, 'package.json')
+  const manifest = await readManifest(manifestPath)
+  if (!manifest) throw new Error('The bundled profile manifest could not be read.')
+  manifest.insightDesktop = { defaultProfileVersion: 1 }
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+}
+
 if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
   throw new Error('The locked Core Runtime was not found. Run npm run prepare:core-runtime before preparing the bundled profile.')
 }
 
 await removeHarnessHomeResidue()
+
+const existingTemplateManifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
+if (existingTemplateManifest && existingTemplateManifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION) {
+  await markDefaultProfile(bundledProfileDirectory)
+}
 
 if (await templateIsReady()) {
   console.log(`Bundled ${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION} profile is already prepared.`)
@@ -105,6 +119,7 @@ if (await templateIsReady()) {
     const shimDirectory = join(temporaryDirectory, '.bin')
     await writePnpmShim(shimDirectory)
     await runDsh(temporaryDirectory, projectRoot, shimDirectory)
+    await markDefaultProfile(join(temporaryDirectory, 'profiles', PROFILE))
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })
     await cp(join(temporaryDirectory, 'profiles', PROFILE), bundledProfileDirectory, {
