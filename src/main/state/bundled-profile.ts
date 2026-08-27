@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { profilePackageJsonPath } from './plugin-recovery'
+import { markProfileInstallComplete } from './profile-install-marker'
 
 const PROFILE = 'web'
 const DEFAULT_PROFILE_VERSION = 2
@@ -58,6 +59,7 @@ export async function initializeBundledProfile(
   const current = await readProfileManifest(destinationManifest)
   if (current === undefined) {
     await copyProfile(source, destination)
+    await markProfileInstallComplete(dshHome)
     return true
   }
 
@@ -66,6 +68,7 @@ export async function initializeBundledProfile(
     isLegacyDefaultProfile(current)
   ) {
     await copyProfile(source, destination)
+    await markProfileInstallComplete(dshHome)
     return true
   }
 

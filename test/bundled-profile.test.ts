@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initializeBundledProfile } from '../src/main/state/bundled-profile'
+import { isProfileInstallComplete } from '../src/main/state/profile-install-marker'
 
 describe('bundled profile initialization', () => {
   const testDir = join(__dirname, '.temp-bundled-profile-test')
@@ -61,5 +62,17 @@ describe('bundled profile initialization', () => {
     )
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
     expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('dsh-user-plugin')
+  })
+
+  it('marks a copied packaged profile complete without reinstalling its dependencies', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    const profile = join(template, 'web')
+    await mkdir(profile, { recursive: true })
+    await writeFile(join(profile, 'package.json'), '{"name":"web-profile"}', 'utf8')
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n', 'utf8')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    await expect(isProfileInstallComplete(dshHome)).resolves.toBe(true)
   })
 })
