@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildHarnessArguments,
   buildHarnessSpawnOptions,
@@ -13,6 +13,7 @@ import {
   extractPluginFailureReferences,
   extractSlotConflictName,
   formatExitCode,
+  HarnessRuntime,
   resolveShellEnvironment,
   updateReadyStability
 } from '../src/main/runtime/harness-runtime'
@@ -25,6 +26,22 @@ import {
 } from '../src/main/window-navigation'
 
 describe('Harness launch contract', () => {
+  it('changes account directories only while Harness is stopped', () => {
+    const runtime = new HarnessRuntime({
+      dshEntryPath: '/missing/dsh',
+      nodeExecutablePath: '/missing/node',
+      nodeEntryPath: '/missing/entry',
+      dshPatchPath: '/missing/patch',
+      dshHome: '/data/legacy/harness',
+      logPath: '/tmp/insight-runtime-test.log',
+      launchProcess: vi.fn(),
+      onChanged: vi.fn()
+    })
+
+    runtime.configureDshHome('/data/accounts/alice/harness')
+
+    expect(runtime.currentDshHome()).toBe('/data/accounts/alice/harness')
+  })
   it('does not treat a briefly reachable port as a completed Harness startup', () => {
     const firstProbe = updateReadyStability(undefined, true, 1_000)
     expect(firstProbe).toEqual({ readySince: 1_000, ready: false })

@@ -1,4 +1,4 @@
-function isHarnessUrl(rawUrl: string): boolean {
+export function isHarnessUrl(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl)
     return (

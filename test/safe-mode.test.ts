@@ -71,7 +71,7 @@ describe('Safe Mode', () => {
   it('wires Safe Mode into startup, IPC, and the packaged resources', async () => {
     const [main, preload, manifest] = await Promise.all([
       readFile('src/main/index.ts', 'utf8'),
-      readFile('src/preload/index.ts', 'utf8'),
+      readFile('src/preload/harness.ts', 'utf8'),
       readFile('package.json', 'utf8')
     ])
     expect(main).toContain('shouldStartInSafeMode(process.argv)')

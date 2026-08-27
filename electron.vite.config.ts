@@ -10,7 +10,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve('src/preload/index.ts'),
+          harness: resolve('src/preload/harness.ts'),
           shell: resolve('src/preload/shell.ts'),
           'windows-menu': resolve('src/preload/windows-menu.ts')
         },

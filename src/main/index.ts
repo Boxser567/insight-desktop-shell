@@ -9,6 +9,8 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  safeStorage,
+  session,
   shell,
   utilityProcess,
   WebContentsView,
@@ -34,7 +36,8 @@ import {
   PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS
 } from './plugin-recovery-detection'
 import { isDaemonLaunch, isUserInitiatedInstance } from './launchd-guard'
-import { secureWindow } from './security'
+import { secureWebContents, secureWindow } from './security'
+import { isHarnessUrl } from './security-policy'
 import { ensureLaunchRoot } from './state/launch-root'
 import { insightDataPath } from './state/insight-data'
 import { initializeBundledProfile } from './state/bundled-profile'
@@ -50,18 +53,14 @@ import {
 import { ensureSafeModeProfile, SAFE_MODE_PROFILE } from './state/safe-mode-profile'
 import { cleanupPluginOwnedComponents } from './state/plugin-component-cleanup'
 import { appBundlePathFromExecutable, auditLaunchAgents } from './state/launch-agent-audit'
-import {
-  desktopHarnessUrl,
-  isAbortedNavigationError,
-  shouldLoadHarnessUrl
-} from './window-navigation'
+import { desktopHarnessUrl } from './window-navigation'
 import {
   raiseWindowWithoutStealingFocus,
   type WindowFocusIntent
 } from './window-raise'
 import type { RuntimeSnapshot } from '../shared/contracts'
 import { resolveHarnessLocale } from './application-locale'
-import { installContextMenu } from './context-menu'
+import { installContextMenu, installWebContentsContextMenu } from './context-menu'
 import {
   WINDOWS_TITLEBAR_HEIGHT,
   isDesktopMenuCommand,
@@ -71,6 +70,15 @@ import {
 import { buildPluginRecoveryViewModel } from './plugin-recovery-view'
 import { buildSafeModeViewModel, shouldStartInSafeMode } from './safe-mode'
 import { windowsMenuViewBounds } from './windows-menu-view'
+import { resolveAuthEnvironment, type AuthEnvironmentConfig } from './auth/auth-environment'
+import { createElectronAuth } from './auth/electron-auth'
+import { assertTrustedShellEvent, registerAuthIpc } from './auth/auth-ipc'
+import type { AuthSessionManager } from './auth/auth-session-manager'
+import { accountPaths, accountScopeKey } from './state/account-scope'
+import { HarnessWorkspaceView, type HarnessViewHost, type HarnessViewInstance } from './workspace/harness-workspace-view'
+import { HarnessWorkspaceController } from './workspace/harness-workspace-controller'
+import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
+import type { WorkspaceBounds } from '../shared/shell-api'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
 type SafeModeAction =
@@ -97,16 +105,20 @@ let quitting = false
 let failureRecoveryVisible = false
 let harnessLaunchOperation: Promise<void> | undefined
 let pluginRecoveryActionResolver: ((action: PluginRecoveryAction) => void) | undefined
-let mainWindowNavigationVersion = 0
 let rendererPluginFailureLogs: string[] = []
 let pluginRecoveryRemovedPlugins: string[] = []
 let pluginRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined
 let pendingFrontendPluginRecovery = false
 let pendingFrontendPluginRecoveryMessage: string | undefined
 let safeModeVisible = false
+let pluginRecoveryWindow: BrowserWindow | undefined
 let safeModeManagerVisible = false
 let safeModeManagerWindow: BrowserWindow | undefined
 let safeModeActionResolver: ((action: SafeModeAction) => void) | undefined
+let authManager: AuthSessionManager | undefined
+let authEnvironment: AuthEnvironmentConfig | undefined
+let workspaceController: HarnessWorkspaceController | undefined
+let workspaceLifecycle: WorkspaceLifecycle | undefined
 const startInSafeMode = shouldStartInSafeMode(process.argv)
 
 function appendRendererPluginFailureLog(message: string): void {
@@ -199,6 +211,102 @@ function isDevelopmentBuild(): boolean {
 
 const developmentBuild = isDevelopmentBuild()
 
+function insightRoot(): string {
+  return insightDataPath(app.getPath('userData'))
+}
+
+function currentDshHome(): string | undefined {
+  return workspaceController?.currentDshHome()
+}
+
+function requireCurrentDshHome(): string {
+  const dshHome = currentDshHome()
+  if (!dshHome) throw new Error('Sign in before using the Harness workspace.')
+  return dshHome
+}
+
+function parseWorkspaceBounds(value: unknown): WorkspaceBounds | null {
+  if (value === null) return null
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid workspace bounds.')
+  }
+  const candidate = value as Record<string, unknown>
+  const keys = Object.keys(candidate).sort()
+  if (keys.join(',') !== 'height,width,x,y') throw new Error('Invalid workspace bounds.')
+  for (const key of keys) {
+    if (typeof candidate[key] !== 'number') throw new Error('Invalid workspace bounds.')
+  }
+  return candidate as unknown as WorkspaceBounds
+}
+
+function applyWorkspaceForCurrentSession(): void {
+  if (!authManager || !authEnvironment || !workspaceLifecycle) return
+  const view = authManager.current()
+  const account = authManager.activeAccount()
+  const workspaceAccount = account
+    ? (() => {
+        const scope = accountScopeKey(authEnvironment.name, account.id)
+        const paths = accountPaths(insightRoot(), scope)
+        return { scope, dshHome: paths.harness }
+      })()
+    : undefined
+  void workspaceLifecycle.apply(view, workspaceAccount).catch(showUnexpectedError)
+}
+
+function isTrustedShellUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    const developmentUrl = process.env.ELECTRON_RENDERER_URL
+    if (developmentUrl) return url.origin === new URL(developmentUrl).origin
+    return url.protocol === 'file:' && url.pathname.endsWith('/renderer/index.html')
+  } catch {
+    return false
+  }
+}
+
+function createHarnessWebContentsView(window: BrowserWindow, scope: string): WebContentsView {
+  const view = new WebContentsView({
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: join(import.meta.dirname, '../preload/harness.cjs'),
+      partition: `persist:insight-harness-${scope}`,
+      sandbox: true,
+      webSecurity: true
+    }
+  })
+  view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#141416' : '#ffffff')
+  view.webContents.on('console-message', (details) => {
+    if (details.level !== 'error') return
+    const sourceUrl = details.sourceId || view.webContents.getURL()
+    if (!isHarnessUrl(sourceUrl)) return
+    appendRendererPluginFailureLog(details.message)
+  })
+  secureWebContents(view.webContents, isHarnessUrl, true)
+  installWebContentsContextMenu(view.webContents, window, harnessLocale)
+  return view
+}
+
+function harnessViewHost(): HarnessViewHost | undefined {
+  const window = mainWindow
+  if (!window || window.isDestroyed()) return undefined
+  return {
+    isDestroyed: () => window.isDestroyed(),
+    getContentBounds: () => window.getContentBounds(),
+    contentView: {
+      addChildView: (view: HarnessViewInstance) => {
+        window.contentView.addChildView(view as WebContentsView, 0)
+      },
+      removeChildView: (view: HarnessViewInstance) => {
+        window.contentView.removeChildView(view as WebContentsView)
+      }
+    },
+    createHarnessView: (scope) => createHarnessWebContentsView(window, scope)
+  }
+}
+
+const harnessWorkspaceView = new HarnessWorkspaceView(harnessViewHost)
+
 function windowsTitleBarOverlay(isDark: boolean): Electron.TitleBarOverlayOptions {
   return {
     color: '#00000000',
@@ -290,50 +398,6 @@ function configureAppIdentity(): void {
   app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))
 }
 
-async function syncNativeTheme(window: BrowserWindow): Promise<void> {
-  if (window.isDestroyed()) return
-
-  // The sidebar already reserves enough room for macOS traffic lights. Read
-  // Harness's resolved theme before showing the window so the native surface
-  // matches the first rendered frame. The transparent drag strip restores the
-  // native window gesture without adding a visual titlebar or covering the
-  // traffic lights and right-side header actions.
-  const isDark = await window.webContents.executeJavaScript(
-    `(() => {
-      if (${process.platform === 'darwin'}) {
-        let dragRegion = document.getElementById('dsh-desktop-drag-region')
-        if (!dragRegion) {
-          dragRegion = document.createElement('div')
-          dragRegion.id = 'dsh-desktop-drag-region'
-          dragRegion.setAttribute('aria-hidden', 'true')
-          Object.assign(dragRegion.style, {
-            position: 'fixed',
-            zIndex: '18',
-            top: '0',
-            left: '80px',
-            right: '220px',
-            height: '24px',
-            background: 'transparent',
-            pointerEvents: 'auto',
-            userSelect: 'none'
-          })
-          dragRegion.style.setProperty('-webkit-app-region', 'drag')
-          document.body.appendChild(dragRegion)
-        }
-      }
-      if (document.body.hasAttribute('data-ds-dark-theme')) return true
-      const color = getComputedStyle(document.body).backgroundColor
-      const channels = color.match(/[\\d.]+/g)?.slice(0, 3).map(Number)
-      if (!channels || channels.length < 3) {
-        return matchMedia('(prefers-color-scheme: dark)').matches
-      }
-      const [red, green, blue] = channels
-      return red * 0.2126 + green * 0.7152 + blue * 0.0722 < 128
-    })()`
-  )
-  applyWindowChromeTheme(window, isDark)
-}
-
 function dshEntryPath(): string {
   return coreRuntime().dshEntryPath
 }
@@ -372,8 +436,10 @@ function desktopIconPath(): string {
 
 function harnessLocale(): 'en' | 'zh' {
   try {
+    const dshHome = currentDshHome()
+    if (!dshHome) throw new Error('No authenticated Harness profile.')
     const settings = parse(
-      readFileSync(join(insightDataPath(app.getPath('userData')), 'harness', 'settings.yaml'), 'utf8')
+      readFileSync(join(dshHome, 'settings.yaml'), 'utf8')
     ) as { locale?: { preference?: unknown } }
     return resolveHarnessLocale(
       settings.locale?.preference,
@@ -390,8 +456,10 @@ function configureApplicationLocale(): void {
 
 function harnessThemePreference(): 'light' | 'dark' | 'system' {
   try {
+    const dshHome = currentDshHome()
+    if (!dshHome) return 'system'
     const settings = parse(
-      readFileSync(join(insightDataPath(app.getPath('userData')), 'harness', 'settings.yaml'), 'utf8')
+      readFileSync(join(dshHome, 'settings.yaml'), 'utf8')
     ) as { 'ui-theme'?: { preference?: unknown } }
     const preference = settings['ui-theme']?.preference
     return preference === 'light' || preference === 'dark' || preference === 'system'
@@ -460,7 +528,8 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: join(import.meta.dirname, '../preload/index.cjs'),
+      preload: join(import.meta.dirname, '../preload/shell.cjs'),
+      partition: 'persist:insight-shell',
       sandbox: true,
       webSecurity: true
     }
@@ -475,17 +544,11 @@ function createWindow(): BrowserWindow {
     event.preventDefault()
     window.setTitle('')
   })
-  window.webContents.on('console-message', (details) => {
-    if (details.level !== 'error') return
-    const sourceUrl = details.sourceId || window.webContents.getURL()
-    if (!sourceUrl.startsWith('http://127.0.0.1:')) return
-    appendRendererPluginFailureLog(details.message)
-  })
-  installPluginRecoveryNavigation(window)
-  secureWindow(window)
+  secureWebContents(window.webContents, isTrustedShellUrl)
   installContextMenu(window, harnessLocale)
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = undefined
+    void workspaceLifecycle?.apply({ kind: 'unauthenticated' }).catch(showUnexpectedError)
     if (windowsMenuView && !windowsMenuView.webContents.isDestroyed()) {
       windowsMenuView.webContents.close()
     }
@@ -499,29 +562,29 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+async function loadShell(window: BrowserWindow): Promise<void> {
+  const developmentUrl = process.env.ELECTRON_RENDERER_URL
+  if (developmentUrl) {
+    await window.loadURL(developmentUrl)
+  } else {
+    await window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  }
+  if (window.isDestroyed()) return
+  applyWindowChromeTheme(window, nativeTheme.shouldUseDarkColors)
+  raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
+}
+
 async function openHarness(
   url: string,
   focusIntent: WindowFocusIntent = 'automatic'
 ): Promise<void> {
   const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
   const rendererUrl = desktopHarnessUrl(url, process.platform)
-  if (shouldLoadHarnessUrl(window.webContents.getURL(), url)) {
-    const navigationVersion = ++mainWindowNavigationVersion
-    rendererPluginFailureLogs = []
-    window.webContents.stop()
-    try {
-      await window.loadURL(rendererUrl)
-    } catch (error) {
-      if (navigationVersion !== mainWindowNavigationVersion) return
-      if (isAbortedNavigationError(error)) return
-      const snapshot = runtime.snapshot()
-      if (snapshot.phase !== 'ready' || snapshot.url !== url) return
-      throw error
-    }
-    if (navigationVersion !== mainWindowNavigationVersion) return
-  }
+  rendererPluginFailureLogs = []
+  if (!workspaceController) throw new Error('The Harness workspace is not initialized.')
+  await workspaceController.open(rendererUrl)
   if (runtime.snapshot().url !== url || window.isDestroyed()) return
-  await syncNativeTheme(window)
+  applyWindowChromeTheme(window, nativeTheme.shouldUseDarkColors)
   raiseWindowWithoutStealingFocus(
     window,
     process.platform,
@@ -532,12 +595,7 @@ async function openHarness(
 
 async function showSplash(): Promise<void> {
   const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
-  const navigationVersion = ++mainWindowNavigationVersion
-  window.webContents.stop()
-  await window.loadFile(desktopResourcePath('splash.html'), {
-    query: { theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }
-  })
-  if (window.isDestroyed() || navigationVersion !== mainWindowNavigationVersion) return
+  if (!window.webContents.getURL()) await loadShell(window)
   raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
 }
 
@@ -628,7 +686,7 @@ async function importLocalPlugin(): Promise<void> {
 
   try {
     const plugin = await resolveLocalPluginImport(selectedPath)
-    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+    const dshHome = requireCurrentDshHome()
     await showSplash()
     await runtime.stop()
     const result = await addProfilePluginWithDsh(
@@ -714,7 +772,8 @@ function launchHarness(): Promise<void> {
 
   harnessLaunchOperation = (async () => {
     safeModeVisible = false
-    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+    const dshHome = requireCurrentDshHome()
+    nativeTheme.themeSource = harnessThemePreference()
     await showSplash()
     // The repair only holds on a stopped Harness, and a restart still has the
     // previous one running: start() stops it, but that is after the repair.
@@ -742,7 +801,8 @@ function launchSafeHarness(): Promise<void> {
 
   harnessLaunchOperation = (async () => {
     safeModeVisible = true
-    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+    const dshHome = requireCurrentDshHome()
+    nativeTheme.themeSource = harnessThemePreference()
     await showSplash()
     await runtime.stop()
     await ensureSafeModeProfile(dshHome)
@@ -766,9 +826,7 @@ function restartHarness(): Promise<void> {
 function registerHarnessHandlers(): void {
   ipcMain.removeHandler('harness:restart')
   ipcMain.handle('harness:restart', async (event) => {
-    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
-      throw new Error('Harness restart is only available from the DSH Desktop window.')
-    }
+    assertTrustedHarnessEvent(event)
     if (runtime.snapshot().phase !== 'ready') {
       throw new Error('Harness is not ready to restart.')
     }
@@ -861,6 +919,23 @@ function assertTrustedMainWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
+function assertTrustedHarnessEvent(event: IpcMainInvokeEvent): void {
+  if (!workspaceController?.isTrustedSender(event.sender, event.senderFrame)) {
+    throw new Error('This action is only available from the authenticated Harness view.')
+  }
+}
+
+function assertTrustedRecoveryEvent(event: IpcMainInvokeEvent): void {
+  if (
+    !pluginRecoveryWindow ||
+    pluginRecoveryWindow.isDestroyed() ||
+    event.sender !== pluginRecoveryWindow.webContents ||
+    event.senderFrame !== pluginRecoveryWindow.webContents.mainFrame
+  ) {
+    throw new Error('This action is only available from the plugin recovery window.')
+  }
+}
+
 function assertTrustedSafeModeManagerEvent(event: IpcMainInvokeEvent): void {
   if (
     !safeModeManagerWindow ||
@@ -937,7 +1012,40 @@ async function waitForPluginRecoveryAction(options: {
   removedPlugins: readonly string[]
   notice?: string
 }): Promise<PluginRecoveryAction> {
-  const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
+  const window = pluginRecoveryWindow && !pluginRecoveryWindow.isDestroyed()
+    ? pluginRecoveryWindow
+    : (() => {
+        const bounds = parent.getBounds()
+        const recovery = new BrowserWindow({
+          parent,
+          modal: true,
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          minWidth: 640,
+          minHeight: 520,
+          show: false,
+          title: '',
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            preload: join(import.meta.dirname, '../preload/harness.cjs'),
+            partition: 'persist:insight-recovery',
+            sandbox: true,
+            webSecurity: true
+          }
+        })
+        secureWindow(recovery)
+        installPluginRecoveryNavigation(recovery)
+        recovery.on('closed', () => {
+          if (pluginRecoveryWindow === recovery) pluginRecoveryWindow = undefined
+          resolvePluginRecoveryAction('quit')
+        })
+        pluginRecoveryWindow = recovery
+        return recovery
+      })()
   const state = buildPluginRecoveryViewModel({
     ...options,
     locale: harnessLocale()
@@ -945,7 +1053,6 @@ async function waitForPluginRecoveryAction(options: {
   const actionPromise = new Promise<PluginRecoveryAction>((resolve) => {
     pluginRecoveryActionResolver = resolve
   })
-  const navigationVersion = ++mainWindowNavigationVersion
   window.webContents.stop()
 
   try {
@@ -961,7 +1068,7 @@ async function waitForPluginRecoveryAction(options: {
     throw error
   }
 
-  if (window.isDestroyed() || navigationVersion !== mainWindowNavigationVersion) return 'quit'
+  if (window.isDestroyed()) return 'quit'
   raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
   return actionPromise
 }
@@ -979,7 +1086,7 @@ async function showPluginRecovery(options?: {
   if (failureRecoveryVisible || quitting) return
   failureRecoveryVisible = true
 
-  const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+  const dshHome = requireCurrentDshHome()
   const isChinese = harnessLocale() === 'zh'
   cancelPluginRecoverySessionReset()
   const removedPlugins = pluginRecoveryRemovedPlugins
@@ -1087,6 +1194,9 @@ async function showPluginRecovery(options?: {
     showUnexpectedError(error)
   } finally {
     failureRecoveryVisible = false
+    const recovery = pluginRecoveryWindow
+    pluginRecoveryWindow = undefined
+    if (recovery && !recovery.isDestroyed()) recovery.close()
     const pending = takePendingFrontendPluginRecovery()
     if (pending.pending && !quitting) {
       queueMicrotask(() => {
@@ -1135,7 +1245,7 @@ async function waitForSafeModeAction(options: {
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
-            preload: join(import.meta.dirname, '../preload/index.cjs'),
+            preload: join(import.meta.dirname, '../preload/harness.cjs'),
             sandbox: true,
             webSecurity: true
           }
@@ -1246,7 +1356,7 @@ async function showSafeMode(): Promise<void> {
 async function showSafeModeManager(): Promise<void> {
   if (!safeModeVisible || safeModeManagerVisible || quitting) return
   safeModeManagerVisible = true
-  const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+  const dshHome = requireCurrentDshHome()
   const isChinese = harnessLocale() === 'zh'
   let notice: string | undefined
   let noticeTone: 'success' | 'error' | undefined
@@ -1304,6 +1414,7 @@ async function showSafeModeManager(): Promise<void> {
 
 function installMenu(): void {
   const isChinese = harnessLocale() === 'zh'
+  const authenticated = authManager?.current().kind === 'authenticated'
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin'
       ? [
@@ -1325,10 +1436,12 @@ function installMenu(): void {
         {
           label: isChinese ? '重启 Harness' : 'Restart Harness',
           accelerator: 'CmdOrCtrl+Shift+R',
+          enabled: authenticated,
           click: () => void restartHarness().catch(showUnexpectedError)
         },
         {
           label: isChinese ? '以安全模式重启…' : 'Restart as Safe Mode…',
+          enabled: authenticated,
           click: () => void showSafeMode().catch(showUnexpectedError)
         },
         {
@@ -1345,6 +1458,7 @@ function installMenu(): void {
       submenu: [
         {
           label: isChinese ? '导入本地插件…' : 'Import Local Plugin…',
+          enabled: authenticated,
           click: () => void importLocalPlugin().catch(showUnexpectedError)
         }
       ]
@@ -1384,15 +1498,15 @@ function installMenu(): void {
 
 async function bootstrap(): Promise<void> {
   if (process.platform === 'darwin') app.dock?.setIcon(desktopIconPath())
-  launchDirectory = await ensureLaunchRoot(insightDataPath(app.getPath('userData')))
+  launchDirectory = join(insightRoot(), 'runtime-unconfigured')
   nativeTheme.themeSource = harnessThemePreference()
-  createWindow()
+  const window = createWindow()
   runtime = new HarnessRuntime({
     dshEntryPath: dshEntryPath(),
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
-    dshHome: join(insightDataPath(app.getPath('userData')), 'harness'),
+    dshHome: join(insightRoot(), 'runtime-unconfigured'),
     logPath: join(app.getPath('logs'), 'harness.log'),
     launchProcess: (executablePath, args, options) =>
       process.platform === 'darwin'
@@ -1408,17 +1522,65 @@ async function bootstrap(): Promise<void> {
       }
     }
   })
+  workspaceController = new HarnessWorkspaceController(
+    runtime,
+    harnessWorkspaceView,
+    async (account) => {
+      launchDirectory = await ensureLaunchRoot(accountPaths(insightRoot(), account.scope).root)
+      return startInSafeMode ? launchSafeHarness() : launchHarness()
+    }
+  )
+  workspaceLifecycle = new WorkspaceLifecycle(workspaceController)
+  authEnvironment = resolveAuthEnvironment({
+    packaged: app.isPackaged,
+    channel: developmentBuild ? 'development' : undefined
+  })
+  const authSession = session.fromPartition(authEnvironment.partition)
+  authManager = createElectronAuth({
+    environment: authEnvironment,
+    insightRoot: insightRoot(),
+    fetch: (input, init) => authSession.fetch(input.toString(), init),
+    cipher: {
+      available: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (value) => safeStorage.encryptString(value),
+      decrypt: (value) => safeStorage.decryptString(value)
+    }
+  })
+  registerAuthIpc({
+    ipcMain,
+    manager: authManager,
+    shellWindow: () => mainWindow
+  })
+  authManager.subscribe(() => {
+    applyWorkspaceForCurrentSession()
+    installMenu()
+  })
   runtime.note(`[desktop] runtime manifest: ${JSON.stringify(readRuntimeManifest(desktopResourcePath('runtime-manifest.json')))}`)
   registerHarnessHandlers()
+  for (const channel of ['workspace:set-bounds', 'workspace:info', 'workspace:open-account-config']) {
+    ipcMain.removeHandler(channel)
+  }
+  ipcMain.handle('workspace:set-bounds', (event, value: unknown) => {
+    assertTrustedShellEvent(event, mainWindow)
+    workspaceController?.setBounds(parseWorkspaceBounds(value))
+  })
+  ipcMain.handle('workspace:info', (event) => {
+    assertTrustedShellEvent(event, mainWindow)
+    if (!authEnvironment) throw new Error('Authentication is not initialized.')
+    return { version: app.getVersion(), environment: authEnvironment.name }
+  })
+  ipcMain.handle('workspace:open-account-config', (event) => {
+    assertTrustedShellEvent(event, mainWindow)
+    if (authManager?.current().kind !== 'authenticated') return { ok: false }
+    const dshHome = currentDshHome()
+    if (!dshHome) return { ok: false }
+    shell.showItemInFolder(join(dshHome, 'settings.yaml'))
+    return { ok: true }
+  })
+  ipcMain.removeHandler('directory-picker:open')
   ipcMain.handle('directory-picker:open', async (event) => {
-    if (
-      !mainWindow ||
-      mainWindow.isDestroyed() ||
-      event.sender !== mainWindow.webContents ||
-      event.senderFrame !== mainWindow.webContents.mainFrame
-    ) {
-      throw new Error('Directory picker requests are only allowed from the main Harness window')
-    }
+    assertTrustedHarnessEvent(event)
+    if (!mainWindow || mainWindow.isDestroyed()) throw new Error('The Shell window is unavailable.')
 
     const result = await dialog.showOpenDialog(mainWindow, {
       title: harnessLocale() === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
@@ -1426,12 +1588,14 @@ async function bootstrap(): Promise<void> {
     })
     return result.canceled ? null : result.filePaths[0] ?? null
   })
-  ipcMain.handle('harness:show-log', () => {
+  ipcMain.removeHandler('harness:show-log')
+  ipcMain.handle('harness:show-log', (event) => {
+    assertTrustedHarnessEvent(event)
     shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
   })
   ipcMain.removeHandler('harness:open-recovery')
   ipcMain.handle('harness:open-recovery', async (event, frontendErrorMessage?: unknown) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     const message = typeof frontendErrorMessage === 'string' ? frontendErrorMessage : undefined
     if (message) appendRendererPluginFailureLog(message)
     const logs = [...rendererPluginFailureLogs]
@@ -1445,7 +1609,7 @@ async function bootstrap(): Promise<void> {
   })
   ipcMain.removeHandler('recovery:action')
   ipcMain.handle('recovery:action', (event, action: unknown) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedRecoveryEvent(event)
     if (typeof action === 'string' && PLUGIN_RECOVERY_ACTIONS.has(action as PluginRecoveryAction)) {
       resolvePluginRecoveryAction(action as PluginRecoveryAction)
       return { ok: true }
@@ -1474,19 +1638,19 @@ async function bootstrap(): Promise<void> {
   })
   ipcMain.removeHandler('safe-mode:status')
   ipcMain.handle('safe-mode:status', (event) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     return { active: safeModeVisible, locale: harnessLocale() }
   })
   ipcMain.removeHandler('safe-mode:manage')
   ipcMain.handle('safe-mode:manage', (event) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     if (!safeModeVisible) return { ok: false }
     void showSafeModeManager().catch(showUnexpectedError)
     return { ok: true }
   })
   ipcMain.removeHandler('safe-mode:exit')
   ipcMain.handle('safe-mode:exit', (event) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     if (!safeModeVisible) return { ok: false }
     resolveSafeModeAction({ type: 'agent' })
     void launchHarness().catch(showUnexpectedError)
@@ -1494,21 +1658,18 @@ async function bootstrap(): Promise<void> {
   })
   ipcMain.removeHandler('harness:reset-plugins')
   ipcMain.handle('harness:reset-plugins', async (event, pluginName?: unknown) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     if (pluginName !== undefined && typeof pluginName !== 'string') {
       throw new Error('The failing plugin name must be a string.')
     }
-    const dshHome = join(insightDataPath(app.getPath('userData')), 'harness')
+    const dshHome = requireCurrentDshHome()
     await resetPluginProfile(dshHome, pluginName)
     await launchHarness()
     return { ok: runtime.snapshot().phase === 'ready' }
   })
   installMenu()
-  if (startInSafeMode) {
-    void showSafeMode().catch(showUnexpectedError)
-  } else {
-    await launchHarness()
-  }
+  await loadShell(window)
+  await authManager.restore()
 }
 
 if (isDaemonLaunch(process.env, process.platform)) {
@@ -1527,12 +1688,16 @@ if (isDaemonLaunch(process.env, process.platform)) {
     app.on('second-instance', (_event, argv) => {
       if (!isUserInitiatedInstance(argv)) return
       if (shouldStartInSafeMode(argv)) {
-        void showSafeMode().catch(showUnexpectedError)
+        if (authManager?.current().kind === 'authenticated') {
+          void showSafeMode().catch(showUnexpectedError)
+        }
         return
       }
       const snapshot = runtime?.snapshot()
       if (snapshot?.phase === 'ready' && snapshot.url) {
         void openHarness(snapshot.url, 'user').catch(showUnexpectedError)
+      } else if (mainWindow && !mainWindow.isDestroyed()) {
+        raiseWindowWithoutStealingFocus(mainWindow, process.platform, () => app.isActive(), 'user')
       }
     })
     app.whenReady().then(bootstrap).catch((error: unknown) => {
@@ -1540,17 +1705,15 @@ if (isDaemonLaunch(process.env, process.platform)) {
       app.quit()
     })
     app.on('activate', () => {
-      if (safeModeVisible && mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.show()
         mainWindow.focus()
         return
       }
-      const snapshot = runtime?.snapshot()
-      if (snapshot?.phase === 'ready' && snapshot.url) {
-        void openHarness(snapshot.url, 'user').catch(showUnexpectedError)
-      } else if (snapshot?.phase === 'idle') {
-        void launchHarness().catch(showUnexpectedError)
-      }
+      const window = createWindow()
+      void loadShell(window)
+        .then(() => applyWorkspaceForCurrentSession())
+        .catch(showUnexpectedError)
     })
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') app.quit()
@@ -1559,7 +1722,7 @@ if (isDaemonLaunch(process.env, process.platform)) {
       if (quitting || !runtime) return
       event.preventDefault()
       quitting = true
-      void runtime.stop().finally(() => app.quit())
+      void (workspaceController?.stop() ?? runtime.stop()).finally(() => app.quit())
     })
   }
 }

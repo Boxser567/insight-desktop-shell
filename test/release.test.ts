@@ -119,26 +119,26 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('${NSD_SetText} $DshDirectoryEdit $3')
   })
 
-  it('shows a packaged startup surface and pins the Electron directory picker surface', async () => {
+  it('loads the Shell first and isolates the authenticated Harness surface', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
-    const splash = await readFile(path.join(projectRoot, 'build', 'splash.html'), 'utf8')
+    const vite = await readFile(path.join(projectRoot, 'electron.vite.config.ts'), 'utf8')
     const patch = await readFile(
       path.join(projectRoot, 'build', 'dsh-desktop.patch.yml'),
       'utf8'
     )
 
-    expect(main).toContain("desktopResourcePath('splash.html')")
-    expect(main).toContain('await showSplash()')
+    expect(main).toContain("preload: join(import.meta.dirname, '../preload/shell.cjs')")
+    expect(main).toContain("preload: join(import.meta.dirname, '../preload/harness.cjs')")
+    expect(main).toContain('partition: `persist:insight-harness-${scope}`')
+    expect(main).toContain('await loadShell(window)')
+    expect(main).toContain('await authManager.restore()')
+    expect(main).toContain('applyWorkspaceForCurrentSession()')
+    expect(main).toContain('authManager.subscribe(() => {')
+    expect(vite).toContain("harness: resolve('src/preload/harness.ts')")
+    expect(vite).toContain("shell: resolve('src/preload/shell.ts')")
     expect(main).toContain("initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)")
     expect(main).toContain("readRuntimeManifest(desktopResourcePath('runtime-manifest.json'))")
-    expect(splash).toContain('Starting 因赛AI')
-    expect(splash).toContain('src="insight-logo.svg"')
-    expect(main).toContain("query: { theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }")
     expect(main).toContain('nativeTheme.themeSource = harnessThemePreference()')
-    expect(splash).toContain("document.documentElement.dataset.theme = splashTheme === 'dark'")
-    expect(splash).toContain(":root[data-theme='dark']")
-    expect(splash).not.toContain('filter: invert(1)')
-    expect(splash).not.toContain('class="track"')
     expect(patch).not.toMatch(/id:\s*directory-picker/)
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-host-directory-picker-native'")
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-ui-directory-picker-native'")

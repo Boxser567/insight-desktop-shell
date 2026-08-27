@@ -23,8 +23,10 @@ export interface HarnessViewHost {
     addChildView(view: HarnessViewInstance): void
     removeChildView(view: HarnessViewInstance): void
   }
-  createHarnessView(): HarnessViewInstance
+  createHarnessView(scope: string): HarnessViewInstance
 }
+
+const ACCOUNT_SCOPE_PATTERN = /^[a-f0-9]{32}$/u
 
 function isLoopbackHarnessUrl(rawUrl: string): boolean {
   try {
@@ -47,9 +49,18 @@ function finiteInteger(value: number): number {
 export class HarnessWorkspaceView {
   private view?: HarnessViewInstance
   private requestedBounds?: WorkspaceBounds
+  private scope?: string
   private url?: string
 
   constructor(private readonly getHost: () => HarnessViewHost | undefined) {}
+
+  setScope(scope: string): void {
+    if (!ACCOUNT_SCOPE_PATTERN.test(scope)) throw new Error('The workspace scope is invalid.')
+    if (this.view && this.scope !== scope) {
+      throw new Error('Close the current Harness view before changing accounts.')
+    }
+    this.scope = scope
+  }
 
   setBounds(bounds: WorkspaceBounds | null): void {
     if (bounds === null) {
@@ -57,11 +68,14 @@ export class HarnessWorkspaceView {
       this.view?.setVisible(false)
       return
     }
+    const width = finiteInteger(bounds.width)
+    const height = finiteInteger(bounds.height)
+    if (width < 0 || height < 0) throw new Error('Workspace size cannot be negative.')
     this.requestedBounds = {
       x: finiteInteger(bounds.x),
       y: finiteInteger(bounds.y),
-      width: finiteInteger(bounds.width),
-      height: finiteInteger(bounds.height)
+      width,
+      height
     }
     this.applyBounds()
   }
@@ -72,9 +86,10 @@ export class HarnessWorkspaceView {
     }
     const host = this.getHost()
     if (!host || host.isDestroyed()) throw new Error('The Shell window is unavailable.')
+    if (!this.scope) throw new Error('An account scope is required before opening Harness.')
 
     if (!this.view || this.view.webContents.isDestroyed()) {
-      this.view = host.createHarnessView()
+      this.view = host.createHarnessView(this.scope)
       host.contentView.addChildView(this.view)
       this.url = undefined
     }
@@ -90,6 +105,7 @@ export class HarnessWorkspaceView {
     const view = this.view
     this.view = undefined
     this.url = undefined
+    this.scope = undefined
     if (!view) return
 
     view.setVisible(false)

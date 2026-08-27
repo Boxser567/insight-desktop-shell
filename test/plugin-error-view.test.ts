@@ -54,7 +54,7 @@ describe('plugin load error detection and extraction', () => {
 
 describe('preload wiring for plugin error handling', () => {
   it('installs error listeners and connects to unified recovery', async () => {
-    const preload = await readFile('src/preload/index.ts', 'utf8')
+    const preload = await readFile('src/preload/harness.ts', 'utf8')
 
     expect(preload).toContain("window.addEventListener('error'")
     expect(preload).toContain("window.addEventListener('unhandledrejection'")

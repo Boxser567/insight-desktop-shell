@@ -238,6 +238,7 @@ export function updateReadyStability(
 export class HarnessRuntime {
   private child?: HarnessChildProcess
   private logStream?: WriteStream
+  private dshHome: string
   private phase: RuntimePhase = 'idle'
   private message = 'Harness is not running.'
   private launchDirectory?: string
@@ -248,7 +249,21 @@ export class HarnessRuntime {
     stderr: ''
   }
 
-  constructor(private readonly options: HarnessRuntimeOptions) {}
+  constructor(private readonly options: HarnessRuntimeOptions) {
+    this.dshHome = options.dshHome
+  }
+
+  /** Select the account-owned Harness directory while the runtime is stopped. */
+  configureDshHome(dshHome: string): void {
+    if (this.child || this.phase === 'starting' || this.phase === 'ready' || this.phase === 'stopping') {
+      throw new Error('Harness must be stopped before changing its account directory.')
+    }
+    this.dshHome = dshHome
+  }
+
+  currentDshHome(): string {
+    return this.dshHome
+  }
 
   snapshot(): RuntimeSnapshot {
     return {
@@ -284,7 +299,7 @@ export class HarnessRuntime {
       return
     }
 
-    await mkdir(this.options.dshHome, { recursive: true })
+    await mkdir(this.dshHome, { recursive: true })
     await mkdir(dirname(this.options.logPath), { recursive: true })
     this.logStream ??= createWriteStream(this.options.logPath, { flags: 'a' })
 
@@ -313,7 +328,7 @@ export class HarnessRuntime {
         args,
         buildHarnessSpawnOptions(
           launchDirectory,
-          this.options.dshHome,
+          this.dshHome,
           process.platform,
           resolveShellEnvironment()
         )

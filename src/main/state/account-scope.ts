@@ -10,6 +10,7 @@ export interface AccountPaths {
   shell: string
   harness: string
   cache: string
+  launchRoot: string
 }
 
 /** Derive an opaque, environment-specific account directory key. */
@@ -33,6 +34,7 @@ export function accountPaths(insightRoot: string, scope: string): AccountPaths {
     root,
     shell: join(root, 'shell'),
     harness: join(root, 'harness'),
-    cache: join(root, 'cache')
+    cache: join(root, 'cache'),
+    launchRoot: join(root, 'launch-root')
   }
 }

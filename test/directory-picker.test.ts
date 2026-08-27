@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('desktop Electron directory picker', () => {
   it('exposes a narrow preload bridge and handles it in the main process', async () => {
-    const preload = await readFile('src/preload/index.ts', 'utf8')
+    const preload = await readFile('src/preload/harness.ts', 'utf8')
     const main = await readFile('src/main/index.ts', 'utf8')
 
     expect(preload).toContain("contextBridge.exposeInMainWorld('dshDesktopDirectoryPicker'")

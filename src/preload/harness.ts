@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { findBootFailureText } from './boot-failure'
 import { isPluginLoadError } from './plugin-error-view'
-import { mountWindowsTitlebarLayout } from './windows-titlebar'
 
 let bootFailureTriggered = false
 let bootFailureTimer: number | undefined
@@ -87,9 +86,6 @@ async function mountSafeModeBanner(): Promise<void> {
 }
 
 function initializeUi(): void {
-  if (process.platform === 'win32') {
-    mountWindowsTitlebarLayout({ document, ipcRenderer })
-  }
   checkBootFailureInDom()
   new MutationObserver(checkBootFailureInDom).observe(document.documentElement, {
     childList: true,

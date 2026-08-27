@@ -14,14 +14,15 @@ describe('desktop account scope', () => {
     expect(first).toMatch(/^[a-f0-9]{32}$/)
   })
 
-  it('places Shell, Harness and cache under one account root', () => {
+  it('places Shell, Harness, generated assets and cache under one account root', () => {
     const scope = accountScopeKey('test', '12345')
 
     expect(accountPaths('/data/insight', scope)).toEqual({
       root: join('/data/insight', 'accounts', scope),
       shell: join('/data/insight', 'accounts', scope, 'shell'),
       harness: join('/data/insight', 'accounts', scope, 'harness'),
-      cache: join('/data/insight', 'accounts', scope, 'cache')
+      cache: join('/data/insight', 'accounts', scope, 'cache'),
+      launchRoot: join('/data/insight', 'accounts', scope, 'launch-root')
     })
   })
 
