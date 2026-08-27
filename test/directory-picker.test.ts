@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
-import { patchPath } from './patch-path'
 
 describe('desktop Electron directory picker', () => {
   it('exposes a narrow preload bridge and handles it in the main process', async () => {
@@ -34,23 +33,10 @@ describe('desktop Electron directory picker', () => {
     expect(desktopPatch).not.toContain('dsh-client-ui-directory-picker-native')
   })
 
-  it('captures the client bridge as a reproducible dependency patch', async () => {
-    const dependencyPatch = await readFile(
-      patchPath('@deepseek-ai/dsh-client-ui-directory-picker-native'),
-      'utf8'
-    )
+  it('keeps the bridge in the Shell instead of restoring registry dependency patches', async () => {
+    const packageJson = await readFile('package.json', 'utf8')
 
-    expect(dependencyPatch).toContain('window.dshDesktopDirectoryPicker')
-    expect(dependencyPatch).toContain('DSH Desktop directory picker bridge is unavailable')
-  })
-
-  it('keeps the Host API proxy active when the legacy picker service is absent', async () => {
-    const apiProxyPatch = await readFile(
-      patchPath('@deepseek-ai/dsh-host-apiproxy'),
-      'utf8'
-    )
-
-    expect(apiProxyPatch).toContain('const directoryPicker = ctx.get("directoryPicker")')
-    expect(apiProxyPatch).toContain('details: { capability: "none" }')
+    expect(packageJson).not.toContain('@deepseek-ai/dsh-host-apiproxy')
+    expect(packageJson).not.toContain('@deepseek-ai/dsh-client-ui-directory-picker-native')
   })
 })

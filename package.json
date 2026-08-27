@@ -111,6 +111,10 @@
         "to": "dsh-loader.gif"
       },
       {
+        "from": "build/dsh-loader-dark.gif",
+        "to": "dsh-loader-dark.gif"
+      },
+      {
         "from": "build/runtime-manifest.json",
         "to": "runtime-manifest.json"
       },
@@ -129,6 +133,14 @@
       {
         "from": "build/plugin-recovery.html",
         "to": "plugin-recovery.html"
+      },
+      {
+        "from": "build/safe-mode.html",
+        "to": "safe-mode.html"
+      },
+      {
+        "from": "build/windows-menu.html",
+        "to": "windows-menu.html"
       },
       {
         "from": "build/bundled-profile",

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { findBootFailureText } from './boot-failure'
 import { isPluginLoadError } from './plugin-error-view'
-import { mountWindowsTitlebar } from './windows-titlebar'
+import { mountWindowsTitlebarLayout } from './windows-titlebar'
 
 let bootFailureTriggered = false
 let bootFailureTimer: number | undefined
@@ -8,15 +9,7 @@ const pendingBootFailureMessages: string[] = []
 const BOOT_FAILURE_SETTLE_MS = 400
 
 function currentBootFailureText(): string | undefined {
-  const root = document.body || document.documentElement
-  if (!root) return undefined
-  const text = document.body?.innerText || root.textContent
-  if (!text?.includes('Failed to load plugins')) return undefined
-  return text
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join('\n')
+  return findBootFailureText(document)
 }
 
 function addBootFailureMessage(message: string | undefined): void {
@@ -65,19 +58,44 @@ contextBridge.exposeInMainWorld(
   })
 )
 
+contextBridge.exposeInMainWorld(
+  'dshSafeMode',
+  Object.freeze({
+    action: (action: string, plugins: string[]): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('safe-mode:action', action, plugins)
+  })
+)
+
+async function mountSafeModeBanner(): Promise<void> {
+  if (location.protocol === 'file:' || document.getElementById('dsh-desktop-safe-mode-banner')) return
+  const status = (await ipcRenderer.invoke('safe-mode:status')) as { active?: boolean; locale?: 'en' | 'zh' }
+  if (status.active !== true) return
+  const safeModeLocale = status.locale === 'zh' ? 'zh' : 'en'
+  const banner = document.createElement('div')
+  banner.id = 'dsh-desktop-safe-mode-banner'
+  banner.style.cssText = 'position:fixed;top:8px;left:50%;z-index:2147483645;transform:translateX(-50%);display:flex;gap:8px;padding:8px;border-radius:10px;background:#27272a;color:#fff'
+  const title = document.createElement('span')
+  title.textContent = safeModeLocale === 'zh' ? '安全模式' : 'Safe Mode'
+  const manage = document.createElement('button')
+  manage.textContent = safeModeLocale === 'zh' ? '卸载插件' : 'Remove plugins'
+  manage.addEventListener('click', () => void ipcRenderer.invoke('safe-mode:manage'))
+  const exit = document.createElement('button')
+  exit.textContent = safeModeLocale === 'zh' ? '退出安全模式' : 'Exit Safe Mode'
+  exit.addEventListener('click', () => void ipcRenderer.invoke('safe-mode:exit'))
+  banner.append(title, manage, exit)
+  document.documentElement.appendChild(banner)
+}
+
 function initializeUi(): void {
   if (process.platform === 'win32') {
-    mountWindowsTitlebar({
-      document,
-      ipcRenderer,
-      locale: navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
-    })
+    mountWindowsTitlebarLayout({ document, ipcRenderer })
   }
   checkBootFailureInDom()
   new MutationObserver(checkBootFailureInDom).observe(document.documentElement, {
     childList: true,
     subtree: true
   })
+  void mountSafeModeBanner().catch((error: unknown) => console.warn('[safe-mode] unable to mount banner', error))
 }
 
 window.addEventListener('error', (event) => {

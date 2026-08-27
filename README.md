@@ -1,88 +1,23 @@
-<h1 align="center">
-  <img src="docs/images/readme-logo-black-v020.png" width="64" alt="DSH Desktop logo" valign="middle" />
-  DSH Desktop
-</h1>
+# 因赛AI Desktop
 
-<p align="center">
-  A local-first, cross-platform desktop shell for
-  <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>.
-</p>
+因赛AI Desktop is a cross-platform Electron host for the pinned Insight Harness Core Runtime.
 
-<p align="center">
-  <a href="README.md">English</a> · <a href="README.zh.md">简体中文</a>
-</p>
+## Runtime policy
 
-<p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-171513.svg" /></a>
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-171513.svg" />
-  <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-171513.svg" />
-</p>
+The application does not install or upgrade `@deepseek-ai/dsh` from the npm registry at runtime. `core-runtime.lock.json` pins an independently released Core Runtime, and packaged builds embed that artifact together with the default Better Sidebar profile.
 
-![DSH Desktop overview with portable presets, model providers, and phone control](docs/images/dsh-desktop-hero-v020.png)
+Profiles, plugins, workspaces, and Harness sessions are stored outside the application installation directory. The product application data directory is stable across upgrades.
 
-<p align="center"><strong>Beyond official DeepSeek models, DSH Desktop supports mainstream third-party model providers—with more DSH-powered desktop experiences coming soon.</strong></p>
-
-DSH Desktop packages the local DeepSeek Harness web experience as a desktop application. It launches a local Harness instance automatically, manages a random loopback port, persists profiles, plugins, and sessions, and opens the full interface as soon as Harness is ready. Project workspaces are added and managed entirely in the Harness interface.
-
-> [!IMPORTANT]
-> DSH Desktop is currently an early preview and depends on the rapidly evolving `@deepseek-ai/dsh@0.1.1-rc.1`. macOS releases are code-signed and notarized by Apple; current installers are distributed through the official website.
-
-## Download
-
-Download DSH Desktop for macOS and Windows from the [official website](https://www.dshdesktop.com/#download).
-
-## Community
-
-<p align="center">
-  Scan the QR code below with WeChat to join the DSH Desktop community group.<br />
-  <img src="docs/images/wechat-group-20260815.png" width="220" alt="DSH Desktop WeChat group QR code" /><br />
-  Prefer Discord? <a href="https://discord.gg/he2gAKCpj">Join the DSH Desktop Discord community</a>.
-</p>
-
-## Why this project exists
-
-DeepSeek Harness already provides a complete agent runtime and Web UI. DSH Desktop does not reimplement Harness; it supplies the host capabilities needed for a desktop product:
-
-- Run without manually starting a CLI or managing local ports
-- Create an application-owned Harness launch directory automatically at startup
-- Add and manage project workspaces through Harness's built-in directory picker
-- Manage the Harness child process, readiness checks, logs, and shutdown in one place
-- Store profiles, plugins, and sessions outside the application installation directory so upgrades do not remove user data
-- Provide packaging entry points for macOS and Windows
-
-## Features
-
-- Opens directly into Harness without an additional landing page
-- Starts without an initial directory prompt by creating and reusing an internal launch directory
-- Offers retry, log viewing, and exit actions when Harness fails to start
-- Provides Harness menu actions for restarting the child process and viewing its log
-- Gracefully terminates the Harness child process when the desktop app exits
-- Listens only on a random `127.0.0.1` port for each launch
-- Removes Node.js privileges from the renderer and enables `contextIsolation`, sandboxing, and navigation restrictions
-- Includes a production DSH app icon in macOS ICNS and Windows ICO formats
-- Preinstalls `dsh-better-sidebar@0.16.1` in new Harness profiles without overwriting existing profiles
-- Imports trusted local plugin folders or `.tgz` archives from the `Plugins` application menu; local plugins run with the same permissions as the desktop app
-
-## Quick start
-
-### Requirements
-
-- Node.js 22 or later
-- npm
-- macOS on Apple Silicon or Intel, or Windows x64
-
-### Local development
+## Local development
 
 ```bash
-git clone https://github.com/dataelement/dsh-desktop.git
-cd dsh-desktop
 npm install
 npm run dev
 ```
 
-`npm install` runs `patch-package` to apply the pinned Harness compatibility patches and then installs the Electron runtime.
+Development prepares the locked Core Runtime, its manifest, and the bundled profile before starting Electron.
 
-### Quality checks
+## Verification
 
 ```bash
 npm test
@@ -90,90 +25,16 @@ npm run typecheck
 npm run build
 ```
 
-### Packaging
+## Packaging
 
 ```bash
-# Generate unsigned DMG and ZIP artifacts for the current Mac architecture
-npm run package:mac
-
-# Run each command on a Mac or CI runner with the matching architecture
 npm run package:mac:arm64
 npm run package:mac:x64
-
-# Generate NSIS and Portable artifacts on a Windows x64 machine or runner
 npm run package:win
 ```
 
-Harness includes architecture-specific native modules. Packaging also prepares an offline default profile containing `dsh-better-sidebar@0.16.1` and its resolved dependencies. Dependencies must be reinstalled and built on the matching platform for macOS ARM64, macOS Intel, and Windows x64. The architecture-specific scripts validate the current `platform/arch` before packaging to prevent artifacts that appear successful but are missing native dependencies.
+Each target must be built on its matching operating system and architecture. The GitHub Actions release workflow builds the Windows installer on `windows-2022`.
 
-Every build also creates `build/runtime-manifest.json`. Packaged macOS applications include the same file at `因赛AI.app/Contents/Resources/runtime-manifest.json`; it records the registry-supplied DSH version, its lockfile integrity checksum, bundled Node version, and target platform/architecture. During this registry transition, `core.commit` is intentionally `null`.
+## Upstream synchronization
 
-## Runtime architecture
-
-```text
-DSH Desktop (Electron Main)
-├── Application-owned launch directory
-├── Harness child-process lifecycle
-├── Random loopback port and readiness checks
-├── Native logging and recovery actions
-└── Hardened BrowserWindow
-     └── http://127.0.0.1:<random>  DeepSeek Harness Web UI
-
-Electron userData
-├── launch-root/
-├── logs/harness.log
-└── harness/
-    ├── profiles/
-    ├── sessions/
-    └── Plugins and user data
-```
-
-Harness runs in a separate Electron Node child process. The `--expose-internals` permission required by Cordis HMR is granted only to that child process and never to the web renderer.
-
-## Project structure
-
-```text
-src/main/             Electron main process, windows, and Harness lifecycle
-src/shared/           Shared runtime types
-patches/              Reproducible UI customizations for the pinned DSH version
-scripts/              Brand-asset installation and target-platform packaging checks
-test/                 Settings, runtime, security, and provider coverage tests
-build/                Application icon assets
-```
-
-## Current validation status
-
-- macOS Apple Silicon: development workflow, real Harness startup, DMG packaging, code signing, Apple notarization, and mounted artifact verified
-- macOS Intel: packaging configuration and platform checks provided; runtime verification still requires an Intel Mac or runner
-- Windows x64: NSIS/Portable configuration and platform checks provided; runtime verification still requires a Windows runner
-- Windows ARM64: not currently supported
-- Automatic updates: not yet integrated
-
-## Upstream version and patches
-
-The project currently pins `@deepseek-ai/dsh@0.1.1-rc.1`. The initial provider list and desktop preset-transfer surface are captured with [`patch-package`](https://github.com/ds300/patch-package) under [`patches/`](patches/) rather than relying on untracked changes in `node_modules`.
-
-When upgrading DSH:
-
-1. Verify the upstream Settings, Credentials, and Provider Directory contracts.
-2. Reapply or rewrite the customized onboarding interface.
-3. Regenerate the patch.
-4. Run regression checks against a real Harness startup and provider configuration flow.
-
-## Contributing
-
-Issues and pull requests are welcome. Before submitting a change, run at least:
-
-```bash
-npm test
-npm run typecheck
-npm run build
-```
-
-Never include real API keys in issues, logs, screenshots, or test data.
-
-## License
-
-This project is open source under the [MIT License](LICENSE).
-
-DeepSeek Harness and its dependencies remain subject to their respective upstream licenses and trademark policies. DSH Desktop is an independent community desktop wrapper.
+This repository periodically merges `dataelement/dsh-desktop`. Preserve the independent Core Runtime and bundled profile when resolving conflicts; do not restore registry-owned DSH dependencies or patch files that the locked Core artifact no longer consumes.

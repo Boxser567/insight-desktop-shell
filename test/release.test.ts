@@ -60,6 +60,10 @@ describe('GitHub release contract', () => {
       to: 'insight-logo.svg'
     })
     expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/dsh-loader-dark.gif',
+      to: 'dsh-loader-dark.gif'
+    })
+    expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/dsh-desktop.patch.yml',
       to: 'dsh-desktop.patch.yml'
     })
@@ -115,6 +119,11 @@ describe('GitHub release contract', () => {
     expect(main).toContain("readRuntimeManifest(desktopResourcePath('runtime-manifest.json'))")
     expect(splash).toContain('Starting 因赛AI')
     expect(splash).toContain('src="insight-logo.svg"')
+    expect(main).toContain("query: { theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }")
+    expect(main).toContain('nativeTheme.themeSource = harnessThemePreference()')
+    expect(splash).toContain("document.documentElement.dataset.theme = splashTheme === 'dark'")
+    expect(splash).toContain(":root[data-theme='dark']")
+    expect(splash).not.toContain('filter: invert(1)')
     expect(splash).not.toContain('class="track"')
     expect(patch).not.toMatch(/id:\s*directory-picker/)
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-host-directory-picker-native'")
@@ -250,6 +259,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('Smoke test packaged Windows Harness')
     expect(workflow).toContain("Join-Path $env:APPDATA 'insight-desktop-dev'")
     expect(workflow).toContain("$executable = 'dist-dev\\win-unpacked\\因赛AI Dev.exe'")
+    expect(workflow).toContain('if (-not [string]::IsNullOrEmpty($log))')
     expect(workflow).toContain('Packaged Windows Harness smoke test passed.')
     expect(workflow).toContain("Invoke-HarnessRpc 'workspace.create'")
     expect(workflow).toContain("Invoke-HarnessRpc 'session.create'")
@@ -300,7 +310,32 @@ describe('GitHub release contract', () => {
     )
   })
 
-  it('routes the published download through the official website', async () => {
+  it('signs Windows installers on the local UKey runner before publishing', async () => {
+    const workflow = await readFile(
+      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
+      'utf8'
+    )
+
+    expect(workflow).toContain('name: windows-x64-unsigned')
+    expect(workflow).toContain('Sign Windows package locally with UKey')
+    expect(workflow).toContain('runs-on: [self-hosted, macOS, ARM64]')
+    expect(workflow).toContain('--storetype ETOKEN')
+    expect(workflow).toContain('--storepass "file:$pin_file"')
+    expect(workflow).toContain('--tsmode RFC3161')
+    expect(workflow).toContain('secrets.DESKTOP_WINDOWS_SIGNING_PIN')
+    expect(workflow).toContain(`printf '%s' "$WINDOWS_SIGNING_PIN" > "$pin_file"`)
+    expect(workflow).toContain('unset WINDOWS_SIGNING_PIN')
+    expect(workflow).not.toContain('security find-generic-password')
+    expect(workflow).not.toContain('WINDOWS_SIGNING_KEYCHAIN_SERVICE')
+    expect(workflow).toContain('finalize-windows-release.mjs')
+    expect(workflow).toContain('version="${GITHUB_REF_NAME#v}"')
+    expect(workflow).toContain('pattern: macos-*')
+    expect(workflow).toMatch(
+      /publish:[\s\S]*?needs\.sign-windows\.result == 'success'[\s\S]*?- sign-windows/
+    )
+  })
+
+  it('documents the locked Core Runtime distribution policy', async () => {
     const readmes = await Promise.all(
       ['README.md', 'README.zh.md'].map((file) =>
         readFile(path.join(projectRoot, file), 'utf8')
@@ -308,7 +343,7 @@ describe('GitHub release contract', () => {
     )
 
     for (const readme of readmes) {
-      expect(readme).toContain('https://www.dshdesktop.com/#download')
+      expect(readme).toContain('Core Runtime')
       expect(readme).not.toContain('| Platform | Package | Download |')
       expect(readme).not.toContain('| 平台 | 安装包 | 下载 |')
       expect(readme).not.toContain('Coming soon')
