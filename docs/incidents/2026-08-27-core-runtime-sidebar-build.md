@@ -32,6 +32,9 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 8. Core Runtime workflow run `33059565058` 构建 `darwin-arm64`、`darwin-x64` 和 `win32-x64`。第一次执行中 ARM64 的 archive 与 JSON 已上传，SHA-256 sidecar 上传收到 GitHub Unicorn 响应；只重跑失败 job 后，第二次执行完成，Release 最终包含三平台各 `.tar.gz`、`.json` 和 `.sha256` 共九个资产。
 9. 正式 `insight-runtime-v0.1.1-rc.9` 中的 loader 与本地已验证构建进行字节等价核对。Shell 随后验证 Release 资产、哈希和元数据，并以提交 `a346076` 锁定 rc.9。
 10. Shell 的测试、类型检查、普通 build 与独立 DEV 目录构建通过。由于 macOS 单实例锁仍指向较旧的运行中 DEV 应用，不能把该进程当作新 rc.9 应用的运行证据；最终安装包仍需在明确退出旧实例后单独验收。
+11. 人工确认 `dist-rc9-validation/mac-arm64/因赛AI Dev.app` 携带 rc.9 且 Sidebar 可用后，Shell run `33062909634` 以 `target: all` 进入安装包阶段。两个 macOS job 的测试、类型检查、DEV 安装包和上传均通过；Windows 在 `npm test` 启动 Vitest 前报告缺少 `@rollup/rollup-win32-x64-msvc`。
+12. Shell 先前只把 Intel macOS Rollup 二进制声明为根 `optionalDependencies`。npm 在 macOS 生成的 lockfile 虽列出 Rollup 的 Windows 可选依赖关系，却没有保留对应 Windows package 节点，Windows 干净 runner 的 `npm ci` 因此无法安装它。提交 `033b264` 显式锁定 Windows x64 Rollup 包并增加 release 回归测试；本地定向测试和 Windows x64 dry-run 通过。
+13. 没有重跑已成功的 macOS job。基于 `033b264` 仅触发 `target: windows` run `33064050963`，Windows 的干净 `npm ci`、完整测试、类型检查、DEV 安装包、打包后 Harness smoke 和约 255 MB artifact 上传全部通过，耗时 8 分 18 秒。
 
 ## 症状、根因与修复
 
@@ -41,6 +44,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 | 会话内 Markdown 和 HTML 唤起 macOS 外部应用 | 卸载失败插件虽然解除启动阻塞，也一并移除了提供文件预览与 Sidebar 路由的内置能力 | 比较卸载前后的 Profile 包与 bundle 注册，并在独立 DEV 应用中实际点击 Markdown/HTML | 恢复可加载的默认 Sidebar，而不是以卸载作为产品修复；Core rc.9 与 Shell 默认 Profile |
 | 应用长期停留在启动页 | Harness Utility Process 未成功完成启动，主窗口持续等待 Runtime 就绪；本次主要触发点是 Sidebar 模块解析失败，Profile 安装状态缺失会进一步引发不必要的安装流程 | 检查子进程日志、恢复窗口识别结果、用户 Profile 的 `.install-complete`，而不是只刷新 renderer | Core `85e67608ff`；Shell `caf47f9` |
 | Windows 测试报告缺少 `build/core-runtime/runtime.json` | manifest 单元测试调用了完整构建脚本，隐式依赖本地已准备的 Runtime，CI 干净工作区没有该文件 | 在 Windows runner 的干净 checkout 重现，检查测试是否越过单元边界读取 `build/` | Shell `c73b2c2` 将 manifest 构造与写入放入临时夹具 |
+| Windows `npm ci` 成功后 Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | npm 的跨平台可选依赖 lockfile 行为没有保留非当前 macOS 主机的 Windows Rollup package 节点；只显式锁定了 Intel macOS 包 | 检查根 `optionalDependencies`、lockfile 的具体 `node_modules/@rollup/...` 节点，并在 Windows 干净 runner 执行 `npm ci` 和测试 | Shell `033b264` 显式锁定 `@rollup/rollup-win32-x64-msvc@4.62.4` 并扩充 release 测试 |
 | macOS codesign 拒绝 Profile 依赖中的 `.DS_Store`，提示 resource fork/Finder information | 默认 Profile 复制进应用资源时带入 Finder 元数据；codesign 会遍历并拒绝这些内容 | 对报错的完整资源路径执行元数据/文件检查，确认不是签名证书本身失败 | Shell 打包资源过滤 `!**/.DS_Store`、`!**/__MACOSX/**`；打包前保持模板清洁 |
 | DMG 已可用，但 zip 命令失败或 blockmap 阶段找不到预期 zip | zip 是独立的分发格式步骤；其命令/产物命名或生成失败不代表同一应用目录和 DMG 的运行行为失败 | 分别核对 `.app`、DMG、zip 和 blockmap 的存在与日志，不用后一阶段错误否定已人工验收的 DMG | 尚未作为本次 Sidebar 根因处理；经人工验收的 DMG 可继续用于 macOS 功能验收，zip 问题单独跟踪 |
 | GitHub Release 最终缺少一个 SHA-256 sidecar，其他资产已上传 | GitHub 上传端返回 Unicorn，属于单资产上传基础设施故障，不是 Runtime 重新编译失败 | 查看 run 中各 job/step 和 Release 资产列表，确认 archive 与 JSON 已存在、失败仅在 sidecar 上传 | 只重跑失败的 `darwin-arm64` job；run `33059565058` attempt 2 补齐资产 |
@@ -53,6 +57,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 | 把 `npm test`、typecheck 或 `electron-builder` 成功当作 Sidebar 正常 | 它们没有启动真实 Utility Process，也没有点击会话文件 | 在独立 DEV 应用中使用全新/既有 Profile 启动，人工点击 Markdown 和 HTML，并确认没有恢复窗口 |
 | 本地 Profile 尚未启动成功就触发 GitHub 安装包 | 远程打包成本高，但不会提供本地即可获得的模块解析和交互证据 | 先完成目录应用、包内资源检查、本地启动和人工功能门禁，再运行 installer workflow |
 | 只验证覆盖过 loader 的本地 Runtime | 能证明代码方向正确，但不能证明已发布压缩包包含同一代码 | 发布后核对九项资产、SHA-256、`runtime.json`，并比较归档 loader 与已验证本地构建的字节内容 |
+| 看到 Rollup 的平台包出现在传递依赖列表，就认为各平台 `npm ci` 都会安装 | macOS 生成的 lockfile 可以保留依赖名称，却缺少 Windows 包节点，只有目标 runner 才暴露问题 | 每个发布 runner 所需的 Rollup 原生包都作为根可选依赖精确锁定，release 测试同时检查 manifest 和 lockfile package 节点 |
 | 单个 sidecar 上传失败后重跑所有平台 | 已成功的平台会重复安装、编译、打包和上传 | 先区分编译失败与上传失败；对上传基础设施故障只重跑失败 job |
 | 未命名用户数据目录就恢复、覆盖或删除 Profile | 可能破坏会话、工作区、设置和用户插件，也会污染验证结论 | 先记录应用标识与精确目录，制作可识别备份，只对明确的测试 Profile 执行最小操作 |
 | 新应用已构建就默认当前窗口运行的是它 | Electron 单实例机制可能把启动请求交给旧进程 | 验收前记录应用绝对路径和 Runtime tag，退出旧实例，再由进程路径或应用内清单确认身份 |
@@ -65,6 +70,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 - Shell `core-runtime.lock.json` 由 `a346076` 锁定 rc.9，并记录各平台归档 URL、SHA-256、Core commit、Node 与 pnpm 身份。
 - Shell rc.9 周期中，38 个测试文件、269 个测试、typecheck、普通 build 和独立 DEV 目录打包通过；应用内静态检查确认 Runtime 与默认 Sidebar 文件存在。
 - `caf47f9` 的测试证明全新或受管迁移 Profile 被复制后会写入 `.install-complete`，避免把已随包安装的依赖再次当作未完成安装。
+- 初始 installer run `33062909634` 的 Apple Silicon 和 Intel job 分别通过；Windows Rollup 修复后的 Windows-only run `33064050963` 完整通过，并上传 `windows-x64-dev` artifact。
 - 尚未把运行中的旧 DEV 实例当作正式 rc.9 应用证据。最终 DMG/Windows 安装包的首次安装、覆盖安装和 Sidebar 行为仍属于发布阶段人工门禁。
 
 ## 可复用经验
@@ -74,6 +80,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 - Runtime Release 的 archive、JSON 和 SHA-256 sidecar 是一个完整单元；Shell 只在资产齐全、哈希和清单一致后更新锁。
 - Profile 模板是只读种子，`.install-complete` 等可变安装状态属于复制后的用户 Profile。
 - 构建故障应按源码、Runtime 归档、Shell 资源、应用启动、安装包格式和上传基础设施分层，失败只回退到被修复影响的最便宜阶段。
+- 平台原生可选依赖不能只依赖传递 lockfile 推断；非当前开发主机的 release runner 入口包必须显式锁定并由静态测试守住。
 - 单实例应用验收必须先确认进程身份。看到新窗口不等于正在运行新构建。
 - 对用户数据只做精确、可恢复的操作。清理构建目录和清理用户 Profile 是两类风险完全不同的操作。
 

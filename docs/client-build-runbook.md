@@ -56,6 +56,7 @@ upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定�
 
 - 先运行最贴近变更的单个测试文件、配置检查或文档检查。
 - 源码变更运行 `npm run typecheck`；进入发布链前运行 `npm test`。
+- Electron/Vite/Rollup 或 lockfile 变更必须检查每个 release runner 所需的平台原生包既在根 `optionalDependencies` 中精确锁定，也在 `package-lock.json` 中具有具体 package 节点；不能只依赖 Rollup 的传递可选依赖列表。
 - 文档变更检查链接、当前脚本名和 `git diff --check`，不为文档单独构建应用。
 
 **通过条件：** 定向断言覆盖实际失败条件，类型与静态配置一致，失败不是被跳过或被环境错误掩盖。
@@ -234,6 +235,7 @@ npm run package:mac:arm64
 | Markdown/HTML 打开外部应用 | Sidebar 是否真实加载、是否曾被恢复流程卸载 | 阶段 8 |
 | 无限启动页 | Harness Utility Process、Profile 安装标记、Runtime 身份 | 阶段 8 |
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
+| Windows Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | 根 `optionalDependencies` 与 lockfile 的 Windows package 节点 | 阶段 2/9，修复后只跑 Windows |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | DMG 成功、zip/blockmap 失败 | 独立分发格式与 artifact 命名，不先否定应用行为 | 阶段 7/9，格式问题单独跟踪 |
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |
@@ -249,6 +251,7 @@ npm run package:mac:arm64
 - 先跑定向测试，再跑一次完整 `npm test`。相关源码没有变化时，不为提交、推送或重跑上传重复执行已通过的全量检查。
 - 先生成目录应用，目录应用资源和行为通过后才生成 DMG、zip 或 NSIS。
 - 原生 runner 只处理本机不能证明的平台、签名和安装器行为；本地可复现问题先本地解决。
+- 某平台的依赖或 lockfile 修复不改变其他平台已构建的输入时，只重跑该平台；新提交不能通过“重跑失败 job”带入，必须从新提交启动对应单平台 workflow。
 - 编译成功但单个上传失败时只重跑失败 job；先确认是否需要重新编译。
 - 把 Runtime 下载、Profile 准备、测试、普通 build、目录应用、安装包和上传分别计时，优化重复最高的阶段，不减少校验项。
 - 测试用户数据使用独立 App ID/channel，并保留精确命名的备份。禁止把清理整个应用数据作为常规提速手段。
