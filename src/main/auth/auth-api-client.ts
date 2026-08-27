@@ -6,7 +6,8 @@ import type {
 } from '../../shared/auth-contracts'
 import type { AuthEnvironmentConfig } from './auth-environment'
 
-type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>
+/** Fetch implementation supplied by an isolated Electron Session. */
+export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>
 
 interface ApiEnvelope {
   code?: string | number
