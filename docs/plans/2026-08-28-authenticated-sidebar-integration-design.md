@@ -17,7 +17,7 @@
 - 登录后只显示一条左侧栏；
 - 使用因赛AI品牌替换 Harness 默认品牌；
 - 在 Harness 侧栏底部显示当前用户摘要，以及“设置”和“退出”操作；
-- 现有 Harness 设置入口与账号菜单中的“设置”打开同一个客户端设置中心；
+- 账号菜单中的“设置”是侧栏内唯一可见设置入口，并打开完整客户端设置中心；
 - 保留 Harness 侧栏折叠、目录选择、安全模式、插件恢复和 Better Sidebar 行为；
 - 把产品代码与两个 upstream 工程的内部 DOM 和布局实现隔离。
 
@@ -54,11 +54,11 @@ macOS 窗口拖拽区域必须由 Harness 页面通过正式 `shell.overlay` 扩
 | 品牌图标 | `sidebar.brand.mark` |
 | 品牌名称 | `sidebar.brand.name` |
 | 账号摘要与菜单 | `sidebar.footer.action` |
-| Harness 原生设置入口 | `sidebar.settings` |
+| 隐藏 Harness 原生设置入口 | `sidebar.settings` |
 | 客户端设置内容 | `settings.section` |
 | macOS 拖拽覆盖层 | `shell.overlay` |
 
-现有 `sidebar.settings` 继续承载 Harness 自带设置按钮。账号菜单中的“设置”必须调用通用的设置对话框控制能力，打开与该按钮相同的设置中心。Core 需要提供一个最小、产品无关、可公开验证的设置对话框控制服务，至少支持 `open()`；产品插件不得通过模拟 DOM 点击实现这一行为。
+Harness 设置插件继续注册 `sidebar.settings`、设置弹窗和所有设置区。第一方桌面集成插件以更低的正式槽位优先级注册一个空 `sidebar.settings` 组件，只遮蔽侧栏底部的原生触发行；不得禁用设置插件或使用 CSS/DOM 隐藏。账号菜单中的“设置”是侧栏内唯一可见入口，并通过通用设置对话框控制服务打开完整设置中心。Core 需要提供一个最小、产品无关、可公开验证的设置对话框控制服务，至少支持 `open()`；产品插件不得通过模拟 DOM 点击实现这一行为。
 
 设置中心首版新增“客户端”区，用于显示版本、发布通道和环境等非敏感客户端信息。账号资料编辑不属于该设置区。
 
@@ -128,7 +128,7 @@ Electron Main 继续是认证会话的唯一写入者。Harness preload 只向�
 | 变更来源 | 合并前必须确认 | 不兼容时的处理 |
 | --- | --- | --- |
 | Shell upstream 的窗口、preload 或 `WebContentsView` | 未登录全屏、登录后全窗口 View、IPC 发送者校验、原生退出入口仍成立 | 在独立适配层解决；不把产品逻辑重新写入 upstream 布局 |
-| Core upstream 的侧栏或设置 UI | 六个扩展槽、设置控制服务和插件生命周期测试通过 | 暂停更新 Runtime 锁；先在 Core 提供兼容接口或更新第一方适配插件 |
+| Core upstream 的侧栏或设置 UI | 六个扩展槽、单槽位优先级遮蔽、设置控制服务和插件生命周期测试通过 | 暂停更新 Runtime 锁；先在 Core 提供兼容接口或更新第一方适配插件 |
 | Core Runtime 制品版本 | manifest、目标平台、第一方插件和默认 Profile 契约一致 | 保持当前锁定版本，不随 upstream 自动升级 |
 | Better Sidebar 版本 | Markdown/HTML 打开、恢复和 Safe Mode 不回归 | 单独修复或回退 Sidebar；不改变账号集成 |
 
@@ -152,7 +152,7 @@ Shell upstream 与 Core Runtime 升级必须拆成两个可独立回退的提交
 - 未登录、恢复、离线和失效状态只显示全屏 Shell 页面；
 - 登录后窗口中只有一条左侧栏，且默认 Harness 品牌已被因赛AI品牌替换；
 - 账号入口显示头像、昵称和脱敏手机号，菜单只有“设置”和“退出”；
-- 原生设置按钮与账号菜单“设置”打开同一个设置中心；
+- 侧栏底部不显示独立设置按钮，账号菜单“设置”打开完整设置中心；
 - 设置中心含客户端信息，但没有账号资料编辑入口；
 - Harness 侧栏折叠和展开均不出现第二条 Shell 侧栏；
 - 退出后旧账号 View 立即不可见，重新登录其他账号不会读取其数据；
