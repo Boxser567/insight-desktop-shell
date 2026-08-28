@@ -3,6 +3,8 @@
 > 状态：approved（2026-08-28）
 >
 > 本文取代 `docs/business-stage-architecture.md` 和 `docs/superpowers/plans/2026-08-27-auth-and-business-entry.md` 中有关系统浏览器登录、OIDC 优先和插件按账号安装的设计。首版接入现有账号 API，不实现注册、忘记密码、企业切换或新的视觉体系。
+>
+> 登录后的窗口布局、单侧栏、账号入口和统一设置中心由 [登录后单侧栏集成设计](2026-08-28-authenticated-sidebar-integration-design.md) 定义。该设计取代本文早期的最小 Shell 侧栏和双设置方案。
 
 ## 目标
 
@@ -38,7 +40,7 @@
 
 ```mermaid
 flowchart LR
-  Renderer["Shell Renderer\n登录、用户入口、最小设置"] -->|"受限 IPC"| Main["Electron Main\nAuthSessionManager"]
+  Renderer["Shell Renderer\n登录与恢复状态"] -->|"受限 IPC"| Main["Electron Main\nAuthSessionManager"]
   Main -->|"HTTPS"| API["现有账号 API"]
   Main --> Secure["系统安全存储\nAccess Token"]
   Main --> Cookies["持久 Electron Session\nHttpOnly Cookie"]
@@ -100,7 +102,7 @@ type SessionView =
 
 ## 登录流程
 
-验证码登录收集手机号、六位验证码和协议确认。发送验证码成功后启动 60 秒倒计时，重复点击不得产生并发请求。
+验证码登录收集手机号、非空短信验证码和协议确认。发送验证码成功后启动 60 秒倒计时，重复点击不得产生并发请求。验证码格式和有效性由服务端判定，客户端只执行输入存在性和长度上限校验。
 
 密码登录收集手机号、密码、图形验证码和协议确认。页面首次进入密码标签时加载验证码；验证失败后刷新验证码。两种登录方式都通过受限 IPC 调用 Main，Main 将输入转发到现有接口。登录成功后立即加密保存令牌、读取用户信息并发布 `authenticated`；失败只返回归一化的字段错误或通用错误，不返回原始响应中的凭证字段。
 
@@ -108,11 +110,9 @@ type SessionView =
 
 ## 窗口与工作区
 
-主窗口始终加载 Shell 自有 Renderer。未登录时显示全屏登录页；已登录时显示沿用 Harness 当前深浅主题的最小 Shell 框架，并在中央区域附着 Harness `WebContentsView`。
+主窗口始终加载 Shell 自有 Renderer，但它只负责未登录、恢复、离线和失效界面。认证成功后 Harness `WebContentsView` 覆盖整个窗口内容区，Harness 原生侧栏是唯一可见导航。品牌、账号入口、统一设置入口和 macOS 拖拽区由随客户端发布的第一方插件通过 Core 正式扩展槽提供。
 
-Shell 框架只增加当前范围所需的产品表面：工作区容器、左下角用户头像和昵称、用户菜单及最小设置页。用户菜单首版只有“设置”和“退出”。Shell 设置与 Harness 设置保持分离；既有 Harness 设置继续由工作区内部入口管理，避免 DOM 注入、私有路由跳转或修改 upstream 页面。
-
-Harness View 的位置由 Renderer 报告布局矩形，Main 校验有限数值并裁剪到主窗口内容区域。View 使用现有 Harness preload，从而保留目录选择、插件恢复、安全模式、Windows 标题栏适配和 Better Sidebar 所需能力。退出、失效或切换到非认证状态时，Main 先隐藏并销毁 View，再停止 Runtime。
+详细所有权、禁止事项、降级策略和 upstream 决策矩阵见 [登录后单侧栏集成设计](2026-08-28-authenticated-sidebar-integration-design.md)。退出、失效或切换到非认证状态时，Main 先隐藏并销毁 View，再停止 Runtime。
 
 ## 账号、资产与插件隔离
 
@@ -140,7 +140,7 @@ Better Sidebar 是出厂插件，每个新账号 Profile 默认启用。用户�
 
 首版不建立 Design Tokens，也不重新定义产品视觉体系。Shell 登录页、用户入口和状态页沿用当前 Harness 的色彩、字体密度、圆角和深浅主题行为，确保双主题可用即可。Core Runtime 不承载样式；第一方插件继续使用各自现有主题实现。
 
-视觉审计、品牌体系、Design Tokens、Harness 主题适配和第一方插件统一作为后续非阻塞工作。当前实现不得通过大面积 CSS 注入或修改 upstream DOM 强行统一风格，以免形成脆弱依赖。首版新增样式应集中在 Shell Renderer 内，便于未来替换。
+视觉审计、品牌体系、Design Tokens、Harness 主题适配和第一方插件统一作为后续非阻塞工作。当前实现不得通过大面积 CSS 注入或修改 upstream DOM 强行统一风格，以免形成脆弱依赖。登录页样式集中在 Shell Renderer；登录后产品入口样式由第一方集成插件通过正式扩展槽提供。
 
 ## 错误处理与安全规则
 
@@ -158,7 +158,7 @@ Better Sidebar 是出厂插件，每个新账号 Profile 默认启用。用户�
 
 新增实现优先放入 `src/main/auth/`、`src/main/workspace/`、`src/renderer/` 和拆分后的 Shell/Harness preload。现有 `src/main/index.ts` 只负责装配和应用生命周期，认证与工作区逻辑不继续堆入该文件。`src/shared/contracts.ts` 和 `electron.vite.config.ts` 只增加必要接口与构建入口。
 
-Core Runtime、Runtime 制品锁定、bundled profile、Better Sidebar 来源和打包脚本不因登录功能改变所有权。后续同步 Shell upstream 时，冲突应集中在主进程装配和窗口接线，业务模块本身保持独立。
+Core Runtime、Runtime 制品锁定、bundled profile、Better Sidebar 来源和打包脚本不因登录功能改变所有权。后续同步 Shell upstream 时，冲突应集中在主进程装配和窗口接线，业务模块本身保持独立；登录后 UI 的合并边界以 [登录后单侧栏集成设计](2026-08-28-authenticated-sidebar-integration-design.md) 为准。
 
 ## 验证策略
 

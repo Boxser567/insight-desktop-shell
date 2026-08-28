@@ -11,6 +11,7 @@
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
 - Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
+- 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - GitHub Actions 成功只证明 job 和产物生成完成，不能替代本地行为或最终安装包验收。
 - 每轮验收必须说明 Shell commit、Core Runtime tag/commit、应用绝对路径、目标平台/架构和用户数据目录。Electron 单实例机制不得把旧进程冒充为新构建。
 - 用户数据操作必须精确、可恢复。不得用宽泛删除命令清理会话、工作区、设置或插件；任何测试 Profile 变更前先记录并备份确切目录。
@@ -29,7 +30,9 @@
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
 | upstream Shell 合并 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
 
-upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项被 upstream 覆盖都先恢复并测试，再进入打包。
+upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项被 upstream 覆盖都先恢复并测试，再进入打包。
+
+Core Runtime 锁更新和 Shell upstream 合并必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
 
 ## 分阶段验证曲线
 
@@ -42,7 +45,7 @@ upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定�
 - 查看 `git status --short --branch`、目标提交范围和相关 diff。
 - 记录 Shell commit、`core-runtime.lock.json` 的 tag/commit/平台哈希、Node/pnpm 版本和构建目标。
 - 区分用户修改、构建输出、缓存和本轮允许修改的文件；不得为获得“干净工作树”清理不属于本轮的内容。
-- upstream 合并按上一节审计产品约束。
+- upstream 合并按上一节审计产品约束，并核对单侧栏设计中的升级决策矩阵。
 
 **通过条件：** 变更类别、验证起点、必需平台、应用身份和用户数据目录均已明确，未跟踪文件所有权清楚。
 
@@ -207,7 +210,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 记录 workflow URL、artifact 文件名、文件大小和对外发布时的 SHA-256。
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `spctl --assess --type execute --verbose=4`，再用 `xcrun stapler validate` 检查应用与 DMG；任一失败即停止安装验收。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
-- 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、设置和插件清单检查。
+- 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 正式包额外验证签名、公证和 stapling；Windows 验证安装、启动、卸载及需要的签名状态。
 
 正式 macOS 本地打包命令为：
@@ -288,6 +291,7 @@ npm run package:mac:arm64
 - Markdown/HTML Sidebar：
 - 恢复窗口/启动页：
 - 会话、工作区、设置、插件清单：
+- 单侧栏、品牌、账号入口、统一设置和原生退出逃生路径：
 
 ## 未解决项
 
