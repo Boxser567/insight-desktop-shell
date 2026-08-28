@@ -70,13 +70,15 @@ describe('GitHub release contract', () => {
       to: 'splash.html'
     })
     expect(packageJson.build.extraResources).toContainEqual({
-      from: 'build/insight-logo.svg',
-      to: 'insight-logo.svg'
+      from: 'build/brand-wordmark.svg',
+      to: 'brand-wordmark.svg'
     })
-    expect(packageJson.build.extraResources).toContainEqual({
-      from: 'build/dsh-loader-dark.gif',
-      to: 'dsh-loader-dark.gif'
-    })
+    expect(packageJson.build.extraResources).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: expect.stringContaining('dsh-loader') }),
+        expect.objectContaining({ from: 'build/insight-logo.svg' })
+      ])
+    )
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/dsh-desktop.patch.yml',
       to: 'dsh-desktop.patch.yml'

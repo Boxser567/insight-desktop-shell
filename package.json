@@ -115,14 +115,6 @@
         "to": "splash.html"
       },
       {
-        "from": "build/dsh-loader.gif",
-        "to": "dsh-loader.gif"
-      },
-      {
-        "from": "build/dsh-loader-dark.gif",
-        "to": "dsh-loader-dark.gif"
-      },
-      {
         "from": "build/runtime-manifest.json",
         "to": "runtime-manifest.json"
       },
@@ -135,8 +127,8 @@
         "to": "runtime/node_modules"
       },
       {
-        "from": "build/insight-logo.svg",
-        "to": "insight-logo.svg"
+        "from": "build/brand-wordmark.svg",
+        "to": "brand-wordmark.svg"
       },
       {
         "from": "build/plugin-recovery.html",
