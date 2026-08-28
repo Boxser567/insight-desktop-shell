@@ -1,5 +1,6 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import { resolve } from 'node:path'
+import { relaxRendererCspForDevelopment } from './src/renderer/development-csp'
 
 export default defineConfig({
   main: {
@@ -22,6 +23,16 @@ export default defineConfig({
     }
   },
   renderer: {
+    plugins: [
+      {
+        name: 'insight-renderer-development-csp',
+        apply: 'serve',
+        transformIndexHtml: relaxRendererCspForDevelopment
+      }
+    ],
+    esbuild: {
+      jsx: 'automatic'
+    },
     build: {
       rollupOptions: {
         input: resolve('src/renderer/index.html')
