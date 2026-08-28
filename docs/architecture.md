@@ -6,6 +6,8 @@
 
 登录后的产品导航采用 Harness 单侧栏和客户端第一方集成插件；窗口所有权、稳定扩展槽、账号桥接及 upstream 约束见 [登录后单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)。
 
+频繁修改 Shell、Core 模块和独立插件时，开发环境采用 [本地组合开发架构](local-composed-development.md)：Shell 作为唯一组合方，从只读 Runtime 基座派生 DEV Runtime/Profile，只投影选定 package 的构建制品，并在正式构建前完全移除覆盖。该流程缩短反馈时间，但不改变源码平面、Runtime 制品和正式 Profile 的所有权。
+
 ## 运行时边界
 
 `core-runtime.lock.json` 锁定 GitHub Release 中不可变的 Core Runtime 制品。Shell 构建时下载并校验该制品，正式安装包将其复制到 `Resources/runtime`。因此 Shell 不在 `package.json` 中声明或升级 `@deepseek-ai/dsh` registry 依赖；Core 的升级必须显式更新锁定文件并完成验证。
