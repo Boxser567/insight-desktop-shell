@@ -2,6 +2,8 @@
 
 因赛AI Desktop 是 Insight Harness Core Runtime 的 Electron 宿主。Shell 负责桌面窗口、受限 IPC、启动恢复、用户数据目录和安装包；Core Runtime 负责 Harness 运行时及其内部依赖。
 
+登录、账号隔离、单侧栏、统一设置入口和品牌统一完成后的工程现状、提交映射、验证证据及下一阶段入口见 [已认证客户端阶段基线](authenticated-client-baseline.md)。该页是后续业务开发和重大升级开始前的交接入口。
+
 业务阶段的目标架构（登录、受保护业务入口、账号范围数据隔离以及 Harness 工作区的接入边界）见 [业务阶段架构提案](business-stage-architecture.md)。该提案不改变本页记录的已实现 Runtime 边界。
 
 登录后的产品导航采用 Harness 单侧栏和客户端第一方集成插件；窗口所有权、稳定扩展槽、账号桥接及 upstream 约束见 [登录后单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)。
