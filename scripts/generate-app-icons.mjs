@@ -10,6 +10,12 @@ const source = path.join(buildDirectory, 'app-icon.png')
 const iconsetDirectory = path.join(buildDirectory, 'app-icon.iconset')
 const icnsDestination = path.join(buildDirectory, 'icon.icns')
 const icoDestination = path.join(buildDirectory, 'icon.ico')
+const icon = await readFile(source)
+const width = icon.length >= 24 ? icon.readUInt32BE(16) : 0
+const height = icon.length >= 24 ? icon.readUInt32BE(20) : 0
+if (icon.subarray(1, 4).toString('ascii') !== 'PNG' || width !== 1024 || height !== 1024) {
+  throw new Error('build/app-icon.png must be a 1024x1024 PNG.')
+}
 
 await rm(iconsetDirectory, { recursive: true, force: true })
 await mkdir(iconsetDirectory, { recursive: true })
@@ -33,7 +39,26 @@ for (const size of [16, 32, 128, 256, 512]) {
   ])
 }
 
-execFileSync('iconutil', ['-c', 'icns', iconsetDirectory, '-o', icnsDestination])
+const icnsSources = [
+  ['icp4', 'icon_16x16.png'],
+  ['icp5', 'icon_32x32.png'],
+  ['icp6', 'icon_32x32@2x.png'],
+  ['ic07', 'icon_128x128.png'],
+  ['ic08', 'icon_256x256.png'],
+  ['ic09', 'icon_512x512.png'],
+  ['ic10', 'icon_512x512@2x.png']
+]
+const icnsEntries = await Promise.all(icnsSources.map(async ([type, filename]) => {
+  const image = await readFile(path.join(iconsetDirectory, filename))
+  const header = Buffer.alloc(8)
+  header.write(type, 0, 4, 'ascii')
+  header.writeUInt32BE(header.length + image.length, 4)
+  return Buffer.concat([header, image])
+}))
+const icnsHeader = Buffer.alloc(8)
+icnsHeader.write('icns', 0, 4, 'ascii')
+icnsHeader.writeUInt32BE(icnsHeader.length + icnsEntries.reduce((sum, entry) => sum + entry.length, 0), 4)
+await writeFile(icnsDestination, Buffer.concat([icnsHeader, ...icnsEntries]))
 
 const icoSizes = [16, 24, 32, 48, 64, 128, 256]
 const icoDirectory = await mkdtemp(path.join(os.tmpdir(), 'dsh-desktop-icons-'))
@@ -72,6 +97,6 @@ for (let index = 0; index < icoImages.length; index += 1) {
 
 await writeFile(icoDestination, Buffer.concat([header, ...icoImages]))
 await rm(icoDirectory, { recursive: true, force: true })
+await rm(iconsetDirectory, { recursive: true, force: true })
 
-const icon = await readFile(source)
 console.log(`Generated app icons from ${path.relative(projectRoot, source)} (${icon.length} bytes PNG).`)

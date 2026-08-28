@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -52,5 +53,27 @@ describe('desktop brand assets', () => {
 
     expect(main).toContain("dialog.showErrorBox('因赛AI encountered an error', message)")
     expect(main).not.toContain("dialog.showErrorBox('DSH Desktop encountered an error'")
+  })
+
+  it('keeps valid system icon containers and guards the PNG source size', async () => {
+    const [png, icns, ico, generator] = await Promise.all([
+      readFile(buildPath('app-icon.png')),
+      readFile(buildPath('icon.icns')),
+      readFile(buildPath('icon.ico')),
+      readFile(path.join(projectRoot, 'scripts', 'generate-app-icons.mjs'), 'utf8')
+    ])
+
+    expect(png.subarray(1, 4).toString('ascii')).toBe('PNG')
+    expect(png.readUInt32BE(16)).toBe(1024)
+    expect(png.readUInt32BE(20)).toBe(1024)
+    expect(createHash('sha256').update(png).digest('hex')).toBe(
+      'a4817096a7a28fdfa6cf825727c9128abc917626c0842d8f5218e0e5b6466c31'
+    )
+    expect(icns.subarray(0, 4).toString('ascii')).toBe('icns')
+    expect(ico.readUInt16LE(2)).toBe(1)
+    expect(ico.readUInt16LE(4)).toBeGreaterThanOrEqual(7)
+    expect(generator).toContain('readUInt32BE(16)')
+    expect(generator).toContain('must be a 1024x1024 PNG')
+    expect(generator).not.toContain("execFileSync('iconutil'")
   })
 })
