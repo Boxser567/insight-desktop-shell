@@ -7,7 +7,7 @@ import { isProfileInstallComplete } from '../src/main/state/profile-install-mark
 describe('bundled profile initialization', () => {
   const testDir = join(__dirname, '.temp-bundled-profile-test')
 
-  async function writeVersionThreeTemplate(template: string): Promise<void> {
+  async function writeVersionThreeTemplate(template: string, clientBundle = 'bundle\n'): Promise<void> {
     const profile = join(template, 'web')
     await mkdir(join(profile, 'packages', 'insight-desktop-integration', 'lib'), { recursive: true })
     await writeFile(
@@ -36,7 +36,7 @@ describe('bundled profile initialization', () => {
       JSON.stringify({ name: '@insight-ai/desktop-integration' }),
       'utf8'
     )
-    await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'bundle\n', 'utf8')
+    await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')
     await writeFile(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n  - packages/*\n', 'utf8')
   }
 
@@ -138,6 +138,50 @@ describe('bundled profile initialization', () => {
     expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(await readFile(join(profile, 'pnpm-workspace.yaml'), 'utf8')).toContain('packages/*')
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('bundle\n')
+  })
+
+  it('refreshes the installation-owned bundle in an existing version three profile', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    const profile = join(dshHome, 'profiles', 'web')
+    await writeVersionThreeTemplate(template, 'new bundle\n')
+    await mkdir(join(profile, 'packages', 'insight-desktop-integration', 'lib'), { recursive: true })
+    const patch = '- id: user-plugin\n  disabled: true\n'
+    await writeFile(
+      join(profile, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          'dsh-better-sidebar': '0.16.1',
+          'user-plugin': '1.2.3',
+          '@insight-ai/desktop-integration': 'workspace:*'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              'dsh-better-sidebar',
+              'user-plugin',
+              '@insight-ai/desktop-integration'
+            ]
+          }
+        },
+        insightDesktop: { defaultProfileVersion: 3 }
+      }),
+      'utf8'
+    )
+    await writeFile(join(profile, 'cordis.patch.yml'), patch, 'utf8')
+    await writeFile(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n  - packages/*\n', 'utf8')
+    await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'package.json'), '{}', 'utf8')
+    await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'old bundle\n', 'utf8')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+
+    const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
+    expect(manifest.dependencies['user-plugin']).toBe('1.2.3')
+    expect(manifest.dsh.profile.bundles).toContain('user-plugin')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
+    expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
   })
 
   it('marks a copied packaged profile complete without reinstalling its dependencies', async () => {

@@ -117,6 +117,13 @@ export async function initializeBundledProfile(
     return true
   }
 
+  if (current.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION) {
+    await copyDesktopIntegration(source, destination)
+    await addDesktopIntegrationToManifest(destination)
+    await ensureWorkspacePackagePattern(destination)
+    return true
+  }
+
   if (
     current.insightDesktop?.defaultProfileVersion !== DEFAULT_PROFILE_VERSION &&
     isLegacyDefaultProfile(current)
