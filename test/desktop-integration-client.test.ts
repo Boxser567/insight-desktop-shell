@@ -22,9 +22,13 @@ describe('desktop integration client', () => {
       'sidebar.brand.mark',
       'sidebar.brand.name',
       'sidebar.footer.action',
+      'sidebar.settings',
       'settings.section',
       'shell.overlay'
     ]) expect(source).toContain(`ctx.slots.inject('${slot}'`)
+    expect(source).toContain("name: 'sidebar.settings'")
+    expect(source).toContain('priority: -100')
+    expect(source).toContain('HiddenSidebarSettings')
     expect(source).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
   })
 })

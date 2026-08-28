@@ -31,6 +31,11 @@ export function BrandName() {
   return <span data-insight-desktop-brand-name>因赛AI</span>
 }
 
+/** Hide the redundant sidebar trigger without disabling the settings service. */
+export function HiddenSidebarSettings(_props: PropsRuntime<'sidebar.settings'>) {
+  return null
+}
+
 function useAccount(): AccountSummary | undefined {
   const [account, setAccount] = useState<AccountSummary>()
   useEffect(() => {

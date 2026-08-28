@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { accountMenuActions } from './account-menu-model'
-import { AccountFooter, BrandMark, BrandName, ClientSettings, MacDragOverlay } from './components'
+import { AccountFooter, BrandMark, BrandName, ClientSettings, HiddenSidebarSettings, MacDragOverlay } from './components'
 import { en, zh } from './locales'
 import { installStyles } from './styles'
 
@@ -33,6 +33,10 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => actions
   }, AccountFooter))
+  ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
+    name: 'sidebar.settings',
+    priority: -100
+  }, HiddenSidebarSettings))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'client',

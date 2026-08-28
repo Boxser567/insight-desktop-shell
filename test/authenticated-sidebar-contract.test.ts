@@ -26,7 +26,7 @@ describe('authenticated single-sidebar integration contract', () => {
       '@deepseek-ai/dsh-client-ui-settings',
       '@deepseek-ai/dsh-client-ui-settings-general'
     ]))
-    for (const slot of requiredSlots.filter((name) => name !== 'sidebar.settings')) {
+    for (const slot of requiredSlots) {
       expect(client).toContain(`ctx.slots.inject('${slot}'`)
     }
     expect(client).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
@@ -57,6 +57,8 @@ describe('authenticated single-sidebar integration contract', () => {
     const manifest = JSON.parse(await readFile(`${generatedProfileRoot}/package.json`, 'utf8'))
     const workspace = await readFile(`${generatedProfileRoot}/pnpm-workspace.yaml`, 'utf8')
     const patch = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/cordis.patch.yml`, 'utf8')
+    const bundledClient = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/lib/client.js`, 'utf8')
+    const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
     expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.16.1')
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
@@ -64,6 +66,7 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(manifest.insightDesktop.defaultProfileVersion).toBe(3)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
+    expect(bundledClient).toBe(builtClient)
   })
 
   it('leaves no authenticated Shell rail and fills the window with Harness', async () => {

@@ -145,7 +145,8 @@ if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
 await removeHarnessHomeResidue()
 
 if (await templateIsReady()) {
-  console.log(`Bundled desktop profile version ${DEFAULT_PROFILE_VERSION} is already prepared.`)
+  await configureDefaultProfile(bundledProfileDirectory)
+  console.log(`Refreshed bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
 } else {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-bundled-profile-'))
   try {
