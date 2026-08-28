@@ -17,6 +17,9 @@ describe('desktop login form model', () => {
       canSubmitSms({ phone: '13800138000', code: '123456', agreed: true })
     ).toBe(true)
     expect(
+      canSubmitSms({ phone: '13800138000', code: '1234', agreed: true })
+    ).toBe(true)
+    expect(
       canSubmitSms({ phone: '13800138000', code: '', agreed: true })
     ).toBe(false)
     expect(

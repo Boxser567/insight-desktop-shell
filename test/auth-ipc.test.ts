@@ -37,6 +37,10 @@ describe('desktop auth IPC', () => {
       phone: '13800138000',
       code: '123456'
     })
+    expect(validateSmsLoginInput({ phone: '13800138000', code: '1234' })).toEqual({
+      phone: '13800138000',
+      code: '1234'
+    })
     expect(() => validateSmsLoginInput({ phone: '13800138000', code: '123456', token: 'x' })).toThrow('SMS login')
     expect(() => validateSmsLoginInput({ phone: '23800138000', code: '123456' })).toThrow('SMS login')
   })

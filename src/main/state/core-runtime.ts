@@ -10,9 +10,13 @@ export interface CoreRuntimePaths {
 }
 
 /** Resolve the selected Core Runtime embedded below an Electron resource root. */
-export function resolveCoreRuntime(resourceRoot: string, platform: NodeJS.Platform = process.platform): CoreRuntimePaths {
+export function resolveCoreRuntime(
+  resourceRoot: string,
+  platform: NodeJS.Platform = process.platform,
+  directory = 'runtime'
+): CoreRuntimePaths {
   const join = platform === 'win32' ? win32.join : posix.join
-  const root = join(resourceRoot, 'runtime')
+  const root = join(resourceRoot, directory)
   const pnpmRoot = join(root, 'node_modules', 'pnpm', 'bin')
   const pnpmCjs = join(pnpmRoot, 'pnpm.cjs')
   return {

@@ -60,7 +60,7 @@ export function validateSmsLoginInput(value: unknown): SmsLoginInput {
     !hasExactKeys(value, ['code', 'phone']) ||
     !validPhone(value.phone) ||
     typeof value.code !== 'string' ||
-    !/^\d{6}$/u.test(value.code)
+    value.code.length === 0
   ) {
     throw new Error('Invalid SMS login input.')
   }

@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { resolveCoreRuntime } from '../src/main/state/core-runtime'
 
 describe('embedded Core Runtime paths', () => {
+  it('resolves the prepared Core Runtime directory in development', () => {
+    expect(
+      resolveCoreRuntime('/repo/insight-desktop-shell/build', 'darwin', 'core-runtime')
+    ).toMatchObject({
+      root: '/repo/insight-desktop-shell/build/core-runtime',
+      dshEntryPath:
+        '/repo/insight-desktop-shell/build/core-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js'
+    })
+  })
+
   it('uses the pnpm ESM fallback when the legacy CommonJS entry is absent', () => {
     expect(resolveCoreRuntime('/tmp/insight-runtime-test/Resources', 'darwin')).toEqual({
       root: '/tmp/insight-runtime-test/Resources/runtime',

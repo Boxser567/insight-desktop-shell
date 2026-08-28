@@ -9,7 +9,7 @@ export function canSubmitSms(input: {
   code: string
   agreed: boolean
 }): boolean {
-  return validatePhone(input.phone) && /^\d{6}$/u.test(input.code) && input.agreed
+  return validatePhone(input.phone) && input.code.length > 0 && input.agreed
 }
 
 /** Return whether the password form has every required field. */

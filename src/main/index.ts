@@ -415,7 +415,9 @@ function bundledPnpmRunnerPath(): string {
 }
 
 function coreRuntime() {
-  return resolveCoreRuntime(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'build'))
+  return app.isPackaged
+    ? resolveCoreRuntime(process.resourcesPath)
+    : resolveCoreRuntime(join(app.getAppPath(), 'build'), process.platform, 'core-runtime')
 }
 
 function harnessNodeEntryPath(): string {
