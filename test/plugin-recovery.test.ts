@@ -54,6 +54,7 @@ describe('plugin-recovery', () => {
       JSON.stringify({
         dependencies: {
           '@deepseek-ai/dsh-base': '0.1.0',
+          '@insight-ai/desktop-integration': 'workspace:*',
           dshmarket: '1.9.0',
           'plugin-a': '1.0.0',
           '@example/plugin-b': '2.0.0',
@@ -63,6 +64,7 @@ describe('plugin-recovery', () => {
           profile: {
             bundles: [
               '@deepseek-ai/dsh-base',
+              '@insight-ai/desktop-integration',
               'dshmarket',
               'plugin-a',
               '@example/plugin-b'
@@ -236,11 +238,44 @@ describe('plugin-recovery', () => {
 
     expect(isThirdPartyPackageName('@deepseek-ai/dsh-client-ui-directory-picker-native')).toBe(false)
     expect(isThirdPartyPackageName('dshmarket')).toBe(false)
+    expect(isThirdPartyPackageName('@insight-ai/desktop-integration')).toBe(false)
     expect(isThirdPartyPackageName('@linxin666/dsh-web-ui-all')).toBe(true)
     await expect(
       uninstallPluginFromProfile(testDir, '@deepseek-ai/dsh-client-ui-directory-picker-native')
     ).resolves.toBe(false)
     expect(JSON.parse(await readFile(pkgPath, 'utf8'))).toEqual(manifest)
+  })
+
+  it('preserves the installation-owned bundle during a full third-party reset', async () => {
+    const pkgPath = profilePackageJsonPath(testDir)
+    await writeFile(
+      pkgPath,
+      JSON.stringify({
+        dependencies: {
+          '@insight-ai/desktop-integration': 'workspace:*',
+          'user-plugin': '1.0.0'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              '@insight-ai/desktop-integration',
+              'user-plugin'
+            ]
+          }
+        }
+      })
+    )
+
+    await expect(resetPluginProfile(testDir)).resolves.toBe(true)
+    const manifest = JSON.parse(await readFile(pkgPath, 'utf8'))
+    expect(manifest.dependencies).toEqual({ '@insight-ai/desktop-integration': 'workspace:*' })
+    expect(manifest.dsh.profile.bundles).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      '@insight-ai/desktop-integration'
+    ])
   })
 
   it('maps an internal duplicate loader error to the profile bundle that declared it', async () => {

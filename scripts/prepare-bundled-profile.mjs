@@ -3,11 +3,15 @@ import { existsSync } from 'node:fs'
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { parse, stringify } from 'yaml'
 
 const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
 const SIDEBAR_VERSION = '0.16.1'
+const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
+const DEFAULT_PROFILE_VERSION = 3
 const projectRoot = process.cwd()
+const desktopIntegrationSource = join(projectRoot, 'packages', 'insight-desktop-integration')
 const bundledProfileRoot = join(projectRoot, 'build', 'bundled-profile')
 const bundledProfileDirectory = join(bundledProfileRoot, PROFILE)
 const coreRuntimeRoot = join(projectRoot, 'build', 'core-runtime')
@@ -28,7 +32,9 @@ async function removeHarnessHomeResidue() {
 
 function hasPinnedSidebar(manifest) {
   return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
-    manifest.insightDesktop?.defaultProfileVersion === 2
+    manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
+    manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
+    manifest.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION
 }
 
 async function readManifest(path) {
@@ -43,7 +49,9 @@ async function templateIsReady() {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
   if (!manifest || !hasPinnedSidebar(manifest)) return false
   return existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
-    existsSync(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json'))
+    existsSync(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')) &&
+    existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
+    existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
 }
 
 async function writePnpmShim(directory) {
@@ -65,7 +73,7 @@ async function writePnpmShim(directory) {
   await chmod(nodePath, 0o755)
 }
 
-async function runDsh(home, workingDirectory, shimDirectory) {
+async function runDsh(home, workingDirectory, shimDirectory, args) {
   const pathKey = process.platform === 'win32' ? 'Path' : 'PATH'
   const inheritedPath = process.env[pathKey] ?? process.env.PATH ?? ''
   const environment = {
@@ -81,7 +89,7 @@ async function runDsh(home, workingDirectory, shimDirectory) {
     npm_config_side_effects_cache: 'false'
   }
   await new Promise((resolve, reject) => {
-    const child = spawn(nodeExecutable, [dshEntry, 'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty', `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`], {
+    const child = spawn(nodeExecutable, [dshEntry, ...args], {
       cwd: workingDirectory,
       env: environment,
       stdio: 'inherit',
@@ -92,12 +100,42 @@ async function runDsh(home, workingDirectory, shimDirectory) {
   })
 }
 
-async function markDefaultProfile(directory) {
+async function configureDefaultProfile(directory) {
   const manifestPath = join(directory, 'package.json')
   const manifest = await readManifest(manifestPath)
   if (!manifest) throw new Error('The bundled profile manifest could not be read.')
-  manifest.insightDesktop = { defaultProfileVersion: 2 }
+  manifest.dependencies ??= {}
+  manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'
+  manifest.dsh ??= {}
+  manifest.dsh.profile ??= {}
+  manifest.dsh.profile.bundles ??= []
+  if (!manifest.dsh.profile.bundles.includes(DESKTOP_INTEGRATION_PACKAGE)) {
+    manifest.dsh.profile.bundles.push(DESKTOP_INTEGRATION_PACKAGE)
+  }
+  manifest.insightDesktop = { defaultProfileVersion: DEFAULT_PROFILE_VERSION }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+
+  const packageDestination = join(directory, 'packages', 'insight-desktop-integration')
+  await rm(packageDestination, { recursive: true, force: true })
+  await mkdir(dirname(packageDestination), { recursive: true })
+  await cp(desktopIntegrationSource, packageDestination, {
+    recursive: true,
+    filter: (source) => !source.includes(`${join('insight-desktop-integration', 'src')}`) &&
+      !source.includes(`${join('insight-desktop-integration', 'tsconfig.json')}`)
+  })
+
+  const workspacePath = join(directory, 'pnpm-workspace.yaml')
+  let workspace = {}
+  try {
+    workspace = parse(await readFile(workspacePath, 'utf8')) ?? {}
+  } catch { }
+  const packages = Array.isArray(workspace.packages)
+    ? workspace.packages.filter((value) => typeof value === 'string')
+    : []
+  if (!packages.includes('.')) packages.unshift('.')
+  if (!packages.includes('packages/*')) packages.push('packages/*')
+  workspace.packages = packages
+  await writeFile(workspacePath, stringify(workspace), 'utf8')
 }
 
 if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
@@ -106,27 +144,29 @@ if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
 
 await removeHarnessHomeResidue()
 
-const existingTemplateManifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
-if (existingTemplateManifest && existingTemplateManifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION) {
-  await markDefaultProfile(bundledProfileDirectory)
-}
-
 if (await templateIsReady()) {
-  console.log(`Bundled ${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION} profile is already prepared.`)
+  console.log(`Bundled desktop profile version ${DEFAULT_PROFILE_VERSION} is already prepared.`)
 } else {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-bundled-profile-'))
   try {
     const shimDirectory = join(temporaryDirectory, '.bin')
     await writePnpmShim(shimDirectory)
-    await runDsh(temporaryDirectory, projectRoot, shimDirectory)
-    await markDefaultProfile(join(temporaryDirectory, 'profiles', PROFILE))
+    await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
+      'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
+      `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`
+    ])
+    const temporaryProfile = join(temporaryDirectory, 'profiles', PROFILE)
+    await configureDefaultProfile(temporaryProfile)
+    await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
+      'plugin', '--profile', PROFILE, 'install', '--no-frozen-lockfile'
+    ])
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })
     await cp(join(temporaryDirectory, 'profiles', PROFILE), bundledProfileDirectory, {
       recursive: true,
       verbatimSymlinks: true
     })
-    console.log(`Prepared bundled ${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION} profile.`)
+    console.log(`Prepared bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true })
   }

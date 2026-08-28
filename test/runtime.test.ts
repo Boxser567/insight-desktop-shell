@@ -396,11 +396,12 @@ describe('offending plugin extraction', () => {
 
   it('extracts only third-party packages from the frontend boot failure list', () => {
     const logs = [
-      '[stderr] Failed to load plugins\n@deepseek-ai/dsh-client-ui-directory-picker-native\ndsh-remote\nweb boot: 2 entries did not activate'
+      '[stderr] Failed to load plugins\n@deepseek-ai/dsh-client-ui-directory-picker-native\n@insight-ai/desktop-integration\ndsh-remote\nweb boot: 3 entries did not activate'
     ]
     expect(extractOffendingPlugins(logs)).toEqual(['dsh-remote'])
     expect(extractPluginFailureReferences(logs)).toEqual([
       '@deepseek-ai/dsh-client-ui-directory-picker-native',
+      '@insight-ai/desktop-integration',
       'dsh-remote'
     ])
   })

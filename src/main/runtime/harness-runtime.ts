@@ -5,6 +5,7 @@ import { mkdir } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { RuntimePhase, RuntimeSnapshot } from '../../shared/contracts'
+import { isInstallationOwnedBundle } from '../state/installation-owned-bundles'
 
 export interface HarnessRuntimeOptions {
   dshEntryPath: string
@@ -569,6 +570,7 @@ function isActionablePluginReference(value: string): boolean {
   return (
     isPackageReference(candidate) &&
     !CORE_BUNDLES.has(candidate) &&
+    !isInstallationOwnedBundle(candidate) &&
     !candidate.startsWith('@deepseek-ai/')
   )
 }

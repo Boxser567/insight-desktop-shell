@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { parse } from 'yaml'
 import { removeTree } from './remove-tree'
 import { bundleEntryIds, prunePatchLayer } from './patch-layer'
+import { isInstallationOwnedBundle } from './installation-owned-bundles'
 
 /**
  * Directories under the profile's node_modules that no longer belong to any
@@ -73,6 +74,7 @@ export function isThirdPartyPackageName(packageName: string): boolean {
   return (
     PACKAGE_NAME_PATTERN.test(packageName) &&
     !packageName.startsWith('@deepseek-ai/') &&
+    !isInstallationOwnedBundle(packageName) &&
     !CORE_BUNDLES.has(packageName)
   )
 }
@@ -498,13 +500,16 @@ export async function resetPluginProfile(
       // If no specific plugin given, reset to safe core bundles and clean all third-party dependencies
       const safeBundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
       if (manifest.dependencies?.dshmarket) safeBundles.push('dshmarket')
+      for (const bundle of manifest.dsh?.profile?.bundles ?? []) {
+        if (isInstallationOwnedBundle(bundle)) safeBundles.push(bundle)
+      }
       manifest.dsh ??= {}
       manifest.dsh.profile ??= {}
       manifest.dsh.profile.bundles = safeBundles
       modified = true
       if (manifest.dependencies) {
         for (const dep of Object.keys(manifest.dependencies)) {
-          if (!CORE_BUNDLES.has(dep)) {
+          if (!CORE_BUNDLES.has(dep) && !isInstallationOwnedBundle(dep)) {
             delete manifest.dependencies[dep]
             modified = true
           }
