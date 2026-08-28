@@ -1,0 +1,6 @@
+- id: ui-brand-official
+  disabled: true
+
+- insert:
+    - id: insight-desktop-integration
+      name: '@insight-ai/desktop-integration'

@@ -5,6 +5,7 @@ dist-dev/
 .DS_Store
 *.log
 coverage/
+packages/insight-desktop-integration/lib/
 /doc/
 /deliverables/
 build/icon.iconset/
