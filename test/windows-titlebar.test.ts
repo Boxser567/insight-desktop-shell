@@ -52,8 +52,12 @@ describe('Windows titlebar menu', () => {
 
     expect(desktopMenuCommands).not.toContain('connect-phone')
     expect(desktopMenuCommands).toContain('safe-mode')
+    expect(desktopMenuCommands).toContain('sign-out')
     expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
       "label: zh ? '以安全模式重启…' : 'Restart as Safe Mode…'"
+    )
+    expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
+      "label: zh ? '退出登录' : 'Sign Out'"
     )
     expect(desktopMenuCommands).not.toContain('check-for-updates')
     expect(desktopMenuCommands).toContain('toggle-fullscreen')

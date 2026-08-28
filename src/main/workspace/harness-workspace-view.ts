@@ -4,6 +4,7 @@ import type { WorkspaceBounds } from '../../shared/shell-api'
 export interface HarnessViewWebContents {
   readonly mainFrame: unknown
   loadURL(url: string): Promise<void>
+  send(channel: string, value: unknown): void
   isDestroyed(): boolean
   close(): void
 }

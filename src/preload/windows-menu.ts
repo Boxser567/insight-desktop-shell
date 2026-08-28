@@ -187,6 +187,7 @@ function menuEntries(locale: 'en' | 'zh'): MenuEntry[] {
     { kind: 'command', command: 'restart-harness', label: zh ? '重启 Harness' : 'Restart Harness', shortcut: 'Ctrl+Shift+R' },
     { kind: 'command', command: 'safe-mode', label: zh ? '以安全模式重启…' : 'Restart as Safe Mode…' },
     { kind: 'command', command: 'show-harness-log', label: zh ? '显示 Harness 日志' : 'Show Harness Log' },
+    { kind: 'command', command: 'sign-out', label: zh ? '退出登录' : 'Sign Out' },
     { kind: 'separator' },
     { kind: 'label', label: zh ? '编辑' : 'EDIT' },
     { kind: 'command', command: 'undo', label: zh ? '撤销' : 'Undo', shortcut: 'Ctrl+Z' },

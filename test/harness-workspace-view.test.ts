@@ -11,6 +11,7 @@ function harnessView(order: string[] = []): HarnessViewInstance {
     webContents: {
       mainFrame,
       loadURL: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn(),
       isDestroyed: vi.fn().mockReturnValue(false),
       close: vi.fn(() => order.push('close'))
     },

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { findBootFailureText } from './boot-failure'
 import { isPluginLoadError } from './plugin-error-view'
+import type { AccountSummary } from '../shared/auth-contracts'
+import type { DesktopClientInfo, HarnessAccountApi } from '../shared/harness-account-api'
 
 let bootFailureTriggered = false
 let bootFailureTimer: number | undefined
@@ -64,6 +66,21 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke('safe-mode:action', action, plugins)
   })
 )
+
+const harnessAccountApi: HarnessAccountApi = Object.freeze({
+  current: (): Promise<AccountSummary | undefined> => ipcRenderer.invoke('harness-account:current'),
+  subscribe: (listener: (account: AccountSummary | undefined) => void): (() => void) => {
+    const handleChanged = (_event: Electron.IpcRendererEvent, account: AccountSummary | undefined): void => {
+      listener(account)
+    }
+    ipcRenderer.on('harness-account:changed', handleChanged)
+    return () => ipcRenderer.removeListener('harness-account:changed', handleChanged)
+  },
+  signOut: (): Promise<void> => ipcRenderer.invoke('harness-account:sign-out'),
+  info: (): Promise<DesktopClientInfo> => ipcRenderer.invoke('harness-account:info')
+})
+
+contextBridge.exposeInMainWorld('insightDesktopAccount', harnessAccountApi)
 
 async function mountSafeModeBanner(): Promise<void> {
   if (location.protocol === 'file:' || document.getElementById('dsh-desktop-safe-mode-banner')) return

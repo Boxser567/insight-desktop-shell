@@ -78,6 +78,7 @@ import { accountPaths, accountScopeKey } from './state/account-scope'
 import { HarnessWorkspaceView, type HarnessViewHost, type HarnessViewInstance } from './workspace/harness-workspace-view'
 import { HarnessWorkspaceController } from './workspace/harness-workspace-controller'
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
+import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
 import type { WorkspaceBounds } from '../shared/shell-api'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
@@ -964,6 +965,9 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<n
     case 'show-harness-log':
       shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
       break
+    case 'sign-out':
+      await authManager?.signOut()
+      break
     case 'undo':
       contents.undo()
       break
@@ -1423,6 +1427,12 @@ function installMenu(): void {
           {
             label: app.name,
             submenu: [
+              {
+                label: isChinese ? '退出登录' : 'Sign Out',
+                enabled: authenticated,
+                click: () => void authManager?.signOut().catch(showUnexpectedError)
+              },
+              { type: 'separator' as const },
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
               { role: 'unhide' as const },
@@ -1552,6 +1562,20 @@ async function bootstrap(): Promise<void> {
     ipcMain,
     manager: authManager,
     shellWindow: () => mainWindow
+  })
+  registerHarnessAccountIpc({
+    ipcMain,
+    manager: authManager,
+    assertTrusted: assertTrustedHarnessEvent,
+    harnessWebContents: () => harnessWorkspaceView.webContents(),
+    info: () => {
+      if (!authEnvironment) throw new Error('Authentication is not initialized.')
+      const platform = process.platform
+      if (platform !== 'darwin' && platform !== 'win32' && platform !== 'linux') {
+        throw new Error(`Unsupported desktop platform: ${platform}`)
+      }
+      return { version: app.getVersion(), environment: authEnvironment.name, platform }
+    }
   })
   authManager.subscribe(() => {
     applyWorkspaceForCurrentSession()
