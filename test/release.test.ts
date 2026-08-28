@@ -203,7 +203,8 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts.dev).toContain('prepare:core-runtime')
     expect(packageJson.scripts.build).toContain('prepare:core-runtime')
     expect(packageJson.scripts.dev).toContain('prepare:runtime-manifest')
-    expect(packageJson.scripts.build).toContain('prepare:runtime-manifest')
+    expect(packageJson.scripts.build).toContain('build:prepared')
+    expect(packageJson.scripts['build:prepared']).toContain('prepare:runtime-manifest')
   })
 
   it('keeps builder jobs from attempting implicit tag publishing', async () => {
