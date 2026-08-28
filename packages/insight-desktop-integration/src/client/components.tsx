@@ -7,7 +7,7 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import appIcon from '../../../../build/app-icon.png'
+import brandMark from '../../../../build/brand-mark.svg'
 import type { InsightDesktopKey } from './locales'
 
 type ProductLocaleProps = PropsLocale<'insightDesktop'>
@@ -23,9 +23,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Render the installed application icon in the brand mark seat. */
+/** Render the product mark in the brand mark seat. */
 export function BrandMark({ size }: PropsRuntime<'sidebar.brand.mark'>) {
-  return <img data-insight-desktop-brand-mark src={appIcon} width={size} height={size} alt="" />
+  return (
+    <span data-insight-desktop-brand-mark style={{ width: size, height: size }}>
+      <img src={brandMark} alt="" />
+    </span>
+  )
 }
 
 /** Render the product name in the brand name seat. */

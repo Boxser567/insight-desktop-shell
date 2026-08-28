@@ -57,6 +57,8 @@ describe('plugin recovery view model', () => {
     expect(model.summary).toBe('')
     expect(model.plugins).toEqual(['plugin-a', 'plugin-b'])
     expect(model.primaryLabel).toBe('卸载这 2 个插件并继续检测')
+    expect(model.brand).toBe('因赛AI')
+    expect(model.quitLabel).toBe('退出因赛AI')
     expect(model.canUninstall).toBe(true)
     expect(model).not.toHaveProperty('restartLabel')
     expect(model).not.toHaveProperty('status')
@@ -96,6 +98,8 @@ describe('plugin recovery view model', () => {
     expect(model.summary).toContain('Enter Safe Mode')
     expect(model.primaryLabel).toBe('Enter Safe Mode')
     expect(model.primaryBusyLabel).toBe('Entering Safe Mode…')
+    expect(model.brand).toBe('因赛AI')
+    expect(model.quitLabel).toBe('Quit 因赛AI')
   })
 
   it('wires the unresolved recovery action to Safe Mode', async () => {

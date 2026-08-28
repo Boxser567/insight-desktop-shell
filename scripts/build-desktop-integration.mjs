@@ -30,7 +30,7 @@ const result = await build({
   jsx: 'automatic',
   legalComments: 'none',
   external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@deepseek-ai/*'],
-  loader: { '.png': 'dataurl' },
+  loader: { '.svg': 'dataurl' },
   write: false
 })
 const client = result.outputFiles[0]?.text

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AuthCommandResult, CaptchaView } from '../../shared/auth-contracts'
+import brandMark from '../../../build/brand-mark.svg'
 import { canSubmitPassword, canSubmitSms, validatePhone } from './auth-form-model'
 
 type LoginMethod = 'sms' | 'password'
@@ -87,7 +88,7 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
     <main className="login-page">
       <section className="login-visual" aria-label="因赛AI">
         <div className="login-brand">
-          <div className="brand-mark" aria-hidden="true">因</div>
+          <div className="brand-mark" aria-hidden="true"><img src={brandMark} alt="" /></div>
           <div>
             <strong>因赛AI</strong>
             <span>一站搞掂电商生意</span>

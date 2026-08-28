@@ -82,6 +82,21 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(view).toContain('view.setBounds({ x: 0, y: 0, width: content.width, height: content.height })')
   })
 
+  it('uses the canonical mark on Shell and Harness product surfaces', async () => {
+    const [app, login, components, build] = await Promise.all([
+      readFile('src/renderer/src/App.tsx', 'utf8'),
+      readFile('src/renderer/src/LoginView.tsx', 'utf8'),
+      readFile('packages/insight-desktop-integration/src/client/components.tsx', 'utf8'),
+      readFile('scripts/build-desktop-integration.mjs', 'utf8')
+    ])
+
+    expect(app).toContain("build/brand-mark.svg")
+    expect(login).toContain("build/brand-mark.svg")
+    expect(components).toContain("build/brand-mark.svg")
+    expect(components).not.toContain('app-icon.png')
+    expect(build).toContain("'.svg': 'dataurl'")
+  })
+
   it.skipIf(!existsSync(runtimeTypesRoot))('matches the prepared locked Runtime public types', async () => {
     const sidebar = await readFile(`${runtimeTypesRoot}/dsh-client-ui-sidebar/lib/types/client/contract/slots.d.ts`, 'utf8')
     const settings = await readFile(`${runtimeTypesRoot}/dsh-client-ui-settings/lib/types/client/contract/slots.d.ts`, 'utf8')

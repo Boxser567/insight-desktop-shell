@@ -44,9 +44,10 @@ button, input { -webkit-app-region: no-drag; }
 .status-card { width: min(420px, 100%); padding: 40px; text-align: center; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .status-card h1 { margin: 20px 0 8px; font-size: 26px; }
 .status-card p { margin: 0 0 24px; color: var(--muted); line-height: 1.6; }
-.brand-mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; color: white; background: linear-gradient(145deg, #315efb, #7a4cff); font-weight: 750; font-size: 22px; box-shadow: 0 8px 24px rgba(49, 94, 251, 0.3); }
+.brand-mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #315efb, #7a4cff); box-shadow: 0 8px 24px rgba(49, 94, 251, 0.3); }
+.brand-mark img { display: block; width: 68%; height: 68%; object-fit: contain; }
 .status-card .brand-mark { margin: auto; }
-.brand-mark.small { width: 38px; height: 38px; border-radius: 11px; font-size: 17px; }
+.brand-mark.small { width: 38px; height: 38px; border-radius: 11px; }
 
 .login-page { display: grid; grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr); }
 .login-visual { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 54px; overflow: hidden; color: #fff; background: radial-gradient(circle at 20% 20%, rgba(110, 143, 255, 0.9), transparent 35%), linear-gradient(145deg, #20264b, #171722 68%); }

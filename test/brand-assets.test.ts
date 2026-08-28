@@ -46,4 +46,11 @@ describe('desktop brand assets', () => {
       ])
     )
   })
+
+  it('uses the product name in Shell-owned recovery errors', async () => {
+    const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+
+    expect(main).toContain("dialog.showErrorBox('因赛AI encountered an error', message)")
+    expect(main).not.toContain("dialog.showErrorBox('DSH Desktop encountered an error'")
+  })
 })

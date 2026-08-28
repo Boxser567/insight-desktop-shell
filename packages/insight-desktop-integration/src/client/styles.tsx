@@ -2,9 +2,17 @@ const STYLE_ID = 'insight-desktop-integration-styles'
 
 const stylesheet = `
 [data-insight-desktop-brand-mark] {
-  display: block;
+  display: grid;
+  flex: none;
+  place-items: center;
   border-radius: 7px;
-  object-fit: cover;
+  background: #315efb;
+}
+[data-insight-desktop-brand-mark] > img {
+  display: block;
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
 }
 [data-insight-desktop-brand-name] {
   overflow: hidden;

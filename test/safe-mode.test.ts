@@ -20,6 +20,8 @@ describe('Safe Mode', () => {
       plugins: ['plugin-a', '@example/plugin-b', 'plugin-a']
     })
     expect(model.badge).toBe('安全模式')
+    expect(model.brand).toBe('因赛AI')
+    expect(model.quitLabel).toBe('退出因赛AI')
     expect(model.heading).toBe('')
     expect(model.summary).toContain('暂时停用所有第三方插件')
     expect(model.summary).toContain('确保基础功能正常使用')
@@ -38,7 +40,7 @@ describe('Safe Mode', () => {
       uninstallLabel: 'Remove selected plugins',
       agentLabel: 'Close',
       restartLabel: 'Exit Safe Mode and restart',
-      quitLabel: 'Quit DSH Desktop'
+      quitLabel: 'Quit 因赛AI'
     })
   })
 
@@ -66,6 +68,7 @@ describe('Safe Mode', () => {
     expect(html).toContain("default-src 'none'")
     expect(html).not.toContain('http://')
     expect(html).not.toContain('https://')
+    expect(html).toContain("model.brand || '因赛AI'")
   })
 
   it('wires Safe Mode into startup, IPC, and the packaged resources', async () => {

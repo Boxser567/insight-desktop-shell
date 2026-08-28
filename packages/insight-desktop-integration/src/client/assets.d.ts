@@ -1,4 +1,4 @@
-declare module '*.png' {
+declare module '*.svg' {
   const source: string
   export default source
 }

@@ -1076,7 +1076,7 @@ async function waitForPluginRecoveryAction(options: {
 
 function showUnexpectedError(error: unknown): void {
   const message = error instanceof Error ? error.stack ?? error.message : String(error)
-  dialog.showErrorBox('DSH Desktop encountered an error', message)
+  dialog.showErrorBox('因赛AI encountered an error', message)
 }
 
 async function showPluginRecovery(options?: {

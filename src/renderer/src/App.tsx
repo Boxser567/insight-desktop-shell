@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SessionView } from '../../shared/auth-contracts'
+import brandMark from '../../../build/brand-mark.svg'
 import { LoginView } from './LoginView'
 
 function StatusPage(props: {
@@ -10,7 +11,7 @@ function StatusPage(props: {
   return (
     <main className="status-page">
       <div className="status-card">
-        <div className="brand-mark" aria-hidden="true">因</div>
+        <div className="brand-mark" aria-hidden="true"><img src={brandMark} alt="" /></div>
         <h1>{props.title}</h1>
         <p>{props.detail}</p>
         {props.action && (
