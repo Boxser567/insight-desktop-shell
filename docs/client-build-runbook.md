@@ -205,6 +205,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 使用 `.github/workflows/release.yml` 的 `Release desktop installers`，按发布范围选择 `macos`、`windows` 或 `all`。
 - Windows x64 由 `windows-2022` runner 负责；macOS 由相应原生 runner 构建。
 - 当前 `workflow_dispatch` 的 macOS 路径生成未签名的 `因赛AI Dev` artifact：它显式设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，只用于目标 runner 构建证明，不得进入阶段 10。只有 `v*` 标签路径在配置完整 secrets 后导入 `Developer ID Application`、签名、公证、stapling 并执行 Gatekeeper 验证。
+- Windows DEV 路径分别验证两个状态：干净用户目录中的 Shell 必须稳定停留在未登录界面且不得提前启动 Harness；随后 `scripts/smoke-packaged-harness.mjs` 直接使用安装包内置的 Node、Runtime、默认 Profile 和桌面 patch 创建 Unicode 路径工作区与会话。不要用登录前 Shell 是否出现 Harness endpoint 判断 Runtime 是否可用，也不要为 CI 增加登录绕过开关。
 - 需要验证 Apple 分发凭据时先运行 `target: apple-signing-preflight`。它只导入 P12、核对 `Developer ID Application` 与 Team ID，并调用 Notary Service，不安装依赖或构建应用；任一检查失败即停止。
 - 预检通过后可运行 `target: macos-arm64-signed` 生成 Apple Silicon 签名候选包。该目标复用正式签名、公证、stapling 与 Gatekeeper 检查，但不构建 Intel/Windows，不执行 UKey 签名，也不创建 GitHub Release。
 - 观察失败发生在 install、test、Runtime、Profile、builder、签名/公证、blockmap 还是 upload；只重跑基础设施型失败的受影响 job。
@@ -254,6 +255,7 @@ npm run package:mac:arm64
 | 无限启动页 | Harness Utility Process、Profile 安装标记、Runtime 身份 | 阶段 8 |
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
 | Windows Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | 根 `optionalDependencies` 与 lockfile 的 Windows package 节点 | 阶段 2/9，修复后只跑 Windows |
+| Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
 | `xattr -d -r` 报 Runtime `.bin/node: No such file` | 先检查应用根目录的 quarantine 是否已删除，再检查 `.bin/node` 是否错误指向 CI runner 的绝对路径；同时确认包内真实 Node 文件存在 | 真实 Node 存在且应用可启动时可继续阶段 9 DEV 验证，但必须单独跟踪失效链接；真实 Node 缺失则退回阶段 6 |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
