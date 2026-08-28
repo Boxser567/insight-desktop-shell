@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { AccountSummary } from '../../../../src/shared/auth-contracts'
 import type { DesktopClientInfo } from '../../../../src/shared/harness-account-api'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -31,8 +33,8 @@ export function BrandName() {
   return <span data-insight-desktop-brand-name>因赛AI</span>
 }
 
-/** Hide the redundant sidebar trigger without disabling the settings service. */
-export function HiddenSidebarSettings(_props: PropsRuntime<'sidebar.settings'>) {
+/** Hide the redundant settings trigger while preserving the mounted settings shell. */
+export function HiddenSettingsTrigger(_props: PropsRuntime<'settings.trigger'>) {
   return null
 }
 
@@ -66,12 +68,40 @@ export function AccountFooter({ wide, t, openSettings, signOut }: PropsRuntime<'
   const account = useAccount()
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<CSSProperties>()
   const root = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = (): void => {
+      if (!button.current || !menu.current) return
+      const anchor = button.current.getBoundingClientRect()
+      const width = menu.current.offsetWidth
+      const height = menu.current.offsetHeight
+      const margin = 12
+      const gap = 6
+      setMenuPosition({
+        left: Math.max(margin, Math.min(anchor.left, window.innerWidth - width - margin)),
+        top: Math.max(margin, Math.min(anchor.top - height - gap, window.innerHeight - height - margin)),
+        visibility: 'visible'
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    document.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      document.removeEventListener('scroll', place, true)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     const close = (event: PointerEvent): void => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (!root.current?.contains(target) && !menu.current?.contains(target)) setOpen(false)
     }
     const escape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setOpen(false)
@@ -97,24 +127,34 @@ export function AccountFooter({ wide, t, openSettings, signOut }: PropsRuntime<'
 
   return (
     <div ref={root} data-insight-desktop-account>
-      {open && (
-        <div data-insight-desktop-account-menu role="menu">
+      {open && createPortal(
+        <div
+          ref={menu}
+          data-insight-desktop-account-menu
+          role="menu"
+          style={menuPosition ?? { left: 0, top: 0, visibility: 'hidden' }}
+        >
           <button type="button" role="menuitem" onClick={() => { setOpen(false); openSettings() }}>
             {t('account.settings')}
           </button>
           <button type="button" role="menuitem" disabled={signingOut} onClick={() => void executeSignOut()}>
             {t('account.signOut')}
           </button>
-        </div>
+        </div>,
+        document.body
       )}
       <button
+        ref={button}
         type="button"
         data-insight-desktop-account-button
         data-rail={wide ? undefined : 'true'}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={account?.displayName || t('account.unavailable')}
-        onClick={() => setOpen(value => !value)}
+        onClick={() => {
+          if (!open) setMenuPosition(undefined)
+          setOpen(value => !value)
+        }}
       >
         <Avatar account={account} />
         {wide && (

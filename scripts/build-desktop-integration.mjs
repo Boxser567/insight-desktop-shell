@@ -29,7 +29,7 @@ const result = await build({
   target: 'es2022',
   jsx: 'automatic',
   legalComments: 'none',
-  external: ['react', 'react/*', '@deepseek-ai/*'],
+  external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@deepseek-ai/*'],
   loader: { '.png': 'dataurl' },
   write: false
 })

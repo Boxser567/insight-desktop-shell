@@ -54,11 +54,13 @@ macOS 窗口拖拽区域必须由 Harness 页面通过正式 `shell.overlay` 扩
 | 品牌图标 | `sidebar.brand.mark` |
 | 品牌名称 | `sidebar.brand.name` |
 | 账号摘要与菜单 | `sidebar.footer.action` |
-| 隐藏 Harness 原生设置入口 | `sidebar.settings` |
+| 隐藏 Harness 原生设置入口 | `settings.trigger` |
 | 客户端设置内容 | `settings.section` |
 | macOS 拖拽覆盖层 | `shell.overlay` |
 
-Harness 设置插件继续注册 `sidebar.settings`、设置弹窗和所有设置区。第一方桌面集成插件以更低的正式槽位优先级注册一个空 `sidebar.settings` 组件，只遮蔽侧栏底部的原生触发行；不得禁用设置插件或使用 CSS/DOM 隐藏。账号菜单中的“设置”是侧栏内唯一可见入口，并通过通用设置对话框控制服务打开完整设置中心。Core 需要提供一个最小、产品无关、可公开验证的设置对话框控制服务，至少支持 `open()`；产品插件不得通过模拟 DOM 点击实现这一行为。
+Harness 设置插件继续注册 `sidebar.settings`、设置弹窗和所有设置区。第一方桌面集成插件以更低的正式槽位优先级注册一个空 `settings.trigger` 组件，只遮蔽侧栏底部的原生触发行；不得替换或禁用 `sidebar.settings`，否则会连同设置对话框宿主和控制服务一起卸载。账号菜单中的“设置”是侧栏内唯一可见入口，并通过通用设置对话框控制服务打开完整设置中心。Core 提供最小、产品无关、可公开验证的设置对话框控制服务，并在触发器为空时保持设置宿主挂载；产品插件不得通过模拟 DOM 点击实现这一行为。
+
+账号菜单通过 React Portal 渲染到 Harness 文档根节点，并根据账号按钮的视口坐标使用 fixed 定位。菜单不得留在侧栏的 `overflow` 裁剪层级内，也不得通过修改 Harness 私有布局或提高局部 `z-index` 规避裁剪；展开和折叠状态共享同一菜单实现。
 
 设置中心首版新增“客户端”区，用于显示版本、发布通道和环境等非敏感客户端信息。账号资料编辑不属于该设置区。
 
@@ -128,7 +130,7 @@ Electron Main 继续是认证会话的唯一写入者。Harness preload 只向�
 | 变更来源 | 合并前必须确认 | 不兼容时的处理 |
 | --- | --- | --- |
 | Shell upstream 的窗口、preload 或 `WebContentsView` | 未登录全屏、登录后全窗口 View、IPC 发送者校验、原生退出入口仍成立 | 在独立适配层解决；不把产品逻辑重新写入 upstream 布局 |
-| Core upstream 的侧栏或设置 UI | 六个扩展槽、单槽位优先级遮蔽、设置控制服务和插件生命周期测试通过 | 暂停更新 Runtime 锁；先在 Core 提供兼容接口或更新第一方适配插件 |
+| Core upstream 的侧栏或设置 UI | 六个扩展槽、`settings.trigger` 优先级遮蔽、设置宿主保活、设置控制服务和插件生命周期测试通过 | 暂停更新 Runtime 锁；先在 Core 提供兼容接口或更新第一方适配插件 |
 | Core Runtime 制品版本 | manifest、目标平台、第一方插件和默认 Profile 契约一致 | 保持当前锁定版本，不随 upstream 自动升级 |
 | Better Sidebar 版本 | Markdown/HTML 打开、恢复和 Safe Mode 不回归 | 单独修复或回退 Sidebar；不改变账号集成 |
 
@@ -140,7 +142,7 @@ Shell upstream 与 Core Runtime 升级必须拆成两个可独立回退的提交
 
 1. 运行扩展槽、设置控制服务、账号 IPC、边界计算和账号隔离的定向测试；
 2. 运行 Shell `npm run typecheck`、`npm test` 和普通 build；Core 变更运行其受影响包检查；
-3. 本地 DEV 人工验证登录、单侧栏、品牌、两个设置入口、退出、重启恢复和 macOS 拖拽；
+3. 本地 DEV 人工验证登录、单侧栏、品牌、账号菜单设置入口、折叠菜单、退出、重启恢复和 macOS 拖拽；
 4. 本地目录应用验证第一方集成、Better Sidebar、安全模式和账号隔离；
 5. 本地 DMG 验证覆盖安装及 Markdown/HTML 打开；
 6. 人工通过后才触发 GitHub Actions 的 macOS/Windows 安装包构建。

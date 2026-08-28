@@ -4,13 +4,13 @@
 
 **Goal:** Hide the Harness settings row at the sidebar foot while keeping the account-menu settings action and complete settings dialog available.
 
-**Architecture:** The first-party desktop integration shadows the public single `sidebar.settings` slot with a null component at priority `-100`. The Harness settings registration remains loaded at priority `0`, so it continues to declare the settings slots and provide `settingsDialog.open(sectionId)` without rendering its own trigger row.
+**Architecture:** Core keeps the `sidebar.settings` shell mounted when the active `settings.trigger` contribution is null. The first-party desktop integration shadows only `settings.trigger` at priority `-100`, so `settingsDialog.open(sectionId)` and the modal host remain available without rendering the native trigger row.
 
 **Tech Stack:** TypeScript, React 18, DSH UI Slots, Vitest, Electron Vite.
 
 ## Global Constraints
 
-- Do not modify Core, Harness sidebar layout, Better Sidebar, or authentication code.
+- Limit the Core change to the product-neutral settings trigger rendering rule; do not modify Harness sidebar layout, Better Sidebar, or authentication code.
 - Do not hide the row with CSS, DOM queries, simulated clicks, or private selectors.
 - The account menu remains the only visible settings entry in expanded and collapsed sidebar states.
 - The settings dialog and `settings.section` registrations must remain available.
@@ -18,7 +18,30 @@
 
 ---
 
-### Task 1: Shadow the Harness settings trigger
+### Task 1: Preserve the Core settings host with an empty trigger
+
+**Files:**
+- Modify: Core `packages/client/ui-settings-general/src/client/SettingsRoot.tsx`
+- Modify: Core `packages/client/ui-settings-general/tests/settings-root.client.spec.tsx`
+- Modify: Core package README pair and add the required Agent Note triplet
+
+**Interface:** A null, undefined, or false `settings.trigger` contribution suppresses only the trigger wrapper. `SettingsRoot` and `SettingsDialogController` remain mounted.
+
+- [ ] **Step 1: Add a failing Core client test**
+
+Mount `SettingsRoot` with a null `settings.trigger`, assert that no `aria-haspopup="dialog"` button exists, call `settingsDialog.open('models')`, and assert that the Models section renders in the dialog.
+
+- [ ] **Step 2: Conditionally render only the trigger wrapper**
+
+Resolve `settings.trigger` once and omit the button for null, undefined, or false content. Do not conditionally mount `SettingsRoot` or its controller attachment.
+
+- [ ] **Step 3: Run focused Core verification**
+
+Run the settings-root and settings-shell client tests, the affected package build, translation pairing, and documentation checks.
+
+---
+
+### Task 2: Shadow the Harness settings trigger from the desktop integration
 
 **Files:**
 - Modify: `packages/insight-desktop-integration/src/client/components.tsx`
@@ -27,36 +50,37 @@
 - Modify: `test/authenticated-sidebar-contract.test.ts`
 
 **Interfaces:**
-- Consumes: public single slot `sidebar.settings` and its numeric `priority` shadowing rule.
-- Produces: `HiddenSidebarSettings(): null`, registered at priority `-100`; the existing account action still calls `ctx.settingsDialog.open('client')`.
+- Consumes: public single slot `settings.trigger` and its numeric `priority` shadowing rule.
+- Produces: `HiddenSettingsTrigger(): null`, registered at priority `-100`; the existing account action still calls `ctx.settingsDialog.open('client')`.
 
 - [ ] **Step 1: Add a failing source contract**
 
 Extend `test/desktop-integration-client.test.ts` to require the formal slot registration and prohibit CSS/DOM hiding:
 
 ```ts
-expect(source).toContain("ctx.slots.inject('sidebar.settings'")
-expect(source).toContain("name: 'sidebar.settings'")
+expect(source).toContain("ctx.slots.inject('settings.trigger'")
+expect(source).toContain("name: 'settings.trigger'")
 expect(source).toContain('priority: -100')
-expect(source).toContain('HiddenSidebarSettings')
+expect(source).toContain('HiddenSettingsTrigger')
+expect(source).not.toContain("ctx.slots.inject('sidebar.settings'")
 expect(source).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
 ```
 
-Update `test/authenticated-sidebar-contract.test.ts` so every member of `requiredSlots`, including `sidebar.settings`, must be injected by the product integration.
+Update `test/authenticated-sidebar-contract.test.ts` so the Runtime types still contain `sidebar.settings`, while the product integration injects `settings.trigger` and does not replace `sidebar.settings`.
 
 - [ ] **Step 2: Run the focused test and confirm failure**
 
 Run: `npx vitest run test/desktop-integration-client.test.ts test/authenticated-sidebar-contract.test.ts`
 
-Expected: FAIL because `sidebar.settings`, `priority: -100`, and `HiddenSidebarSettings` are absent.
+Expected: FAIL because `settings.trigger`, `priority: -100`, and `HiddenSettingsTrigger` are absent.
 
 - [ ] **Step 3: Add the null slot component and registration**
 
 Add the component to `components.tsx`:
 
 ```tsx
-/** Hide the redundant sidebar trigger without disabling the settings service. */
-export function HiddenSidebarSettings(_: PropsRuntime<'sidebar.settings'>) {
+/** Hide the redundant settings trigger while preserving the mounted settings shell. */
+export function HiddenSettingsTrigger(_: PropsRuntime<'settings.trigger'>) {
   return null
 }
 ```
@@ -64,10 +88,10 @@ export function HiddenSidebarSettings(_: PropsRuntime<'sidebar.settings'>) {
 Import it in `index.tsx` and register it before the settings section:
 
 ```tsx
-ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
-  name: 'sidebar.settings',
+ctx.slots.inject('settings.trigger', () => ctx.slots.register({
+  name: 'settings.trigger',
   priority: -100
-}, HiddenSidebarSettings))
+}, HiddenSettingsTrigger))
 ```
 
 - [ ] **Step 4: Run automated verification**

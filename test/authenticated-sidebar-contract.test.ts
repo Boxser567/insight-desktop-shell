@@ -4,14 +4,15 @@ import { describe, expect, it } from 'vitest'
 
 const runtimeTypesRoot = 'build/core-runtime/node_modules/@deepseek-ai'
 const generatedProfileRoot = 'build/bundled-profile/web'
-const requiredSlots = [
+const productSlots = [
   'sidebar.brand.mark',
   'sidebar.brand.name',
   'sidebar.footer.action',
-  'sidebar.settings',
+  'settings.trigger',
   'settings.section',
   'shell.overlay'
 ] as const
+const runtimeSlots = [...productSlots, 'sidebar.settings'] as const
 
 describe('authenticated single-sidebar integration contract', () => {
   it('declares only formal Runtime UI extension points', async () => {
@@ -26,9 +27,10 @@ describe('authenticated single-sidebar integration contract', () => {
       '@deepseek-ai/dsh-client-ui-settings',
       '@deepseek-ai/dsh-client-ui-settings-general'
     ]))
-    for (const slot of requiredSlots) {
+    for (const slot of productSlots) {
       expect(client).toContain(`ctx.slots.inject('${slot}'`)
     }
+    expect(client).not.toContain("ctx.slots.inject('sidebar.settings'")
     expect(client).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(patch).toContain("name: '@insight-ai/desktop-integration'")
@@ -87,7 +89,7 @@ describe('authenticated single-sidebar integration contract', () => {
     const dialog = await readFile(`${runtimeTypesRoot}/dsh-client-ui-settings-general/lib/types/client/settings-dialog.d.ts`, 'utf8')
     const publicTypes = [sidebar, settings, layout].join('\n')
 
-    for (const slot of requiredSlots) expect(publicTypes).toContain(`'${slot}'`)
+    for (const slot of runtimeSlots) expect(publicTypes).toContain(`'${slot}'`)
     expect(dialog).toMatch(/open\(sectionId\?: string\): void;/u)
   })
 })

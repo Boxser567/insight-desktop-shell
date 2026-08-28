@@ -88,10 +88,8 @@ const stylesheet = `
   line-height: 18px;
 }
 [data-insight-desktop-account-menu] {
-  position: absolute;
-  z-index: 20;
-  left: 0;
-  bottom: calc(100% + 6px);
+  position: fixed;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   width: 176px;

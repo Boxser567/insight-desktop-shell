@@ -22,13 +22,24 @@ describe('desktop integration client', () => {
       'sidebar.brand.mark',
       'sidebar.brand.name',
       'sidebar.footer.action',
-      'sidebar.settings',
+      'settings.trigger',
       'settings.section',
       'shell.overlay'
     ]) expect(source).toContain(`ctx.slots.inject('${slot}'`)
-    expect(source).toContain("name: 'sidebar.settings'")
+    expect(source).toContain("name: 'settings.trigger'")
     expect(source).toContain('priority: -100')
-    expect(source).toContain('HiddenSidebarSettings')
+    expect(source).toContain('HiddenSettingsTrigger')
+    expect(source).not.toContain("ctx.slots.inject('sidebar.settings'")
     expect(source).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
+  })
+
+  it('renders the account menu outside the clipped sidebar and reuses the host React DOM', async () => {
+    const components = await readFile('packages/insight-desktop-integration/src/client/components.tsx', 'utf8')
+    const build = await readFile('scripts/build-desktop-integration.mjs', 'utf8')
+
+    expect(components).toContain("createPortal(")
+    expect(components).toContain('document.body')
+    expect(build).toContain("'react-dom'")
+    expect(build).toContain("'react-dom/*'")
   })
 })
