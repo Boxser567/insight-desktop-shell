@@ -5,9 +5,7 @@ import type {
   SmsLoginInput
 } from '../shared/auth-contracts'
 import type {
-  ShellAuthApi,
-  ShellWorkspaceApi,
-  WorkspaceBounds
+  ShellAuthApi
 } from '../shared/shell-api'
 
 const auth: ShellAuthApi = Object.freeze({
@@ -28,12 +26,4 @@ const auth: ShellAuthApi = Object.freeze({
   signOut: () => ipcRenderer.invoke('auth:sign-out')
 })
 
-const workspace: ShellWorkspaceApi = Object.freeze({
-  setBounds: (bounds: WorkspaceBounds | null) =>
-    ipcRenderer.invoke('workspace:set-bounds', bounds),
-  info: () => ipcRenderer.invoke('workspace:info'),
-  openAccountConfig: () => ipcRenderer.invoke('workspace:open-account-config')
-})
-
 contextBridge.exposeInMainWorld('insightAuth', auth)
-contextBridge.exposeInMainWorld('insightWorkspace', workspace)

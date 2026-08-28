@@ -15,7 +15,6 @@ function fixture(order: string[] = []) {
   }
   const view = {
     setScope: vi.fn(),
-    setBounds: vi.fn(),
     open: vi.fn().mockResolvedValue(undefined),
     close: vi.fn(async () => {
       order.push('close-view')

@@ -79,7 +79,6 @@ import { HarnessWorkspaceView, type HarnessViewHost, type HarnessViewInstance } 
 import { HarnessWorkspaceController } from './workspace/harness-workspace-controller'
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
-import type { WorkspaceBounds } from '../shared/shell-api'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
 type SafeModeAction =
@@ -226,20 +225,6 @@ function requireCurrentDshHome(): string {
   return dshHome
 }
 
-function parseWorkspaceBounds(value: unknown): WorkspaceBounds | null {
-  if (value === null) return null
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('Invalid workspace bounds.')
-  }
-  const candidate = value as Record<string, unknown>
-  const keys = Object.keys(candidate).sort()
-  if (keys.join(',') !== 'height,width,x,y') throw new Error('Invalid workspace bounds.')
-  for (const key of keys) {
-    if (typeof candidate[key] !== 'number') throw new Error('Invalid workspace bounds.')
-  }
-  return candidate as unknown as WorkspaceBounds
-}
-
 function applyWorkspaceForCurrentSession(): void {
   if (!authManager || !authEnvironment || !workspaceLifecycle) return
   const view = authManager.current()
@@ -294,6 +279,16 @@ function harnessViewHost(): HarnessViewHost | undefined {
   return {
     isDestroyed: () => window.isDestroyed(),
     getContentBounds: () => window.getContentBounds(),
+    watchContentBounds: (listener) => {
+      window.on('resize', listener)
+      window.on('enter-full-screen', listener)
+      window.on('leave-full-screen', listener)
+      return () => {
+        window.removeListener('resize', listener)
+        window.removeListener('enter-full-screen', listener)
+        window.removeListener('leave-full-screen', listener)
+      }
+    },
     contentView: {
       addChildView: (view: HarnessViewInstance) => {
         window.contentView.addChildView(view as WebContentsView, 0)
@@ -1583,26 +1578,6 @@ async function bootstrap(): Promise<void> {
   })
   runtime.note(`[desktop] runtime manifest: ${JSON.stringify(readRuntimeManifest(desktopResourcePath('runtime-manifest.json')))}`)
   registerHarnessHandlers()
-  for (const channel of ['workspace:set-bounds', 'workspace:info', 'workspace:open-account-config']) {
-    ipcMain.removeHandler(channel)
-  }
-  ipcMain.handle('workspace:set-bounds', (event, value: unknown) => {
-    assertTrustedShellEvent(event, mainWindow)
-    workspaceController?.setBounds(parseWorkspaceBounds(value))
-  })
-  ipcMain.handle('workspace:info', (event) => {
-    assertTrustedShellEvent(event, mainWindow)
-    if (!authEnvironment) throw new Error('Authentication is not initialized.')
-    return { version: app.getVersion(), environment: authEnvironment.name }
-  })
-  ipcMain.handle('workspace:open-account-config', (event) => {
-    assertTrustedShellEvent(event, mainWindow)
-    if (authManager?.current().kind !== 'authenticated') return { ok: false }
-    const dshHome = currentDshHome()
-    if (!dshHome) return { ok: false }
-    shell.showItemInFolder(join(dshHome, 'settings.yaml'))
-    return { ok: true }
-  })
   ipcMain.removeHandler('directory-picker:open')
   ipcMain.handle('directory-picker:open', async (event) => {
     assertTrustedHarnessEvent(event)

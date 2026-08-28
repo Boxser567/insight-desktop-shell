@@ -1,4 +1,9 @@
-import type { WorkspaceBounds } from '../../shared/shell-api'
+interface ContentBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /** Minimum WebContents surface used by the Harness view container. */
 export interface HarnessViewWebContents {
@@ -12,14 +17,15 @@ export interface HarnessViewWebContents {
 /** Minimum WebContentsView surface used by the container. */
 export interface HarnessViewInstance {
   readonly webContents: HarnessViewWebContents
-  setBounds(bounds: WorkspaceBounds): void
+  setBounds(bounds: ContentBounds): void
   setVisible(visible: boolean): void
 }
 
 /** BrowserWindow operations required to attach one Harness view. */
 export interface HarnessViewHost {
   isDestroyed(): boolean
-  getContentBounds(): WorkspaceBounds
+  getContentBounds(): ContentBounds
+  watchContentBounds(listener: () => void): () => void
   contentView: {
     addChildView(view: HarnessViewInstance): void
     removeChildView(view: HarnessViewInstance): void
@@ -41,15 +47,10 @@ function isLoopbackHarnessUrl(rawUrl: string): boolean {
   }
 }
 
-function finiteInteger(value: number): number {
-  if (!Number.isFinite(value)) throw new Error('Workspace bounds must be finite.')
-  return Math.round(value)
-}
-
 /** Own the isolated Harness WebContentsView attached to the Shell window. */
 export class HarnessWorkspaceView {
   private view?: HarnessViewInstance
-  private requestedBounds?: WorkspaceBounds
+  private stopWatchingBounds?: () => void
   private scope?: string
   private url?: string
 
@@ -63,24 +64,6 @@ export class HarnessWorkspaceView {
     this.scope = scope
   }
 
-  setBounds(bounds: WorkspaceBounds | null): void {
-    if (bounds === null) {
-      this.requestedBounds = undefined
-      this.view?.setVisible(false)
-      return
-    }
-    const width = finiteInteger(bounds.width)
-    const height = finiteInteger(bounds.height)
-    if (width < 0 || height < 0) throw new Error('Workspace size cannot be negative.')
-    this.requestedBounds = {
-      x: finiteInteger(bounds.x),
-      y: finiteInteger(bounds.y),
-      width,
-      height
-    }
-    this.applyBounds()
-  }
-
   async open(url: string): Promise<void> {
     if (!isLoopbackHarnessUrl(url)) {
       throw new Error('Harness workspace URLs must use a loopback HTTP origin.')
@@ -92,6 +75,7 @@ export class HarnessWorkspaceView {
     if (!this.view || this.view.webContents.isDestroyed()) {
       this.view = host.createHarnessView(this.scope)
       host.contentView.addChildView(this.view)
+      this.stopWatchingBounds = host.watchContentBounds(() => this.applyBounds())
       this.url = undefined
     }
     this.applyBounds()
@@ -105,10 +89,13 @@ export class HarnessWorkspaceView {
   async close(): Promise<void> {
     const view = this.view
     this.view = undefined
+    const stopWatchingBounds = this.stopWatchingBounds
+    this.stopWatchingBounds = undefined
     this.url = undefined
     this.scope = undefined
     if (!view) return
 
+    stopWatchingBounds?.()
     view.setVisible(false)
     const host = this.getHost()
     if (host && !host.isDestroyed()) host.contentView.removeChildView(view)
@@ -133,14 +120,9 @@ export class HarnessWorkspaceView {
   private applyBounds(): void {
     const view = this.view
     const host = this.getHost()
-    const requested = this.requestedBounds
-    if (!view || !host || host.isDestroyed() || !requested) return
+    if (!view || !host || host.isDestroyed()) return
 
     const content = host.getContentBounds()
-    const x = Math.max(0, Math.min(requested.x, content.width))
-    const y = Math.max(0, Math.min(requested.y, content.height))
-    const width = Math.max(0, Math.min(requested.width, content.width - x))
-    const height = Math.max(0, Math.min(requested.height, content.height - y))
-    view.setBounds({ x, y, width, height })
+    view.setBounds({ x: 0, y: 0, width: content.width, height: content.height })
   }
 }

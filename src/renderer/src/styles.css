@@ -36,10 +36,10 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 button, input { font: inherit; }
 button { color: inherit; }
-button, input, .settings-panel { -webkit-app-region: no-drag; }
+button, input { -webkit-app-region: no-drag; }
 .app-drag-region { position: fixed; z-index: 100; top: 0; left: 76px; right: 190px; height: 28px; -webkit-app-region: drag; pointer-events: none; }
 
-.status-page, .login-page, .shell-layout { width: 100%; height: 100%; background: var(--background); color: var(--text); }
+.status-page, .login-page, .authenticated-host { width: 100%; height: 100%; background: var(--background); color: var(--text); }
 .status-page { display: grid; place-items: center; padding: 32px; }
 .status-card { width: min(420px, 100%); padding: 40px; text-align: center; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .status-card h1 { margin: 20px 0 8px; font-size: 26px; }
@@ -81,35 +81,8 @@ button, input, .settings-panel { -webkit-app-region: no-drag; }
 .secondary-button { padding: 0 16px; border: 1px solid var(--border); background: var(--surface-muted); }
 .form-message { min-height: 22px; margin: 14px 0 0; color: var(--danger); font-size: 13px; }
 
-.shell-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); }
-.shell-rail { position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: space-between; padding: 14px 12px 12px; border-right: 1px solid var(--border); background: var(--surface); }
-.workspace-slot { min-width: 0; min-height: 0; background: var(--background); }
-.account-area { position: relative; }
-.account-trigger { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; text-align: left; }
-.account-trigger:hover { background: var(--surface-muted); }
-.account-trigger img, .avatar-fallback { display: grid; flex: 0 0 auto; width: 34px; height: 34px; place-items: center; border-radius: 50%; object-fit: cover; background: var(--accent); color: white; font-weight: 700; }
-.account-trigger > span:last-child { min-width: 0; }
-.account-trigger strong, .account-trigger small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-trigger strong { font-size: 13px; }
-.account-trigger small { margin-top: 3px; color: var(--muted); font-size: 11px; }
-.account-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); display: grid; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-.account-menu button { padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
-.account-menu button:hover { background: var(--surface-muted); }
-.account-menu .danger { color: var(--danger); }
-.modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.36); backdrop-filter: blur(5px); }
-.settings-panel { width: min(420px, calc(100vw - 40px)); padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-.settings-panel header { display: flex; justify-content: space-between; align-items: center; }
-.settings-panel h2 { margin: 0; font-size: 20px; }
-.settings-panel header button { border: 0; background: transparent; cursor: pointer; font-size: 24px; }
-.settings-panel dl { margin: 22px 0; }
-.settings-panel dl > div { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid var(--border); }
-.settings-panel dt { color: var(--muted); }
-.settings-panel dd { margin: 0; text-align: right; }
-
 @media (max-width: 820px) {
   .login-page { grid-template-columns: 1fr; }
   .login-visual { display: none; }
   .login-panel { padding: 28px; }
-  .shell-layout { grid-template-columns: 72px minmax(0, 1fr); }
-  .account-trigger > span:last-child { display: none; }
 }

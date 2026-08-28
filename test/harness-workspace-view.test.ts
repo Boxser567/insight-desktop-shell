@@ -20,10 +20,21 @@ function harnessView(order: string[] = []): HarnessViewInstance {
   }
 }
 
-function host(view: HarnessViewInstance, order: string[] = []): HarnessViewHost {
+function host(
+  view: HarnessViewInstance,
+  order: string[] = [],
+  boundsState: {
+    bounds: { x: number; y: number; width: number; height: number }
+    listener?: () => void
+  } = { bounds: { x: 0, y: 0, width: 1000, height: 700 } }
+): HarnessViewHost {
   return {
     isDestroyed: () => false,
-    getContentBounds: () => ({ x: 0, y: 0, width: 1000, height: 700 }),
+    getContentBounds: () => boundsState.bounds,
+    watchContentBounds: (listener) => {
+      boundsState.listener = listener
+      return () => { boundsState.listener = undefined }
+    },
     contentView: {
       addChildView: vi.fn(() => order.push('add')),
       removeChildView: vi.fn(() => order.push('remove'))
@@ -44,26 +55,18 @@ describe('Harness workspace view', () => {
     expect(view.webContents.loadURL).toHaveBeenCalledWith('http://127.0.0.1:43127')
   })
 
-  it('clips renderer bounds to the host content area', async () => {
+  it('fills and follows the host content area', async () => {
     const view = harnessView()
-    const workspace = new HarnessWorkspaceView(() => host(view))
-    workspace.setBounds({ x: 190, y: -20, width: 1200, height: 900 })
+    const boundsState = { bounds: { x: 20, y: 30, width: 1000, height: 700 }, listener: undefined as (() => void) | undefined }
+    const workspace = new HarnessWorkspaceView(() => host(view, [], boundsState))
     workspace.setScope('a'.repeat(32))
 
     await workspace.open('http://localhost:43127')
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 1000, height: 700 })
 
-    expect(view.setBounds).toHaveBeenCalledWith({ x: 190, y: 0, width: 810, height: 700 })
-  })
-
-  it('rejects invalid renderer dimensions', () => {
-    const workspace = new HarnessWorkspaceView(() => host(harnessView()))
-
-    expect(() => workspace.setBounds({ x: 0, y: 0, width: -1, height: 20 })).toThrow(
-      'cannot be negative'
-    )
-    expect(() => workspace.setBounds({ x: 0, y: 0, width: Number.NaN, height: 20 })).toThrow(
-      'finite'
-    )
+    boundsState.bounds = { x: 40, y: 50, width: 1280, height: 820 }
+    boundsState.listener?.()
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 1280, height: 820 })
   })
 
   it('hides and removes the view before closing its contents', async () => {

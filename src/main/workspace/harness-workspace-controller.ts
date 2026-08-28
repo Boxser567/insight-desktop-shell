@@ -1,4 +1,3 @@
-import type { WorkspaceBounds } from '../../shared/shell-api'
 import type { WorkspaceAccount, WorkspaceDriver } from './workspace-lifecycle'
 
 interface AccountRuntime {
@@ -8,7 +7,6 @@ interface AccountRuntime {
 
 interface AccountWorkspaceView {
   setScope(scope: string): void
-  setBounds(bounds: WorkspaceBounds | null): void
   open(url: string): Promise<void>
   close(): Promise<void>
   isTrustedSender(sender: unknown, senderFrame: unknown): boolean
@@ -40,10 +38,6 @@ export class HarnessWorkspaceController implements WorkspaceDriver {
     this.account = undefined
     await this.view.close()
     await this.runtime.stop()
-  }
-
-  setBounds(bounds: WorkspaceBounds | null): void {
-    this.view.setBounds(bounds)
   }
 
   async open(url: string): Promise<void> {

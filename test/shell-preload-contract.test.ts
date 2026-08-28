@@ -3,19 +3,28 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('Shell preload contract', () => {
-  it('exposes only session commands and renderer-safe workspace actions', async () => {
+  it('exposes only session commands to the unauthenticated Shell renderer', async () => {
     const source = await readFile(
       join(import.meta.dirname, '..', 'src', 'preload', 'shell.ts'),
       'utf8'
     )
 
     expect(source).toContain("exposeInMainWorld('insightAuth'")
-    expect(source).toContain("exposeInMainWorld('insightWorkspace'")
     expect(source).toContain("ipcRenderer.invoke('auth:current')")
     expect(source).toContain("ipcRenderer.invoke('auth:login-sms'")
     expect(source).toContain("ipcRenderer.invoke('auth:login-password'")
-    expect(source).toContain("ipcRenderer.invoke('workspace:set-bounds'")
+    expect(source).not.toContain('insightWorkspace')
+    expect(source).not.toContain('workspace:set-bounds')
     expect(source).not.toMatch(/getToken|readToken|getCookie|readCookie|getUserId/)
+  })
+
+  it('keeps authenticated navigation and settings out of the Shell renderer', async () => {
+    const app = await readFile(join(import.meta.dirname, '..', 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
+    const styles = await readFile(join(import.meta.dirname, '..', 'src', 'renderer', 'src', 'styles.css'), 'utf8')
+
+    expect(app).toContain('authenticated-host')
+    expect(app).not.toContain('AuthenticatedShell')
+    expect(styles).not.toMatch(/shell-rail|workspace-slot|account-menu|settings-panel/)
   })
 
   it('keeps deferred account flows out of the first login surface', async () => {

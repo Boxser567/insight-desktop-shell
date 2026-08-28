@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { SessionView } from '../../shared/auth-contracts'
-import { AuthenticatedShell } from './AuthenticatedShell'
 import { LoginView } from './LoginView'
 
 function StatusPage(props: {
@@ -38,7 +37,7 @@ export function App(): React.JSX.Element {
 
   let content: React.JSX.Element
   if (session.kind === 'authenticated') {
-    content = <AuthenticatedShell account={session.account} />
+    content = <main className="authenticated-host" aria-hidden="true" />
   } else if (session.kind === 'restoring') {
     content = <StatusPage title="正在启动因赛AI" detail="正在安全恢复登录状态…" />
   } else if (session.kind === 'offline') {
@@ -59,7 +58,7 @@ export function App(): React.JSX.Element {
   }
   return (
     <>
-      <div className="app-drag-region" aria-hidden="true" />
+      {session.kind !== 'authenticated' && <div className="app-drag-region" aria-hidden="true" />}
       {content}
     </>
   )
