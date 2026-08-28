@@ -27,9 +27,13 @@
 
 - `macos`：构建 Apple Silicon 与 Intel macOS 包；
 - `windows`：使用 `windows-2022` runner 构建 Windows x64 包；
-- `all`：构建全部上述目标。
+- `all`：构建全部上述目标；
+- `apple-signing-preflight`：只验证 Apple P12、`Developer ID Application`、Team ID 与 Notary Service 鉴权，不安装依赖或构建应用；
+- `macos-arm64-signed`：在预检通过后构建、签名、公证并上传 Apple Silicon 候选包，不创建 GitHub Release。
 
-手动运行当前只生成未签名的 macOS DEV artifact，用于原生 runner 构建证明，不能作为可直接安装的候选包。macOS 阶段 10 必须来自 `v*` 标签签名链，并需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。
+普通 `macos`/`all` 手动运行只生成未签名的 macOS DEV artifact，用于原生 runner 构建证明，不能作为可直接安装的候选包。签名候选必须先通过 `apple-signing-preflight`，再单独运行 `macos-arm64-signed`；预检失败时禁止继续构建。候选包与 `v*` 标签路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。
+
+`macos-arm64-signed` 只关闭 Apple Silicon 的研发分发门禁，不替代正式多平台发布。它不会构建 Intel 或 Windows，不会启动 Windows UKey 签名，也不会创建或更新 GitHub Release。下载后必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
 
 运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
 

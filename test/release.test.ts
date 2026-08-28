@@ -327,6 +327,41 @@ describe('GitHub release contract', () => {
     )
   })
 
+  it('isolates Apple credential preflight and the signed arm64 candidate from publication', async () => {
+    const workflow = await readFile(
+      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
+      'utf8'
+    )
+    const preflight = workflow.match(
+      /  apple-signing-preflight:\r?\n[\s\S]*?(?=\r?\n  macos-apple-silicon:)/
+    )?.[0]
+    const appleSilicon = workflow.match(
+      /  macos-apple-silicon:\r?\n[\s\S]*?(?=\r?\n  macos-intel:)/
+    )?.[0]
+    const intel = workflow.match(
+      /  macos-intel:\r?\n[\s\S]*?(?=\r?\n  windows-x64:)/
+    )?.[0]
+    const windows = workflow.match(
+      /  windows-x64:\r?\n[\s\S]*?(?=\r?\n  sign-windows:)/
+    )?.[0]
+    const publish = workflow.match(/  publish:\r?\n[\s\S]*$/)?.[0]
+
+    expect(workflow).toContain('- apple-signing-preflight')
+    expect(workflow).toContain('- macos-arm64-signed')
+    expect(preflight).toContain("inputs.target == 'apple-signing-preflight'")
+    expect(preflight).toContain('runs-on: macos-15')
+    expect(preflight).toContain('Developer ID Application')
+    expect(preflight).toContain('($APPLE_TEAM_ID)')
+    expect(preflight).toContain('xcrun notarytool history')
+    expect(preflight).toContain('if: always()')
+    expect(appleSilicon).toContain("inputs.target == 'macos-arm64-signed'")
+    expect(appleSilicon).toContain('name: macos-apple-silicon-signed-candidate')
+    expect(intel).not.toContain("inputs.target == 'macos-arm64-signed'")
+    expect(windows).not.toContain("inputs.target == 'macos-arm64-signed'")
+    expect(publish).not.toContain("inputs.target == 'macos-arm64-signed'")
+    expect(publish).toContain("startsWith(github.ref, 'refs/tags/v')")
+  })
+
   it('signs Windows installers on the local UKey runner before publishing', async () => {
     const workflow = await readFile(
       path.join(projectRoot, '.github', 'workflows', 'release.yml'),

@@ -205,6 +205,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 使用 `.github/workflows/release.yml` 的 `Release desktop installers`，按发布范围选择 `macos`、`windows` 或 `all`。
 - Windows x64 由 `windows-2022` runner 负责；macOS 由相应原生 runner 构建。
 - 当前 `workflow_dispatch` 的 macOS 路径生成未签名的 `因赛AI Dev` artifact：它显式设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，只用于目标 runner 构建证明，不得进入阶段 10。只有 `v*` 标签路径在配置完整 secrets 后导入 `Developer ID Application`、签名、公证、stapling 并执行 Gatekeeper 验证。
+- 需要验证 Apple 分发凭据时先运行 `target: apple-signing-preflight`。它只导入 P12、核对 `Developer ID Application` 与 Team ID，并调用 Notary Service，不安装依赖或构建应用；任一检查失败即停止。
+- 预检通过后可运行 `target: macos-arm64-signed` 生成 Apple Silicon 签名候选包。该目标复用正式签名、公证、stapling 与 Gatekeeper 检查，但不构建 Intel/Windows，不执行 UKey 签名，也不创建 GitHub Release。
 - 观察失败发生在 install、test、Runtime、Profile、builder、签名/公证、blockmap 还是 upload；只重跑基础设施型失败的受影响 job。
 
 **通过条件：** 目标 job 成功，预期安装包与伴随文件存在，文件名和架构符合目标；macOS 若要进入阶段 10，还必须来自签名发布链并通过 workflow 中的签名、公证、stapling 与 Gatekeeper 检查。
@@ -213,12 +215,13 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 run 下载的确切安装包。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 DMG；未签名 DEV artifact 不是本阶段输入。`Apple Development` 身份不能替代外部分发身份。
+**输入：** 从阶段 9 对应 run 下载的确切安装包。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 DMG；可接受 `macos-arm64-signed` 候选包或正式 `v*` 标签包，未签名 DEV artifact 不是本阶段输入。`Apple Development` 身份不能替代外部分发身份。
 
 **执行：**
 
 - 记录 workflow URL、artifact 文件名、文件大小和对外发布时的 SHA-256。
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `spctl --assess --type execute --verbose=4`，再用 `xcrun stapler validate` 检查应用与 DMG；任一失败即停止安装验收。
+- 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 正式包额外验证签名、公证和 stapling；Windows 验证安装、启动、卸载及需要的签名状态。
