@@ -14,6 +14,7 @@ describe('desktop integration package', () => {
     expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
     expect(manifest.dsh.client.inject).toEqual(expect.arrayContaining([
       '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-layout',
       '@deepseek-ai/dsh-client-ui-settings-general'
     ]))
     expect(manifest.publishConfig).toBeUndefined()

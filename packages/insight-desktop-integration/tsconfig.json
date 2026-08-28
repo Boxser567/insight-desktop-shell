@@ -9,6 +9,7 @@
       "@deepseek-ai/cordis": ["build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-runtime/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-runtime/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-locale/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-locale/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-layout/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-layout/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-slots": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-slots/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-sidebar/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-sidebar/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-settings/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/index.d.ts"],
