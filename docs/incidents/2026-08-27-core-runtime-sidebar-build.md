@@ -38,6 +38,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 14. 从 run `33062909634` 下载 Apple Silicon DEV artifact 后，macOS 报“因赛AI Dev 已损坏”。`hdiutil verify` 证明 DMG 校验有效；DMG 内和 ZIP 内应用均只有 Electron 可执行文件的 linker ad-hoc 签名，`codesign --verify --deep --strict` 报 `code has no resources but signature indicates they must be present`，Gatekeeper 在下载 quarantine 下拒绝启动。原因是手动 workflow 明确禁用签名发现，并跳过只对 `v*` 标签执行的证书导入、签名、公证、stapling 和验收。仓库没有 Apple 签名 secrets，本机也只有 `Apple Development` 而没有 `Developer ID Application`，因此该 DEV artifact 只能证明构建和上传，不能作为阶段 10 可安装候选包。
 15. 对该 DEV 应用执行 `/usr/bin/xattr -d -r com.apple.quarantine` 时，命令在 `runtime/node_modules/.bin/node` 报 `No such file`。检查确认应用根目录及普通文件的 quarantine 已清除；报错来自唯一一个失效链接，该链接保留了 GitHub Runner 工作区的绝对路径。包内真实的 `runtime/node_modules/node/bin/node` 存在且为 arm64 可执行文件，应用随后正常启动。该错误不否定本次 DEV 启动验证，但 CI 绝对链接仍是需要单独修复的制品缺陷。
 16. 登录门禁接入后的 Windows-only run `33163897155` 已完成 `npm ci`、完整测试、类型检查和 DEV 安装包构建，但旧 smoke 在 75 秒内只看到 Runtime manifest，没有 Harness endpoint。应用进程始终存活且没有 stderr；干净用户目录按新产品要求停留在登录页，登录前不再启动 Harness，因此旧检查条件已经失效。Shell 启动稳定性与包内 Runtime/RPC 随后拆成两个无账号检查：前者明确要求登录前无 endpoint，后者由跨平台脚本直接使用包内 Node、Runtime、默认 Profile 和桌面 patch 创建 Unicode 路径工作区与会话，不增加 CI 登录绕过能力。
+17. Shell 提交 `1363ed1` 完成上述拆分并在本地已验收的 macOS 包内 Runtime 上通过同一 RPC smoke。随后只重跑 Windows 的 run `33164951219`：`npm ci`、完整测试、类型检查、DEV 安装包、未登录 Shell smoke、包内 Harness Runtime smoke 和 `windows-x64-dev` artifact 上传全部通过，没有重复构建 macOS。
 
 ## 症状、根因与修复
 
@@ -78,6 +79,7 @@ Shell 已从 npm registry 直接安装 `@deepseek-ai/dsh`，迁移为锁定并�
 - Shell rc.9 周期中，38 个测试文件、269 个测试、typecheck、普通 build 和独立 DEV 目录打包通过；应用内静态检查确认 Runtime 与默认 Sidebar 文件存在。
 - `caf47f9` 的测试证明全新或受管迁移 Profile 被复制后会写入 `.install-complete`，避免把已随包安装的依赖再次当作未完成安装。
 - 初始 installer run `33062909634` 的 Apple Silicon 和 Intel job 分别通过；Windows Rollup 修复后的 Windows-only run `33064050963` 完整通过，并上传 `windows-x64-dev` artifact。
+- 登录门禁兼容修复后的 Windows-only run `33164951219` 完整通过；未登录 Shell 与包内 Harness Runtime 分别获得独立证据，并上传新的 `windows-x64-dev` artifact。
 - run `33062909634` 的 macOS DEV DMG 校验有效，但严格签名与 Gatekeeper 检查失败；它不构成最终安装验收证据。
 - 尚未把运行中的旧 DEV 实例当作正式 rc.9 应用证据。最终 DMG/Windows 安装包的首次安装、覆盖安装和 Sidebar 行为仍属于发布阶段人工门禁。
 
