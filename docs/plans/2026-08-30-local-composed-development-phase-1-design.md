@@ -72,7 +72,7 @@ Shell 正式构建、目录应用和安装包继续读取 `build/core-runtime`�
 启动过程为：
 
 1. 对锁定 Runtime、Runtime manifest 和 bundled Profile执行与 `dev:shell` 相同的就绪检查；
-2. 根据 Runtime lock、目标 package 和本地 Core commit 计算稳定 composition ID；
+2. 根据 Runtime 目标身份和覆盖 package 集合计算稳定 composition ID；本地 Core commit 只记录在状态与启动摘要中，不参与用户数据目录身份；
 3. 当基座身份变化或派生目录不存在时，从 `build/core-runtime` 创建一次派生 Runtime；
 4. 比较本地和基座 package 的 runtime dependencies、peer dependencies、exports、DSH client inject 与必要入口；
 5. 兼容时运行 Core package 的既有 `bundle`，将 `package.json`、`lib/` 和 manifest 明确声明的必要静态资源复制到 staging；
