@@ -358,6 +358,18 @@ describe('GitHub release contract', () => {
       expect(packageJson.scripts[name]).toContain('electron-builder.candidate.cjs')
       expect(packageJson.scripts[name]).toContain('--publish never')
     }
+    expect(packageJson.scripts['package:candidate:mac:arm64']).toContain(
+      'finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip'
+    )
+    expect(packageJson.scripts['package:candidate:mac:x64']).toContain(
+      'finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip'
+    )
+    expect(packageJson.scripts['package:mac:arm64']).toContain(
+      'finalize-mac-release.mjs dist insight-mac-arm64.zip'
+    )
+    expect(packageJson.scripts['package:mac:x64']).toContain(
+      'finalize-mac-release.mjs dist insight-mac-x64.zip'
+    )
   })
 
   it('preflights one complete release before starting native builds', async () => {
@@ -391,6 +403,7 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('--policy build/update-release-policy.json')
     expect(preflight).toContain('--runtime-lock core-runtime.lock.json')
     expect(preflight).toContain('Run release configuration tests')
+    expect(preflight).toContain('test/finalize-mac-release.test.ts')
     expect(preflight).not.toContain('prepare:core-runtime')
     expect(appleSilicon).toContain('needs: release-preflight')
     expect(intel).toContain('needs: release-preflight')

@@ -79,6 +79,7 @@ jobs:
           npx vitest run
           test/release-preflight.test.ts
           test/build-update-release.test.ts
+          test/finalize-mac-release.test.ts
           test/merge-mac-update-metadata.test.ts
           test/verify-release-assets.test.ts
           test/finalize-windows-release.test.ts
