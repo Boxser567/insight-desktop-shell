@@ -1,4 +1,4 @@
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import type {
   AppUpdater,
   ProgressInfo,
@@ -33,7 +33,7 @@ export interface UpdateExecutor {
 export class ElectronUpdateExecutor implements UpdateExecutor {
   private readonly listeners = new Set<(event: ExecutorEvent) => void>()
 
-  constructor(private readonly updater: AppUpdater = autoUpdater) {
+  constructor(private readonly updater: AppUpdater = electronUpdater.autoUpdater) {
     updater.on('update-available', (info: UpdateInfo) => {
       this.emit({ type: 'available', version: info.version })
     })

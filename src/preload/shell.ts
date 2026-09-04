@@ -7,6 +7,7 @@ import type {
 import type {
   ShellAuthApi
 } from '../shared/shell-api'
+import { createDesktopUpdateApi } from './update-api'
 
 const auth: ShellAuthApi = Object.freeze({
   current: () => ipcRenderer.invoke('auth:current'),
@@ -27,3 +28,4 @@ const auth: ShellAuthApi = Object.freeze({
 })
 
 contextBridge.exposeInMainWorld('insightAuth', auth)
+contextBridge.exposeInMainWorld('insightDesktopUpdates', createDesktopUpdateApi())

@@ -13,9 +13,34 @@ describe('Shell preload contract', () => {
     expect(source).toContain("ipcRenderer.invoke('auth:current')")
     expect(source).toContain("ipcRenderer.invoke('auth:login-sms'")
     expect(source).toContain("ipcRenderer.invoke('auth:login-password'")
+    expect(source).toContain("exposeInMainWorld('insightDesktopUpdates'")
+    expect(source).not.toContain("ipcRenderer.invoke('updates:quit'")
+    const harness = await readFile(
+      join(import.meta.dirname, '..', 'src', 'preload', 'harness.ts'),
+      'utf8'
+    )
+    expect(harness).toContain("exposeInMainWorld('insightDesktopUpdates'")
+    expect(harness).not.toContain("ipcRenderer.invoke('updates:quit'")
     expect(source).not.toContain('insightWorkspace')
     expect(source).not.toContain('workspace:set-bounds')
     expect(source).not.toMatch(/getToken|readToken|getCookie|readCookie|getUserId/)
+  })
+
+  it('gives the update window the only renderer quit capability', async () => {
+    const source = await readFile(
+      join(import.meta.dirname, '..', 'src', 'preload', 'update.ts'),
+      'utf8'
+    )
+
+    expect(source).toContain("exposeInMainWorld('insightDesktopUpdates'")
+    expect(source).toContain("ipcRenderer.invoke('updates:quit'")
+    expect(source).not.toMatch(/shell\.openExternal|node:fs|node:path/)
+    const base = await readFile(
+      join(import.meta.dirname, '..', 'src', 'preload', 'update-api.ts'),
+      'utf8'
+    )
+    expect(base).toContain("ipcRenderer.on('updates:status-changed', handler)")
+    expect(base).toContain("ipcRenderer.removeListener('updates:status-changed', handler)")
   })
 
   it('keeps authenticated navigation and settings out of the Shell renderer', async () => {

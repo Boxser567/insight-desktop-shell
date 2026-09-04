@@ -9,6 +9,7 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  powerMonitor,
   safeStorage,
   session,
   shell,
@@ -79,6 +80,12 @@ import { HarnessWorkspaceView, type HarnessViewHost, type HarnessViewInstance } 
 import { HarnessWorkspaceController } from './workspace/harness-workspace-controller'
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
+import { ElectronUpdateExecutor } from './update/update-executor'
+import { GitHubReleaseSource } from './update/github-release-source'
+import { UpdateManager } from './update/update-manager'
+import { createUpdateFixture, resolveUpdateFixture } from './update/update-fixture'
+import { registerUpdateIpc } from './update/update-ipc'
+import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
 type SafeModeAction =
@@ -119,6 +126,9 @@ let authManager: AuthSessionManager | undefined
 let authEnvironment: AuthEnvironmentConfig | undefined
 let workspaceController: HarnessWorkspaceController | undefined
 let workspaceLifecycle: WorkspaceLifecycle | undefined
+let updateManager: UpdateManager | undefined
+let updateWindowController: UpdateWindowController<BrowserWindow> | undefined
+let disposeUpdateIpc: (() => void) | undefined
 const startInSafeMode = shouldStartInSafeMode(process.argv)
 
 function appendRendererPluginFailureLog(message: string): void {
@@ -248,6 +258,43 @@ function isTrustedShellUrl(rawUrl: string): boolean {
   } catch {
     return false
   }
+}
+
+function isTrustedUpdateUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    const developmentUrl = process.env.ELECTRON_RENDERER_URL
+    if (developmentUrl) {
+      return url.origin === new URL(developmentUrl).origin && url.pathname.endsWith('/update.html')
+    }
+    return url.protocol === 'file:' && url.pathname.endsWith('/renderer/update.html')
+  } catch {
+    return false
+  }
+}
+
+function createUpdateWindowController(): UpdateWindowController<BrowserWindow> {
+  return new UpdateWindowController({
+    create: () => {
+      const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+      const window = new BrowserWindow(updateWindowOptions({
+        parent,
+        preload: join(import.meta.dirname, '../preload/update.cjs'),
+        icon: desktopIconPath()
+      }))
+      secureWebContents(window.webContents, isTrustedUpdateUrl)
+      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      return window
+    },
+    load: async (window) => {
+      const developmentUrl = process.env.ELECTRON_RENDERER_URL
+      if (developmentUrl) {
+        await window.loadURL(new URL('/update.html', developmentUrl).toString())
+      } else {
+        await window.loadFile(join(import.meta.dirname, '../renderer/update.html'))
+      }
+    }
+  })
 }
 
 function createHarnessWebContentsView(window: BrowserWindow, scope: string): WebContentsView {
@@ -960,6 +1007,9 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<n
     case 'show-harness-log':
       shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
       break
+    case 'check-for-updates':
+      await updateWindowController?.open()
+      break
     case 'sign-out':
       await authManager?.signOut()
       break
@@ -1413,6 +1463,77 @@ async function showSafeModeManager(): Promise<void> {
   }
 }
 
+function updateChannel(): 'development' | 'candidate' | 'stable' {
+  if (developmentBuild) return 'development'
+  return /-rc\.\d+$/u.test(app.getVersion()) ? 'candidate' : 'stable'
+}
+
+function readUpdatePublicKey(): string {
+  if (!app.isPackaged) return ''
+  try {
+    return readFileSync(desktopResourcePath('update-public-key.pem'), 'utf8')
+  } catch (error) {
+    console.warn('[desktop] update public key is unavailable', error)
+    return ''
+  }
+}
+
+async function prepareForUpdateInstall(): Promise<void> {
+  await workspaceLifecycle?.stop()
+  updateWindowController?.close()
+  if (pluginRecoveryWindow && !pluginRecoveryWindow.isDestroyed()) pluginRecoveryWindow.close()
+  if (safeModeManagerWindow && !safeModeManagerWindow.isDestroyed()) safeModeManagerWindow.close()
+}
+
+async function initializeUpdates(): Promise<void> {
+  const fixtureName = resolveUpdateFixture({
+    packaged: app.isPackaged,
+    name: process.env.INSIGHT_UPDATE_FIXTURE
+  })
+  const fixture = fixtureName
+    ? createUpdateFixture({
+        name: fixtureName,
+        currentVersion: app.getVersion(),
+        userData: app.getPath('userData')
+      })
+    : undefined
+  const publicKeyPem = fixture?.publicKeyPem ?? readUpdatePublicKey()
+  updateWindowController = createUpdateWindowController()
+  updateManager = new UpdateManager({
+    currentVersion: app.getVersion(),
+    environment: {
+      packaged: fixture ? true : app.isPackaged,
+      channel: fixture ? 'stable' : updateChannel(),
+      platform: process.platform,
+      arch: process.arch
+    },
+    source: fixture?.source ?? new GitHubReleaseSource({ publicKeyPem }),
+    executor: fixture?.executor ?? new ElectronUpdateExecutor(),
+    publicKeyPem,
+    userData: app.getPath('userData'),
+    prepareToInstall: fixture ? async () => undefined : prepareForUpdateInstall,
+    resume: {
+      subscribe(listener) {
+        powerMonitor.on('resume', listener)
+        return () => powerMonitor.removeListener('resume', listener)
+      }
+    }
+  })
+  disposeUpdateIpc = registerUpdateIpc({
+    ipcMain,
+    manager: updateManager,
+    shellWindow: () => mainWindow,
+    harnessWebContents: () => harnessWorkspaceView.webContents(),
+    updateWindow: () => updateWindowController?.window(),
+    open: () => {
+      if (!updateWindowController) throw new Error('The update window is unavailable.')
+      return updateWindowController.open()
+    },
+    quit: () => app.quit()
+  })
+  await updateManager.start()
+}
+
 function installMenu(): void {
   const isChinese = harnessLocale() === 'zh'
   const authenticated = authManager?.current().kind === 'authenticated'
@@ -1422,6 +1543,11 @@ function installMenu(): void {
           {
             label: app.name,
             submenu: [
+              {
+                label: isChinese ? '检查更新…' : 'Check for Updates…',
+                click: () => void updateWindowController?.open().catch(showUnexpectedError)
+              },
+              { type: 'separator' as const },
               {
                 label: isChinese ? '退出登录' : 'Sign Out',
                 enabled: authenticated,
@@ -1538,6 +1664,7 @@ async function bootstrap(): Promise<void> {
     }
   )
   workspaceLifecycle = new WorkspaceLifecycle(workspaceController)
+  await initializeUpdates()
   authEnvironment = resolveAuthEnvironment({
     packaged: app.isPackaged,
     channel: developmentBuild ? 'development' : undefined
@@ -1723,7 +1850,12 @@ if (isDaemonLaunch(process.env, process.platform)) {
       if (quitting || !runtime) return
       event.preventDefault()
       quitting = true
-      void (workspaceController?.stop() ?? runtime.stop()).finally(() => app.quit())
+      disposeUpdateIpc?.()
+      disposeUpdateIpc = undefined
+      void (async () => {
+        await updateManager?.stop()
+        await (workspaceLifecycle?.stop() ?? runtime.stop())
+      })().finally(() => app.quit())
     })
   }
 }

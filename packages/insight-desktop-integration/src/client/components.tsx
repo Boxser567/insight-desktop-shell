@@ -3,6 +3,8 @@ import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { AccountSummary } from '../../../../src/shared/auth-contracts'
 import type { DesktopClientInfo } from '../../../../src/shared/harness-account-api'
+import type { DesktopUpdateApi } from '../../../../src/shared/update-api'
+import type { UpdateStatus } from '../../../../src/shared/update-contracts'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -15,6 +17,42 @@ type ProductLocaleProps = PropsLocale<'insightDesktop'>
 export interface AccountFooterActions {
   openSettings(): void
   signOut(): Promise<void>
+  updates: DesktopUpdateApi
+}
+
+function updateHighlighted(status: UpdateStatus | undefined): boolean {
+  return status?.phase === 'available' ||
+    status?.phase === 'downloading' ||
+    status?.phase === 'downloaded' ||
+    (status?.phase === 'error' && status.required)
+}
+
+/** Render the authenticated update entry without inspecting Harness DOM. */
+export function UpdateButton({ updates }: { updates: DesktopUpdateApi }) {
+  const [status, setStatus] = useState<UpdateStatus>()
+  useEffect(() => {
+    let active = true
+    const unsubscribe = updates.subscribe(setStatus)
+    void updates.status().then(value => {
+      if (active) setStatus(value)
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [updates])
+  return (
+    <button
+      type="button"
+      data-insight-desktop-update-button
+      data-active={updateHighlighted(status) ? 'true' : undefined}
+      aria-label="打开客户端更新"
+      title="检查客户端更新"
+      onClick={() => void updates.open()}
+    >
+      ↓
+    </button>
+  )
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -68,7 +106,7 @@ function Avatar({ account }: { account: AccountSummary | undefined }) {
 }
 
 /** Render the current account and its two product-level actions. */
-export function AccountFooter({ wide, t, openSettings, signOut }: PropsRuntime<'sidebar.footer.action'> & ProductLocaleProps & AccountFooterActions) {
+export function AccountFooter({ wide, t, openSettings, signOut, updates }: PropsRuntime<'sidebar.footer.action'> & ProductLocaleProps & AccountFooterActions) {
   const account = useAccount()
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -147,27 +185,30 @@ export function AccountFooter({ wide, t, openSettings, signOut }: PropsRuntime<'
         </div>,
         document.body
       )}
-      <button
-        ref={button}
-        type="button"
-        data-insight-desktop-account-button
-        data-rail={wide ? undefined : 'true'}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={account?.displayName || t('account.unavailable')}
-        onClick={() => {
-          if (!open) setMenuPosition(undefined)
-          setOpen(value => !value)
-        }}
-      >
-        <Avatar account={account} />
-        {wide && (
-          <span data-insight-desktop-account-copy>
-            <span data-insight-desktop-account-name>{account?.displayName || t('account.unavailable')}</span>
-            {account && <span data-insight-desktop-account-phone>{account.maskedPhone}</span>}
-          </span>
-        )}
-      </button>
+      <div data-insight-desktop-account-row>
+        <button
+          ref={button}
+          type="button"
+          data-insight-desktop-account-button
+          data-rail={wide ? undefined : 'true'}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={account?.displayName || t('account.unavailable')}
+          onClick={() => {
+            if (!open) setMenuPosition(undefined)
+            setOpen(value => !value)
+          }}
+        >
+          <Avatar account={account} />
+          {wide && (
+            <span data-insight-desktop-account-copy>
+              <span data-insight-desktop-account-name>{account?.displayName || t('account.unavailable')}</span>
+              {account && <span data-insight-desktop-account-phone>{account.maskedPhone}</span>}
+            </span>
+          )}
+        </button>
+        {wide && <UpdateButton updates={updates} />}
+      </div>
     </div>
   )
 }

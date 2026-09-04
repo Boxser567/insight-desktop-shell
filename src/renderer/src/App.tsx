@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { SessionView } from '../../shared/auth-contracts'
 import brandMark from '../../../build/brand-mark.svg'
 import { LoginView } from './LoginView'
+import { UpdateBadge } from './UpdateBadge'
 
 function StatusPage(props: {
   title: string
@@ -61,6 +62,7 @@ export function App(): React.JSX.Element {
     <>
       {session.kind !== 'authenticated' && <div className="app-drag-region" aria-hidden="true" />}
       {content}
+      {session.kind !== 'authenticated' && <UpdateBadge />}
     </>
   )
 }

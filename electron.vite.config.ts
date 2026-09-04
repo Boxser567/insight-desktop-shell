@@ -13,6 +13,7 @@ export default defineConfig({
         input: {
           harness: resolve('src/preload/harness.ts'),
           shell: resolve('src/preload/shell.ts'),
+          update: resolve('src/preload/update.ts'),
           'windows-menu': resolve('src/preload/windows-menu.ts')
         },
         output: {
@@ -35,7 +36,10 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: resolve('src/renderer/index.html')
+        input: {
+          index: resolve('src/renderer/index.html'),
+          update: resolve('src/renderer/update.html')
+        }
       }
     }
   }

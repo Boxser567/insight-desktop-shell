@@ -4,6 +4,7 @@ export const desktopMenuCommands = [
   'restart-harness',
   'safe-mode',
   'show-harness-log',
+  'check-for-updates',
   'sign-out',
   'undo',
   'redo',

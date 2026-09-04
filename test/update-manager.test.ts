@@ -189,6 +189,13 @@ async function setup(input: {
 }
 
 describe('desktop update manager', () => {
+  it('loads the CommonJS electron-updater package through its default export', async () => {
+    const source = await readFile('src/main/update/update-executor.ts', 'utf8')
+
+    expect(source).toContain("import electronUpdater from 'electron-updater'")
+    expect(source).not.toContain("import { autoUpdater } from 'electron-updater'")
+  })
+
   it('creates one startup timer, one six-hour interval and cleans them on stop', async () => {
     const { manager, executor, timers, resume } = await setup()
 

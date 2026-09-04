@@ -3,6 +3,7 @@ import { findBootFailureText } from './boot-failure'
 import { isPluginLoadError } from './plugin-error-view'
 import type { AccountSummary } from '../shared/auth-contracts'
 import type { DesktopClientInfo, HarnessAccountApi } from '../shared/harness-account-api'
+import { createDesktopUpdateApi } from './update-api'
 
 let bootFailureTriggered = false
 let bootFailureTimer: number | undefined
@@ -81,6 +82,7 @@ const harnessAccountApi: HarnessAccountApi = Object.freeze({
 })
 
 contextBridge.exposeInMainWorld('insightDesktopAccount', harnessAccountApi)
+contextBridge.exposeInMainWorld('insightDesktopUpdates', createDesktopUpdateApi())
 
 async function mountSafeModeBanner(): Promise<void> {
   if (location.protocol === 'file:' || document.getElementById('dsh-desktop-safe-mode-banner')) return
