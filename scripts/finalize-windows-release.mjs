@@ -18,9 +18,9 @@ async function findInstaller(releaseDir) {
   return installers[0]
 }
 
-function validateX64Pe(bytes, filename) {
+function validatePe(bytes, filename, expectedMachine) {
   if (bytes.length < 70 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) {
-    throw new Error(`Windows installer has an invalid DOS header: ${filename}`)
+    throw new Error(`Windows executable has an invalid DOS header: ${filename}`)
   }
   const peOffset = bytes.readUInt32LE(0x3c)
   if (
@@ -28,17 +28,21 @@ function validateX64Pe(bytes, filename) {
     peOffset + 6 > bytes.length ||
     bytes.readUInt32LE(peOffset) !== 0x00004550
   ) {
-    throw new Error(`Windows installer has an invalid PE signature: ${filename}`)
+    throw new Error(`Windows executable has an invalid PE signature: ${filename}`)
   }
-  if (bytes.readUInt16LE(peOffset + 4) !== 0x8664) {
-    throw new Error(`Windows installer is not x64: ${filename}`)
+  if (expectedMachine !== undefined && bytes.readUInt16LE(peOffset + 4) !== expectedMachine) {
+    throw new Error(`Packaged Windows application is not x64: ${filename}`)
   }
 }
 
-async function finalizeRelease(releaseDir, version) {
+async function finalizeRelease(releaseDir, version, appExecutable) {
   const installer = await findInstaller(releaseDir)
-  const installerBytes = await readFile(installer)
-  validateX64Pe(installerBytes, basename(installer))
+  const [installerBytes, appBytes] = await Promise.all([
+    readFile(installer),
+    readFile(appExecutable)
+  ])
+  validatePe(installerBytes, basename(installer))
+  validatePe(appBytes, basename(appExecutable), 0x8664)
   const blockmap = `${installer}.blockmap`
   await rm(blockmap, { force: true })
   const updateInfo = await buildBlockMap(installer, 'gzip', blockmap)
@@ -64,10 +68,12 @@ async function finalizeRelease(releaseDir, version) {
   return { installer, blockmap }
 }
 
-const [releaseDirArg, version] = process.argv.slice(2)
-if (!releaseDirArg || semver.valid(version) !== version) {
-  throw new Error('Usage: finalize-windows-release.mjs <release-dir> <semver>')
+const [releaseDirArg, version, appExecutableArg] = process.argv.slice(2)
+if (!releaseDirArg || semver.valid(version) !== version || !appExecutableArg) {
+  throw new Error(
+    'Usage: finalize-windows-release.mjs <release-dir> <semver> <app-executable>'
+  )
 }
 
-const result = await finalizeRelease(resolve(releaseDirArg), version)
+const result = await finalizeRelease(resolve(releaseDirArg), version, resolve(appExecutableArg))
 console.log(`Finalized Windows installer metadata for ${basename(result.installer)}.`)

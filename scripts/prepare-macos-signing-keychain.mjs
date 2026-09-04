@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { execFile as execFileCallback } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
+import { findDeveloperIdApplicationIdentity } from './macos-signing-identity.mjs'
 
 const execFile = promisify(execFileCallback)
 const developerIdG2CertificateUrl =
@@ -58,6 +59,7 @@ const runnerTemp = required('RUNNER_TEMP')
 const githubOutput = required('GITHUB_OUTPUT')
 const certificateSource = required('CSC_LINK')
 const certificatePassword = required('CSC_KEY_PASSWORD')
+const appleTeamId = required('APPLE_TEAM_ID')
 const token = randomBytes(12).toString('hex')
 const certificatePath = path.join(runnerTemp, `dsh-desktop-signing-${token}.p12`)
 const intermediateCertificatePath = path.join(
@@ -119,15 +121,16 @@ try {
   )
 
   const { stdout } = await security('find-identity', '-v', '-p', 'codesigning', keychainPath)
-  if (!/^\s*\d+\)/m.test(stdout)) {
-    throw new Error('No valid code-signing identity was imported into the temporary keychain')
+  const identity = findDeveloperIdApplicationIdentity(stdout, appleTeamId)
+  if (!identity) {
+    throw new Error(`Developer ID Application identity for Team ${appleTeamId} was not imported`)
   }
 
   await appendFile(
     githubOutput,
-    `keychain=${keychainPath}\ncertificate=${certificatePath}\nkeychain_list=${keychainListPath}\n`
+    `keychain=${keychainPath}\ncertificate=${certificatePath}\nkeychain_list=${keychainListPath}\nidentity=${identity}\n`
   )
-  console.log('Prepared temporary macOS signing keychain.')
+  console.log('Prepared temporary macOS signing keychain with a Developer ID Application identity.')
 } catch (error) {
   if (originalKeychains.length > 0) {
     await security('list-keychains', '-d', 'user', '-s', ...originalKeychains).catch(() => {})

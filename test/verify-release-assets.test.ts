@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createPeFixture, writeReleaseFixture } from './release-script-fixtures'
+import { writeReleaseFixture } from './release-script-fixtures'
 
 const temporaryDirectories: string[] = []
 
@@ -65,7 +65,7 @@ describe('complete release asset verifier', () => {
     expect(runVerify(version, '0.1.3').status).not.toBe(0)
   })
 
-  it('rejects unreadable ZIP central directories and non-x64 PE files', async () => {
+  it('rejects unreadable ZIP central directories and invalid Windows installers', async () => {
     const zip = await builtFixture()
     await writeFile(path.join(zip.releaseDir, 'insight-mac-arm64.zip'), 'not a zip')
     expect(runVerify(zip).status).not.toBe(0)
@@ -73,7 +73,7 @@ describe('complete release asset verifier', () => {
     const pe = await builtFixture()
     await writeFile(
       path.join(pe.releaseDir, 'insight-windows-x64-setup.exe'),
-      createPeFixture(0xaa64)
+      'not a Windows executable'
     )
     expect(runVerify(pe).status).not.toBe(0)
   })

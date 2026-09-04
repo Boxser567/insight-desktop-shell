@@ -427,6 +427,8 @@ describe('GitHub release contract', () => {
       expect(workflow).toContain(`secrets.${secret}`)
     }
     expect(workflow.match(/Prepare macOS signing keychain/g)).toHaveLength(2)
+    expect(workflow.match(/CSC_NAME: \$\{\{ steps\.signing_keychain\.outputs\.identity \}\}/g)).toHaveLength(2)
+    expect(workflow.match(/ulimit -n 10240/g)).toHaveLength(2)
     expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(4)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
     expect(workflow.match(/hdiutil verify/g)).toHaveLength(2)
@@ -450,6 +452,8 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('latest-mac-arm64.yml')
     expect(workflow).toContain('latest-mac-x64.yml')
     expect(workflow).toContain('finalize-windows-release.mjs')
+    expect(workflow).toContain('$PSNativeCommandUseErrorActionPreference = $true')
+    expect(workflow).toContain('$appExecutable')
     expect(workflow).toContain('7z t $installerPath')
     expect(workflow).toContain("Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml')")
   })

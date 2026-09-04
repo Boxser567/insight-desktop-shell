@@ -270,6 +270,9 @@ npm run package:mac:arm64
 | macOS DMG、ZIP 和 blockmap 已生成但缺少 `latest-mac.yml` | `publish: null` 或 `--publish never` 不保证 electron-builder 生成更新元数据；检查架构打包命令是否执行 `finalize-mac-release.mjs` | 阶段 7/9；根据最终 ZIP 重建并校验 YAML，不为生成元数据启用自动发布 |
 | Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
 | macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
+| macOS 签名时出现 `EMFILE: too many open files` | runner 的软文件句柄限制是否仍为默认低值；内置 Profile 的大量文件会放大递归签名并发 | 阶段 9；在两个 macOS 构建 Shell 内将 `ulimit -n` 提升到 `10240`，签名完成后仍执行完整 bundle 校验 |
+| electron-builder 选择 `Apple Development` 或找不到 `Developer ID Application` | `DESKTOP_CSC_LINK` 实际包含的证书类型、Team ID 和私钥是否匹配 | 阶段 9；导入临时钥匙串后、打包前必须精确找到目标 Team 的 `Developer ID Application` 并以哈希传给 `CSC_NAME`，不允许自动选择其他身份 |
+| Windows NSIS 已生成且 `7z t` 通过，但被判定“不是 x64” | 是否错误地把 NSIS 安装器外壳的 PE machine 当成应用架构 | 阶段 9；只校验安装器是有效 PE/NSIS，在 `win-unpacked` 中校验主程序为 x64，并让 PowerShell 对任何外部命令非零状态立即停止 |
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |

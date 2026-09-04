@@ -79,7 +79,9 @@ jobs:
           node --check scripts/build-update-release.mjs
           node --check scripts/finalize-mac-release.mjs
           node --check scripts/finalize-windows-release.mjs
+          node --check scripts/macos-signing-identity.mjs
           node --check scripts/merge-mac-update-metadata.mjs
+          node --check scripts/prepare-macos-signing-keychain.mjs
           node --check scripts/verify-release-assets.mjs
 
   macos-apple-silicon:
@@ -129,13 +131,16 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: node scripts/prepare-macos-signing-keychain.mjs
       - name: Build signed Apple Silicon package
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
+          CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
         run: |
           set -euo pipefail
+          ulimit -n 10240
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:arm64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
@@ -257,13 +262,16 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: node scripts/prepare-macos-signing-keychain.mjs
       - name: Build signed Intel package
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
+          CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
         run: |
           set -euo pipefail
+          ulimit -n 10240
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:x64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
@@ -357,16 +365,20 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
           RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           if ($env:RELEASE_CHANNEL -eq 'candidate') {
             npm run package:candidate:win
             $releaseDir = 'dist-candidate'
             $installer = 'insight-candidate-windows-x64-setup.exe'
+            $appExecutable = 'dist-candidate/win-unpacked/因赛AI Candidate.exe'
           } else {
             npm run package:win
             $releaseDir = 'dist'
             $installer = 'insight-windows-x64-setup.exe'
+            $appExecutable = 'dist/win-unpacked/因赛AI.exe'
           }
-          node scripts/finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION
+          node scripts/finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION $appExecutable
           $installerPath = Join-Path $releaseDir $installer
           7z t $installerPath
           if ($LASTEXITCODE -ne 0) { throw '7z rejected the Windows installer.' }

@@ -42,6 +42,21 @@ async function main() {
   ]) {
     requireText(job, 'needs: release-preflight', name)
   }
+  for (const [name, job] of [
+    ['macos-apple-silicon', appleSilicon],
+    ['macos-intel', intel]
+  ]) {
+    requireText(job, 'APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}', name)
+    requireText(job, 'CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}', name)
+    requireText(job, 'ulimit -n 10240', name)
+  }
+  requireText(windows, "$PSNativeCommandUseErrorActionPreference = $true", 'windows-x64')
+  requireText(windows, '$appExecutable', 'windows-x64')
+  requireText(
+    windows,
+    'finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION $appExecutable',
+    'windows-x64'
+  )
   requireText(publish, 'environment: desktop-release', 'Publish job')
   for (const dependency of [
     '- release-preflight',

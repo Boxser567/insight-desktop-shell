@@ -851,7 +851,7 @@ Publish Job：
 ### 9.5 验证与提交
 
 ```bash
-npx vitest run test/release-preflight.test.ts test/release-workflow-verifier.test.ts test/release.test.ts test/build-update-release.test.ts test/finalize-mac-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts
+npx vitest run test/release-preflight.test.ts test/release-workflow-verifier.test.ts test/macos-signing-identity.test.ts test/release.test.ts test/build-update-release.test.ts test/finalize-mac-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts
 npm run typecheck
 git diff --check
 ```

@@ -105,7 +105,7 @@ function verifyZipCentralDirectory(bytes, name) {
   }
 }
 
-function verifyWindowsExecutable(bytes, name) {
+function verifyWindowsInstaller(bytes, name) {
   if (bytes.length < 70 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) {
     throw new Error(`Windows installer has an invalid DOS header: ${name}`)
   }
@@ -116,9 +116,6 @@ function verifyWindowsExecutable(bytes, name) {
     bytes.readUInt32LE(peOffset) !== 0x00004550
   ) {
     throw new Error(`Windows installer has an invalid PE signature: ${name}`)
-  }
-  if (bytes.readUInt16LE(peOffset + 4) !== 0x8664) {
-    throw new Error(`Windows installer is not x64: ${name}`)
   }
 }
 
@@ -249,7 +246,7 @@ async function main() {
       throw new Error(`Release manifest does not match release asset: ${artifact.name}`)
     }
     if (artifact.kind === 'zip') verifyZipCentralDirectory(bytes, artifact.name)
-    if (artifact.kind === 'nsis') verifyWindowsExecutable(bytes, artifact.name)
+    if (artifact.kind === 'nsis') verifyWindowsInstaller(bytes, artifact.name)
   }
 
   await verifyUpdaterMetadata(releaseDir, manifest, definitions)
