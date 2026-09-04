@@ -267,7 +267,7 @@ npm run package:mac:arm64
 | Windows Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | 根 `optionalDependencies` 与 lockfile 的 Windows package 节点 | 阶段 2/9，修复后只跑 Windows |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
-| `xattr -d -r` 报 Runtime `.bin/node: No such file` | 先检查应用根目录的 quarantine 是否已删除，再检查 `.bin/node` 是否错误指向 CI runner 的绝对路径；同时确认包内真实 Node 文件存在 | 真实 Node 存在且应用可启动时可继续阶段 9 DEV 验证，但必须单独跟踪失效链接；真实 Node 缺失则退回阶段 6 |
+| codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | `iconutil` 对尺寸完整的 iconset 报 `Invalid Iconset` | 先用 `file`/`sips` 核对全部标准尺寸；若 `iconutil` 自己解包的 iconset 也无法重新封装，则属于宿主工具异常 | 阶段 2/7，使用仓库生成器直接写入标准 ICNS PNG entries，并以 `file`、`sips` 和品牌资产测试验证，不进入远程打包调试 |
 | DMG 成功、zip/blockmap 失败 | 独立分发格式与 artifact 命名，不先否定应用行为 | 阶段 7/9，格式问题单独跟踪 |

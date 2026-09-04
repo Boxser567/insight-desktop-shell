@@ -1,8 +1,11 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
-import { moveRuntimeDirectory } from '../scripts/prepare-core-runtime.mjs'
+import {
+  moveRuntimeDirectory,
+  removeInvalidBundledNodeShim
+} from '../scripts/prepare-core-runtime.mjs'
 
 const directories = []
 
@@ -27,5 +30,23 @@ describe('Core Runtime preparation', () => {
     })
 
     await expect(readFile(join(destination, 'runtime.json'), 'utf8')).resolves.toBe('{"schemaVersion":1}\n')
+  })
+
+  it('removes host-bound Node shims while preserving a valid relative shim', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-test-'))
+    directories.push(directory)
+    const bin = join(directory, 'node_modules', '.bin')
+    const node = join(directory, 'node_modules', 'node', 'bin', 'node')
+    await mkdir(bin, { recursive: true })
+    await mkdir(join(directory, 'node_modules', 'node', 'bin'), { recursive: true })
+    await writeFile(node, 'node')
+
+    await symlink('/Users/runner/work/core/runtime/node', join(bin, 'node'))
+    await expect(removeInvalidBundledNodeShim(directory, 'darwin')).resolves.toBe(true)
+    await expect(readFile(join(bin, 'node'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await symlink('../node/bin/node', join(bin, 'node'))
+    await expect(removeInvalidBundledNodeShim(directory, 'darwin')).resolves.toBe(false)
+    await expect(readFile(join(bin, 'node'), 'utf8')).resolves.toBe('node')
   })
 })
