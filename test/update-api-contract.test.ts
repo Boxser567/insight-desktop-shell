@@ -6,6 +6,7 @@ function windowStub() {
   const mainFrame = {}
   return {
     isDestroyed: () => false,
+    close: vi.fn(),
     webContents: { mainFrame, send: vi.fn() }
   }
 }
@@ -84,6 +85,7 @@ describe('desktop update IPC', () => {
     expect(fixture.manager.download).toHaveBeenCalledOnce()
     expect(fixture.manager.install).toHaveBeenCalledOnce()
     expect(fixture.manager.skip).toHaveBeenCalledWith('1.1.0')
+    expect(fixture.update.close).toHaveBeenCalledOnce()
   })
 
   it('rejects untrusted senders and non-main frames for every mutation', async () => {

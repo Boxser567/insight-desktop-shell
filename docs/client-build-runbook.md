@@ -157,6 +157,8 @@ node --version
 npm exec electron-vite -- dev
 ```
 
+退出时使用 `Ctrl+C`，并确认 Electron 与 Vite 一同结束、开发端口已经释放。macOS 上为读取 `.zprofile` 和 `.zshrc` 启动的交互式 Shell 必须位于独立进程会话；否则它退出后可能把终端前台进程组留在失效 PID，表现为终端只打印 `^C` 而 Dev 客户端继续运行。
+
 先构建成本较低的目录应用：
 
 ```bash
@@ -271,7 +273,9 @@ npm run package:mac:arm64
 | DMG 成功、zip/blockmap 失败 | 独立分发格式与 artifact 命名，不先否定应用行为 | 阶段 7/9，格式问题单独跟踪 |
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |
 | pnpm 非 TTY 清理、OOM 或下载失败 | Node/pnpm 版本、store、`CI=1`、并发和网络 | 阶段 3/6，不进入 builder |
+| `npm test` 的发布说明测试报 `spawnSync python3 ENOEXEC` | `command -v python3`、`file "$(command -v python3)"`；检查 PATH 首项是否为空文件或损坏的 Homebrew shim | 阶段 2；改用可执行的系统 Python 或修复本机 shim，不修改测试来掩盖宿主环境故障 |
 | Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version`；普通 build 成功不能证明 Vite 7 DEV 可启动 | 阶段 7，切换到 Node 22 后重启，不改产品代码 |
+| Dev 终端按 `Ctrl+C` 只打印 `^C`，客户端或 5173 端口仍存活 | 比较 Dev 进程 `PGID/TPGID`；检查交互式登录 Shell 是否夺走终端控制权，以及 Development 主进程是否处理 `SIGINT/SIGTERM` | 阶段 7；禁止带残留进程继续下一轮验证，先恢复进程组与优雅退出链路 |
 | `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |

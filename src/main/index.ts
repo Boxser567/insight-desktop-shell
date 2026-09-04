@@ -221,6 +221,13 @@ function isDevelopmentBuild(): boolean {
 
 const developmentBuild = isDevelopmentBuild()
 
+if (developmentBuild) {
+  // Electron does not exit on terminal signals by default. Let Ctrl+C and
+  // process supervisors use the same graceful shutdown path as app.quit().
+  process.once('SIGINT', () => app.quit())
+  process.once('SIGTERM', () => app.quit())
+}
+
 function insightRoot(): string {
   return insightDataPath(app.getPath('userData'))
 }

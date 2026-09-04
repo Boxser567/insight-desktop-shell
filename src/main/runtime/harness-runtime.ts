@@ -1,4 +1,9 @@
-import { execFileSync, type SpawnOptionsWithoutStdio } from 'node:child_process'
+import {
+  execFileSync,
+  spawnSync,
+  type SpawnOptionsWithoutStdio,
+  type SpawnSyncOptionsWithStringEncoding
+} from 'node:child_process'
 import type { EventEmitter } from 'node:events'
 import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
@@ -98,12 +103,21 @@ export function resolveShellEnvironment(): NodeJS.ProcessEnv {
       // (Homebrew, OrbStack) and .zshrc (mise shims, ~/.local/bin, cargo,
       // go, etc.) are sourced.  stderr is ignored to suppress prompt noise.
       const shell = process.env.SHELL ?? '/bin/sh'
-      const output = execFileSync(shell, ['-l', '-i', '-c', 'env'], {
+      const options: SpawnSyncOptionsWithStringEncoding & { detached: true } = {
         encoding: 'utf8',
         timeout: 10_000,
-        stdio: ['ignore', 'pipe', 'ignore']
-      })
-      resolvedShellEnvironment = parseEnvOutput(output, /\n/)
+        stdio: ['ignore', 'pipe', 'ignore'],
+        // An interactive shell creates its own process group. Without a
+        // detached session it becomes the terminal's foreground group and
+        // leaves Ctrl+C disconnected from the Electron dev process on exit.
+        detached: true
+      }
+      const result = spawnSync(shell, ['-l', '-i', '-c', 'env'], options)
+      if (result.error) throw result.error
+      if (result.status !== 0) {
+        throw new Error(`Login shell exited with status ${String(result.status)}.`)
+      }
+      resolvedShellEnvironment = parseEnvOutput(result.stdout, /\n/)
     }
   } catch {
     // Shell capture failed — stay silent and keep the inherited environment.

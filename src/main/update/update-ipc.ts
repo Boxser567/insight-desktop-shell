@@ -8,6 +8,7 @@ interface TrustedWebContents {
 
 interface TrustedWindow {
   isDestroyed(): boolean
+  close(): void
   webContents: TrustedWebContents
 }
 
@@ -72,6 +73,8 @@ export function registerUpdateIpc(input: {
       throw new Error('更新版本必须是非空字符串。')
     }
     await input.manager.skip(version)
+    const window = input.updateWindow()
+    if (window && !window.isDestroyed()) window.close()
   })
   input.ipcMain.handle('updates:quit', async (event) => {
     assertUpdateWindowSender(event, input.updateWindow())

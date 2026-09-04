@@ -162,6 +162,9 @@ export class UpdateManager {
       }
       return Promise.resolve()
     }
+    if (!manual && ['checking', 'downloading', 'downloaded', 'installing'].includes(this.statusValue.phase)) {
+      return Promise.resolve()
+    }
     return this.run(() => this.performCheck(manual))
   }
 
