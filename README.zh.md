@@ -35,6 +35,6 @@ npm run package:win
 
 每个目标必须在匹配的操作系统和架构上构建。Windows 安装包由 GitHub Actions 的 `windows-2022` Runner 构建。
 
-## 同步上游
+## 参考上游
 
-本仓库定期合并 `dataelement/dsh-desktop`。解决冲突时必须保留独立 Core Runtime 与内置 Profile，不得恢复已不再由锁定 Core 制品使用的 registry DSH 依赖或补丁文件。
+本仓库将 `dataelement/dsh-desktop` 作为参考上游。上游变更按 Commit 范围审计并定向采用，整体仓库合并不再是常规升级路径。每次采用都必须保留独立锁定的 Core Runtime、内置 Profile、产品身份、账号隔离和第一方集成。审计记录见[上游接收规范](docs/upstream-intake.md)。

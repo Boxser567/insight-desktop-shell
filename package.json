@@ -5,16 +5,15 @@
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
-  "author": "DataElement",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dataelement/dsh-desktop.git"
+    "url": "git+https://github.com/Boxser567/insight-desktop-shell.git"
   },
   "bugs": {
-    "url": "https://github.com/dataelement/dsh-desktop/issues"
+    "url": "https://github.com/Boxser567/insight-desktop-shell/issues"
   },
-  "homepage": "https://github.com/dataelement/dsh-desktop#readme",
+  "homepage": "https://github.com/Boxser567/insight-desktop-shell#readme",
   "keywords": [
     "deepseek",
     "harness",

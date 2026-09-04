@@ -11,6 +11,28 @@ const releaseAssets = [
 ]
 
 describe('GitHub release contract', () => {
+  it('uses the Insight repository identity without inheriting the reference upstream author', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as {
+      author?: string
+      repository?: { url?: string }
+      bugs?: { url?: string }
+      homepage?: string
+    }
+
+    expect(packageJson.repository?.url).toBe(
+      'git+https://github.com/Boxser567/insight-desktop-shell.git'
+    )
+    expect(packageJson.bugs?.url).toBe(
+      'https://github.com/Boxser567/insight-desktop-shell/issues'
+    )
+    expect(packageJson.homepage).toBe(
+      'https://github.com/Boxser567/insight-desktop-shell#readme'
+    )
+    expect(packageJson.author).toBeUndefined()
+  })
+
   it('keeps the package and lockfile versions aligned', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')

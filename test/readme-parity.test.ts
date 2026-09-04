@@ -49,4 +49,18 @@ describe('localized README parity', () => {
     expect(existsSync('docs/preset-square-mvp.md')).toBe(false)
     expect(existsSync('docs/windows-profile-repair.md')).toBe(false)
   })
+
+  it('documents reference upstream review instead of periodic whole-repository merges', () => {
+    const readme = readFileSync('README.md', 'utf8')
+    const localizedReadme = readFileSync('README.zh.md', 'utf8')
+    const intake = readFileSync('docs/upstream-intake.md', 'utf8')
+
+    expect(readme).toContain('reference upstream')
+    expect(readme).toContain('selective adoption')
+    expect(intake).toContain('upstream commit range')
+    expect(localizedReadme).toContain('参考上游')
+    expect(localizedReadme).toContain('定向采用')
+    expect(`${readme}\n${localizedReadme}`).not.toContain('periodically merges')
+    expect(localizedReadme).not.toContain('定期合并')
+  })
 })

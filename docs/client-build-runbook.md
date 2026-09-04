@@ -29,11 +29,11 @@
 | 默认 Profile 或 Better Sidebar | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
-| upstream Shell 合并 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
+| upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
 
-upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项被 upstream 覆盖都先恢复并测试，再进入打包。
+upstream Shell 变更的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项会被候选变更覆盖，都先完成本地适配并测试，再进入打包。
 
-Core Runtime 锁更新和 Shell upstream 合并必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
+Core Runtime 锁更新和 Shell upstream 定向采用必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
 
 Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行为，不能替代阶段 3–5 的 Core 源码证明、原生 Runtime Release 和锁更新。覆盖验证通过后，正式收口必须关闭 watcher、从新目录重新准备锁定 Runtime/Profile，并确认没有源码软链接、本机绝对路径或 DEV 状态文件，再继续阶段 6。
 
@@ -48,7 +48,7 @@ Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行
 - 查看 `git status --short --branch`、目标提交范围和相关 diff。
 - 记录 Shell commit、`core-runtime.lock.json` 的 tag/commit/平台哈希、Node/pnpm 版本和构建目标。
 - 区分用户修改、构建输出、缓存和本轮允许修改的文件；不得为获得“干净工作树”清理不属于本轮的内容。
-- upstream 合并按上一节审计产品约束，并核对单侧栏设计中的升级决策矩阵。
+- upstream 变更按 [上游接收规范](upstream-intake.md) 审计，并核对单侧栏设计中的升级决策矩阵。
 
 **通过条件：** 变更类别、验证起点、必需平台、应用身份和用户数据目录均已明确，未跟踪文件所有权清楚。
 
