@@ -132,7 +132,15 @@ npm run prepare:bundled-profile
 
 `npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1` 和模板版本要求的 Profile，避免无意义地重新安装。
 
-**通过条件：** 测试、类型检查和普通 build 均通过，生成的 manifest/Runtime/Profile 与锁和默认插件版本一致。
+Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
+
+```bash
+rg -n 'require\(.+\./chunks/' out/preload/*.cjs
+```
+
+预期无输出。多个 preload 复用同一个运行时 helper 时，Rollup 可能生成共享 `chunks/*.cjs`；Electron sandbox preload 无法加载该相对模块，随后会同时出现 preload 加载失败、桥接 API 为 `undefined`、账号入口消失或辅助窗口空白。跨 preload 只共享会在编译后擦除的 TypeScript 类型；少量运行时 IPC bridge 保持在各自入口内，并由契约测试校验一致性。
+
+**通过条件：** 测试、类型检查和普通 build 均通过，生成的 manifest/Runtime/Profile 与锁和默认插件版本一致；所有 sandbox preload 均不依赖相对共享 chunk。
 
 **失败时：** 不生成 DMG、zip、NSIS，也不触发 GitHub installer。按失败属于测试、Runtime 下载、Profile 或 Electron build 回到相应阶段。
 
@@ -264,6 +272,7 @@ npm run package:mac:arm64
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |
 | pnpm 非 TTY 清理、OOM 或下载失败 | Node/pnpm 版本、store、`CI=1`、并发和网络 | 阶段 3/6，不进入 builder |
 | Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version`；普通 build 成功不能证明 Vite 7 DEV 可启动 | 阶段 7，切换到 Node 22 后重启，不改产品代码 |
+| `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |
 
