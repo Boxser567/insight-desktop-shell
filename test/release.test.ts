@@ -198,18 +198,28 @@ describe('GitHub release contract', () => {
     expect(main).toContain('logs: [...rendererPluginFailureLogs]')
   })
 
-  it('does not configure automatic updates', async () => {
+  it('configures GitHub updates without allowing local package commands to publish', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as {
       dependencies: Record<string, string>
+      scripts: Record<string, string>
       build: {
-        publish?: unknown
+        publish?: Array<{ provider: string; owner: string; repo: string }>
+        detectUpdateChannel?: boolean
         win: { verifyUpdateCodeSignature: boolean }
       }
     }
-    expect(packageJson.dependencies['electron-updater']).toBeUndefined()
-    expect(packageJson.build.publish).toBeUndefined()
+    expect(packageJson.dependencies['electron-updater']).toBe('^6.8.9')
+    expect(packageJson.build.publish).toEqual([{
+      provider: 'github',
+      owner: 'Boxser567',
+      repo: 'insight-desktop-shell'
+    }])
+    expect(packageJson.build.detectUpdateChannel).toBe(false)
+    for (const [name, command] of Object.entries(packageJson.scripts)) {
+      if (name.startsWith('package:')) expect(command).toContain('--publish never')
+    }
     expect(packageJson.build.win.verifyUpdateCodeSignature).toBe(false)
   })
 

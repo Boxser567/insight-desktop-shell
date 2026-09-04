@@ -36,7 +36,7 @@ describe('authenticated workspace lifecycle', () => {
     await lifecycle.apply({ kind: 'expired' })
 
     expect(runtime.start).not.toHaveBeenCalled()
-    expect(runtime.stop).toHaveBeenCalledTimes(3)
+    expect(runtime.stop).not.toHaveBeenCalled()
   })
 
   it('starts once for repeated authenticated events from the same account', async () => {
@@ -89,6 +89,56 @@ describe('authenticated workspace lifecycle', () => {
     await Promise.all([start, revoke])
 
     expect(runtime.stop).toHaveBeenCalled()
+    expect(lifecycle.activeScope()).toBeUndefined()
+  })
+
+  it('queues an explicit stop behind an in-flight start and stops only once', async () => {
+    let finishStart: (() => void) | undefined
+    const order: string[] = []
+    const runtime: WorkspaceDriver = {
+      start: vi.fn(() => new Promise<void>((resolve) => {
+        order.push('start')
+        finishStart = resolve
+      })),
+      stop: vi.fn(async () => {
+        order.push('stop')
+      })
+    }
+    const lifecycle = new WorkspaceLifecycle(runtime)
+
+    const start = lifecycle.apply(authenticated, alice)
+    await Promise.resolve()
+    const stop = lifecycle.stop()
+    finishStart?.()
+    await Promise.all([start, stop])
+
+    expect(order).toEqual(['start', 'stop'])
+    expect(lifecycle.activeScope()).toBeUndefined()
+  })
+
+  it('prevents a queued account switch from starting after an explicit stop', async () => {
+    const runtime = driver()
+    const lifecycle = new WorkspaceLifecycle(runtime)
+    await lifecycle.apply(authenticated, alice)
+
+    const switchAccount = lifecycle.apply(authenticated, bob)
+    const stop = lifecycle.stop()
+    await Promise.all([switchAccount, stop])
+
+    expect(runtime.start).toHaveBeenCalledTimes(1)
+    expect(runtime.stop).toHaveBeenCalledOnce()
+    expect(lifecycle.activeScope()).toBeUndefined()
+  })
+
+  it('clears the active scope even when the driver cannot stop cleanly', async () => {
+    const runtime = driver()
+    vi.mocked(runtime.stop).mockRejectedValueOnce(new Error('stop failed'))
+    const lifecycle = new WorkspaceLifecycle(runtime)
+    await lifecycle.apply(authenticated, alice)
+
+    await expect(lifecycle.stop()).rejects.toThrow('stop failed')
+
+    expect(runtime.stop).toHaveBeenCalledOnce()
     expect(lifecycle.activeScope()).toBeUndefined()
   })
 

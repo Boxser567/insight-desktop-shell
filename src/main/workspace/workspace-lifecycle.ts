@@ -31,22 +31,28 @@ export class WorkspaceLifecycle {
     return operation
   }
 
+  stop(): Promise<void> {
+    ++this.revision
+    const operation = this.queue.then(() => this.stopActive())
+    this.queue = operation.catch(() => undefined)
+    return operation
+  }
+
   private async applyNext(
     revision: number,
     view: SessionView,
     account?: WorkspaceAccount
   ): Promise<void> {
+    if (revision !== this.revision) return
     if (view.kind !== 'authenticated') {
-      await this.driver.stop()
-      this.scope = undefined
+      await this.stopActive()
       return
     }
     if (!account) throw new Error('An authenticated session requires a workspace account.')
     if (this.scope === account.scope) return
 
     if (this.scope !== undefined) {
-      await this.driver.stop()
-      this.scope = undefined
+      await this.stopActive()
     }
 
     await this.driver.start(account)
@@ -55,5 +61,11 @@ export class WorkspaceLifecycle {
       return
     }
     this.scope = account.scope
+  }
+
+  private async stopActive(): Promise<void> {
+    if (this.scope === undefined) return
+    this.scope = undefined
+    await this.driver.stop()
   }
 }

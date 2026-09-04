@@ -6,6 +6,8 @@ import type {
 
 export interface ResolvedRelease {
   manifest: SignedReleaseManifest
+  manifestBytes: Uint8Array
+  signatureBytes: Uint8Array
   artifactUrls: ReadonlyMap<string, URL>
 }
 

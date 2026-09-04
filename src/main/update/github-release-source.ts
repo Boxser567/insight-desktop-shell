@@ -80,7 +80,7 @@ export class GitHubReleaseSource implements UpdateSource {
       artifactUrls.set(artifact.name, trustedAssetUrl(releaseAsset.browserDownloadUrl))
     }
 
-    return { manifest, artifactUrls }
+    return { manifest, manifestBytes, signatureBytes, artifactUrls }
   }
 
   async #listReleases(): Promise<GitHubRelease[]> {

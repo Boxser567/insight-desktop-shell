@@ -36,8 +36,8 @@
     "typecheck:desktop-integration": "tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir",
-    "package:dev:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --config electron-builder.dev.cjs",
+    "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never",
+    "package:dev:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never --config electron-builder.dev.cjs",
     "package:dev:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --arm64 --publish never --config electron-builder.dev.cjs && electron-builder --mac zip --arm64 --publish never --config electron-builder.dev.cjs",
     "package:dev:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --x64 --publish never --config electron-builder.dev.cjs && electron-builder --mac zip --x64 --publish never --config electron-builder.dev.cjs",
     "package:dev:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.dev.cjs",
@@ -47,6 +47,7 @@
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "qrcode": "^1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -92,6 +93,14 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Boxser567",
+        "repo": "insight-desktop-shell"
+      }
+    ],
+    "detectUpdateChannel": false,
     "files": [
       "out/**/*",
       "node_modules/**/*",
