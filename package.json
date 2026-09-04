@@ -49,13 +49,16 @@
   "dependencies": {
     "qrcode": "^1.5.4",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "semver": "^7.8.5",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "@types/semver": "^7.8.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
