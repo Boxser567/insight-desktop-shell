@@ -3,6 +3,20 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('Shell preload contract', () => {
+  it('keeps update IPC code inside each sandboxed preload bundle', async () => {
+    for (const entry of ['shell.ts', 'harness.ts', 'update.ts']) {
+      const source = await readFile(
+        join(import.meta.dirname, '..', 'src', 'preload', entry),
+        'utf8'
+      )
+
+      expect(source).not.toContain("from './update-api'")
+      expect(source).toContain("ipcRenderer.invoke('updates:status')")
+      expect(source).toContain("ipcRenderer.on('updates:status-changed', handler)")
+      expect(source).toContain("ipcRenderer.removeListener('updates:status-changed', handler)")
+    }
+  })
+
   it('exposes only session commands to the unauthenticated Shell renderer', async () => {
     const source = await readFile(
       join(import.meta.dirname, '..', 'src', 'preload', 'shell.ts'),
@@ -35,12 +49,8 @@ describe('Shell preload contract', () => {
     expect(source).toContain("exposeInMainWorld('insightDesktopUpdates'")
     expect(source).toContain("ipcRenderer.invoke('updates:quit'")
     expect(source).not.toMatch(/shell\.openExternal|node:fs|node:path/)
-    const base = await readFile(
-      join(import.meta.dirname, '..', 'src', 'preload', 'update-api.ts'),
-      'utf8'
-    )
-    expect(base).toContain("ipcRenderer.on('updates:status-changed', handler)")
-    expect(base).toContain("ipcRenderer.removeListener('updates:status-changed', handler)")
+    expect(source).toContain("ipcRenderer.on('updates:status-changed', handler)")
+    expect(source).toContain("ipcRenderer.removeListener('updates:status-changed', handler)")
   })
 
   it('keeps authenticated navigation and settings out of the Shell renderer', async () => {
