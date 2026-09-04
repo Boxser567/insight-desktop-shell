@@ -84,8 +84,10 @@ describe('GitHub release contract', () => {
     ) as { packages: Record<string, { version?: string }> }
 
     expect(packageJson.optionalDependencies?.['@rollup/rollup-darwin-x64']).toBe('4.62.4')
+    expect(packageJson.optionalDependencies?.['@rollup/rollup-linux-x64-gnu']).toBe('4.62.4')
     expect(packageJson.optionalDependencies?.['@rollup/rollup-win32-x64-msvc']).toBe('4.62.4')
     expect(packageLock.packages['node_modules/@rollup/rollup-darwin-x64']?.version).toBe('4.62.4')
+    expect(packageLock.packages['node_modules/@rollup/rollup-linux-x64-gnu']?.version).toBe('4.62.4')
     expect(packageLock.packages['node_modules/@rollup/rollup-win32-x64-msvc']?.version).toBe('4.62.4')
   })
 
