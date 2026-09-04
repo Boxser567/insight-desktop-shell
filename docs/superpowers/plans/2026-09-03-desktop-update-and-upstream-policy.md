@@ -778,7 +778,7 @@ git commit -m "build(update): isolate desktop release channels"
 
 ## 任务 9：围绕 Windows 未签名包重建 GitHub Release Workflow
 
-**涉及文件：** `.github/workflows/release.yml`、`test/release.test.ts`、`docs/client-build-runbook.md`。
+**涉及文件：** `.github/workflows/release.yml`、`scripts/verify-release-preflight.mjs`、`test/release-preflight.test.ts`、`test/release.test.ts`、`docs/client-build-runbook.md`。
 
 ### 9.1 增加低成本 release-preflight
 
@@ -851,7 +851,7 @@ Publish Job：
 ### 9.5 验证与提交
 
 ```bash
-npx vitest run test/release.test.ts test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts
+npx vitest run test/release-preflight.test.ts test/release.test.ts test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts
 npm run typecheck
 git diff --check
 ```

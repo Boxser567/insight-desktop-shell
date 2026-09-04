@@ -6,8 +6,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createPeFixture } from './release-script-fixtures'
 
-describe('signed Windows release finalizer', () => {
-  it('rebuilds the blockmap and updater metadata after signing', async () => {
+describe('Windows release finalizer', () => {
+  it('rebuilds the blockmap and updater metadata for the final installer', async () => {
     const releaseDir = await mkdtemp(path.join(tmpdir(), 'dsh-windows-release-'))
     try {
       const installerName = 'dsh-desktop-windows-x64-setup.exe'

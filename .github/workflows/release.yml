@@ -4,118 +4,89 @@ on:
   push:
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      target:
-        description: Platform to build
-        required: false
-        default: all
-        type: choice
-        options:
-          - all
-          - windows
-          - macos
-          - apple-signing-preflight
-          - macos-arm64-signed
-      windows_prerelease_tag:
-        description: Optional non-v tag for a Windows Dev pre-release
-        required: false
+      candidate_tag:
+        description: Candidate tag, for example v0.1.2-rc.1
+        required: true
         type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: desktop-release-${{ github.ref }}
+  group: desktop-release-${{ github.event_name == 'workflow_dispatch' && inputs.candidate_tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  apple-signing-preflight:
-    name: Apple signing credentials preflight
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'apple-signing-preflight'
-    runs-on: macos-15
+  release-preflight:
+    name: Release preflight
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
+      runtime_tag: ${{ steps.release.outputs.runtime_tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate Apple release secrets
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate release identity, policy, and Runtime lock
+        id: release
+        shell: bash
         env:
-          CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_CONTENT: ${{ secrets.DESKTOP_APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
-          APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
         run: |
-          required=(CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID)
-          for name in "${required[@]}"; do
-            test -n "${!name}" || { echo "::error::Missing required secret: $name"; exit 1; }
-          done
-      - name: Prepare Apple notarization key
-        env:
-          APPLE_API_KEY_CONTENT: ${{ secrets.DESKTOP_APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
-          APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
-        run: |
-          key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s' "$APPLE_API_KEY_CONTENT" > "$key_path"
-          chmod 600 "$key_path"
-          echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
-          echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
-          echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
-          echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
-      - name: Prepare preflight signing keychain
-        id: preflight_keychain
-        env:
-          CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
-        run: node scripts/prepare-macos-signing-keychain.mjs
-      - name: Verify Developer ID identity and Notary Service access
-        env:
-          CSC_KEYCHAIN: ${{ steps.preflight_keychain.outputs.keychain }}
-        run: |
-          identity_output="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN")"
-          [[ "$identity_output" == *"Developer ID Application"* ]] || {
-            echo "::error::Developer ID Application identity not found"
-            exit 1
-          }
-          [[ "$identity_output" == *"($APPLE_TEAM_ID)"* ]] || {
-            echo "::error::Developer ID Application Team ID does not match DESKTOP_APPLE_TEAM_ID"
-            exit 1
-          }
-          xcrun notarytool history \
-            --key "$APPLE_API_KEY" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --issuer "$APPLE_API_ISSUER"
-      - name: Remove preflight signing files
-        if: always()
-        env:
-          SIGNING_KEYCHAIN: ${{ steps.preflight_keychain.outputs.keychain }}
-          SIGNING_CERTIFICATE: ${{ steps.preflight_keychain.outputs.certificate }}
-          SIGNING_KEYCHAIN_LIST: ${{ steps.preflight_keychain.outputs.keychain_list }}
-        run: |
-          if [ -n "$SIGNING_KEYCHAIN_LIST" ] && [ -f "$SIGNING_KEYCHAIN_LIST" ]; then
-            keychains=()
-            while IFS= read -r keychain; do
-              test -z "$keychain" || keychains+=("$keychain")
-            done < "$SIGNING_KEYCHAIN_LIST"
-            security list-keychains -d user -s "${keychains[@]}"
-            rm -f "$SIGNING_KEYCHAIN_LIST"
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ]; then
+            release_tag="$CANDIDATE_TAG"
+            expected_channel='candidate'
+            if git rev-parse --verify --quiet "refs/tags/$release_tag" >/dev/null; then
+              echo "::error::Candidate tag $release_tag already exists; choose a new version."
+              exit 1
+            fi
+          else
+            release_tag="$GITHUB_REF_NAME"
+            expected_channel='stable'
           fi
-          test -z "$SIGNING_KEYCHAIN" || security delete-keychain "$SIGNING_KEYCHAIN" || rm -f "$SIGNING_KEYCHAIN"
-          test -z "$SIGNING_CERTIFICATE" || rm -f "$SIGNING_CERTIFICATE"
-          test -z "$APPLE_API_KEY" || rm -f "$APPLE_API_KEY"
+          node scripts/verify-release-preflight.mjs \
+            --tag "$release_tag" \
+            --expected-channel "$expected_channel" \
+            --package package.json \
+            --policy build/update-release-policy.json \
+            --runtime-lock core-runtime.lock.json \
+            > "$RUNNER_TEMP/release-preflight.json"
+          cat "$RUNNER_TEMP/release-preflight.json"
+          node --input-type=module - "$RUNNER_TEMP/release-preflight.json" "$GITHUB_OUTPUT" <<'NODE'
+          import { appendFile, readFile } from 'node:fs/promises'
+          const [input, output] = process.argv.slice(2)
+          const release = JSON.parse(await readFile(input, 'utf8'))
+          await appendFile(output, [
+            `tag=${release.tag}`,
+            `version=${release.version}`,
+            `channel=${release.channel}`,
+            `runtime_tag=${release.runtimeTag}`,
+            ''
+          ].join('\n'))
+          NODE
+      - name: Run release configuration tests
+        run: >-
+          npx vitest run
+          test/release-preflight.test.ts
+          test/build-update-release.test.ts
+          test/merge-mac-update-metadata.test.ts
+          test/verify-release-assets.test.ts
+          test/finalize-windows-release.test.ts
+          test/release.test.ts
 
   macos-apple-silicon:
     name: macOS Apple Silicon
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'macos' || inputs.target == 'macos-arm64-signed'))
+    needs: release-preflight
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -125,16 +96,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Set app version from release tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm version --no-git-tag-version --allow-same-version "${{ github.ref_name }}"
       - run: npm ci
-      - run: npm test
-      - run: npm run typecheck
       - name: Validate Apple release secrets
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
@@ -143,58 +106,57 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: |
+          set -euo pipefail
           required=(CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID)
           for name in "${required[@]}"; do
             test -n "${!name}" || { echo "::error::Missing required secret: $name"; exit 1; }
           done
       - name: Prepare Apple notarization key
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.DESKTOP_APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: |
+          set -euo pipefail
           key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          umask 077
           printf '%s' "$APPLE_API_KEY_CONTENT" > "$key_path"
-          chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
           echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
           echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
       - name: Prepare macOS signing keychain
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
         id: signing_keychain
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
         run: node scripts/prepare-macos-signing-keychain.mjs
       - name: Build signed Apple Silicon package
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
-        run: npm run package:mac:arm64
-      - name: Build isolated Apple Silicon development package
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.target != 'macos-arm64-signed' }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run package:dev:mac:arm64
+          RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
+            npm run package:candidate:mac:arm64
+            echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist-candidate/mac-arm64/因赛AI Candidate.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-candidate-mac-arm64' >> "$GITHUB_ENV"
+          else
+            npm run package:mac:arm64
+            echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist/mac-arm64/因赛AI.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-mac-arm64' >> "$GITHUB_ENV"
+          fi
       - name: Sign, notarize, and staple Apple Silicon DMG
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
         run: |
-          dmg_path="dist/insight-mac-arm64.dmg"
-          identity="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" | awk '/Developer ID Application/ { print $2; exit }')"
-          test -n "$identity" || { echo "::error::Developer ID Application identity not found"; exit 1; }
+          set -euo pipefail
+          dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
+          identity="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" | awk -v team="$APPLE_TEAM_ID" '$0 ~ /Developer ID Application/ && $0 ~ "\\(" team "\\)" { print $2; exit }')"
+          test -n "$identity" || { echo "::error::Developer ID Application identity for Team $APPLE_TEAM_ID not found"; exit 1; }
           codesign --keychain "$CSC_KEYCHAIN" --sign "$identity" --timestamp --force "$dmg_path"
           xcrun notarytool submit "$dmg_path" \
             --key "$APPLE_API_KEY" \
@@ -203,11 +165,36 @@ jobs:
             --wait \
             --no-s3-acceleration
           xcrun stapler staple "$dmg_path"
-      - name: Remove temporary signing keychain
-        if: >-
-          always() &&
-          (startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed'))
+      - name: Verify Apple Silicon release inputs
+        run: |
+          set -euo pipefail
+          dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
+          zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
+          spctl --assess --type execute --verbose=4 "$RELEASE_APP"
+          xcrun stapler validate "$RELEASE_APP"
+          codesign --verify --verbose=2 "$dmg_path"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+          hdiutil verify "$dmg_path"
+          unzip -t "$zip_path"
+          test -s "$zip_path.blockmap"
+          test -s "$RELEASE_DIR/latest-mac.yml"
+      - name: Collect Apple Silicon release inputs
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.dmg" release-assets/
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.zip" release-assets/
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.zip.blockmap" release-assets/
+          cp "$RELEASE_DIR/latest-mac.yml" release-assets/latest-mac-arm64.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-apple-silicon
+          path: release-assets/
+          if-no-files-found: error
+      - name: Remove Apple signing files
+        if: always()
         env:
           SIGNING_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
           SIGNING_CERTIFICATE: ${{ steps.signing_keychain.outputs.certificate }}
@@ -223,49 +210,11 @@ jobs:
           fi
           test -z "$SIGNING_KEYCHAIN" || security delete-keychain "$SIGNING_KEYCHAIN" || rm -f "$SIGNING_KEYCHAIN"
           test -z "$SIGNING_CERTIFICATE" || rm -f "$SIGNING_CERTIFICATE"
-          test -z "$APPLE_API_KEY" || rm -f "$APPLE_API_KEY"
-      - name: Verify signed and notarized Apple Silicon app
-        if: >-
-          startsWith(github.ref, 'refs/tags/v') ||
-          (github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed')
-        run: |
-          app_path="dist/mac-arm64/因赛AI.app"
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
-          xcrun stapler validate "$app_path"
-          codesign --verify --verbose=2 dist/insight-mac-arm64.dmg
-          spctl --assess --type open --context context:primary-signature --verbose=4 dist/insight-mac-arm64.dmg
-          xcrun stapler validate dist/insight-mac-arm64.dmg
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: macos-apple-silicon
-          path: |
-            dist/insight-mac-arm64.dmg
-            dist/insight-mac-arm64.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64-signed'
-        with:
-          name: macos-apple-silicon-signed-candidate
-          path: |
-            dist/insight-mac-arm64.dmg
-            dist/insight-mac-arm64.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.target != 'macos-arm64-signed' }}
-        with:
-          name: macos-apple-silicon-dev
-          path: |
-            dist-dev/insight-dev-mac-arm64.dmg
-            dist-dev/insight-dev-mac-arm64.zip
-          if-no-files-found: error
+          test -z "${APPLE_API_KEY:-}" || rm -f "$APPLE_API_KEY"
 
   macos-intel:
     name: macOS Intel
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'macos'))
+    needs: release-preflight
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
@@ -275,14 +224,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Set app version from release tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm version --no-git-tag-version --allow-same-version "${{ github.ref_name }}"
       - run: npm ci
-      - run: npm test
-      - run: npm run typecheck
       - name: Validate Apple release secrets
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
@@ -291,50 +234,57 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: |
+          set -euo pipefail
           required=(CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID)
           for name in "${required[@]}"; do
             test -n "${!name}" || { echo "::error::Missing required secret: $name"; exit 1; }
           done
       - name: Prepare Apple notarization key
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.DESKTOP_APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
         run: |
+          set -euo pipefail
           key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          umask 077
           printf '%s' "$APPLE_API_KEY_CONTENT" > "$key_path"
-          chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
           echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
           echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
       - name: Prepare macOS signing keychain
-        if: startsWith(github.ref, 'refs/tags/v')
         id: signing_keychain
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
         run: node scripts/prepare-macos-signing-keychain.mjs
       - name: Build signed Intel package
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
-        run: npm run package:mac:x64
-      - name: Build isolated Intel development package
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run package:dev:mac:x64
+          RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
+            npm run package:candidate:mac:x64
+            echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist-candidate/mac/因赛AI Candidate.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-candidate-mac-x64' >> "$GITHUB_ENV"
+          else
+            npm run package:mac:x64
+            echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist/mac/因赛AI.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-mac-x64' >> "$GITHUB_ENV"
+          fi
       - name: Sign, notarize, and staple Intel DMG
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
         run: |
-          dmg_path="dist/insight-mac-x64.dmg"
-          identity="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" | awk '/Developer ID Application/ { print $2; exit }')"
-          test -n "$identity" || { echo "::error::Developer ID Application identity not found"; exit 1; }
+          set -euo pipefail
+          dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
+          identity="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" | awk -v team="$APPLE_TEAM_ID" '$0 ~ /Developer ID Application/ && $0 ~ "\\(" team "\\)" { print $2; exit }')"
+          test -n "$identity" || { echo "::error::Developer ID Application identity for Team $APPLE_TEAM_ID not found"; exit 1; }
           codesign --keychain "$CSC_KEYCHAIN" --sign "$identity" --timestamp --force "$dmg_path"
           xcrun notarytool submit "$dmg_path" \
             --key "$APPLE_API_KEY" \
@@ -343,8 +293,36 @@ jobs:
             --wait \
             --no-s3-acceleration
           xcrun stapler staple "$dmg_path"
-      - name: Remove temporary signing keychain
-        if: always() && startsWith(github.ref, 'refs/tags/v')
+      - name: Verify Intel release inputs
+        run: |
+          set -euo pipefail
+          dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
+          zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
+          spctl --assess --type execute --verbose=4 "$RELEASE_APP"
+          xcrun stapler validate "$RELEASE_APP"
+          codesign --verify --verbose=2 "$dmg_path"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+          hdiutil verify "$dmg_path"
+          unzip -t "$zip_path"
+          test -s "$zip_path.blockmap"
+          test -s "$RELEASE_DIR/latest-mac.yml"
+      - name: Collect Intel release inputs
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.dmg" release-assets/
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.zip" release-assets/
+          cp "$RELEASE_DIR/$RELEASE_BASENAME.zip.blockmap" release-assets/
+          cp "$RELEASE_DIR/latest-mac.yml" release-assets/latest-mac-x64.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel
+          path: release-assets/
+          if-no-files-found: error
+      - name: Remove Apple signing files
+        if: always()
         env:
           SIGNING_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
           SIGNING_CERTIFICATE: ${{ steps.signing_keychain.outputs.certificate }}
@@ -360,40 +338,11 @@ jobs:
           fi
           test -z "$SIGNING_KEYCHAIN" || security delete-keychain "$SIGNING_KEYCHAIN" || rm -f "$SIGNING_KEYCHAIN"
           test -z "$SIGNING_CERTIFICATE" || rm -f "$SIGNING_CERTIFICATE"
-          test -z "$APPLE_API_KEY" || rm -f "$APPLE_API_KEY"
-      - name: Verify signed and notarized Intel app
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          app_path="dist/mac/因赛AI.app"
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
-          xcrun stapler validate "$app_path"
-          codesign --verify --verbose=2 dist/insight-mac-x64.dmg
-          spctl --assess --type open --context context:primary-signature --verbose=4 dist/insight-mac-x64.dmg
-          xcrun stapler validate dist/insight-mac-x64.dmg
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: macos-intel
-          path: |
-            dist/insight-mac-x64.dmg
-            dist/insight-mac-x64.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        with:
-          name: macos-intel-dev
-          path: |
-            dist-dev/insight-dev-mac-x64.dmg
-            dist-dev/insight-dev-mac-x64.zip
-          if-no-files-found: error
+          test -z "${APPLE_API_KEY:-}" || rm -f "$APPLE_API_KEY"
 
   windows-x64:
-    name: Windows x64
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'windows' || inputs.target == '' || inputs.windows_prerelease_tag != ''))
+    name: Windows x64 unsigned
+    needs: release-preflight
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -403,202 +352,56 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Set app version from release tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm version --no-git-tag-version --allow-same-version "${{ github.ref_name }}"
       - run: npm ci
-      - run: npm test
-      - run: npm run typecheck
-      - name: Build Windows release package
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm run package:win
-      - name: Build isolated Windows development package
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run package:dev:win
-      - name: Smoke test packaged Windows shell
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      - name: Build unsigned Windows package
         shell: pwsh
+        env:
+          RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+          RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
         run: |
-          $userData = Join-Path $env:APPDATA 'insight-desktop-dev'
-          $logPath = Join-Path $userData 'logs\harness.log'
-          $executable = 'dist-dev\win-unpacked\因赛AI Dev.exe'
-          if (Test-Path $userData) { Remove-Item -Recurse -Force $userData }
-          $desktop = Start-Process -FilePath $executable -PassThru
-          try {
-            $deadline = (Get-Date).AddSeconds(30)
-            $manifestLogged = $false
-            while ((Get-Date) -lt $deadline) {
-              if ($desktop.HasExited) {
-                throw "因赛AI Dev exited before the login shell was ready (exit code $($desktop.ExitCode))."
-              }
-              if (Test-Path $logPath) {
-                $log = Get-Content -Raw $logPath
-                if ($log -match '\[desktop\] runtime manifest:') {
-                  $manifestLogged = $true
-                  break
-                }
-              }
-              Start-Sleep -Milliseconds 500
-            }
-            if (-not $manifestLogged) { throw 'Packaged shell did not load its Runtime manifest within 30 seconds.' }
-            Start-Sleep -Seconds 10
-            if ($desktop.HasExited) {
-              throw "因赛AI Dev exited while showing the login shell (exit code $($desktop.ExitCode))."
-            }
-            $stableLog = Get-Content -Raw $logPath
-            if ($stableLog -match '\[desktop\] endpoint') {
-              throw 'Harness started before authentication.'
-            }
-            Write-Host 'Packaged Windows shell unauthenticated smoke test passed.'
-          } finally {
-            if (Test-Path $logPath) {
-              Write-Host '--- harness.log ---'
-              Get-Content $logPath
-            }
-            if (-not $desktop.HasExited) { Stop-Process -Id $desktop.Id -Force }
+          if ($env:RELEASE_CHANNEL -eq 'candidate') {
+            npm run package:candidate:win
+            $releaseDir = 'dist-candidate'
+            $installer = 'insight-candidate-windows-x64-setup.exe'
+          } else {
+            npm run package:win
+            $releaseDir = 'dist'
+            $installer = 'insight-windows-x64-setup.exe'
           }
-      - name: Smoke test packaged Windows Harness
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: node scripts/smoke-packaged-harness.mjs 'dist-dev\win-unpacked\resources'
-      - name: Publish validated Windows development pre-release
-        if: github.event_name == 'workflow_dispatch' && inputs.windows_prerelease_tag != ''
+          node scripts/finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION
+          $installerPath = Join-Path $releaseDir $installer
+          7z t $installerPath
+          if ($LASTEXITCODE -ne 0) { throw '7z rejected the Windows installer.' }
+          "RELEASE_DIR=$releaseDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_INSTALLER=$installer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Collect Windows release inputs
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRERELEASE_TAG: ${{ inputs.windows_prerelease_tag }}
         run: |
-          gh release create $env:PRERELEASE_TAG `
-            --repo $env:GITHUB_REPOSITORY `
-            --target $env:GITHUB_SHA `
-            --prerelease `
-            --title '因赛AI Windows Workspace Test' `
-            --notes "Windows x64 development build for validating workspace selection and session startup on affected machines. This build pins Koffi 3.1.5 for the stable native Windows binaries, uses an isolated app identity and user data directory, and has passed a packaged Harness smoke test that creates a Unicode-path workspace and session." `
-            'dist-dev/insight-dev-windows-x64-setup.exe#因赛AI Dev Windows x64 Setup'
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: windows-x64-unsigned
-          path: |
-            dist/insight-windows-x64-setup.exe
-          if-no-files-found: error
-          retention-days: 1
-      - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        with:
-          name: windows-x64-dev
-          path: |
-            dist-dev/insight-dev-windows-x64-setup.exe
-          if-no-files-found: error
-
-  sign-windows:
-    name: Sign Windows package locally with UKey
-    needs: windows-x64
-    if: >-
-      always() &&
-      startsWith(github.ref, 'refs/tags/v') &&
-      needs.windows-x64.result == 'success'
-    runs-on: [self-hosted, macOS, ARM64]
-    env:
-      CI: 'true'
-      JSIGN_VERSION: '7.5'
-      JSIGN_SHA256: '602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Install release tooling
-        run: npm ci --ignore-scripts
-      - name: Prepare unsigned Windows package
-        run: |
-          work_dir="$RUNNER_TEMP/dsh-windows-${{ github.run_id }}"
-          mkdir -p "$work_dir/release"
-          echo "WINDOWS_SIGNING_WORK_DIR=$work_dir" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-x64-unsigned
-          path: ${{ runner.temp }}/dsh-windows-${{ github.run_id }}/release
-      - name: Download and verify Jsign
-        run: |
-          jsign_jar="$WINDOWS_SIGNING_WORK_DIR/jsign-${JSIGN_VERSION}.jar"
-          curl --fail --location --retry 3 \
-            --output "$jsign_jar" \
-            "https://github.com/ebourg/jsign/releases/download/${JSIGN_VERSION}/jsign-${JSIGN_VERSION}.jar"
-          printf '%s  %s\n' "$JSIGN_SHA256" "$jsign_jar" | shasum -a 256 --check
-          java -jar "$jsign_jar" --version
-          echo "JSIGN_JAR=$jsign_jar" >> "$GITHUB_ENV"
-      - name: Sign Windows installer with SafeNet UKey
-        env:
-          WINDOWS_SIGNING_PIN: ${{ secrets.DESKTOP_WINDOWS_SIGNING_PIN }}
-        run: |
-          test -r /usr/local/lib/libeTPkcs11.dylib
-          test -n "$WINDOWS_SIGNING_PIN" || { echo "::error::Missing required secret: DESKTOP_WINDOWS_SIGNING_PIN"; exit 1; }
-          installer_count="$(find "$WINDOWS_SIGNING_WORK_DIR/release" -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')"
-          test "$installer_count" = '1'
-          installer="$(find "$WINDOWS_SIGNING_WORK_DIR/release" -maxdepth 1 -type f -name '*.exe' -print -quit)"
-          pin_file="$(mktemp "$WINDOWS_SIGNING_WORK_DIR/jsign-pin.XXXXXX")"
-          trap 'rm -f "$pin_file"' EXIT
-          chmod 600 "$pin_file"
-          printf '%s' "$WINDOWS_SIGNING_PIN" > "$pin_file"
-          unset WINDOWS_SIGNING_PIN
-          java -jar "$JSIGN_JAR" \
-            --storetype ETOKEN \
-            --storepass "file:$pin_file" \
-            --alg SHA-256 \
-            --tsaurl http://timestamp.digicert.com \
-            --tsmode RFC3161 \
-            --tsretries 3 \
-            --tsretrywait 10 \
-            --name 'DSH Desktop' \
-            --url https://www.dshdesktop.com \
-            --verbose \
-            "$installer"
-          java -jar "$JSIGN_JAR" extract --format DER "$installer"
-          test -s "$installer.sig"
-          rm -f "$installer.sig"
-      - name: Rebuild Windows update metadata
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          node scripts/finalize-windows-release.mjs \
-            "$WINDOWS_SIGNING_WORK_DIR/release" \
-            "$version"
-          test -f "$WINDOWS_SIGNING_WORK_DIR/release/latest.yml"
-          test -f "$WINDOWS_SIGNING_WORK_DIR"/release/*.exe.blockmap
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Copy-Item (Join-Path $env:RELEASE_DIR $env:RELEASE_INSTALLER) release-assets
+          Copy-Item (Join-Path $env:RELEASE_DIR "$($env:RELEASE_INSTALLER).blockmap") release-assets
+          Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml') release-assets
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
-          path: |
-            ${{ runner.temp }}/dsh-windows-${{ github.run_id }}/release/dsh-desktop-windows-x64-setup.exe
-            ${{ runner.temp }}/dsh-windows-${{ github.run_id }}/release/dsh-desktop-windows-x64-setup.exe.blockmap
-            ${{ runner.temp }}/dsh-windows-${{ github.run_id }}/release/latest.yml
+          path: release-assets/
           if-no-files-found: error
-      - name: Remove local signing files
-        if: always()
-        run: |
-          case "$WINDOWS_SIGNING_WORK_DIR" in
-            "$RUNNER_TEMP"/dsh-windows-*) rm -rf "$WINDOWS_SIGNING_WORK_DIR" ;;
-            '') ;;
-            *) echo "Refusing to remove unexpected signing path: $WINDOWS_SIGNING_WORK_DIR"; exit 1 ;;
-          esac
 
   publish:
-    name: Publish GitHub Release
-    if: >-
-      always() &&
-      startsWith(github.ref, 'refs/tags/v') &&
-      needs.macos-apple-silicon.result == 'success' &&
-      needs.macos-intel.result == 'success' &&
-      needs.sign-windows.result == 'success'
+    name: Publish verified GitHub Release
     needs:
+      - release-preflight
       - macos-apple-silicon
       - macos-intel
-      - sign-windows
+      - windows-x64
+    if: >-
+      always() &&
+      needs.release-preflight.result == 'success' &&
+      needs.macos-apple-silicon.result == 'success' &&
+      needs.macos-intel.result == 'success' &&
+      needs.windows-x64.result == 'success'
     runs-on: ubuntu-24.04
+    environment: desktop-release
     steps:
       - uses: actions/checkout@v4
         with:
@@ -610,114 +413,92 @@ jobs:
       - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@v4
         with:
-          pattern: macos-*
+          name: macos-apple-silicon
           path: release-assets
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-intel
+          path: release-assets
       - uses: actions/download-artifact@v4
         with:
           name: windows-x64
           path: release-assets
       - name: Merge macOS update metadata
         run: |
+          set -euo pipefail
           node scripts/merge-mac-update-metadata.mjs \
             release-assets/latest-mac-arm64.yml \
             release-assets/latest-mac-x64.yml \
             release-assets/latest-mac.yml
-          find release-assets -maxdepth 1 \
-            \( -name latest-mac-arm64.yml -o -name latest-mac-x64.yml \) \
-            -delete
-      - name: Create or update release
+          rm release-assets/latest-mac-arm64.yml release-assets/latest-mac-x64.yml
+      - name: Prepare product update signing key
+        env:
+          DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY" || {
+            echo '::error::Missing desktop-release Environment secret: DESKTOP_UPDATE_SIGNING_PRIVATE_KEY'
+            exit 1
+          }
+          key_path="$RUNNER_TEMP/update-signing-private.pem"
+          umask 077
+          printf '%s' "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY" > "$key_path"
+          echo "UPDATE_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
+      - name: Build and verify authenticated release manifest
+        env:
+          RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
+          RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+        run: |
+          set -euo pipefail
+          node --input-type=module - "$RUNNER_TEMP/release-runtime-manifest.json" <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises'
+          const output = process.argv[2]
+          const lock = JSON.parse(await readFile('core-runtime.lock.json', 'utf8'))
+          const commits = new Set(Object.values(lock.targets).map((target) => target.core.commit))
+          if (commits.size !== 1) throw new Error('Core Runtime targets do not use one Core commit.')
+          await writeFile(output, `${JSON.stringify({
+            core: { releaseTag: lock.releaseTag, commit: [...commits][0] }
+          }, null, 2)}\n`)
+          NODE
+          node scripts/build-update-release.mjs \
+            --dir release-assets \
+            --version "$RELEASE_VERSION" \
+            --channel "$RELEASE_CHANNEL" \
+            --shell-commit "$GITHUB_SHA" \
+            --runtime-manifest "$RUNNER_TEMP/release-runtime-manifest.json" \
+            --compatibility build/update-compatibility.json \
+            --policy build/update-release-policy.json \
+            --private-key "$UPDATE_SIGNING_PRIVATE_KEY"
+          node scripts/verify-release-assets.mjs \
+            --dir release-assets \
+            --version "$RELEASE_VERSION" \
+            --channel "$RELEASE_CHANNEL" \
+            --public-key build/update-signing-public.pem
+      - name: Create immutable draft Release and upload verified assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release-preflight.outputs.tag }}
+          RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
         run: |
+          set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+            echo "::error::Release $RELEASE_TAG already exists; create a new version instead of replacing assets."
+            exit 1
+          fi
+          create_args=(--draft --generate-notes --title "因赛AI $RELEASE_TAG" --repo "$GITHUB_REPOSITORY")
+          if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
+            create_args+=(--prerelease --target "$GITHUB_SHA")
           else
-            gh release create "$RELEASE_TAG" release-assets/* \
-              --verify-tag \
-              --generate-notes \
-              --title "因赛AI $RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY"
+            create_args+=(--verify-tag)
           fi
-      - name: Mirror release assets to ModelScope
-        env:
-          MODELSCOPE_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
-          MODELSCOPE_REPO_ID: alexyaojin/dsh-desktop
-        run: |
-          set -euo pipefail
-          test -n "$MODELSCOPE_TOKEN" || { echo "::error::Missing secret MODELSCOPE_TOKEN"; exit 1; }
-          python3 -m venv "$RUNNER_TEMP/ms-env"
-          "$RUNNER_TEMP/ms-env/bin/pip" install -q modelscope
-          "$RUNNER_TEMP/ms-env/bin/python3" <<'PY'
-          import os, pathlib
-          from modelscope.hub.api import HubApi
-
-          api = HubApi()
-          token = os.environ["MODELSCOPE_TOKEN"]
-          repo_id = os.environ["MODELSCOPE_REPO_ID"]
-          tag = os.environ.get("GITHUB_REF_NAME", "unknown")
-          src = pathlib.Path("release-assets")
-
-          api.upload_folder(
-              repo_id=repo_id,
-              folder_path=str(src),
-              path_in_repo="releases/latest",
-              commit_message=f"Release {tag}",
-              token=token,
-          )
-          print(f"✅ Uploaded {src} -> {repo_id}/releases/latest")
-          PY
-
-      - name: Build Feishu release note prompt
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          mkdir -p .github/release-artifacts
-          git fetch --force --tags
-          python3 .github/scripts/feishu_release_notes.py build-prompt \
-            --tag "$RELEASE_TAG" \
-            --output .github/release-artifacts/feishu-release-prompt.txt
-
-      - name: Generate bilingual Feishu release note
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.MODELS_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          if [ -n "${COPILOT_GITHUB_TOKEN:-}" ]; then
-            echo "Generating release notes via Copilot CLI..."
-            npm install -g @github/copilot@latest || true
-            prompt="$(cat .github/release-artifacts/feishu-release-prompt.txt)"
-            if copilot -p "$prompt" -s --model gpt-5.6-terra --no-ask-user > .github/release-artifacts/feishu-release-notes.md 2>/dev/null && \
-               python3 .github/scripts/feishu_release_notes.py validate --tag "$RELEASE_TAG" --input .github/release-artifacts/feishu-release-notes.md; then
-              echo "✅ AI release notes generated and validated."
-            else
-              echo "⚠️ AI generation fell back to deterministic release note generator."
-              python3 .github/scripts/feishu_release_notes.py generate-fallback \
-                --tag "$RELEASE_TAG" \
-                --output .github/release-artifacts/feishu-release-notes.md
-            fi
+          gh release create "$RELEASE_TAG" "${create_args[@]}"
+          gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY"
+          if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --repo "$GITHUB_REPOSITORY"
           else
-            echo "Generating release notes from git evidence..."
-            python3 .github/scripts/feishu_release_notes.py generate-fallback \
-              --tag "$RELEASE_TAG" \
-              --output .github/release-artifacts/feishu-release-notes.md
+            gh release edit "$RELEASE_TAG" --draft=false --repo "$GITHUB_REPOSITORY"
           fi
-
-      - name: Send Feishu release success notification
-        if: success()
-        env:
-          FEISHU_RELEASE_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
-          RELEASE_TAG: ${{ github.ref_name }}
+      - name: Remove product update signing key
+        if: always()
         run: |
-          set -euo pipefail
-          if [ -z "${FEISHU_RELEASE_WEBHOOK:-}" ]; then
-            echo "⚠️ FEISHU_RELEASE_WEBHOOK secret not set; skipping notification."
-            exit 0
-          fi
-          python3 .github/scripts/feishu_release_notes.py send \
-            --tag "$RELEASE_TAG" \
-            --notes .github/release-artifacts/feishu-release-notes.md \
-            --webhook "$FEISHU_RELEASE_WEBHOOK"
+          test -z "${UPDATE_SIGNING_PRIVATE_KEY:-}" || rm -f "$UPDATE_SIGNING_PRIVATE_KEY"
