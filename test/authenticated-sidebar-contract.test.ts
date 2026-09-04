@@ -47,6 +47,7 @@ describe('authenticated single-sidebar integration contract', () => {
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
 
     expect(prepare).toContain("const SIDEBAR_VERSION = '0.16.1'")
+    expect(prepare).toContain("const MARKET_VERSION = '1.41.0'")
     expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 3")
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
@@ -63,12 +64,15 @@ describe('authenticated single-sidebar integration contract', () => {
     const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
     expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.16.1')
+    expect(manifest.dependencies.dshmarket).toBe('1.41.0')
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
+    expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
     expect(manifest.insightDesktop.defaultProfileVersion).toBe(3)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)
+    expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(true)
   })
 
   it('leaves no authenticated Shell rail and fills the window with Harness', async () => {

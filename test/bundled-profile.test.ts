@@ -15,6 +15,7 @@ describe('bundled profile initialization', () => {
       JSON.stringify({
         dependencies: {
           'dsh-better-sidebar': '0.16.1',
+          dshmarket: '1.41.0',
           '@insight-ai/desktop-integration': 'workspace:*'
         },
         dsh: {
@@ -23,6 +24,7 @@ describe('bundled profile initialization', () => {
               '@deepseek-ai/dsh-base',
               '@deepseek-ai/dsh-web-app',
               'dsh-better-sidebar',
+              'dshmarket',
               '@insight-ai/desktop-integration'
             ]
           }
@@ -47,11 +49,14 @@ describe('bundled profile initialization', () => {
   it('copies the packaged web profile only for a new Harness home', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    await mkdir(join(template, 'web'), { recursive: true })
-    await writeFile(join(template, 'web', 'package.json'), '{"name":"web-profile"}', 'utf8')
+    await writeVersionThreeTemplate(template)
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
-    expect(await readFile(join(dshHome, 'profiles', 'web', 'package.json'), 'utf8')).toContain('web-profile')
+    const initialized = JSON.parse(
+      await readFile(join(dshHome, 'profiles', 'web', 'package.json'), 'utf8')
+    )
+    expect(initialized.dependencies.dshmarket).toBe('1.41.0')
+    expect(initialized.dsh.profile.bundles).toContain('dshmarket')
 
     await writeFile(join(dshHome, 'profiles', 'web', 'package.json'), '{"name":"user-profile"}', 'utf8')
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
@@ -180,6 +185,8 @@ describe('bundled profile initialization', () => {
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
     expect(manifest.dependencies['user-plugin']).toBe('1.2.3')
     expect(manifest.dsh.profile.bundles).toContain('user-plugin')
+    expect(manifest.dependencies).not.toHaveProperty('dshmarket')
+    expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
     expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
   })

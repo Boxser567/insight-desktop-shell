@@ -8,6 +8,8 @@ import { parse, stringify } from 'yaml'
 const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
 const SIDEBAR_VERSION = '0.16.1'
+const MARKET_PACKAGE = 'dshmarket'
+const MARKET_VERSION = '1.41.0'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
 const DEFAULT_PROFILE_VERSION = 3
 const projectRoot = process.cwd()
@@ -30,9 +32,12 @@ async function removeHarnessHomeResidue() {
   await rm(join(bundledProfileRoot, 'storages'), { recursive: true, force: true })
 }
 
-function hasPinnedSidebar(manifest) {
+function hasPinnedDefaultPlugins(manifest) {
   return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
+    manifest.dependencies?.[MARKET_PACKAGE] === MARKET_VERSION &&
     manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
+    manifest.dsh?.profile?.bundles?.includes(SIDEBAR_PACKAGE) &&
+    manifest.dsh?.profile?.bundles?.includes(MARKET_PACKAGE) &&
     manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
     manifest.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION
 }
@@ -47,9 +52,10 @@ async function readManifest(path) {
 
 async function templateIsReady() {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
-  if (!manifest || !hasPinnedSidebar(manifest)) return false
+  if (!manifest || !hasPinnedDefaultPlugins(manifest)) return false
   return existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')) &&
+    existsSync(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
 }
@@ -155,6 +161,10 @@ if (await templateIsReady()) {
     await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
       'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
       `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`
+    ])
+    await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
+      'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
+      `${MARKET_PACKAGE}@${MARKET_VERSION}`
     ])
     const temporaryProfile = join(temporaryDirectory, 'profiles', PROFILE)
     await configureDefaultProfile(temporaryProfile)
