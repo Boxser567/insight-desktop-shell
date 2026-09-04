@@ -4,7 +4,7 @@
 
 本文确定因赛AI桌面客户端的整包更新、插件更新归属、版本回退边界，以及本项目与 `dataelement/dsh-desktop` 的长期关系。本文取代“Shell 应定期整体合并 DSH Desktop 主分支”的旧设想。
 
-第一阶段只实现整包更新检查、可信发布元数据、下载、安装、发布产物校验和上游变更筛选。历史版本回退和公共插件市场分别立项，不纳入本阶段。
+第一阶段只实现整包更新检查、可信发布元数据、下载、安装、发布产物校验和上游变更筛选。历史版本回退不纳入本阶段；公共插件市场的后续预装决策见 [出厂插件市场设计](2026-09-04-bundled-plugin-market-design.md)。
 
 ## 产品决策
 
@@ -55,7 +55,7 @@ dataelement/dsh-desktop
 - Windows Authenticode 或 Microsoft Store 分发。
 - 独立于 Shell Release 的 Core Runtime 在线下载。
 - 必需第一方插件的独立更新。
-- 公共社区插件市场。
+- 在整包更新器内实现公共社区插件市场；市场由独立 Profile 插件提供。
 - 任意历史版本的自动选择与安装。
 - 数据结构降级迁移。
 - ModelScope、飞书、`dshdesktop.com` 或 DSH Desktop 的发布基础设施。
@@ -249,7 +249,7 @@ type UpdateStatus =
 
 当产品依赖 Better Sidebar、账号集成、未来画布桥接、基础文档或媒体预览时，它们属于必需第一方能力。PDF 或表格预览可以作为插件能力；dshmarket 只是一套插件发现、安装、更新、备份和诊断系统。
 
-当前产品继续支持本地导入插件。本阶段不内置 dshmarket。未来可以定向借鉴它的备份、兼容性、操作记录、回退和诊断设计，但公共市场必须单独评审，且无权更新必需第一方插件。
+当前产品继续支持本地导入插件，并在新 Profile 中预装锁定版本的 `dshmarket`。用户可以卸载或手动升级市场；市场无权更新 Shell、Core Runtime、Better Sidebar 或桌面集成。详细生命周期和验证要求由 [出厂插件市场设计](2026-09-04-bundled-plugin-market-design.md) 维护。
 
 ## DSH Desktop 上游变更接收策略
 

@@ -17,6 +17,7 @@
 - [品牌资产统一设计](plans/2026-08-28-brand-assets-unification-design.md)：品牌源文件、派生图标、展示位置和构建规则。
 - [客户端构建 Runbook](client-build-runbook.md)：从定向检查到安装包和 GitHub Actions 的验证曲线。
 - [本地组合开发架构](local-composed-development.md)：未来的 Shell/Core/插件快速联调接口；其中命令尚未实现。
+- [出厂插件市场设计](plans/2026-09-04-bundled-plugin-market-design.md)：市场预装、卸载、更新权限和 Profile 生命周期。
 
 ## 当前运行结构
 
@@ -31,6 +32,7 @@ flowchart LR
   Runtime --> Harness["全窗口 Harness View"]
   Integration["insight-desktop-integration\n品牌、账号、设置、拖拽区"] --> Harness
   Sidebar["Better Sidebar\n内置文件与工作区能力"] --> Harness
+  Market["dshmarket\n可选社区插件管理"] --> Harness
 ```
 
 ### 组件所有权
@@ -44,6 +46,7 @@ flowchart LR
 | Core Runtime | Harness、公开 UI 扩展槽、设置控制和插件运行 | 登录、产品路由或因赛AI业务权限 |
 | `insight-desktop-integration` | 随 Shell 发布的品牌、账号入口、客户端设置区和 macOS 拖拽覆盖层 | 可卸载第三方插件或对 Harness DOM 的私有补丁 |
 | Better Sidebar | 出厂 Profile 中的文件、终端、Git 和 Markdown/HTML 内置打开能力 | 登录、账号菜单或业务授权来源 |
+| `dshmarket` | 出厂 Profile 中可卸载的社区插件发现、安装、更新和诊断入口 | Shell、Core Runtime、Sidebar 或桌面集成的更新器 |
 
 ## 登录与会话实现
 
@@ -156,6 +159,7 @@ Core Runtime 的 `@deepseek-ai/*` 技术包名和历史技术夹具不属于产�
 | 登录后单侧栏 | passed-by-user | 不再出现 Shell 与 Harness 两条并列侧栏。 |
 | 账号摘要、菜单和设置 | passed-by-user | 左下角用户信息、菜单、完整设置中心可用，重复设置入口已隐藏。 |
 | Better Sidebar | passed-by-user | 会话内 Markdown 与 HTML 继续在内置 Sidebar 打开。 |
+| 出厂 Plugin Market | not-yet-verified | `dshmarket@1.41.0` 已进入默认 Profile 构建；等待新 Profile、卸载持久性及 Sidebar 回归的 DEV 人工验收。 |
 | 因赛AI主要品牌界面 | passed-by-user | 新应用图标、登录页、侧栏和主题显示完成手工验收。 |
 | 离线、过期、账号禁用和运行中权限变化 | not-yet-verified | 自动状态覆盖存在，但尚缺本轮服务端真实场景人工验收。 |
 | 品牌变更后的目录应用和 DMG | not-yet-verified | DEV 验收已通过，尚未执行本轮安装包品牌回归。 |
@@ -175,7 +179,7 @@ Core Runtime 的 `@deepseek-ai/*` 技术包名和历史技术夹具不属于产�
 ## 已知范围与后续项
 
 - 注册、忘记密码、直接账号切换、企业切换、账号资料设置和 Design Tokens 不在本阶段范围。
-- 用户导入的插件代码按设备共享；其配置、密钥、缓存和业务数据继续按账号隔离。
+- `dshmarket` 随新 Profile 预装但可卸载、可手动升级；它无权升级 Shell、Core Runtime、Sidebar 或桌面集成。用户导入的插件代码按设备共享；插件配置、密钥、缓存和业务数据继续按账号隔离。
 - 当前样式沿用 Harness 的双主题基础。统一视觉审计和跨 Shell/Core/插件 Design Tokens 后置，不阻塞业务接入。
 - [本地组合开发架构](local-composed-development.md) 已批准，但 `dev:shell`、`dev:core`、`dev:plugin`、`dev:reset` 和 `verify:release` 尚未实现，不能作为当前命令使用。
 - 现有账号服务已能支撑当前登录切片，但账号禁用、权限变化、跨设备和长期接口兼容仍需 Product 与 Backend 形成正式契约。

@@ -84,6 +84,7 @@ git commit -m "feat(profile): bundle the plugin market"
 ### Task 2: Treat the market as removable and required packages as protected
 
 **Files:**
+- Modify: `src/main/state/installation-owned-bundles.ts:1-10`
 - Modify: `src/main/state/plugin-recovery.ts:62-90,495-520`
 - Modify: `src/main/runtime/harness-runtime.ts:573-592`
 - Modify: `test/plugin-recovery.test.ts:50-80,220-245`
@@ -109,7 +110,7 @@ Expected: failures show `dshmarket` is still included in both `CORE_BUNDLES` def
 
 - [ ] **Step 3: Remove only the false market classification**
 
-In `src/main/state/plugin-recovery.ts`, make `CORE_BUNDLES` contain only `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. Delete the no-target reset branch that manually puts `dshmarket` into `safeBundles`; otherwise reset would retain a bundle but delete its dependency. Apply the same two-package `CORE_BUNDLES` list in `src/main/runtime/harness-runtime.ts`. Do not weaken `@deepseek-ai/` or `isInstallationOwnedBundle()` protections.
+In `src/main/state/installation-owned-bundles.ts`, add `dsh-better-sidebar` to the packages protected by `isInstallationOwnedBundle()`. In `src/main/state/plugin-recovery.ts`, make `CORE_BUNDLES` contain only `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. Delete the no-target reset branch that manually puts `dshmarket` into `safeBundles`; otherwise reset would retain a bundle but delete its dependency. Apply the same two-package `CORE_BUNDLES` list in `src/main/runtime/harness-runtime.ts`. Do not weaken `@deepseek-ai/` or installation-owned protections.
 
 - [ ] **Step 4: Verify recovery behavior**
 
@@ -125,7 +126,7 @@ Expected: market is removable/actionable, required plugins remain protected, and
 - [ ] **Step 5: Commit the ownership change**
 
 ```bash
-git add src/main/state/plugin-recovery.ts src/main/runtime/harness-runtime.ts test/plugin-recovery.test.ts test/runtime.test.ts
+git add src/main/state/installation-owned-bundles.ts src/main/state/plugin-recovery.ts src/main/runtime/harness-runtime.ts test/plugin-recovery.test.ts test/runtime.test.ts
 git commit -m "fix(plugins): treat bundled market as removable"
 ```
 
@@ -139,11 +140,11 @@ git commit -m "fix(plugins): treat bundled market as removable"
 
 **Interfaces:**
 - Consumes: `buildProfilePluginAddArguments(dshEntryPath, packagePath)` and the Profile pnpm workspace.
-- Produces: local import executes at the workspace root and explicitly permits only runtime-required `node-pty` during profile package changes.
+- Produces: local import and recovery removal execute at the workspace root; add explicitly permits only runtime-required `node-pty` during profile package changes.
 
 - [ ] **Step 1: Write the local-import regression assertion**
 
-Set the expected argv in `test/profile-plugin-command.test.ts` to:
+Set the expected add argv in `test/profile-plugin-command.test.ts` to:
 
 ```ts
 [
@@ -155,6 +156,8 @@ Set the expected argv in `test/profile-plugin-command.test.ts` to:
 
 This preserves the two conditions found in the temporary communication-plugin demonstration: pnpm must accept the Profile workspace root, and its runtime-required `node-pty` build must not be rejected. It does not approve arbitrary plugin postinstall scripts.
 
+Change the remove argv expectation to `['plugin', '--profile', 'web', 'remove', '--workspace-root', '@example/plugin']`, because recovery removes from the same pnpm workspace root.
+
 - [ ] **Step 2: Verify the regression fails, then make the command-only fix**
 
 Run:
@@ -163,7 +166,7 @@ Run:
 npx vitest run test/profile-plugin-command.test.ts
 ```
 
-Expected: argv mismatch. Then change only `buildProfilePluginAddArguments()` to return:
+Expected: both argv checks mismatch. Change `buildProfilePluginRemoveArguments()` to insert `--workspace-root` after `remove`, then change `buildProfilePluginAddArguments()` to return:
 
 ```ts
 [

@@ -11,6 +11,7 @@
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
 - Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
+- `dshmarket` 是新 Profile 中可卸载的出厂插件。构建必须固定版本并包含完整文件；用户卸载后，重启和应用升级不得自动恢复。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
 - 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；不得用局部上传、覆盖同版本资产或单平台发布修补线上版本。
@@ -27,7 +28,7 @@
 | 仅文档 | 阶段 2 | 文档链接、命令存在性和 `git diff --check`；不构建应用 |
 | 不涉及 Runtime 或打包的 Shell UI | 阶段 2 | 当前开发平台；定向 UI 测试后执行受影响的普通 build/DEV 行为 |
 | Shell main/preload 或用户数据行为 | 阶段 2 | 当前开发平台，并覆盖受影响的 macOS/Windows 路径；必须验证既有用户数据不丢失 |
-| 默认 Profile 或 Better Sidebar | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
+| 默认 Profile、Better Sidebar 或 `dshmarket` | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
 | upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
@@ -131,7 +132,7 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1` 和模板版本要求的 Profile，避免无意义地重新安装。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 和模板版本要求的 Profile，避免无意义地重新安装。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 
@@ -185,6 +186,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
+- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.41.0`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
@@ -199,7 +201,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的用户 Profile：`dsh-better-sidebar@0.16.1` 依赖、bundle 注册和 `.install-complete` 均存在。
+- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
+- 打开设置中的 Plugin Market；卸载 `dshmarket` 后重启同一应用，确认市场不会恢复，登录、设置、退出和 Sidebar 仍可用。另用新账号范围确认首次初始化仍预装市场。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
 

@@ -59,7 +59,7 @@ export function buildProfilePluginRemoveArguments(
   dshEntryPath: string,
   pluginName: string
 ): string[] {
-  return [dshEntryPath, 'plugin', '--profile', PROFILE, 'remove', pluginName]
+  return [dshEntryPath, 'plugin', '--profile', PROFILE, 'remove', '--workspace-root', pluginName]
 }
 
 /** Build the DSH command that installs one user-selected local package. */
@@ -67,7 +67,17 @@ export function buildProfilePluginAddArguments(
   dshEntryPath: string,
   packagePath: string
 ): string[] {
-  return [dshEntryPath, 'plugin', '--profile', PROFILE, 'add', '--save-exact', packagePath]
+  return [
+    dshEntryPath,
+    'plugin',
+    '--profile',
+    PROFILE,
+    'add',
+    '--workspace-root',
+    '--save-exact',
+    '--allow-build=node-pty',
+    packagePath
+  ]
 }
 
 /**
