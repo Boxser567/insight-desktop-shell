@@ -88,6 +88,37 @@ describe('authenticated release manifest', () => {
     ])
   })
 
+  it('allows one authenticated macOS metadata asset to cover both architectures', () => {
+    const sharedMetadata = artifact(
+      'darwin',
+      'x64',
+      'updater-metadata',
+      'latest-mac.yml'
+    )
+    const value = {
+      ...baseManifest,
+      artifacts: [
+        ...baseManifest.artifacts,
+        artifact('darwin', 'x64', 'dmg', 'insight-mac-x64.dmg'),
+        artifact('darwin', 'x64', 'zip', 'insight-mac-x64.zip'),
+        artifact('darwin', 'x64', 'blockmap', 'insight-mac-x64.zip.blockmap'),
+        sharedMetadata
+      ]
+    }
+
+    expect(() => verify(value, {
+      channel: 'stable',
+      platform: 'darwin',
+      arch: 'x64'
+    })).not.toThrow()
+    expect(() => verify({
+      ...value,
+      artifacts: value.artifacts.map((entry) =>
+        entry === sharedMetadata ? { ...entry, size: entry.size + 1 } : entry
+      )
+    })).toThrow('共享资产信息不一致')
+  })
+
   it('rejects any byte change after signing', () => {
     const authenticated = signed(baseManifest)
     const changedBytes = Buffer.concat([authenticated.manifestBytes, Buffer.from(' ')])

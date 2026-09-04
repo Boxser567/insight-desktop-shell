@@ -78,11 +78,16 @@ function releaseFixture(
     draft?: boolean
     prerelease?: boolean
     mutateManifestBytes?: (bytes: Uint8Array) => Uint8Array
+    additionalArtifacts?: ReleaseArtifact[]
   } = {}
 ): ReleaseFixture {
   const version = options.manifestVersion ?? tag.slice(1)
   const channel = options.channel ?? (version.includes('-rc.') ? 'candidate' : 'stable')
-  const value = manifest(version, channel)
+  const base = manifest(version, channel)
+  const value = {
+    ...base,
+    artifacts: [...base.artifacts, ...(options.additionalArtifacts ?? [])]
+  }
   const originalBytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
   const signatureBytes = sign(null, originalBytes, privateKey)
   const manifestBytes = options.mutateManifestBytes?.(originalBytes) ?? originalBytes
@@ -90,7 +95,8 @@ function releaseFixture(
   const assets = [
     { name: 'insight-update.json', browser_download_url: `${baseUrl}/insight-update.json` },
     { name: 'insight-update.json.sig', browser_download_url: `${baseUrl}/insight-update.json.sig` },
-    ...value.artifacts.map(({ name }) => ({ name, browser_download_url: `${baseUrl}/${name}` }))
+    ...[...new Set(value.artifacts.map(({ name }) => name))]
+      .map((name) => ({ name, browser_download_url: `${baseUrl}/${name}` }))
   ]
   const downloads = new Map<string, Uint8Array>([
     [`${baseUrl}/insight-update.json`, manifestBytes],
@@ -193,6 +199,25 @@ describe('GitHub release source', () => {
     await expect(source.resolve('candidate', target)).resolves.toMatchObject({
       manifest: { version: '0.2.0-rc.2', channel: 'candidate' }
     })
+  })
+
+  it('maps shared macOS metadata once when the manifest covers both architectures', async () => {
+    const release = releaseFixture('v0.1.2', {
+      additionalArtifacts: [
+        artifact('darwin', 'x64', 'dmg', 'insight-mac-x64.dmg'),
+        artifact('darwin', 'x64', 'zip', 'insight-mac-x64.zip'),
+        artifact('darwin', 'x64', 'blockmap', 'insight-mac-x64.zip.blockmap'),
+        artifact('darwin', 'x64', 'updater-metadata', 'latest-mac.yml')
+      ]
+    })
+    const { source } = createSource([[release.release]], [release])
+
+    const resolved = await source.resolve('stable', stableTarget)
+
+    expect([...resolved.artifactUrls.keys()].filter((name) => name === 'latest-mac.yml')).toEqual([
+      'latest-mac.yml'
+    ])
+    expect(resolved.artifactUrls.size).toBe(7)
   })
 
   it('rejects an incomplete result after the fifth page', async () => {

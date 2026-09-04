@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, join, resolve } from 'node:path'
+import semver from 'semver'
 
 const require = createRequire(import.meta.url)
 const { buildBlockMap } = require('app-builder-lib/out/targets/blockmap/blockmap')
@@ -17,19 +18,34 @@ async function findInstaller(releaseDir) {
   return installers[0]
 }
 
-async function sha512(file) {
-  return createHash('sha512').update(await readFile(file)).digest('base64')
+function validateX64Pe(bytes, filename) {
+  if (bytes.length < 70 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) {
+    throw new Error(`Windows installer has an invalid DOS header: ${filename}`)
+  }
+  const peOffset = bytes.readUInt32LE(0x3c)
+  if (
+    peOffset < 0x40 ||
+    peOffset + 6 > bytes.length ||
+    bytes.readUInt32LE(peOffset) !== 0x00004550
+  ) {
+    throw new Error(`Windows installer has an invalid PE signature: ${filename}`)
+  }
+  if (bytes.readUInt16LE(peOffset + 4) !== 0x8664) {
+    throw new Error(`Windows installer is not x64: ${filename}`)
+  }
 }
 
 async function finalizeRelease(releaseDir, version) {
   const installer = await findInstaller(releaseDir)
+  const installerBytes = await readFile(installer)
+  validateX64Pe(installerBytes, basename(installer))
   const blockmap = `${installer}.blockmap`
   await rm(blockmap, { force: true })
   const updateInfo = await buildBlockMap(installer, 'gzip', blockmap)
   const fileStat = await stat(installer)
-  const digest = await sha512(installer)
+  const digest = createHash('sha512').update(installerBytes).digest('base64')
   if (updateInfo.size !== fileStat.size || updateInfo.sha512 !== digest) {
-    throw new Error('Generated update metadata does not match the signed installer.')
+    throw new Error('Generated update metadata does not match the Windows installer.')
   }
 
   const filename = basename(installer)
@@ -49,9 +65,9 @@ async function finalizeRelease(releaseDir, version) {
 }
 
 const [releaseDirArg, version] = process.argv.slice(2)
-if (!releaseDirArg || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version ?? '')) {
+if (!releaseDirArg || semver.valid(version) !== version) {
   throw new Error('Usage: finalize-windows-release.mjs <release-dir> <semver>')
 }
 
 const result = await finalizeRelease(resolve(releaseDirArg), version)
-console.log(`Finalized signed installer metadata for ${basename(result.installer)}.`)
+console.log(`Finalized Windows installer metadata for ${basename(result.installer)}.`)

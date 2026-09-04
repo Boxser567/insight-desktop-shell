@@ -130,6 +130,10 @@
         "to": "runtime-manifest.json"
       },
       {
+        "from": "build/update-signing-public.pem",
+        "to": "update-signing-public.pem"
+      },
+      {
         "from": "build/core-runtime",
         "to": "runtime"
       },

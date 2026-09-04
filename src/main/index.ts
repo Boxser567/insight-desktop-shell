@@ -1478,7 +1478,7 @@ function updateChannel(): 'development' | 'candidate' | 'stable' {
 function readUpdatePublicKey(): string {
   if (!app.isPackaged) return ''
   try {
-    return readFileSync(desktopResourcePath('update-public-key.pem'), 'utf8')
+    return readFileSync(desktopResourcePath('update-signing-public.pem'), 'utf8')
   } catch (error) {
     console.warn('[desktop] update public key is unavailable', error)
     return ''

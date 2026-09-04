@@ -73,11 +73,10 @@ export class GitHubReleaseSource implements UpdateSource {
 
     const artifactUrls = new Map<string, URL>()
     for (const artifact of manifest.artifacts) {
-      if (artifactUrls.has(artifact.name)) {
-        throw new Error(`更新 Manifest 包含重复资产名：${artifact.name}。`)
-      }
       const releaseAsset = requireAsset(assets, artifact.name)
-      artifactUrls.set(artifact.name, trustedAssetUrl(releaseAsset.browserDownloadUrl))
+      if (!artifactUrls.has(artifact.name)) {
+        artifactUrls.set(artifact.name, trustedAssetUrl(releaseAsset.browserDownloadUrl))
+      }
     }
 
     return { manifest, manifestBytes, signatureBytes, artifactUrls }

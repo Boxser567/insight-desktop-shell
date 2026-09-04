@@ -112,6 +112,7 @@ function validateManifest(manifest: SignedReleaseManifest): void {
   }
 
   const identities = new Set<string>()
+  const assetsByName = new Map<string, ReleaseArtifact>()
   for (const artifact of manifest.artifacts) {
     requiredArtifactKinds(artifact.platform, artifact.arch)
     const identity = [
@@ -124,6 +125,19 @@ function validateManifest(manifest: SignedReleaseManifest): void {
       throw new Error(`更新 Manifest 包含重复产物：${artifact.name}。`)
     }
     identities.add(identity)
+
+    const existing = assetsByName.get(artifact.name)
+    if (
+      existing &&
+      (
+        existing.kind !== artifact.kind ||
+        existing.size !== artifact.size ||
+        existing.sha512 !== artifact.sha512
+      )
+    ) {
+      throw new Error(`更新 Manifest 的共享资产信息不一致：${artifact.name}。`)
+    }
+    assetsByName.set(artifact.name, artifact)
   }
 }
 
