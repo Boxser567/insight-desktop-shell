@@ -1,10 +1,28 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import semver from 'semver'
 
 const targetNames = ['darwin-arm64', 'darwin-x64', 'win32-x64']
 const commitPattern = /^[0-9a-f]{40}$/u
 const sha256Pattern = /^[0-9a-f]{64}$/u
+const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.(0|[1-9]\d*))?$/u
+
+function parseVersion(value) {
+  if (typeof value !== 'string') return undefined
+  const match = versionPattern.exec(value)
+  if (!match) return undefined
+  const numbers = match.slice(1).map((part) => part === undefined ? undefined : Number(part))
+  if (numbers.some((part) => part !== undefined && !Number.isSafeInteger(part))) return undefined
+  return { major: numbers[0], minor: numbers[1], patch: numbers[2], rc: numbers[3] }
+}
+
+function compareVersions(left, right) {
+  for (const key of ['major', 'minor', 'patch']) {
+    if (left[key] !== right[key]) return left[key] - right[key]
+  }
+  if (left.rc === undefined) return right.rc === undefined ? 0 : 1
+  if (right.rc === undefined) return -1
+  return left.rc - right.rc
+}
 
 function parseArguments(argv) {
   const names = new Set([
@@ -49,13 +67,10 @@ function assertExactKeys(value, keys, label) {
 }
 
 function parseTag(tag) {
-  const candidate = /^v(\d+\.\d+\.\d+-rc\.\d+)$/u.exec(tag)
-  if (candidate && semver.valid(candidate[1]) === candidate[1]) {
-    return { version: candidate[1], channel: 'candidate' }
-  }
-  const stable = /^v(\d+\.\d+\.\d+)$/u.exec(tag)
-  if (stable && semver.valid(stable[1]) === stable[1]) {
-    return { version: stable[1], channel: 'stable' }
+  const version = typeof tag === 'string' ? /^v(.+)$/u.exec(tag)?.[1] : undefined
+  const parsed = parseVersion(version)
+  if (version && parsed) {
+    return { version, channel: parsed.rc === undefined ? 'stable' : 'candidate' }
   }
   throw new Error('Release tag must be v<semver> or v<semver>-rc.<number>.')
 }
@@ -72,13 +87,16 @@ function validatePolicy(value, version, channel) {
     ['schema', 'releaseVersion', 'channel', 'mode', 'minimumSupportedVersion'],
     'Release policy'
   )
+  const minimum = parseVersion(value.minimumSupportedVersion)
+  const release = parseVersion(version)
   if (
     value.schema !== 1 ||
     value.releaseVersion !== version ||
     value.channel !== channel ||
     !['optional', 'required'].includes(value.mode) ||
-    semver.valid(value.minimumSupportedVersion) !== value.minimumSupportedVersion ||
-    semver.gt(value.minimumSupportedVersion, version)
+    !minimum ||
+    !release ||
+    compareVersions(minimum, release) > 0
   ) {
     throw new Error('Release policy does not match the requested release.')
   }
@@ -97,11 +115,11 @@ function validateRuntimeTarget(value, name, releaseTag) {
     typeof value.sha256 !== 'string' ||
     !sha256Pattern.test(value.sha256) ||
     value.core.repository !== 'Boxser567/insight-harness-core' ||
-    semver.valid(value.core.version) !== value.core.version ||
+    !parseVersion(value.core.version) ||
     typeof value.core.commit !== 'string' ||
     !commitPattern.test(value.core.commit) ||
-    semver.valid(value.node.version) !== value.node.version ||
-    semver.valid(value.pnpm.version) !== value.pnpm.version
+    !parseVersion(value.node.version) ||
+    !parseVersion(value.pnpm.version)
   ) {
     throw new Error(`Runtime target ${name} is invalid.`)
   }
@@ -112,7 +130,7 @@ function validateRuntimeLock(value) {
   const tagVersion = typeof value.releaseTag === 'string'
     ? /^insight-runtime-v(.+)$/u.exec(value.releaseTag)?.[1]
     : undefined
-  if (value.schemaVersion !== 1 || !tagVersion || semver.valid(tagVersion) !== tagVersion) {
+  if (value.schemaVersion !== 1 || !parseVersion(tagVersion)) {
     throw new Error('Core Runtime lock header is invalid.')
   }
   assertExactKeys(value.targets, targetNames, 'Core Runtime targets')

@@ -97,6 +97,17 @@ describe('desktop release preflight', () => {
     expect(run(policy).stderr).toContain('does not match')
   })
 
+  it('rejects non-canonical versions and unsupported release floors', async () => {
+    const tag = await fixture()
+    expect(run(tag, 'v0.1.2-rc.01').stderr).toContain('Release tag')
+
+    const policy = await fixture()
+    const value = JSON.parse(await readFile(policy.policy, 'utf8'))
+    value.minimumSupportedVersion = '0.1.3'
+    await writeFile(policy.policy, JSON.stringify(value))
+    expect(run(policy).stderr).toContain('does not match')
+  })
+
   it('rejects incomplete or cross-commit Runtime locks', async () => {
     const incomplete = await fixture()
     const value = JSON.parse(await readFile(incomplete.runtimeLock, 'utf8'))

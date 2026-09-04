@@ -778,7 +778,7 @@ git commit -m "build(update): isolate desktop release channels"
 
 ## 任务 9：围绕 Windows 未签名包重建 GitHub Release Workflow
 
-**涉及文件：** `.github/workflows/release.yml`、`scripts/verify-release-preflight.mjs`、`test/release-preflight.test.ts`、`test/release.test.ts`、`docs/client-build-runbook.md`。
+**涉及文件：** `.github/workflows/release.yml`、`scripts/verify-release-preflight.mjs`、`scripts/verify-release-workflow.mjs`、`test/release-preflight.test.ts`、`test/release-workflow-verifier.test.ts`、`test/release.test.ts`、`docs/client-build-runbook.md`。
 
 ### 9.1 增加低成本 release-preflight
 
@@ -789,7 +789,7 @@ git commit -m "build(update): isolate desktop release channels"
 - 校验 Package Version；
 - 校验 `build/update-release-policy.json` 的 `releaseVersion`、`channel`、`mode` 和最低版本；
 - 校验 `core-runtime.lock.json` 的格式、Runtime Tag 和三平台资产声明，不在预检阶段下载 Runtime；
-- 运行发布脚本的纯配置测试；
+- 运行不安装依赖的 workflow 拓扑校验和发布脚本语法检查；完整 Vitest 由本地门禁和常规 CI 负责，preflight 不加载 Rollup/esbuild；
 - 输出将要构建的平台、版本、渠道和 Runtime Tag，不输出任何 Secret。
 
 所有 Native Build Job 必须 `needs: release-preflight`。预检失败时不启动 macOS/Windows Runner，不浪费安装依赖和打包时间。
@@ -851,7 +851,7 @@ Publish Job：
 ### 9.5 验证与提交
 
 ```bash
-npx vitest run test/release-preflight.test.ts test/release.test.ts test/build-update-release.test.ts test/finalize-mac-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts
+npx vitest run test/release-preflight.test.ts test/release-workflow-verifier.test.ts test/release.test.ts test/build-update-release.test.ts test/finalize-mac-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts
 npm run typecheck
 git diff --check
 ```

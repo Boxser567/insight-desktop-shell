@@ -34,8 +34,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci --ignore-scripts
       - name: Validate release identity, policy, and Runtime lock
         id: release
         shell: bash
@@ -74,16 +72,15 @@ jobs:
             ''
           ].join('\n'))
           NODE
-      - name: Run release configuration tests
-        run: >-
-          npx vitest run
-          test/release-preflight.test.ts
-          test/build-update-release.test.ts
-          test/finalize-mac-release.test.ts
-          test/merge-mac-update-metadata.test.ts
-          test/verify-release-assets.test.ts
-          test/finalize-windows-release.test.ts
-          test/release.test.ts
+      - name: Run dependency-free release checks
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.json
+          node --check scripts/build-update-release.mjs
+          node --check scripts/finalize-mac-release.mjs
+          node --check scripts/finalize-windows-release.mjs
+          node --check scripts/merge-mac-update-metadata.mjs
+          node --check scripts/verify-release-assets.mjs
 
   macos-apple-silicon:
     name: macOS Apple Silicon

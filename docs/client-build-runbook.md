@@ -214,7 +214,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 **执行：**
 
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
-- 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只检查 tag/channel、包版本、发布策略、三个 Core Runtime target 及其共同 Core commit，并运行发布配置测试。该 job 不下载 Runtime、不构建应用；预检失败时三个原生 job 均不得开始。
+- 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后验证应用和 DMG 的 codesign、Gatekeeper、stapling，运行 `hdiutil verify` 与 `unzip -t`，并检查 zip blockmap 和架构更新元数据。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
 - `publish` 必须直接依赖预检、两个 macOS job 和 Windows job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
@@ -268,7 +268,8 @@ npm run package:mac:arm64
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
 | `release-preflight` 在原生 job 前失败 | tag/channel、`package.json` 与 lockfile 版本、发布策略版本、三个 Runtime target 和共同 Core commit | 阶段 9；只修正元数据并重跑，不下载 Runtime 或启动原生构建 |
 | macOS DMG、ZIP 和 blockmap 已生成但缺少 `latest-mac.yml` | `publish: null` 或 `--publish never` 不保证 electron-builder 生成更新元数据；检查架构打包命令是否执行 `finalize-mac-release.mjs` | 阶段 7/9；根据最终 ZIP 重建并校验 YAML，不为生成元数据启用自动发布 |
-| Linux preflight、macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `linux-x64-gnu`、`darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
+| Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
+| macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |

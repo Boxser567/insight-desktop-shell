@@ -84,10 +84,8 @@ describe('GitHub release contract', () => {
     ) as { packages: Record<string, { version?: string }> }
 
     expect(packageJson.optionalDependencies?.['@rollup/rollup-darwin-x64']).toBe('4.62.4')
-    expect(packageJson.optionalDependencies?.['@rollup/rollup-linux-x64-gnu']).toBe('4.62.4')
     expect(packageJson.optionalDependencies?.['@rollup/rollup-win32-x64-msvc']).toBe('4.62.4')
     expect(packageLock.packages['node_modules/@rollup/rollup-darwin-x64']?.version).toBe('4.62.4')
-    expect(packageLock.packages['node_modules/@rollup/rollup-linux-x64-gnu']?.version).toBe('4.62.4')
     expect(packageLock.packages['node_modules/@rollup/rollup-win32-x64-msvc']?.version).toBe('4.62.4')
   })
 
@@ -404,9 +402,9 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('--package package.json')
     expect(preflight).toContain('--policy build/update-release-policy.json')
     expect(preflight).toContain('--runtime-lock core-runtime.lock.json')
-    expect(preflight).toContain('Run release configuration tests')
-    expect(preflight).toContain('test/finalize-mac-release.test.ts')
-    expect(preflight).not.toContain('prepare:core-runtime')
+    expect(preflight).toContain('Run dependency-free release checks')
+    expect(preflight).toContain('verify-release-workflow.mjs')
+    expect(preflight).not.toMatch(/npm ci|vitest|prepare:core-runtime/)
     expect(appleSilicon).toContain('needs: release-preflight')
     expect(intel).toContain('needs: release-preflight')
     expect(windows).toContain('needs: release-preflight')
