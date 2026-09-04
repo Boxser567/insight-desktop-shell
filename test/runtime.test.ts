@@ -24,6 +24,46 @@ import {
   isAbortedNavigationError,
   shouldLoadHarnessUrl
 } from '../src/main/window-navigation'
+import { resolveApplicationChannel } from '../src/main/application-channel'
+
+describe('application release channel', () => {
+  it('forces unpackaged Electron onto the development channel', () => {
+    expect(resolveApplicationChannel({
+      packaged: false,
+      configuredChannel: 'stable',
+      appId: 'com.insight.desktop'
+    })).toBe('development')
+  })
+
+  it.each(['development', 'candidate', 'stable'] as const)(
+    'accepts the explicit packaged %s channel',
+    (configuredChannel) => {
+      expect(resolveApplicationChannel({
+        packaged: true,
+        configuredChannel,
+        appId: undefined
+      })).toBe(configuredChannel)
+    }
+  )
+
+  it('supports only the legacy stable App ID when channel metadata is absent', () => {
+    expect(resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: undefined,
+      appId: 'com.insight.desktop'
+    })).toBe('stable')
+    expect(() => resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: undefined,
+      appId: 'com.insight.desktop.candidate'
+    })).toThrow('no supported update channel')
+    expect(() => resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: 'preview',
+      appId: 'com.insight.desktop'
+    })).toThrow('no supported update channel')
+  })
+})
 
 describe('Harness launch contract', () => {
   it('changes account directories only while Harness is stopped', () => {

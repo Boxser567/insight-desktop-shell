@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -11,6 +13,33 @@ const releaseAssets = [
 ]
 
 describe('GitHub release contract', () => {
+  it('generates update signing keys outside the repository with a private mode', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'insight-update-keys-'))
+    try {
+      const privateKey = path.join(directory, 'private.pem')
+      const publicKey = path.join(directory, 'public.pem')
+      const script = path.join(projectRoot, 'scripts', 'generate-update-signing-keypair.mjs')
+      const generated = spawnSync(process.execPath, [
+        script,
+        '--private-key', privateKey,
+        '--public-key', publicKey
+      ], { encoding: 'utf8' })
+      expect(generated.status, generated.stderr).toBe(0)
+      expect((await stat(privateKey)).mode & 0o777).toBe(0o600)
+      expect(await readFile(publicKey, 'utf8')).toContain('BEGIN PUBLIC KEY')
+
+      const rejected = spawnSync(process.execPath, [
+        script,
+        '--private-key', path.join(projectRoot, 'build', 'forbidden-private.pem'),
+        '--public-key', path.join(directory, 'unused-public.pem')
+      ], { encoding: 'utf8' })
+      expect(rejected.status).not.toBe(0)
+      expect(rejected.stderr).toContain('outside the repository')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('uses the Insight repository identity without inheriting the reference upstream author', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
@@ -75,6 +104,7 @@ describe('GitHub release contract', () => {
     ) as {
       build: {
         artifactName: string
+        extraMetadata: { insightDesktopAppId: string; insightDesktopChannel: string }
         extraResources: Array<{ from: string; to: string }>
         win: { target: Array<{ target: string; arch: string[] }> }
         nsis: { artifactName: string; include: string }
@@ -83,6 +113,8 @@ describe('GitHub release contract', () => {
     }
 
     expect(packageJson.build.artifactName).toBe('insight-${os}-${arch}.${ext}')
+    expect(packageJson.build.extraMetadata.insightDesktopAppId).toBe('com.insight.desktop')
+    expect(packageJson.build.extraMetadata.insightDesktopChannel).toBe('stable')
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/app-icon.png',
       to: 'icon.png'
@@ -109,6 +141,11 @@ describe('GitHub release contract', () => {
       from: 'build/runtime-manifest.json',
       to: 'runtime-manifest.json'
     })
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/update-signing-public.pem',
+      to: 'update-signing-public.pem'
+    })
+    expect(JSON.stringify(packageJson.build.extraResources)).not.toMatch(/private.*key|private.*pem/i)
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/core-runtime',
       to: 'runtime'
@@ -253,7 +290,11 @@ describe('GitHub release contract', () => {
       'package:win',
       'package:dev:mac:arm64',
       'package:dev:mac:x64',
-      'package:dev:win'
+      'package:dev:win',
+      'package:candidate:dir',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:candidate:win'
     ]) {
       expect(packageJson.scripts[script]).toContain('--publish never')
     }
@@ -265,6 +306,10 @@ describe('GitHub release contract', () => {
     ) as { scripts: Record<string, string> }
     const developmentConfig = await readFile(
       path.join(projectRoot, 'electron-builder.dev.cjs'),
+      'utf8'
+    )
+    const candidateConfig = await readFile(
+      path.join(projectRoot, 'electron-builder.candidate.cjs'),
       'utf8'
     )
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
@@ -283,7 +328,8 @@ describe('GitHub release contract', () => {
     expect(developmentConfig).toContain("appId: 'com.insight.desktop.dev'")
     expect(developmentConfig).toContain("productName: '因赛AI Dev'")
     expect(developmentConfig).toContain("output: 'dist-dev'")
-    expect(developmentConfig).toContain("dshDesktopChannel: 'development'")
+    expect(developmentConfig).toContain("insightDesktopAppId: 'com.insight.desktop.dev'")
+    expect(developmentConfig).toContain("insightDesktopChannel: 'development'")
     expect(developmentConfig).toContain(
       "artifactName: 'insight-dev-${os}-${arch}.${ext}'"
     )
@@ -291,8 +337,26 @@ describe('GitHub release contract', () => {
       "artifactName: 'insight-dev-windows-${arch}-setup.${ext}'"
     )
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))")
+    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-candidate'))")
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
-    expect(main).toContain('const developmentBuild = isDevelopmentBuild()')
+    expect(main).toContain('const desktopChannel = applicationChannel()')
+    expect(candidateConfig).toContain("appId: 'com.insight.desktop.candidate'")
+    expect(candidateConfig).toContain("productName: '因赛AI Candidate'")
+    expect(candidateConfig).toContain("output: 'dist-candidate'")
+    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight.desktop.candidate'")
+    expect(candidateConfig).toContain("insightDesktopChannel: 'candidate'")
+    expect(candidateConfig).toContain("artifactName: 'insight-candidate-${os}-${arch}.${ext}'")
+    expect(candidateConfig).toContain("artifactName: 'insight-candidate-windows-${arch}-setup.${ext}'")
+    expect(candidateConfig).toContain('publish: null')
+    for (const name of [
+      'package:candidate:dir',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:candidate:win'
+    ]) {
+      expect(packageJson.scripts[name]).toContain('electron-builder.candidate.cjs')
+      expect(packageJson.scripts[name]).toContain('--publish never')
+    }
   })
 
   it('builds and publishes every supported platform', async () => {

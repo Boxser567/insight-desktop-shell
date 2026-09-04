@@ -72,6 +72,7 @@ import { buildPluginRecoveryViewModel } from './plugin-recovery-view'
 import { buildSafeModeViewModel, shouldStartInSafeMode } from './safe-mode'
 import { windowsMenuViewBounds } from './windows-menu-view'
 import { resolveAuthEnvironment, type AuthEnvironmentConfig } from './auth/auth-environment'
+import { resolveApplicationChannel } from './application-channel'
 import { createElectronAuth } from './auth/electron-auth'
 import { assertTrustedShellEvent, registerAuthIpc } from './auth/auth-ipc'
 import type { AuthSessionManager } from './auth/auth-session-manager'
@@ -206,20 +207,33 @@ function appendPluginRecoveryDetectionLog(plugins: readonly string[]): void {
   }
 }
 
-function isDevelopmentBuild(): boolean {
-  if (!app.isPackaged) return true
-
-  try {
-    const metadata = JSON.parse(
-      readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')
-    ) as { dshDesktopChannel?: unknown }
-    return metadata.dshDesktopChannel === 'development'
-  } catch {
-    return false
+function applicationChannel(): 'development' | 'candidate' | 'stable' {
+  if (!app.isPackaged) {
+    return resolveApplicationChannel({
+      packaged: false,
+      configuredChannel: undefined,
+      appId: undefined
+    })
   }
+
+  const metadata = JSON.parse(
+    readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')
+  ) as {
+    name?: unknown
+    insightDesktopChannel?: unknown
+    insightDesktopAppId?: unknown
+  }
+  return resolveApplicationChannel({
+    packaged: true,
+    configuredChannel: metadata.insightDesktopChannel,
+    appId: metadata.insightDesktopAppId ?? (
+      metadata.name === 'insight-desktop' ? 'com.insight.desktop' : undefined
+    )
+  })
 }
 
-const developmentBuild = isDevelopmentBuild()
+const desktopChannel = applicationChannel()
+const developmentBuild = desktopChannel === 'development'
 
 if (developmentBuild) {
   // Electron does not exit on terminal signals by default. Let Ctrl+C and
@@ -434,9 +448,14 @@ function attachWindowsMenuView(window: BrowserWindow): void {
 }
 
 function configureAppIdentity(): void {
-  if (developmentBuild) {
+  if (desktopChannel === 'development') {
     app.setName('因赛AI Dev')
     app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))
+    return
+  }
+  if (desktopChannel === 'candidate') {
+    app.setName('因赛AI Candidate')
+    app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-candidate'))
     return
   }
 
@@ -1470,11 +1489,6 @@ async function showSafeModeManager(): Promise<void> {
   }
 }
 
-function updateChannel(): 'development' | 'candidate' | 'stable' {
-  if (developmentBuild) return 'development'
-  return /-rc\.\d+$/u.test(app.getVersion()) ? 'candidate' : 'stable'
-}
-
 function readUpdatePublicKey(): string {
   if (!app.isPackaged) return ''
   try {
@@ -1510,7 +1524,7 @@ async function initializeUpdates(): Promise<void> {
     currentVersion: app.getVersion(),
     environment: {
       packaged: fixture ? true : app.isPackaged,
-      channel: fixture ? 'stable' : updateChannel(),
+      channel: fixture ? 'stable' : desktopChannel,
       platform: process.platform,
       arch: process.arch
     },
@@ -1674,7 +1688,7 @@ async function bootstrap(): Promise<void> {
   await initializeUpdates()
   authEnvironment = resolveAuthEnvironment({
     packaged: app.isPackaged,
-    channel: developmentBuild ? 'development' : undefined
+    channel: desktopChannel
   })
   const authSession = session.fromPartition(authEnvironment.partition)
   authManager = createElectronAuth({
