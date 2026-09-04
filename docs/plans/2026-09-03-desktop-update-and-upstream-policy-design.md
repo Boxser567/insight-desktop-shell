@@ -1,21 +1,23 @@
-# Desktop Update and Upstream Policy Design
+# 桌面客户端更新与上游管理方案
 
-## Status
+## 状态
 
-This document defines the approved direction for full-client updates, plugin update ownership, release rollback, and the relationship between Insight Desktop and `dataelement/dsh-desktop`. It supersedes the earlier assumption that the Shell should periodically merge the complete DSH Desktop main branch.
+本文确定因赛AI桌面客户端的整包更新、插件更新归属、版本回退边界，以及本项目与 `dataelement/dsh-desktop` 的长期关系。本文取代“Shell 应定期整体合并 DSH Desktop 主分支”的旧设想。
 
-The first implementation phase covers full-client update checks, authenticated release metadata, download, installation, release-asset validation, and the upstream intake policy. Historical-version rollback and a community plugin market remain separately planned capabilities.
+第一阶段只实现整包更新检查、可信发布元数据、下载、安装、发布产物校验和上游变更筛选。历史版本回退和公共插件市场分别立项，不纳入本阶段。
 
-## Product decision
+## 产品决策
 
-Insight Desktop is an independently maintained product fork. `dataelement/dsh-desktop` remains a reference upstream whose fixes and designs are periodically audited, but its main branch is no longer merged wholesale into the product branch.
+Insight Desktop 是独立维护的产品分支。`dataelement/dsh-desktop` 只作为参考上游，定期审计其中的修复和设计，不再把其主分支整体合入产品分支。
 
-This distinction does not change the Core relationship. Insight Harness Core may continue to ingest DeepSeek Harness upstream changes through its own review and release process. The Shell consumes only a locked Core Runtime artifact and never follows an npm or upstream version implicitly.
+仓库和 npm 元数据必须使用 Insight 自有地址，不得继续保留上游作者身份。在法定产品主体尚未确认前，删除 `author` 字段比填入未经确认的名称更安全。
+
+该决策不改变 Core 的依赖关系。Insight Harness Core 可以继续通过自身的审查和发布流程吸收 DeepSeek Harness 上游改动；Shell 只消费锁定的 Core Runtime 制品，不会因为 npm 或上游版本变化而自动升级。
 
 ```text
-DeepSeek Harness upstream
+DeepSeek Harness 上游
         |
-        | reviewed and adapted by the Core repository
+        | Core 仓库审查并适配
         v
 Insight Harness Core Runtime Release
         |
@@ -23,91 +25,93 @@ Insight Harness Core Runtime Release
         v
 Insight Desktop Shell Release
         |
-        +-- required first-party plugins
+        +-- 必需的第一方插件
         +-- Better Sidebar
-        +-- authentication and account isolation
-        +-- future canvas product surface
-        +-- full-client updater
+        +-- 登录与账号隔离
+        +-- 未来的画布业务界面
+        +-- 整包更新器
 
 dataelement/dsh-desktop
         |
-        +-- reference implementation and selective fix source
-            (no periodic full merge)
+        +-- 参考实现和定向修复来源
+            （不再定期整体合并）
 ```
 
-## Goals
+## 目标
 
-- Update the whole installed client so the Shell, locked Core Runtime, required first-party plugins, default Profile, and recovery surfaces remain one tested release unit.
-- Check at startup after a short randomized delay, every six hours while running, after a sufficiently long system resume, and when the user requests a check.
-- Let unsigned Windows builds download and install updates without buying a Windows code-signing certificate during the current product stage.
-- Preserve macOS Developer ID signing, notarization, stapling, and platform signature validation for production releases.
-- Authenticate update metadata and artifacts independently of Windows Authenticode so a compromised download location cannot silently replace an installer.
-- Keep update controls available before login and when Core Runtime or plugins fail to start.
-- Support both optional releases and authenticated required releases for versions below a declared minimum, so an incompatible required first-party plugin or business protocol can move with the whole client.
-- Preserve account data, Harness sessions, user settings, workspaces, assets, and user-imported plugins across an application update.
-- Keep the initial update host replaceable so a CDN or regional mirror can be added without redesigning the client.
-- Continue learning from DSH Desktop without restoring its product identity, Runtime ownership, marketplace, signing hardware, or deployment services.
+- 把 Shell、锁定的 Core Runtime、必需的第一方插件、默认 Profile 和恢复界面作为一个经过整体测试的发布单元进行更新。
+- 启动后经过短暂随机延迟检查更新；运行期间每六小时检查一次；系统长时间休眠恢复后检查；用户也可手动检查。
+- 当前阶段不购买 Windows 代码签名证书，仍允许 Windows 安装包下载和安装更新。
+- macOS 正式版本继续执行 Developer ID 签名、公证、装订和系统签名验证。
+- 使用独立于 Windows Authenticode 的发布签名验证元数据和安装包，避免下载位置被篡改后静默替换安装器。
+- 登录前、Core Runtime 启动失败或插件启动失败时，仍可使用更新入口。
+- 同时支持可选更新和可信的强制更新。旧版本低于声明的最低支持版本时，允许业务协议或必需插件随整包强制升级。
+- 更新后保留账号数据、Harness 会话、用户设置、工作区、资产和用户自行导入的插件。
+- 更新源可替换。未来增加 CDN 或国内镜像时，不重写客户端更新状态机。
+- 继续吸收 DSH Desktop 中有价值的实现，但不恢复其产品身份、Runtime 管理、插件市场、签名硬件或部署服务。
 
-## Non-goals for the first implementation phase
+## 第一阶段不做的内容
 
-- Windows Authenticode or Microsoft Store distribution.
-- Automatic Core Runtime download independent of a Shell release.
-- Independent update of required first-party plugins.
-- A public community plugin marketplace.
-- Automatic selection and installation of arbitrary historical versions.
-- Data-schema downgrade migrations.
-- ModelScope, Feishu, `dshdesktop.com`, or DSH Desktop release infrastructure.
-- Linux packages.
+- Windows Authenticode 或 Microsoft Store 分发。
+- 独立于 Shell Release 的 Core Runtime 在线下载。
+- 必需第一方插件的独立更新。
+- 公共社区插件市场。
+- 任意历史版本的自动选择与安装。
+- 数据结构降级迁移。
+- ModelScope、飞书、`dshdesktop.com` 或 DSH Desktop 的发布基础设施。
+- Linux 安装包。
 
-## Release unit and version ownership
+## 发布单元与版本归属
 
-One desktop version identifies one immutable release unit:
+一个桌面版本对应一个不可变发布单元：
 
 ```text
-Desktop version
+桌面版本
   -> Shell commit
-  -> Core Runtime tag, commit, platform and digest
-  -> required first-party plugin versions
-  -> bundled Profile template version
-  -> supported user-data schema range
-  -> macOS and Windows release artifacts
+  -> Core Runtime tag、commit、平台和摘要
+  -> 必需第一方插件版本
+  -> 内置 Profile 模板版本
+  -> 支持的用户数据结构范围
+  -> macOS 与 Windows 发布产物
 ```
 
-The Shell release workflow is the only owner of this mapping. Installed clients never replace Core Runtime or a required first-party plugin without replacing the complete application.
+Shell 发布工作流是这组映射的唯一维护者。已安装客户端不得在不替换完整应用的情况下单独替换 Core Runtime 或必需第一方插件。
 
-The application installation directory is disposable. Mutable product data remains under the stable product `userData` root. Updating the application must not delete or recreate account-scoped Harness homes, sessions, imported plugins, settings, workspaces, or future canvas assets.
+应用安装目录视为可替换内容。可变业务数据保存在稳定的产品 `userData` 根目录下。应用升级不得删除或重建账号级 Harness Home、会话、用户导入插件、设置、工作区或未来的画布资产。
 
-## Platform and signing matrix
+## 平台与签名矩阵
 
-| Channel | macOS | Windows |
+| 渠道 | macOS | Windows |
 | --- | --- | --- |
-| Development | Separate App ID and user-data root; unsigned; production update source disabled | Separate App ID and user-data root; unsigned; production update source disabled |
-| Release candidate | Developer ID signed, notarized and stapled; isolated candidate feed | Unsigned NSIS; isolated candidate feed; SmartScreen warning accepted |
-| Stable | Developer ID signed, notarized and stapled; authenticated stable feed | Unsigned NSIS; authenticated stable feed; SmartScreen warning accepted |
+| 开发版 | 独立 App ID 与 userData；不签名；禁用正式更新源 | 独立 App ID 与 userData；不签名；禁用正式更新源 |
+| 候选版 | Developer ID 签名、公证并装订；使用隔离的候选更新源 | 未签名 NSIS；使用隔离的候选更新源；接受 SmartScreen 提示 |
+| 正式版 | Developer ID 签名、公证并装订；使用可信正式更新源 | 未签名 NSIS；使用可信正式更新源；接受 SmartScreen 提示 |
 
-macOS uses the platform signature check performed by the updater and the authenticated release manifest described below. Windows sets `verifyUpdateCodeSignature: false` while Authenticode is unavailable, but it must not install an artifact until the product-level manifest signature and artifact digest both pass.
+macOS 同时使用更新器的平台签名检查和本文定义的产品级发布签名。Windows 在没有 Authenticode 期间设置 `verifyUpdateCodeSignature: false`，但只有产品 Manifest 签名和实际安装包摘要都通过后才能安装。
 
-Development packages cannot check, download, or install stable updates. Release candidate and stable channels have separate manifests so an RC cannot replace a stable installation and a stable installation cannot discover an RC.
+开发版不得检查、下载或安装候选版和正式版。候选版与正式版使用不同渠道，不能互相发现或覆盖。
 
-## Update source
+## 更新源
 
-The initial source is the public `Boxser567/insight-desktop-shell` GitHub Releases feed. GitHub Actions already builds the platform artifacts and can publish the metadata beside them, so no new hosting service is required.
+第一阶段使用公开的 `Boxser567/insight-desktop-shell` GitHub Releases。现有 GitHub Actions 已能构建多平台产物，可直接在同一 Release 中发布更新元数据，无需新增托管服务。
 
-The update manager consumes an `UpdateSource` interface rather than constructing GitHub URLs in UI or lifecycle code. The interface resolves an authenticated release descriptor for a named channel. A future generic HTTPS, object-storage, CDN, or regional mirror source must implement the same interface and serve the same signed bytes.
+更新管理器依赖 `UpdateSource` 接口，不在 UI 或应用生命周期代码中拼接 GitHub URL。该接口按渠道解析经过认证的发布描述。未来接入通用 HTTPS、对象存储、CDN 或国内镜像时，只需实现同一接口并提供相同的签名字节。
 
-The GitHub repository should enable immutable releases when available. The workflow creates a draft release, uploads and verifies every asset, and only then publishes it. Published tags and assets are never overwritten; a correction uses a new version.
+仓库可用时应启用 Immutable Releases。工作流先创建草稿 Release，上传并校验全部产物，最后一次性发布。已发布 Tag 和产物不得覆盖；修复必须使用新版本。
 
-## Authenticated release manifest
+版本发现不能依赖 GitHub API 返回顺序。客户端按渠道解析合法 Tag，进行有上限的分页，并从完整候选集合中选择最高语义版本。到达分页上限但仍有下一页时，应返回明确错误，不能基于不完整结果静默选版本。
 
-Every RC and stable release includes:
+## 可信发布 Manifest
 
-- `insight-update.json`: canonical UTF-8 JSON release manifest;
-- `insight-update.json.sig`: Ed25519 signature over the exact manifest bytes;
-- platform updater metadata such as `latest-mac.yml` and `latest.yml`;
-- installers, ZIPs and blockmaps required by `electron-updater`;
-- a release-asset validation report retained by the workflow.
+每个候选版和正式版包含：
 
-The manifest records:
+- `insight-update.json`：规范化 UTF-8 JSON Manifest；
+- `insight-update.json.sig`：对 Manifest 原始字节生成的 Ed25519 分离签名；
+- `latest-mac.yml`、`latest.yml` 等平台更新元数据；
+- `electron-updater` 所需的安装包、ZIP 和 blockmap；
+- 工作流保留的发布产物校验报告。
+
+Manifest 内容：
 
 ```ts
 type UpdateChannel = 'candidate' | 'stable'
@@ -145,42 +149,46 @@ interface SignedReleaseManifest {
 }
 ```
 
-The Ed25519 private key exists only as a protected GitHub Actions secret. The application embeds only the public key. A key rotation requires a release that trusts both the current and next public keys before a later release removes the old key.
+每次发布必须读取已提交且严格校验的 `build/update-release-policy.json`。该文件声明 `releaseVersion`、`channel`、`mode` 和 `minimumSupportedVersion`。发布脚本不得提供策略默认值；缺少文件、出现未知字段、版本格式错误、渠道不一致、版本不等于本次 Tag，或最低支持版本高于发布版本时，发布失败。强制更新必须先经过明确的策略文件变更和代码审查，不能因为上次配置残留而继续生效。
 
-The client rejects an update before download when the manifest signature, schema, channel, semantic version, update policy, target platform, target architecture, or compatibility declaration is invalid. `minimumSupportedVersion` cannot be newer than the release version. After download it compares the actual artifact size and SHA512 to the signed manifest before installation. The unsigned Windows installer is therefore still authenticated as an Insight release even though Windows displays an unknown-publisher warning.
+Ed25519 私钥只在仓库外的系统临时目录生成，随后写入受保护的 GitHub Actions Environment Secret，并保存一份受访问控制的加密恢复副本。确认两个存储位置后立即删除本机明文。私钥不得保存在仓库内，即使路径已被 `.gitignore` 忽略。应用只内置公钥。轮换密钥时，先发布同时信任新旧公钥的版本，后续版本才能移除旧公钥；加密恢复副本用于避免 GitHub Secret 丢失后无法完成该过渡。
 
-An optional release may be skipped. A required release applies only when the running version is older than its authenticated `minimumSupportedVersion`; it cannot be skipped and remains visible until installed. The client caches only a successfully verified required manifest. On the next launch that cached policy gates login and Core startup until the update succeeds or the user quits. A network error with no previously verified required policy never invents a mandatory update or locks an otherwise usable installed client.
+下载前，客户端必须校验 Manifest 签名、Schema、渠道、语义版本、更新策略、目标平台、目标架构和兼容性声明。选中的 GitHub Tag 必须与签名 Manifest 版本完全一致。`minimumSupportedVersion` 不能高于发布版本。下载后必须用实际文件重新计算大小和 SHA512。Windows 安装器即使没有 Authenticode，也必须能被认证为 Insight 发布的原始文件。
 
-## Update manager ownership
+可选更新允许跳过。只有当前版本低于签名 Manifest 中的 `minimumSupportedVersion` 时，更新才属于强制更新。强制更新不可跳过，并持续显示到安装完成。
 
-The updater is a Shell main-process service. It starts independently of authentication and Core Runtime. Renderer code only receives a safe status projection and invokes narrow commands.
+客户端只缓存已经验证过的 Manifest 原始字节和分离签名，不缓存可直接信任的派生最低版本。每次启动都要使用应用内置公钥和当前渠道/平台重新验证缓存内容，验证成功后才能阻止登录和 Core 启动。伪造、损坏或格式错误的缓存按开放策略处理，只删除该更新缓存文件，不得锁死可用客户端。
 
-The main process owns:
+## 更新管理器归属
 
-- scheduling and resume checks;
-- release-source access;
-- manifest signature validation;
-- version and channel policy;
-- `electron-updater` configuration;
-- download and artifact verification;
-- application shutdown preparation;
-- install and restart;
-- persistent skipped-version preference;
-- structured updater logs.
+更新器属于 Shell 主进程服务，独立于登录和 Core Runtime 启动。渲染进程只能读取安全状态并调用有限命令。
 
-The Shell renderer owns:
+主进程负责：
 
-- a pre-login and recovery-safe update dialog;
-- current version, new version, download progress and errors;
-- check, download, install, skip and remind-later actions;
-- an update badge near the authenticated user entry;
-- no filesystem, private-key, token, URL-construction, or installer access.
+- 定时检查与系统恢复检查；
+- 访问更新源；
+- 验证 Manifest 签名；
+- 判断版本和渠道策略；
+- 配置 `electron-updater`；
+- 下载和校验安装产物；
+- 安装前停止业务运行；
+- 安装并重启；
+- 保存跳过版本偏好；
+- 输出结构化更新日志。
 
-The native application menu exposes `Check for Updates...` on macOS and the custom Windows menu exposes the equivalent command. Both invoke the same main-process service.
+Shell 渲染进程负责：
 
-## Update state model
+- 登录前和恢复模式都可使用的更新窗口；
+- 展示当前版本、新版本、下载进度和错误；
+- 检查、下载、安装、跳过、稍后提醒，以及强制更新时的退出操作；
+- 在已登录用户入口旁展示更新提示；
+- 不接触文件路径、私钥、令牌、URL 拼接或安装器。
 
-The renderer receives one state union:
+macOS 原生菜单和 Windows 自定义菜单都提供“检查更新”，并调用同一个主进程服务。
+
+## 更新状态模型
+
+渲染进程只接收一个判别联合：
 
 ```ts
 type UpdateStatus =
@@ -192,98 +200,108 @@ type UpdateStatus =
   | { phase: 'installing'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
   | { phase: 'up-to-date'; currentVersion: string; manual: true }
   | { phase: 'unsupported'; currentVersion: string; reason: string; manual: boolean }
-  | { phase: 'error'; currentVersion: string; message: string; manual: boolean; retryable: boolean }
+  | { phase: 'error'; currentVersion: string; availableVersion?: string; required: boolean; message: string; manual: boolean; retryable: boolean }
 ```
 
-An automatic check may transition to `available`, but transient `checking`, `up-to-date`, and network errors do not interrupt the user. A manual check displays them. A required release opens the update surface, disables skip/remind-later, and prevents a later launch from entering login or Core after its signed policy has been cached. It does not terminate an active operation mid-turn; installation remains an explicit user action. Only one check, download, or install operation may run at once.
+自动检查可以进入 `available`，但短暂的 `checking`、`up-to-date` 和网络错误不打断用户；手动检查要显示这些状态。强制更新会主动打开更新窗口并禁用跳过和稍后提醒。只有缓存 Manifest 与签名在本次启动重新验证成功后，才允许阻止登录或 Core 启动。
 
-The client checks 15-30 seconds after startup, every six hours, and after resume when the previous successful or attempted check is at least six hours old. Network failure keeps the current application usable and is retried on the next scheduled or manual check.
+强制更新进入错误状态时仍要保留 `required: true` 和目标版本，保证 UI 继续显示“重试”和“退出”，不能意外显示可选更新操作。
 
-## Installation lifecycle
+更新不会中断正在执行的 Agent 操作；安装仍由用户明确触发。同一时间只能进行一次检查、下载或安装。
 
-An update does not stop Core Runtime while it is only checking or downloading. Immediately before installation the update manager asks the workspace lifecycle to:
+客户端在启动 15 至 30 秒后检查更新，之后每六小时检查一次。系统恢复时，如果距离上次成功或失败检查已满六小时，则再次检查。网络失败不影响当前版本继续使用，后续按定时或手动操作重试。
 
-1. reject new update-install requests;
-2. stop accepting new product operations;
-3. flush Shell-owned mutable state;
-4. detach the Harness view;
-5. stop the Core Runtime with the existing graceful timeout;
-6. close auxiliary recovery and menu views;
-7. invoke `quitAndInstall`.
+## 安装生命周期
 
-If preparation fails, the client remains on the current version, returns to an error state, and does not run the installer. The manager never deletes user data to recover from an update failure.
+只检查或下载时不停止 Core Runtime。安装前，更新管理器要求工作区生命周期依次完成：
 
-## Rollback policy
+1. 拒绝新的安装请求；
+2. 停止接受新的产品操作；
+3. 刷新 Shell 管理的可变状态；
+4. 分离 Harness View；
+5. 使用已有超时策略优雅停止 Core Runtime；
+6. 关闭辅助恢复窗口和菜单窗口；
+7. 调用 `quitAndInstall`。
 
-Rollback is a separate second-phase capability. The first updater records compatibility fields now so later rollback does not require changing the release format.
+准备失败时，客户端保持当前版本并回到可重试错误状态，不得启动安装器，也不得通过删除用户数据恢复。
 
-The future rollback catalog may expose only releases whose signed manifest remains available. Before installing an older release, the client compares the target read range with the currently written data schema:
+更新窗口的退出命令只允许该窗口自身的主 Frame 调用，并执行普通 `app.quit()`，不得隐式安装更新。Shell 和 Harness Frame 调用同一 IPC 时必须被拒绝。
 
-- compatible target: allow downgrade;
-- target requires a reversible metadata migration: snapshot the affected databases and configuration, then downgrade;
-- incompatible target: block in-place downgrade and offer an isolated data root if product requirements justify it.
+## 回退策略
 
-Large media assets are not duplicated merely to roll back application code. Metadata, databases, configuration, Profile patches, and asset references are the recoverable set.
+版本回退属于第二阶段。第一阶段先在 Manifest 中记录兼容性字段，避免未来支持回退时再次修改发布格式。
 
-## Plugin ownership
+未来的回退目录只展示仍保留签名 Manifest 的版本。安装旧版本前，客户端比较目标版本可读取的数据结构范围与当前数据结构：
 
-| Class | Installation scope | Update owner | Removal policy |
+- 兼容：允许降级；
+- 需要可逆元数据迁移：先快照数据库和配置，再执行降级；
+- 不兼容：阻止原地降级，只有业务确有需要时才提供隔离的数据根目录。
+
+回退应用代码时不复制大型媒体资产。可恢复范围只包括元数据、数据库、配置、Profile Patch 和资产引用。
+
+## 插件归属
+
+| 类型 | 安装范围 | 更新负责人 | 删除策略 |
 | --- | --- | --- | --- |
-| Required first-party | Bundled with the application and installed into the managed Profile | Whole-client release | Cannot be independently removed or updated |
-| Optional official | Device-level installation with declared Shell/Core compatibility | Future curated official catalog | User removable |
-| User/community | Device-level installation shared by accounts | User or future community manager | User removable |
+| 必需第一方插件 | 随应用打包并安装到托管 Profile | 整包发布 | 不允许独立删除或升级 |
+| 可选官方插件 | 设备级安装，声明 Shell/Core 兼容范围 | 未来的官方插件目录 | 用户可删除 |
+| 用户或社区插件 | 设备级安装，多账号共享 | 用户或未来社区管理器 | 用户可删除 |
 
-Better Sidebar, account integration, the future canvas bridge, and baseline document/media preview plugins are required first-party capabilities when the product depends on them. PDF or spreadsheet preview is a plugin capability; dshmarket is only a plugin discovery, installation, update, backup, and diagnostic system.
+当产品依赖 Better Sidebar、账号集成、未来画布桥接、基础文档或媒体预览时，它们属于必需第一方能力。PDF 或表格预览可以作为插件能力；dshmarket 只是一套插件发现、安装、更新、备份和诊断系统。
 
-The current product keeps local plugin import. dshmarket is not bundled as a required component in this phase. Its backup, compatibility, operation tracking, rollback and diagnostic designs may be selectively adapted later. A public community market, if added, is a separate reviewed feature and does not gain authority over required first-party plugins.
+当前产品继续支持本地导入插件。本阶段不内置 dshmarket。未来可以定向借鉴它的备份、兼容性、操作记录、回退和诊断设计，但公共市场必须单独评审，且无权更新必需第一方插件。
 
-## DSH Desktop upstream intake policy
+## DSH Desktop 上游变更接收策略
 
-The `upstream-dsh-desktop` remote remains configured. A periodic audit fetches the remote and classifies upstream changes into:
+保留 `upstream-dsh-desktop` Remote。定期 Fetch 后，将上游变化分为：
 
-- Electron or operating-system lifecycle fixes;
-- updater and release-pipeline fixes;
-- plugin recovery or Profile safety fixes;
-- Harness compatibility changes relevant to the locked Core interface;
-- DSH-specific product, market, brand, analytics, mobile or deployment features.
+- Electron 或操作系统生命周期修复；
+- 更新器和发布流程修复；
+- 插件恢复或 Profile 安全修复；
+- 与锁定 Core 接口有关的 Harness 兼容性变化；
+- DSH 专属产品、市场、品牌、分析、移动端或部署功能。
 
-Only the first four classes are candidates for selective adoption. Adoption occurs as a focused local change with:
+前四类才进入定向采用候选。每次采用必须记录：
 
-- the reviewed upstream commit range;
-- the specific files or behavior adopted;
-- the local product differences;
-- focused tests;
-- the appropriate build-runbook validation stage;
-- a commit message or design note retaining provenance.
+- 已审查的上游 Commit 范围；
+- 采用的具体文件或行为；
+- Insight 产品差异；
+- 对应的聚焦测试；
+- 构建手册达到的验证阶段；
+- 保留来源信息的 Commit 或设计记录。
 
-The product branch must not merge upstream `package.json`, lockfile, release workflow, vendored Harness packages, dshmarket tree, product assets, App ID, Profile, or update host as a unit.
+产品分支不得整体合并上游 `package.json`、Lockfile、Release Workflow、内置 Harness 包、dshmarket 目录、品牌资源、App ID、Profile 或更新域名。
 
-## Failure handling
+## 失败处理
 
-- Missing or invalid signature: report an unauthenticated release and refuse download.
-- Missing artifact or mismatched digest: delete only the updater cache entry and refuse installation.
-- GitHub unavailable or rate limited: retain the current version and retry later; manual checks show a bounded error.
-- Download interrupted: keep the current version; allow a later retry through updater cache semantics.
-- Core Runtime cannot stop: cancel installation and keep the current process alive when possible.
-- Required update download unavailable: keep retry and quit available; do not start login/Core from a later launch while a cached authenticated minimum-version policy still excludes the installed version.
-- Installer fails after application exit: the existing installation and user data remain recoverable through platform installer behavior; the next launch records the running version and previous update attempt.
-- Release asset validation fails in CI: do not publish or mutate the Release.
+- Manifest 缺失或签名无效：提示发布无法认证，拒绝下载。
+- Tag 与 Manifest 版本不一致：拒绝该 Release，不回退到未明确选择的版本。
+- 产物缺失或摘要不一致：只删除对应更新缓存，拒绝安装。
+- GitHub 不可用或触发限流：保留当前版本；手动检查显示简短错误，后续可重试。
+- 下载中断：保留当前版本，之后继续使用更新器缓存重试。
+- Core Runtime 无法停止：取消安装，并尽可能保持当前进程继续运行。
+- 强制更新无法下载：保留“重试”和“退出”。只有缓存 Manifest 与签名重新验证成功且当前版本确实过低时，后续启动才阻止登录/Core。
+- 应用退出后安装器失败：依靠平台安装机制保留旧安装和用户数据；下次启动记录当前实际版本和上次尝试结果。
+- CI 原生 DMG、ZIP 或 NSIS 结构校验失败：不得上传对应构建产物。
+- CI 发布产物校验失败：不得发布或修改 Release。
 
-## Verification strategy
+## 研发与验证原则
 
-Validation follows the existing low-cost-to-high-cost curve:
+实施按低成本到高成本推进，每个阶段通过后才进入下一阶段：
 
-1. Pure unit tests for signature validation, optional/required policy, channel policy, target selection, state transitions, scheduling and skipped versions.
-2. IPC and preload contract tests proving untrusted renderers cannot access installer paths or update internals.
-3. Release-script fixture tests for manifests, signatures, digests, merged macOS metadata and required assets.
-4. Development UI validation using fixture manifests and fake executor events; no production source and no real installation.
-5. Packaged unsigned DEV smoke proving the development channel cannot see stable updates.
-6. Candidate feed with a signed/notarized macOS N to N+1 update, including installation and data retention.
-7. Candidate feed with unsigned Windows N to N+1 update, including manifest verification, installer execution, SmartScreen expectation and data retention.
-8. Stable Release publication only after both candidate paths and the existing login, account isolation, Better Sidebar and packaged Runtime checks pass.
+1. 纯单元测试：签名、发布策略、渠道、目标选择、状态转换、定时规则和跳过版本。
+2. IPC 与 Preload 契约测试：证明不可信渲染进程不能接触安装路径或更新内部信息。
+3. 发布脚本 Fixture：显式发布策略、Manifest、签名、摘要、macOS 元数据合并、必需产物及截断文件拒绝。
+4. 开发模式 Fixture UI：覆盖全部状态，但不接触 GitHub 正式源，也不允许真实安装。
+5. 本地未签名 DEV 包：证明开发渠道无法发现正式更新。
+6. macOS 候选渠道：完成原生 DMG/ZIP 校验以及 N 到 N+1 安装和数据保留。
+7. Windows 候选渠道：完成原生 NSIS 校验、Manifest 验证、N 到 N+1 安装、SmartScreen 预期和数据保留。
+8. 两个平台候选路径以及登录、账号隔离、Better Sidebar 和内置 Runtime 验收通过后，才允许发布正式版。
 
-## Documentation consequences
+不得为了验证更新窗口、状态机、Manifest 或错误提示而提前构建安装包。不得在本地聚焦测试、Build、Fixture UI 和对应平台本地 Smoke 通过前触发 GitHub 安装包任务。
 
-After this design is accepted, current documentation that says DSH Desktop is periodically merged must be changed to the reference-upstream policy. The build Runbook must replace “upstream merge” with “upstream intake audit” as the normal path while retaining an exceptional isolated integration-branch procedure for a deliberately requested full merge.
+## 文档维护
 
-New updater or packaging failures that change future gates belong in the client build Runbook. One-off failure timelines belong in `docs/incidents/`.
+本方案确认后，所有仍写着“定期合并 DSH Desktop”的文档都要改成“参考上游、定向采用”。构建手册把“整体 Upstream Merge”改为“上游变更审计”的正常路径，同时保留一个仅供明确需求使用的隔离集成分支流程。
+
+新的更新或打包问题，如果会改变以后发布门禁，应追加到 `docs/client-build-runbook.md`；只记录一次性故障时间线时，放入 `docs/incidents/`。

@@ -1,113 +1,126 @@
-# Desktop Update and Upstream Policy Implementation Plan
+# 桌面客户端更新与上游管理实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> 本计划按任务顺序执行。每个阶段都有停止点；未达到当前停止点时，不得触发下一阶段的 GitHub 安装包构建。
 
-**Goal:** Make Insight Desktop an independently maintained product fork and add authenticated whole-client updates for signed macOS and unsigned Windows releases hosted on GitHub Releases.
+**目标：** 将 Insight Desktop 固化为独立维护的产品分支，并为托管在 GitHub Releases 的 macOS 签名包和 Windows 未签名包增加可信整包更新能力。
 
-**Architecture:** The Shell main process owns update scheduling, GitHub release discovery, Ed25519 manifest verification, `electron-updater`, downloaded-artifact verification, and installation shutdown. A dedicated child update window and narrow preload APIs expose status before login, during recovery, and over the authenticated Harness surface; required first-party plugins and the locked Core Runtime update only with the complete application.
+**架构：** Shell 主进程负责更新调度、GitHub Release 发现、Ed25519 Manifest 验签、`electron-updater`、下载产物校验和安装前退出。独立更新窗口和有限 Preload API 在登录前、恢复模式和已登录 Harness 界面中提供更新状态。必需第一方插件和锁定的 Core Runtime 只能随完整客户端更新。
 
-**Tech Stack:** Electron 43, electron-builder/electron-updater 26.15/6.x, TypeScript 5.9, React 18, Node crypto Ed25519, Zod, semver, Vitest 4, GitHub Actions, GitHub Releases, NSIS, Apple Developer ID and Notary Service.
+**技术栈：** Electron 43、electron-builder/electron-updater 26.15/6.x、TypeScript 5.9、React 18、Node.js Crypto Ed25519、Zod、semver、Vitest 4、GitHub Actions、GitHub Releases、NSIS、Apple Developer ID 与 Notary Service。
 
-## Global Constraints
+## 全局约束
 
-- `dataelement/dsh-desktop` is a reference upstream; do not merge its main branch, package manifest, lockfile, vendored Harness packages, dshmarket tree, brand assets, or workflow wholesale.
-- `core-runtime.lock.json` remains the sole Shell authority for the embedded Core Runtime.
-- Required first-party plugins, Better Sidebar, the default Profile and Core Runtime update only as one complete desktop release.
-- Stable production artifacts use App ID `com.insight.desktop`; development and candidate builds use separate App IDs and user-data roots.
-- Stable and candidate macOS packages are Developer ID signed, notarized and stapled.
-- Windows NSIS packages remain unsigned and may trigger SmartScreen; update installation still requires an Ed25519-authenticated manifest and matching artifact SHA512.
-- Development packages never contact or install from candidate or stable update sources.
-- Initial update hosting is the public `Boxser567/insight-desktop-shell` GitHub Releases feed.
-- Stable tags use `v<major>.<minor>.<patch>` and candidate tags use `v<major>.<minor>.<patch>-rc.<number>`; drafts are never visible to installed clients.
-- Stable and candidate channels never discover each other's releases.
-- A signed manifest may require an update only when the installed version is below its `minimumSupportedVersion`; a required update cannot be skipped and a cached verified policy gates login/Core on later launches.
-- Linux, dshmarket integration, independent required-plugin updates, historical-version installation and data downgrade migrations are outside this plan.
-- An update must preserve all product `userData`, account-scoped Harness homes, sessions, workspaces, settings, future canvas assets and user-imported plugins.
-- Do not trigger a GitHub installer build until focused tests, local build, fixture UI validation and the corresponding local packaged smoke pass.
+- `dataelement/dsh-desktop` 是参考上游。不得整体合并其主分支、`package.json`、Lockfile、内置 Harness 包、dshmarket、品牌资源或发布工作流。
+- `core-runtime.lock.json` 是 Shell 内置 Core Runtime 的唯一版本来源。
+- 必需第一方插件、Better Sidebar、默认 Profile 和 Core Runtime 只能随完整桌面版本一起更新。
+- 正式版使用 App ID `com.insight.desktop`；开发版和候选版使用独立 App ID 与 `userData`。
+- 正式版和候选版 macOS 安装包必须完成 Developer ID 签名、公证和装订。
+- Windows NSIS 暂不签名，允许出现 SmartScreen 提示；安装前仍必须通过 Ed25519 Manifest 与实际 EXE SHA512 校验。
+- 开发版不得连接候选或正式更新源。
+- 第一阶段更新源是公开的 `Boxser567/insight-desktop-shell` GitHub Releases。
+- 正式 Tag 格式为 `v<major>.<minor>.<patch>`；候选 Tag 格式为 `v<major>.<minor>.<patch>-rc.<number>`。
+- 正式版和候选版不能互相发现。
+- 强制更新仅在当前版本低于签名策略中的 `minimumSupportedVersion` 时成立。
+- 缓存的强制策略必须保存 Manifest 原始字节与签名，并在每次启动重新验签后才能阻止登录/Core。
+- 生产更新私钥不得保存在仓库内，包括被 `.gitignore` 忽略的路径。
+- 更新不得删除产品 `userData`、账号级 Harness Home、会话、工作区、设置、画布资产或用户导入插件。
+- Linux、dshmarket、必需插件独立更新、历史版本安装和数据降级迁移不在本计划内。
+- 聚焦测试、本地 Build、Fixture UI 和对应本地 Smoke 未通过前，不得触发 GitHub 安装包构建。
+- 每个任务提交前只暂存该任务文件清单中的改动，不使用 `git add -A`。下文 Commit 命令均假设相关文件已经精确暂存。
+
+## 四阶段执行路线
+
+### 阶段 A：可信契约，不打包
+
+执行任务 1 至任务 4。只处理产品归属、Manifest、GitHub Release 解析、状态和缓存。
+
+停止点 A：相关 Vitest 与 TypeScript 检查通过；伪造 Manifest、伪造强制更新缓存、错误渠道和乱序 Release 都被拒绝。
+
+### 阶段 B：本地更新闭环，不连接正式源
+
+执行任务 5 至任务 6。使用 Fake Source 和 Fake Executor 完成主进程、IPC、菜单和更新窗口。
+
+停止点 B：开发模式能人工查看全部更新状态；无法真实安装，也不会连接 GitHub 正式源。
+
+### 阶段 C：发布工具和本地候选包，不发布 Release
+
+执行任务 7 至任务 8。完成密钥、公钥、发布策略、产物验证和三渠道隔离。
+
+停止点 C：本地候选目录检查通过，内置 Runtime、Better Sidebar、公钥和渠道身份正确；仓库及安装包中不存在私钥或本地源码路径。
+
+### 阶段 D：GitHub 候选更新
+
+执行任务 9 至任务 10。先运行低成本发布预检，再构建平台安装包，最后完成 N 到 N+1 更新。
+
+停止点 D：macOS arm64 与 Windows x64 的候选更新、数据保留和核心业务回归全部通过后，才允许创建正式 Release。
+
+## 文件清单
+
+### 产品与策略
+
+- 修改 `README.md`：声明 Insight 产品仓库和参考上游策略。
+- 修改 `package.json`、`package-lock.json`：移除上游作者身份，修正仓库地址，增加更新依赖和发布配置。
+- 修改 `docs/client-build-runbook.md`：增加上游审计与更新发布门禁。
+- 修改 `docs/plans/2026-08-28-authenticated-sidebar-integration-design.md`：移除整体同步 Shell 上游的假设。
+- 新增 `docs/upstream-intake.md`：记录上游审计和定向采用。
+
+### 共享契约与认证
+
+- 新增 `src/shared/update-contracts.ts`：更新状态、命令、Manifest、平台和渠道类型。
+- 新增 `src/shared/update-api.ts`：Shell、Harness 和更新窗口的有限 API。
+- 新增 `src/main/update/release-manifest.ts`：严格解析、验签和目标产物选择。
+- 新增 `src/main/update/update-source.ts`：与更新托管方无关的解析接口。
+- 新增 `src/main/update/github-release-source.ts`：GitHub Releases 实现。
+- 新增 `build/update-compatibility.json`：数据兼容性配置。
+- 新增 `build/update-release-policy.json`：与发布版本和渠道绑定的可选/强制策略。
+- 新增 `build/update-signing-public.pem`：生产更新公钥。
+
+### 更新生命周期
+
+- 新增 `src/main/update/update-policy.ts`：平台、渠道、调度和支持策略。
+- 新增 `src/main/update/update-state.ts`：纯状态 Reducer。
+- 新增 `src/main/update/skipped-version.ts`：原子保存跳过版本。
+- 新增 `src/main/update/required-update-policy.ts`：保存原始 Manifest/签名并在读取时重新验签。
+- 新增 `src/main/update/update-executor.ts`：`electron-updater` 适配器。
+- 新增 `src/main/update/update-manager.ts`：串行调度、验签、下载校验和安装。
+- 新增 `src/main/update/update-window.ts`：独立更新窗口生命周期。
+- 修改 `src/main/workspace/workspace-lifecycle.ts`：安装前显式、串行停止工作区。
+- 修改 `src/main/index.ts`：只负责组合服务、注册 IPC/菜单和退出清理。
+
+### 渲染进程与 Preload
+
+- 新增 `src/preload/update.ts`。
+- 修改 `src/preload/shell.ts`、`src/preload/harness.ts`。
+- 修改 `src/shared/shell-api.ts`、`src/renderer/src/global.d.ts`、`packages/insight-desktop-integration/src/client/global.d.ts`。
+- 新增 `src/renderer/update.html`、`src/renderer/src/update-main.tsx`、`src/renderer/src/UpdateWindow.tsx`、`src/renderer/src/update.css`。
+- 新增 `src/renderer/src/UpdateBadge.tsx`，修改 `src/renderer/src/App.tsx`。
+- 修改第一方集成插件的 `components.tsx`、`index.tsx`、`styles.tsx` 和语言文件。
+- 修改 `electron.vite.config.ts`、`src/shared/desktop-menu.ts`、`src/preload/windows-menu.ts` 和 `src/main/index.ts`。
+
+### 发布脚本与 CI
+
+- 新增 `scripts/generate-update-signing-keypair.mjs`。
+- 新增 `scripts/build-update-release.mjs`。
+- 新增 `scripts/merge-mac-update-metadata.mjs`。
+- 新增 `scripts/verify-release-assets.mjs`。
+- 修改 `scripts/finalize-windows-release.mjs`。
+- 新增 `electron-builder.candidate.cjs`，修改 `electron-builder.dev.cjs`。
+- 修改 `.github/workflows/release.yml`。
+
+### 测试
+
+- 新增 `test/update-manifest.test.ts`、`test/github-release-source.test.ts`、`test/update-policy.test.ts`、`test/update-state.test.ts`、`test/skipped-version.test.ts`、`test/required-update-policy.test.ts`、`test/update-manager.test.ts`、`test/update-window.test.ts`、`test/update-api-contract.test.ts`、`test/build-update-release.test.ts`、`test/merge-mac-update-metadata.test.ts`、`test/verify-release-assets.test.ts`。
+- 修改 `test/workspace-lifecycle.test.ts`、`test/release.test.ts`、`test/shell-preload-contract.test.ts`、`test/desktop-integration-client.test.ts`、`test/windows-titlebar.test.ts`、`test/readme-parity.test.ts`、`test/finalize-windows-release.test.ts`、`test/runtime.test.ts`。
 
 ---
 
-## File Map
+## 任务 1：确立产品分支和仓库身份
 
-### Product and policy
+**涉及文件：** `README.md`、`package.json`、`package-lock.json`、`docs/client-build-runbook.md`、Sidebar 集成设计、`docs/upstream-intake.md`、`test/release.test.ts`、`test/readme-parity.test.ts`。
 
-- Modify `README.md` — identify this repository and replace periodic full upstream merge instructions.
-- Modify `package.json` and `package-lock.json` — correct repository identity, add updater dependencies and publish metadata.
-- Modify `docs/client-build-runbook.md` — define reference-upstream intake and updater validation gates.
-- Modify `docs/plans/2026-08-28-authenticated-sidebar-integration-design.md` — replace full Shell upstream merge assumptions.
-- Create `docs/upstream-intake.md` — repeatable audit ledger and selective-adoption template.
+### 1.1 先修改契约测试
 
-### Shared contracts and verification
-
-- Create `src/shared/update-contracts.ts` — renderer-safe status union, commands, manifest fields and platform/channel names.
-- Create `src/shared/update-api.ts` — narrow renderer API shared by Shell, Harness and update-window preloads.
-- Create `src/main/update/release-manifest.ts` — strict manifest parsing, Ed25519 verification and target selection.
-- Create `src/main/update/update-source.ts` — source-neutral release-resolution interface.
-- Create `src/main/update/github-release-source.ts` — public GitHub Releases implementation.
-- Create `build/update-compatibility.json` — release data-compatibility numbers.
-- Create `build/update-signing-public.pem` — production update-signing public key.
-
-### Update lifecycle
-
-- Create `src/main/update/update-policy.ts` — channel, schedule and support policy.
-- Create `src/main/update/update-state.ts` — pure state reducer.
-- Create `src/main/update/skipped-version.ts` — atomic skipped-version persistence.
-- Create `src/main/update/required-update-policy.ts` — cache only an authenticated minimum-version gate.
-- Create `src/main/update/update-executor.ts` — testable adapter around `electron-updater`.
-- Create `src/main/update/update-manager.ts` — serialization, scheduling, source authentication, download verification and installation.
-- Create `src/main/update/update-window.ts` — dedicated child window lifecycle.
-- Modify `src/main/workspace/workspace-lifecycle.ts` — serialized explicit stop before installation.
-- Modify `src/main/index.ts` — composition only: create manager, register IPC/menu and stop it during shutdown.
-
-### Renderer and preload
-
-- Create `src/preload/update.ts` — update-window bridge.
-- Modify `src/preload/shell.ts` and `src/preload/harness.ts` — expose the same status/open/check projection.
-- Modify `src/shared/shell-api.ts`, `src/renderer/src/global.d.ts` and `packages/insight-desktop-integration/src/client/global.d.ts` — type the bridges.
-- Create `src/renderer/update.html`, `src/renderer/src/update-main.tsx`, `src/renderer/src/UpdateWindow.tsx` and `src/renderer/src/update.css` — dedicated update UI.
-- Create `src/renderer/src/UpdateBadge.tsx` — update entry on unauthenticated Shell surfaces.
-- Modify `src/renderer/src/App.tsx` — render the pre-login update entry.
-- Modify `packages/insight-desktop-integration/src/client/components.tsx`, `index.tsx`, `styles.tsx` and locale files — render authenticated footer badge without changing upstream Harness DOM.
-- Modify `electron.vite.config.ts` — build Shell and update renderers plus the update preload.
-- Modify `src/shared/desktop-menu.ts`, `src/preload/windows-menu.ts` and `src/main/index.ts` — add native/custom menu update commands.
-
-### Release tooling and CI
-
-- Create `scripts/generate-update-signing-keypair.mjs` — generate local Ed25519 PEM files without committing the private key.
-- Create `scripts/build-update-release.mjs` — inventory assets, write canonical manifest and signature.
-- Create `scripts/merge-mac-update-metadata.mjs` — merge arm64/x64 updater metadata.
-- Create `scripts/verify-release-assets.mjs` — enforce the complete signed release set.
-- Modify `scripts/finalize-windows-release.mjs` — remove signed-installer wording and validate unsigned NSIS metadata.
-- Create `electron-builder.candidate.cjs` — isolated candidate identity and output.
-- Modify `electron-builder.dev.cjs` — rename the channel metadata field and keep publishing disabled.
-- Modify `.github/workflows/release.yml` — candidate/stable builds, unsigned Windows publication, metadata signing and publication gates.
-
-### Tests
-
-- Create `test/update-manifest.test.ts`, `test/github-release-source.test.ts`, `test/update-policy.test.ts`, `test/update-state.test.ts`, `test/skipped-version.test.ts`, `test/required-update-policy.test.ts`, `test/update-manager.test.ts`, `test/update-window.test.ts`, `test/update-api-contract.test.ts`, `test/build-update-release.test.ts`, `test/merge-mac-update-metadata.test.ts` and `test/verify-release-assets.test.ts`.
-- Modify `test/workspace-lifecycle.test.ts`, `test/release.test.ts`, `test/shell-preload-contract.test.ts`, `test/desktop-integration-client.test.ts`, `test/windows-titlebar.test.ts` and `test/readme-parity.test.ts`.
-
----
-
-### Task 1: Establish the product-fork policy and repository identity
-
-**Files:**
-- Modify: `README.md:1-40`
-- Modify: `package.json:1-20`
-- Modify: `package-lock.json`
-- Modify: `docs/client-build-runbook.md:20-38`
-- Modify: `docs/plans/2026-08-28-authenticated-sidebar-integration-design.md:108-137`
-- Create: `docs/upstream-intake.md`
-- Modify: `test/release.test.ts`
-- Modify: `test/readme-parity.test.ts`
-
-**Interfaces:**
-- Consumes: approved design `docs/plans/2026-09-03-desktop-update-and-upstream-policy-design.md`.
-- Produces: a reference-upstream policy used by every later task; correct GitHub repository metadata used by the updater and workflow.
-
-- [ ] **Step 1: Change the release contract test to require Insight ownership**
-
-Add a test that reads `package.json` and asserts:
+测试读取 `package.json` 并断言：
 
 ```ts
 expect(packageJson.repository.url).toBe(
@@ -119,77 +132,62 @@ expect(packageJson.bugs.url).toBe(
 expect(packageJson.homepage).toBe(
   'https://github.com/Boxser567/insight-desktop-shell#readme'
 )
+expect(packageJson.author).toBeUndefined()
 ```
 
-Change the upstream documentation assertions so they require the phrases `reference upstream`, `selective adoption`, `upstream commit range`, and reject `periodically merges`.
+文档测试必须包含 `reference upstream`、`selective adoption`、`upstream commit range`，并拒绝 `periodically merges`。
 
-- [ ] **Step 2: Run the focused tests and verify the old policy fails**
-
-Run: `npx vitest run test/release.test.ts test/readme-parity.test.ts`
-
-Expected: FAIL because repository metadata still points to `dataelement/dsh-desktop` and README still promises periodic merges.
-
-- [ ] **Step 3: Update repository metadata and policy documents**
-
-Set the three `package.json` URLs to the tested Insight repository values. Update the lockfile root package metadata through `npm install --package-lock-only --ignore-scripts` rather than hand-editing dependency resolution.
-
-Replace README's upstream section with:
-
-```markdown
-## Reference upstream
-
-`dataelement/dsh-desktop` is retained as a reference upstream. This product branch does not periodically merge upstream main. Each intake records the reviewed commit range and selectively adopts only relevant Electron, updater, recovery or compatibility fixes while preserving the locked Core Runtime, product identity, account isolation and first-party plugins.
-```
-
-Create `docs/upstream-intake.md` with the exact audit record fields:
-
-```markdown
-## Intake record
-
-- Review date:
-- Upstream range:
-- Reviewed categories: Electron lifecycle / updater / recovery / Core compatibility / product-only
-- Adopted commits and files:
-- Rejected changes and reason:
-- Local adaptations:
-- Focused tests:
-- Build Runbook stage reached:
-```
-
-Update the Runbook and sidebar design so the normal operation is a reference-upstream audit. Preserve a separate statement that a deliberately requested full merge happens only on an isolated integration branch and must pass every protected product constraint before reaching `main`.
-
-- [ ] **Step 4: Run documentation and release contract tests**
-
-Run: `npx vitest run test/release.test.ts test/readme-parity.test.ts`
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit the policy change**
+### 1.2 验证旧行为确实失败
 
 ```bash
-git add README.md package.json package-lock.json docs/client-build-runbook.md docs/plans/2026-08-28-authenticated-sidebar-integration-design.md docs/upstream-intake.md test/release.test.ts test/readme-parity.test.ts
+npx vitest run test/release.test.ts test/readme-parity.test.ts
+```
+
+预期：仓库地址、上游策略和作者字段导致失败。
+
+### 1.3 修改元数据和文档
+
+将三个 URL 改为 Insight 地址，删除 `DataElement` 作者字段。在法定主体未确认前不填入替代名称。通过以下命令更新 Lockfile 根包元数据，不手工改依赖解析：
+
+```bash
+npm install --package-lock-only --ignore-scripts
+```
+
+`docs/upstream-intake.md` 使用以下记录模板：
+
+```markdown
+## 上游接收记录
+
+- 审查日期：
+- 上游 Commit 范围：
+- 审查类别：Electron 生命周期 / 更新器 / 恢复 / Core 兼容 / 上游产品专属
+- 采用的 Commit 与文件：
+- 拒绝的变更及原因：
+- 本地适配：
+- 聚焦测试：
+- 构建手册达到的阶段：
+```
+
+### 1.4 验证与提交
+
+```bash
+npx vitest run test/release.test.ts test/readme-parity.test.ts
+git diff --check
+```
+
+预期：全部通过。用户确认后提交：
+
+```bash
 git commit -m "docs: establish reference upstream policy"
 ```
 
 ---
 
-### Task 2: Define and authenticate the release manifest
+## 任务 2：定义并认证发布 Manifest
 
-**Files:**
-- Create: `src/shared/update-contracts.ts`
-- Create: `src/main/update/release-manifest.ts`
-- Create: `build/update-compatibility.json`
-- Create: `test/update-manifest.test.ts`
-- Modify: `package.json`
-- Modify: `package-lock.json`
+**涉及文件：** `src/shared/update-contracts.ts`、`src/main/update/release-manifest.ts`、`build/update-compatibility.json`、`test/update-manifest.test.ts`、`package.json`、`package-lock.json`。
 
-**Interfaces:**
-- Consumes: raw UTF-8 manifest bytes, detached Ed25519 signature bytes, an SPKI public key and `{ channel, platform, arch }`.
-- Produces: `verifyReleaseManifest(input: VerifyReleaseManifestInput): SignedReleaseManifest` and `selectTargetArtifacts(manifest, target): TargetArtifacts`.
-
-- [ ] **Step 1: Add strict shared types and failing verifier tests**
-
-Define:
+### 2.1 定义共享类型并先写失败测试
 
 ```ts
 export type UpdateChannel = 'development' | 'candidate' | 'stable'
@@ -218,55 +216,44 @@ export interface SignedReleaseManifest {
 }
 ```
 
-The test generates an Ed25519 key pair with `generateKeyPairSync('ed25519')`, signs the exact `Buffer` returned by `JSON.stringify(value, null, 2) + '\n'`, and proves:
+测试使用 `generateKeyPairSync('ed25519')` 生成临时测试密钥，对 `JSON.stringify(value, null, 2) + '\n'` 的原始 `Buffer` 签名，并证明：
 
-- valid bytes return the parsed manifest;
-- changing one byte rejects the signature;
-- a valid signature with an unknown field rejects strict schema validation;
-- stable cannot accept a candidate manifest;
-- darwin arm64 requires its ZIP, ZIP blockmap, DMG and updater metadata;
-- win32 x64 requires its NSIS installer, blockmap and updater metadata;
-- another platform or architecture is rejected;
-- invalid semver, invalid ISO date, duplicate artifact name, negative size and malformed SHA512 are rejected.
-- a required policy rejects an invalid minimum semver or a minimum newer than the release; optional and required policies parse distinctly.
+- 合法原始字节可返回解析后的 Manifest；
+- 任意一字节变化都会导致验签失败；
+- 签名合法但包含未知字段时，严格 Schema 拒绝；
+- 正式渠道不能接受候选 Manifest；
+- darwin arm64 必须包含 ZIP、ZIP blockmap、DMG 和更新元数据；
+- win32 x64 必须包含 NSIS、blockmap 和更新元数据；
+- 其他平台或架构被拒绝；
+- 非法 semver、日期、重复产物、负数大小和错误 SHA512 被拒绝；
+- `minimumSupportedVersion` 非法或高于发布版本时被拒绝。
 
-- [ ] **Step 2: Run the verifier test and confirm missing modules fail**
+### 2.2 安装依赖并实现
 
-Run: `npx vitest run test/update-manifest.test.ts`
+```bash
+npm install zod semver
+npm install --save-dev @types/semver
+```
 
-Expected: FAIL because `update-contracts.ts` and `release-manifest.ts` do not exist.
-
-- [ ] **Step 3: Install validation dependencies**
-
-Run: `npm install zod semver && npm install --save-dev @types/semver`
-
-Expected: `package.json` and `package-lock.json` record direct dependencies without changing the locked Core Runtime.
-
-- [ ] **Step 4: Implement exact-byte signature and schema validation**
-
-Use this verifier structure:
+核心验签结构：
 
 ```ts
-import { createPublicKey, verify } from 'node:crypto'
-import { z } from 'zod'
-import semver from 'semver'
-
 export function verifyReleaseManifest(input: VerifyReleaseManifestInput): SignedReleaseManifest {
   const key = createPublicKey(input.publicKeyPem)
   if (!verify(null, input.manifestBytes, key, input.signatureBytes)) {
-    throw new Error('Update manifest signature is invalid.')
+    throw new Error('更新 Manifest 签名无效。')
   }
   const parsed = manifestSchema.parse(JSON.parse(input.manifestBytes.toString('utf8')))
-  if (!semver.valid(parsed.version)) throw new Error('Update version is not valid semver.')
-  if (parsed.channel !== input.target.channel) throw new Error('Update channel does not match this build.')
+  if (!semver.valid(parsed.version)) throw new Error('更新版本不是合法语义版本。')
+  if (parsed.channel !== input.target.channel) throw new Error('更新渠道与当前客户端不一致。')
   selectTargetArtifacts(parsed, input.target)
   return parsed
 }
 ```
 
-Build `manifestSchema` from `.strict()` Zod objects. Validate the digest with `/^[A-Za-z0-9+/]{86}==$/`, require safe non-negative integers for sizes and schema numbers, require `minimumReadableDataSchema <= maximumReadableDataSchema`, and reject duplicate `(platform, arch, kind, name)` tuples after parsing.
+所有 Zod 对象使用 `.strict()`。大小和 Schema 数值必须是非负安全整数；SHA512 Base64 必须符合 `/^[A-Za-z0-9+/]{86}==$/`；`minimumReadableDataSchema <= maximumReadableDataSchema`；解析后拒绝重复的 `(platform, arch, kind, name)`。
 
-Create `build/update-compatibility.json` with version-one values:
+`build/update-compatibility.json` 初始内容：
 
 ```json
 {
@@ -277,52 +264,27 @@ Create `build/update-compatibility.json` with version-one values:
 }
 ```
 
-- [ ] **Step 5: Run verifier tests and typecheck**
-
-Run: `npx vitest run test/update-manifest.test.ts && npm run typecheck`
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit the manifest contract**
+### 2.3 验证与提交
 
 ```bash
-git add package.json package-lock.json build/update-compatibility.json src/shared/update-contracts.ts src/main/update/release-manifest.ts test/update-manifest.test.ts
+npx vitest run test/update-manifest.test.ts
+npm run typecheck
+git diff --check
+```
+
+用户确认后提交：
+
+```bash
 git commit -m "feat(update): authenticate release manifests"
 ```
 
 ---
 
-### Task 3: Resolve candidate and stable GitHub releases
+## 任务 3：解析候选和正式 GitHub Release
 
-**Files:**
-- Create: `src/main/update/update-source.ts`
-- Create: `src/main/update/github-release-source.ts`
-- Create: `test/github-release-source.test.ts`
+**涉及文件：** `src/main/update/update-source.ts`、`src/main/update/github-release-source.ts`、`test/github-release-source.test.ts`。
 
-**Interfaces:**
-- Consumes: `ReleaseUpdateChannel`, injected `fetch`, repository owner/name and production public key.
-- Produces: `UpdateSource.resolve(channel, target): Promise<ResolvedRelease>` containing the verified manifest and asset URLs indexed by signed artifact name.
-
-- [ ] **Step 1: Write source-selection and trust tests**
-
-Use fixture GitHub API responses and assert:
-
-```ts
-expect((await source.resolve('stable', target)).manifest.version).toBe('1.2.0')
-expect((await source.resolve('candidate', target)).manifest.version).toBe('1.3.0-rc.2')
-```
-
-Cover draft exclusion, stable/pre-release separation, missing manifest, missing signature, duplicated asset names, unsigned manifest bytes, a signed artifact absent from the GitHub Release, redirect failure, non-HTTPS asset URL and GitHub error/rate-limit responses.
-
-- [ ] **Step 2: Run the focused test and confirm it fails**
-
-Run: `npx vitest run test/github-release-source.test.ts`
-
-Expected: FAIL because the source files do not exist.
-
-- [ ] **Step 3: Implement the source-neutral interface**
-
-Define:
+### 3.1 定义接口
 
 ```ts
 export interface ResolvedRelease {
@@ -335,44 +297,45 @@ export interface UpdateSource {
 }
 ```
 
-`GitHubReleaseSource` requests `https://api.github.com/repos/Boxser567/insight-desktop-shell/releases?per_page=20`, sets `Accept: application/vnd.github+json`, rejects drafts, chooses the first `prerelease === (channel === 'candidate')`, then downloads `insight-update.json` and `insight-update.json.sig`. It verifies the exact manifest bytes before trusting any artifact name or version.
+### 3.2 先写选择与信任测试
 
-Allow only HTTPS release asset URLs whose initial host is `github.com` or `api.github.com`; let `fetch` follow GitHub's signed object-storage redirect. Do not embed a GitHub token in the client.
+覆盖以下情况：草稿过滤、正式/候选隔离、API 顺序与 semver 顺序不同、合法版本出现在后一页、非法 Tag、Tag 与 Manifest 版本不一致、缺失 Manifest/签名、重复资产名、签名被篡改、Manifest 声明的资产在 Release 中缺失、非 HTTPS、跳转失败和 GitHub 限流。
 
-- [ ] **Step 4: Run source tests and typecheck**
+### 3.3 实现 GitHub Source
 
-Run: `npx vitest run test/github-release-source.test.ts && npm run typecheck`
+请求：
 
-Expected: PASS.
+```text
+https://api.github.com/repos/Boxser567/insight-desktop-shell/releases?per_page=100&page=<n>
+```
 
-- [ ] **Step 5: Commit the release source**
+请求使用 `Accept: application/vnd.github+json`。最多读取五页。拒绝草稿和不符合目标渠道 Tag 规则的版本，从完整候选集合中选择最高 semver。到达五页上限但仍有下一页时返回明确错误，不使用不完整集合。
+
+下载选中 Release 的 `insight-update.json` 和 `.sig`，先验证原始字节，再要求 Manifest 版本等于 Tag 版本，之后才能信任资产名和 URL。
+
+初始 URL 只允许 HTTPS 且 Host 为 `github.com` 或 `api.github.com`；允许 `fetch` 跟随 GitHub 签名对象存储跳转。客户端不内置 GitHub Token。
+
+### 3.4 验证与提交
 
 ```bash
-git add src/main/update/update-source.ts src/main/update/github-release-source.ts test/github-release-source.test.ts
+npx vitest run test/github-release-source.test.ts
+npm run typecheck
+git diff --check
+```
+
+用户确认后提交：
+
+```bash
 git commit -m "feat(update): resolve authenticated GitHub releases"
 ```
 
 ---
 
-### Task 4: Implement update policy, persistence and state transitions
+## 任务 4：实现更新策略、持久化和状态转换
 
-**Files:**
-- Create: `src/main/update/update-policy.ts`
-- Create: `src/main/update/update-state.ts`
-- Create: `src/main/update/skipped-version.ts`
-- Create: `src/main/update/required-update-policy.ts`
-- Create: `test/update-policy.test.ts`
-- Create: `test/update-state.test.ts`
-- Create: `test/skipped-version.test.ts`
-- Create: `test/required-update-policy.test.ts`
+**涉及文件：** `update-policy.ts`、`update-state.ts`、`skipped-version.ts`、`required-update-policy.ts` 及四个对应测试。
 
-**Interfaces:**
-- Consumes: packaged flag, platform, channel, time, state events and a user-data directory.
-- Produces: `supportsUpdates`, schedule constants, `reduceUpdateStatus`, skipped-version helpers, and authenticated required-policy cache helpers.
-
-- [ ] **Step 1: Write pure policy and reducer tests**
-
-Require these constants:
+### 4.1 定义策略常量
 
 ```ts
 export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000
@@ -381,17 +344,9 @@ export const UPDATE_STARTUP_JITTER_MS = 15_000
 export const AUTO_INSTALL_ON_APP_QUIT = false
 ```
 
-Test that only packaged `candidate` and `stable` builds on `darwin` or `win32` support updates. Test resume checks at exactly six hours, skipped-version persistence through restart, manual checks overriding a skipped version, atomic JSON replacement, malformed preference recovery without deleting unrelated files, required-policy cache persistence/clearing, refusal to cache unverified input, and all legal reducer transitions.
+只有已打包的 `candidate`、`stable` 且平台为 `darwin`、`win32` 时支持更新。
 
-- [ ] **Step 2: Run tests and verify missing modules fail**
-
-Run: `npx vitest run test/update-policy.test.ts test/update-state.test.ts test/skipped-version.test.ts test/required-update-policy.test.ts`
-
-Expected: FAIL because the modules do not exist.
-
-- [ ] **Step 3: Implement policy and the discriminated status reducer**
-
-Use the `UpdateStatus` union from `src/shared/update-contracts.ts`. Expose only reducer events:
+### 4.2 定义状态事件
 
 ```ts
 type UpdateStateEvent =
@@ -402,78 +357,87 @@ type UpdateStateEvent =
   | { type: 'installing'; version: string; required: boolean; manual: boolean }
   | { type: 'up-to-date' }
   | { type: 'unsupported'; reason: string; manual: boolean }
-  | { type: 'error'; message: string; retryable: boolean; manual: boolean }
+  | { type: 'error'; version?: string; required: boolean; message: string; retryable: boolean; manual: boolean }
   | { type: 'reset' }
 ```
 
-Clamp progress to `0..100`. An event that lacks the version required by the current phase must throw rather than silently inventing one.
+下载进度限制在 `0..100`。需要版本的状态缺少版本时必须抛错，不能猜测。
 
-Persist `{ schema: 1, version: string }` at `updates/skipped-version.json` under product `userData`. Write a sibling temporary file, rename it over the live file, and accept only valid semver on read. `shouldOfferVersion` ignores the skip when `required` is true.
+### 4.3 持久化
 
-Persist `{ schema: 1, releaseVersion, minimumSupportedVersion, manifestSha512 }` at `updates/required-policy.json` only after `verifyReleaseManifest` succeeds. On read, require valid semver and recompute whether the running version is still excluded. Remove this one file after a supporting version starts; malformed cache data fails open with a warning and does not modify user content.
+跳过版本写入 `updates/skipped-version.json`：
 
-- [ ] **Step 4: Run focused tests and typecheck**
+```json
+{ "schema": 1, "version": "1.2.3" }
+```
 
-Run: `npx vitest run test/update-policy.test.ts test/update-state.test.ts test/skipped-version.test.ts test/required-update-policy.test.ts && npm run typecheck`
+写入同目录临时文件后原子 Rename。读取时只接受合法 semver。强制更新忽略跳过设置。
 
-Expected: PASS.
+强制策略缓存写入 `updates/required-policy.json`：
 
-- [ ] **Step 5: Commit state and policy**
+```json
+{ "schema": 1, "manifestBase64": "...", "signatureBase64": "..." }
+```
+
+只有 `verifyReleaseManifest` 成功后才能写入。读取时解码原始 Manifest 与签名，使用内置公钥和当前渠道/平台重新验签。Base64、签名、Schema、渠道、目标或策略无效时，记录警告并只删除该缓存文件，客户端继续启动。
+
+支持当前运行版本后删除强制策略缓存，不修改用户内容或其他更新文件。
+
+### 4.4 测试
+
+覆盖六小时边界、跳过版本重启恢复、手动检查覆盖跳过、原子替换、损坏偏好恢复、原始字节保存、每次读取重新验签、有效格式伪造缓存失败开放、缓存清理和所有合法状态转换。
 
 ```bash
-git add src/main/update/update-policy.ts src/main/update/update-state.ts src/main/update/skipped-version.ts src/main/update/required-update-policy.ts test/update-policy.test.ts test/update-state.test.ts test/skipped-version.test.ts test/required-update-policy.test.ts
+npx vitest run test/update-policy.test.ts test/update-state.test.ts test/skipped-version.test.ts test/required-update-policy.test.ts
+npm run typecheck
+git diff --check
+```
+
+### 停止点 A
+
+以上命令全部通过后停止，检查 Git Diff。未通过时不进入更新管理器、UI 或任何打包工作。
+
+用户确认后提交：
+
+```bash
 git commit -m "feat(update): define update policy and state"
 ```
 
 ---
 
-### Task 5: Add the testable updater executor and manager
+## 任务 5：实现可测试的更新执行器和管理器
 
-**Files:**
-- Create: `src/main/update/update-executor.ts`
-- Create: `src/main/update/update-manager.ts`
-- Modify: `src/main/workspace/workspace-lifecycle.ts`
-- Create: `test/update-manager.test.ts`
-- Modify: `test/workspace-lifecycle.test.ts`
-- Modify: `package.json`
-- Modify: `package-lock.json`
+**涉及文件：** `update-executor.ts`、`update-manager.ts`、`workspace-lifecycle.ts`、对应测试、`package.json` 和 Lockfile。
 
-**Interfaces:**
-- Consumes: `UpdateSource`, public key, app version/channel/target, timers, `UpdateExecutor`, user-data path and `prepareToInstall`.
-- Produces: `UpdateManager.start()`, `stop()`, `status()`, `subscribe()`, `check(manual)`, `download()`, `skip(version)` and `install()`.
+`UpdateManager` 对外只提供 `start()`、`stop()`、`status()`、`subscribe()`、`check(manual)`、`download()`、`skip(version)` 和 `install()`。
 
-- [ ] **Step 1: Add failing lifecycle and manager tests**
+### 5.1 先写生命周期和管理器测试
 
-Add `WorkspaceLifecycle.stop()` tests proving it serializes behind an active start, stops once, clears `activeScope()`, and prevents an obsolete queued account from reappearing.
+`WorkspaceLifecycle.stop()` 必须排在正在执行的 Start 后面、只停止一次、清除 `activeScope()`，并阻止过期队列重新启动旧账号。
 
-Use fake source, executor, clock and timers to prove the manager:
+使用 Fake Source、Executor、Clock 和 Timer 证明：
 
-- schedules one randomized startup check and one six-hour interval;
-- coalesces concurrent checks;
-- authenticates the release before asking `electron-updater` to check;
-- does not offer the current or an older version;
-- respects skipped versions for automatic checks and ignores the skip for manual checks;
-- treats the release as required only when the running version is below the signed minimum, persists the last verified required policy, and clears it after a successfully installed supporting version starts;
-- never creates a required gate from an unsigned, invalid or unavailable manifest;
-- does not automatically download;
-- verifies `downloadedFile` size and SHA512 against the signed artifact before `downloaded`;
-- deletes only the mismatched cached installer and emits a non-installable error;
-- calls `prepareToInstall` exactly once before `quitAndInstall`;
-- never calls `quitAndInstall` after preparation failure;
-- checks after resume only when six hours elapsed;
-- never starts an updater in development or unpackaged mode.
+- 启动随机延迟和六小时定时器各创建一次；
+- 并发检查合并为同一个操作；
+- Manifest 验证成功后才调用 `electron-updater`；
+- 当前版本和旧版本不提示；
+- 自动检查遵循跳过设置，手动检查可重新显示；
+- 只有当前版本低于签名最低版本时才写入强制策略缓存；
+- 重新读取强制缓存时再次验签；
+- 无效或不可用 Manifest 不产生强制门禁；
+- 不自动下载；
+- 下载完成后重新计算大小和 SHA512；
+- 不一致时只删除对应缓存安装器；
+- `prepareToInstall` 在 `quitAndInstall` 前只执行一次；
+- 准备失败时不调用安装；
+- 系统恢复满六小时才检查；
+- 开发模式或未打包模式不启动真实更新器。
 
-- [ ] **Step 2: Run focused tests and confirm failure**
+### 5.2 适配 electron-updater
 
-Run: `npx vitest run test/update-manager.test.ts test/workspace-lifecycle.test.ts`
-
-Expected: FAIL because the manager, executor and explicit lifecycle stop do not exist.
-
-- [ ] **Step 3: Install and wrap electron-updater**
-
-Run: `npm install electron-updater@^6.8.9`
-
-Define a narrow executor instead of exposing the package:
+```bash
+npm install electron-updater@^6.8.9
+```
 
 ```ts
 export interface UpdateExecutor {
@@ -485,9 +449,17 @@ export interface UpdateExecutor {
 }
 ```
 
-The Electron adapter sets `autoDownload = false`, `autoInstallOnAppQuit = false`, `allowPrerelease = channel === 'candidate'`, `allowDowngrade = false`, and uses the GitHub provider generated into `app-update.yml`. Map `update-available`, `update-not-available`, `download-progress`, `update-downloaded` and `error` to the interface. Include `downloadedFile` in the downloaded event.
+Electron Adapter 设置：
 
-Configure Electron Builder with:
+- `autoDownload = false`；
+- `autoInstallOnAppQuit = false`；
+- `allowPrerelease = channel === 'candidate'`；
+- `allowDowngrade = false`；
+- 使用打包生成的 GitHub `app-update.yml`；
+- 将 `update-available`、`update-not-available`、`download-progress`、`update-downloaded`、`error` 转为内部事件；
+- 下载完成事件必须带 `downloadedFile`。
+
+Builder 配置：
 
 ```json
 "publish": [{
@@ -498,90 +470,48 @@ Configure Electron Builder with:
 "detectUpdateChannel": false
 ```
 
-Keep every package script on `--publish never`; GitHub Actions remains the only publication owner.
+所有本地 Package Script 继续使用 `--publish never`，只有 GitHub Actions 可以发布。
 
-- [ ] **Step 4: Implement the manager as a serialized service**
+### 5.3 串行管理器与文件校验
 
-Keep source authentication separate from executor events. A check first resolves and verifies the signed release, selects the target installer/ZIP, compares it with `app.getVersion()`, and only then lets the executor check the provider. Reject any executor-reported version that differs from the signed manifest version.
+检查流程先解析和验证签名 Release，再选择平台产物、比较 `app.getVersion()`，最后允许 Executor 检查 Provider。Executor 返回版本必须与签名 Manifest 相同。
 
-Use one `operation: Promise<void> | undefined` for check/download/install exclusion. Store unsubscribe functions and timers; `stop()` clears them and removes the resume listener. Never retain the private key, GitHub credentials or a mutable artifact URL in renderer status.
+检查、下载、安装共用一个 `operation: Promise<void> | undefined`，禁止并发。`stop()` 清理订阅、Timer 和 Resume Listener。渲染进程状态不得包含私钥、GitHub 凭据、可变资产 URL 或本地路径。
 
-Use streaming SHA512 for `downloadedFile`:
+下载文件使用流式 SHA512：
 
 ```ts
 const digest = createHash('sha512')
 for await (const chunk of createReadStream(downloadedFile)) digest.update(chunk)
 if (digest.digest('base64') !== artifact.sha512) {
   await rm(downloadedFile, { force: true })
-  throw new Error('Downloaded update does not match the authenticated release.')
+  throw new Error('下载的更新文件与可信发布记录不一致。')
 }
 ```
 
-- [ ] **Step 5: Add serialized workspace shutdown**
+### 5.4 工作区停止
 
-Add:
+为 `WorkspaceLifecycle` 增加串行 `stop()`。更新安装不得删除或重置任何账号目录。
 
-```ts
-stop(): Promise<void> {
-  const revision = ++this.revision
-  const operation = this.queue.then(async () => {
-    await this.driver.stop()
-    if (revision === this.revision) this.scope = undefined
-  })
-  this.queue = operation.catch(() => undefined)
-  return operation
-}
-```
-
-Do not delete or reset an account directory during update preparation.
-
-- [ ] **Step 6: Run manager tests and typecheck**
-
-Run: `npx vitest run test/update-manager.test.ts test/workspace-lifecycle.test.ts && npm run typecheck`
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit the update service**
+### 5.5 验证与提交
 
 ```bash
-git add package.json package-lock.json src/main/update/update-executor.ts src/main/update/update-manager.ts src/main/workspace/workspace-lifecycle.ts test/update-manager.test.ts test/workspace-lifecycle.test.ts
+npx vitest run test/update-manager.test.ts test/workspace-lifecycle.test.ts
+npm run typecheck
+git diff --check
+```
+
+用户确认后提交：
+
+```bash
 git commit -m "feat(update): manage verified client updates"
 ```
 
 ---
 
-### Task 6: Expose safe IPC, menus, update window and badges
+## 任务 6：提供安全 IPC、菜单、更新窗口和提示入口
 
-**Files:**
-- Create: `src/shared/update-api.ts`
-- Create: `src/main/update/update-window.ts`
-- Create: `src/preload/update.ts`
-- Modify: `src/preload/shell.ts`
-- Modify: `src/preload/harness.ts`
-- Modify: `src/shared/shell-api.ts`
-- Modify: `src/shared/desktop-menu.ts`
-- Modify: `src/preload/windows-menu.ts`
-- Modify: `src/main/index.ts`
-- Modify: `src/renderer/src/global.d.ts`
-- Create: `src/renderer/update.html`
-- Create: `src/renderer/src/update-main.tsx`
-- Create: `src/renderer/src/UpdateWindow.tsx`
-- Create: `src/renderer/src/update.css`
-- Create: `src/renderer/src/UpdateBadge.tsx`
-- Modify: `src/renderer/src/App.tsx`
-- Modify: `electron.vite.config.ts`
-- Create: `test/update-window.test.ts`
-- Create: `test/update-api-contract.test.ts`
-- Modify: `test/shell-preload-contract.test.ts`
-- Modify: `test/windows-titlebar.test.ts`
-
-**Interfaces:**
-- Consumes: `UpdateManager` and its renderer-safe `UpdateStatus`.
-- Produces: `DesktopUpdateApi` on Shell, Harness and update-window contexts; native/custom menu command `check-for-updates`; a dedicated update child window.
-
-- [ ] **Step 1: Write failing IPC, preload and window tests**
-
-Define the API expected by tests:
+### 6.1 API
 
 ```ts
 export interface DesktopUpdateApi {
@@ -593,95 +523,92 @@ export interface DesktopUpdateApi {
   install(): Promise<void>
   skip(version: string): Promise<void>
 }
+
+export interface DesktopUpdateWindowApi extends DesktopUpdateApi {
+  quit(): Promise<void>
+}
 ```
 
-Assert every mutating IPC handler validates the exact sender frame. Assert the update window uses `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `update.cjs`, and cannot navigate away. Assert a second open focuses the existing window. Assert `check-for-updates` is recognized by both macOS and Windows menus.
+Shell 和 Harness 只获得 `DesktopUpdateApi`；更新窗口获得带 `quit()` 的 `DesktopUpdateWindowApi`。
 
-- [ ] **Step 2: Run contract tests and confirm failure**
+### 6.2 IPC 与窗口安全
 
-Run: `npx vitest run test/update-window.test.ts test/update-api-contract.test.ts test/shell-preload-contract.test.ts test/windows-titlebar.test.ts`
+- 每个修改状态的 IPC 都校验精确 Sender Frame。
+- `updates:quit` 只接受更新窗口主 Frame；Shell 和 Harness 调用必须被拒绝。
+- `quit()` 调用普通 `app.quit()`，不触发安装。
+- 更新窗口启用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
+- 使用 `update.cjs` Preload，禁止导航到其他地址。
+- 再次打开时聚焦已有窗口，不创建重复窗口。
+- 窗口约为 560×360，存在主窗口时设置为其非模态子窗口，并在 `ready-to-show` 前保持隐藏。
 
-Expected: FAIL because update APIs and UI entry points do not exist.
+主进程注册：`updates:status`、`updates:open`、`updates:check`、`updates:download`、`updates:install`、`updates:skip`、`updates:quit`。
 
-- [ ] **Step 3: Implement one reusable preload bridge**
+Preload 返回冻结对象。`subscribe()` 只监听 `updates:status-changed`，取消订阅时必须移除同一个 Listener。
 
-Create a function returning a frozen `DesktopUpdateApi`; call it from the three preloads. The subscription listens only to `updates:status-changed` and removes the exact listener on unsubscribe. Expose it as `window.insightDesktopUpdates`.
+### 6.3 更新窗口状态
 
-Register handlers in main for `updates:status`, `updates:open`, `updates:check`, `updates:download`, `updates:install` and `updates:skip`. Shell and update-window calls must come from their own main frames; Harness calls must come from the active Harness view main frame.
+- `idle`、`up-to-date`：显示当前版本和检查按钮；
+- `checking`：显示不可操作的检查状态；
+- `available`：下载、跳过、稍后提醒；
+- `downloading`：进度，无安装按钮；
+- `downloaded`：安装并重启；
+- `error`：简短错误，可重试时显示重试；若属于已认证强制策略，同时显示退出；
+- `unsupported`：明确说明开发版或未打包版本不支持真实更新。
 
-- [ ] **Step 4: Build the dedicated update window**
+更新窗口组件不得接收文件路径或任意 URL。强制流程转为错误状态时必须保留 `required: true` 和目标版本。
 
-Create a non-modal child `BrowserWindow` sized about 560×360, hidden until `ready-to-show`, parented to the main window when available. Load `update.html` in production and `${ELECTRON_RENDERER_URL}/update.html` in development. The window renders phase-specific actions:
+### 6.4 登录前、已登录和菜单入口
 
-- `idle` or `up-to-date`: current version and check action;
-- `checking`: disabled progress state;
-- `available`: download, skip and remind-later actions;
-- `downloading`: percent progress and no install action;
-- `downloaded`: install and restart;
-- `error`: bounded message and retry when `retryable`;
-- `unsupported`: explicit development/unpackaged explanation.
+登录前 Shell 展示 `UpdateBadge`，不能遮挡拖拽区域。已登录后，通过第一方集成插件已有的 `sidebar.footer.action` 在账号入口旁增加更新按钮，不查询或修改 Harness DOM。
 
-No update window component receives a filesystem path or arbitrary URL.
+macOS 应用菜单和 Windows 自定义菜单增加“检查更新”。
 
-- [ ] **Step 5: Add pre-login and authenticated entries**
+`bootstrap()` 在主窗口创建后、登录恢复前构造 `UpdateManager`。安装准备调用显式工作区 Stop，关闭辅助窗口并刷新 Shell 更新偏好。`before-quit` 先停止更新 Timer，再执行已有 Runtime 退出流程。`src/main/index.ts` 只保留组合代码。
 
-`UpdateBadge` subscribes to status and renders only for `available` or `downloaded`. Place it on unauthenticated Shell screens without covering the drag region. A required status opens the update window, hides skip/remind-later, keeps retry and quit available, and blocks `authManager.restore()` plus workspace startup on subsequent launches until the installed version satisfies the cached verified minimum.
+### 6.5 Build 配置与测试
 
-Expose the same API in `src/preload/harness.ts`. In the first-party integration plugin, add a small update button beside the account footer when the status is actionable; clicking it calls `window.insightDesktopUpdates.open()`. Register only through the existing `sidebar.footer.action` component and its own CSS attributes—do not query or modify Harness DOM.
-
-- [ ] **Step 6: Add application menu commands and main composition**
-
-Add `check-for-updates` to `desktopMenuCommands`. On macOS put `Check for Updates...` below the app menu identity section. On Windows place it in the application section above Harness commands.
-
-In `bootstrap()`, construct `UpdateManager` after the main window exists but before authentication restore. Its `prepareToInstall` calls the explicit workspace stop, closes auxiliary recovery/menu windows, and flushes Shell-owned update preferences. `before-quit` stops update timers before the existing Runtime shutdown path. Keep implementation details out of `src/main/index.ts`.
-
-- [ ] **Step 7: Configure renderer and preload build entries**
-
-Add `update: resolve('src/preload/update.ts')` to preload input and add both `src/renderer/index.html` and `src/renderer/update.html` to renderer Rollup input. Keep the production CSP unchanged and apply development relaxation only to local Vite pages.
-
-- [ ] **Step 8: Run focused UI and contract tests**
-
-Run: `npx vitest run test/update-window.test.ts test/update-api-contract.test.ts test/shell-preload-contract.test.ts test/windows-titlebar.test.ts test/desktop-integration-client.test.ts && npm run typecheck`
-
-Expected: PASS.
-
-- [ ] **Step 9: Commit the Shell update surface**
+Vite 增加 Update Preload 和 Update Renderer Entry。正式 CSP 保持不变；仅本地 Vite 页面可使用开发模式放宽配置。
 
 ```bash
-git add src/shared src/main/update src/main/index.ts src/preload src/renderer electron.vite.config.ts packages/insight-desktop-integration test/update-window.test.ts test/update-api-contract.test.ts test/shell-preload-contract.test.ts test/windows-titlebar.test.ts test/desktop-integration-client.test.ts
+npx vitest run test/update-window.test.ts test/update-api-contract.test.ts test/shell-preload-contract.test.ts test/windows-titlebar.test.ts test/desktop-integration-client.test.ts
+npm run typecheck
+```
+
+### 停止点 B：人工 Fixture 验收
+
+使用只在未打包 Electron 下生效的测试参数注入 Fake Update Source。人工验证全部状态、登录前入口、已登录入口、菜单入口、重试和强制更新退出。
+
+验收标准：不会连接生产 GitHub；下载和安装按钮不会执行真实安装；控制台无错误；关闭后正常回到客户端。
+
+用户确认后提交：
+
+```bash
 git commit -m "feat(update): expose client update controls"
 ```
 
 ---
 
-### Task 7: Build, sign and verify complete release assets
+## 任务 7：生成、签名并校验完整发布产物
 
-**Files:**
-- Create: `scripts/generate-update-signing-keypair.mjs`
-- Create: `scripts/build-update-release.mjs`
-- Create: `scripts/merge-mac-update-metadata.mjs`
-- Create: `scripts/verify-release-assets.mjs`
-- Modify: `scripts/finalize-windows-release.mjs`
-- Create: `build/update-signing-public.pem`
-- Modify: `package.json`
-- Modify: `.gitignore`
-- Create: `test/build-update-release.test.ts`
-- Create: `test/merge-mac-update-metadata.test.ts`
-- Create: `test/verify-release-assets.test.ts`
-- Modify: `test/finalize-windows-release.test.ts`
-- Modify: `test/release.test.ts`
+**涉及文件：** 四个发布脚本、`finalize-windows-release.mjs`、`build/update-release-policy.json`、生产公钥、相关测试和 `package.json`。
 
-**Interfaces:**
-- Consumes: one release-assets directory, desktop semver, channel, Shell commit, runtime manifest, compatibility JSON and an Ed25519 private key path.
-- Produces: merged updater metadata, `insight-update.json`, `insight-update.json.sig`, validated installer/blockmap inventory and a committed public key.
+### 7.1 发布工具测试
 
-- [ ] **Step 1: Write failing release-tool fixture tests**
+Fixture 测试证明：
 
-Create small fixture files and test that the release builder inventories exact file size/SHA512, sorts artifacts by `(platform, arch, kind, name)`, writes a trailing newline, signs the exact bytes, and includes the Runtime tag/commit from `build/runtime-manifest.json`.
+- 资产大小和 SHA512 来自实际文件；
+- 资产按 `(platform, arch, kind, name)` 排序；
+- JSON 结尾只有一个换行；
+- 签名覆盖完全相同的原始字节；
+- Core Runtime Tag/Commit 来自 `build/runtime-manifest.json`；
+- 发布策略只来自严格策略文件，不存在默认策略；
+- 策略版本、渠道必须与构建参数完全一致；
+- 最低支持版本不得高于发布版本；
+- macOS 元数据合并拒绝重复架构、版本不一致、缺失 blockmap 和错误 YAML；
+- ZIP 必须包含可读中央目录；EXE 必须包含有效 DOS Header 和范围内 PE Signature；
+- 零字节、错误架构、摘要/大小不一致、签名无效和版本不一致均失败。
 
-Test mac metadata merging with two inputs whose `files` arrays point at arm64 and x64 ZIPs. Test failure on duplicate architecture, version mismatch, missing ZIP blockmap and malformed YAML.
-
-Test final verification requires exactly:
+完整正式资产集合：
 
 ```text
 insight-mac-arm64.dmg
@@ -698,23 +625,19 @@ insight-update.json
 insight-update.json.sig
 ```
 
-It must reject unexpected target architecture, zero-byte assets, YAML digest/size mismatch, manifest digest/size mismatch, invalid signature and version disagreement.
+### 7.2 生成生产密钥
 
-- [ ] **Step 2: Run release-tool tests and confirm failure**
+脚本要求显式 `--private-key`、`--public-key`，私钥权限为 `0600`。如果私钥目标位于仓库内，即使已忽略，也必须拒绝。
 
-Run: `npx vitest run test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts test/release.test.ts`
+```bash
+UPDATE_SIGNING_TEMP_DIR="$(mktemp -d)"
+UPDATE_SIGNING_PRIVATE_KEY="$UPDATE_SIGNING_TEMP_DIR/update-signing-private.pem"
+node scripts/generate-update-signing-keypair.mjs \
+  --private-key "$UPDATE_SIGNING_PRIVATE_KEY" \
+  --public-key build/update-signing-public.pem
+```
 
-Expected: FAIL because the three new scripts and production public key do not exist.
-
-- [ ] **Step 3: Implement key generation with private-key exclusion**
-
-The generator uses `generateKeyPairSync('ed25519')`, writes PKCS8 private PEM to `.local/update-signing-private.pem` with mode `0600`, and writes SPKI public PEM to `build/update-signing-public.pem`. Add only `.local/update-signing-private.pem` to `.gitignore`; do not ignore the public key.
-
-Run: `node scripts/generate-update-signing-keypair.mjs`
-
-Expected: both files exist, `git status --short` never shows the private key, the public key is visible for commit, and `git check-ignore .local/update-signing-private.pem` succeeds.
-
-Add the public key as an Electron Builder resource:
+Builder 只打包公钥：
 
 ```json
 {
@@ -723,11 +646,23 @@ Add the public key as an Electron Builder resource:
 }
 ```
 
-Extend `test/release.test.ts` to require this entry and reject any private-key resource.
+测试拒绝任何私钥资源。
 
-- [ ] **Step 4: Implement manifest creation and detached signing**
+### 7.3 显式发布策略
 
-`build-update-release.mjs` accepts:
+```json
+{
+  "schema": 1,
+  "releaseVersion": "0.1.2",
+  "channel": "stable",
+  "mode": "optional",
+  "minimumSupportedVersion": "0.1.1"
+}
+```
+
+每次候选或正式发布前都要把 `releaseVersion`、`channel` 改成目标 Tag 对应值，其中 `releaseVersion` 不包含前导 `v`。发布脚本禁止复用不匹配的策略。要发布强制更新，必须先提交并审查 `mode: "required"` 和最低支持版本。
+
+`build-update-release.mjs` 参数：
 
 ```text
 --dir <release-assets>
@@ -736,61 +671,50 @@ Extend `test/release.test.ts` to require this entry and reject any private-key r
 --shell-commit <40-hex>
 --runtime-manifest <path>
 --compatibility <path>
+--policy <path>
 --private-key <path>
 ```
 
-It identifies assets only through exact Insight filename patterns, streams SHA512, emits deterministic JSON plus one newline, signs with `sign(null, manifestBytes, privateKey)`, then reuses `verifyReleaseManifest` through a built or script-safe shared verifier before returning success.
+### 7.4 密钥保存
 
-- [ ] **Step 5: Adapt the upstream metadata utilities without DSH product assumptions**
+创建受保护的 GitHub Environment：`desktop-release`。限制发布 Tag 和 Workflow；仓库套餐支持时启用 Required Reviewer。私钥保存为该 Environment 的 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`，不得保存为仓库级 Secret。
 
-Port only the behavior of upstream `merge-mac-update-metadata.mjs` and `verify-release-assets.mjs`. Use Insight filenames, the authenticated manifest, both architectures and no ModelScope/DSH paths.
-
-Change `finalize-windows-release.mjs` output from `Finalized signed installer metadata` to `Finalized Windows installer metadata`. Keep rebuilding blockmap and YAML from the exact post-build installer so the unsigned bytes and metadata agree.
-
-- [ ] **Step 6: Run release-tool tests and inspect secret hygiene**
-
-Run: `npx vitest run test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts test/release.test.ts && git diff --check && git status --short`
-
-Expected: tests pass; no private PEM appears in Git status or `git diff`.
-
-- [ ] **Step 7: Store the production private key in GitHub Actions**
-
-Run locally without printing the key:
+同时在 GitHub 和仓库外保存一份受访问控制的加密恢复副本。确认恢复副本后，在同一 Shell 中执行：
 
 ```bash
-gh secret set DESKTOP_UPDATE_SIGNING_PRIVATE_KEY < .local/update-signing-private.pem
-gh secret list | grep '^DESKTOP_UPDATE_SIGNING_PRIVATE_KEY'
+gh secret set --env desktop-release DESKTOP_UPDATE_SIGNING_PRIVATE_KEY < "$UPDATE_SIGNING_PRIVATE_KEY"
+gh secret list --env desktop-release | grep '^DESKTOP_UPDATE_SIGNING_PRIVATE_KEY'
 ```
 
-Expected: the secret name is listed; command output never includes its value.
-
-- [ ] **Step 8: Commit release authentication tooling**
+只有两个命令成功且恢复副本确认后，才能删除本机明文：
 
 ```bash
-git add .gitignore package.json build/update-signing-public.pem scripts/generate-update-signing-keypair.mjs scripts/build-update-release.mjs scripts/merge-mac-update-metadata.mjs scripts/verify-release-assets.mjs scripts/finalize-windows-release.mjs test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts test/release.test.ts
+rm -f -- "$UPDATE_SIGNING_PRIVATE_KEY"
+rmdir "$UPDATE_SIGNING_TEMP_DIR"
+unset UPDATE_SIGNING_PRIVATE_KEY UPDATE_SIGNING_TEMP_DIR
+```
+
+### 7.5 验证与提交
+
+```bash
+npx vitest run test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts test/finalize-windows-release.test.ts test/release.test.ts
+git diff --check
+git status --short
+```
+
+预期：测试通过；Git 状态和 Diff 不出现私钥。
+
+用户确认后提交：
+
+```bash
 git commit -m "build(update): authenticate desktop release assets"
 ```
 
 ---
 
-### Task 8: Separate development, candidate and stable build channels
+## 任务 8：隔离开发、候选和正式渠道
 
-**Files:**
-- Create: `electron-builder.candidate.cjs`
-- Modify: `electron-builder.dev.cjs`
-- Modify: `package.json`
-- Modify: `package-lock.json`
-- Modify: `src/main/index.ts`
-- Modify: `test/release.test.ts`
-- Modify: `test/runtime.test.ts`
-
-**Interfaces:**
-- Consumes: builder metadata and packaged `package.json`.
-- Produces: `resolveDesktopChannel(): UpdateChannel`, isolated identities and package scripts for each channel.
-
-- [ ] **Step 1: Add failing channel-isolation tests**
-
-Assert:
+### 8.1 契约测试
 
 ```ts
 expect(stable.build.extraMetadata.insightDesktopChannel).toBe('stable')
@@ -802,117 +726,149 @@ expect(development.extraMetadata.insightDesktopChannel).toBe('development')
 expect(development.publish).toBeNull()
 ```
 
-Require package scripts for `package:candidate:mac:arm64`, `package:candidate:mac:x64` and `package:candidate:win`, all using the candidate config and `--publish never`.
-Require `package:candidate:dir` for a local unpacked candidate inspection.
+新增：
 
-- [ ] **Step 2: Run channel tests and confirm old metadata fails**
+- `package:candidate:mac:arm64`；
+- `package:candidate:mac:x64`；
+- `package:candidate:win`；
+- `package:candidate:dir`。
 
-Run: `npx vitest run test/release.test.ts test/runtime.test.ts`
+全部使用 Candidate Config 和 `--publish never`。
 
-Expected: FAIL because development still uses `dshDesktopChannel` and candidate configuration does not exist.
+### 8.2 实现
 
-- [ ] **Step 3: Implement channel resolution and builder configurations**
+打包元数据统一改为 `insightDesktopChannel`。正式包内置 `stable`，候选和开发配置覆盖该值。未打包 Electron 始终返回 `development`；打包应用只接受三个固定值。只有 App ID 为 `com.insight.desktop` 的旧正式包可在缺少字段时按 `stable` 处理。
 
-Rename packaged metadata to `insightDesktopChannel`. Stable `package.json` embeds `stable`; candidate and development configs override it. `resolveDesktopChannel()` returns `development` for unpackaged Electron and otherwise accepts only the three literal values, failing closed to `stable` for old production packages only when App ID is `com.insight.desktop`.
+候选输出目录为 `dist-candidate`，产物名使用 `insight-candidate-${os}-${arch}.${ext}`，Windows 为 `insight-candidate-windows-${arch}-setup.${ext}`。
 
-Set candidate output to `dist-candidate`, artifact names to `insight-candidate-${os}-${arch}.${ext}` and NSIS name to `insight-candidate-windows-${arch}-setup.${ext}`. Candidate macOS retains hardened runtime and production signing capability.
+`userData`：
 
-Set candidate `userData` to `insight-desktop-candidate`; keep stable at `insight-desktop` and development at `insight-desktop-dev`.
+- 正式版：`insight-desktop`；
+- 候选版：`insight-desktop-candidate`；
+- 开发版：`insight-desktop-dev`。
 
-- [ ] **Step 4: Run channel tests, typecheck and build**
-
-Run: `npx vitest run test/release.test.ts test/runtime.test.ts && npm run typecheck && npm run build`
-
-Expected: PASS; normal build prepares the locked Core Runtime and both renderer entries without packaging.
-
-- [ ] **Step 5: Commit channel isolation**
+### 8.3 验证
 
 ```bash
-git add electron-builder.candidate.cjs electron-builder.dev.cjs package.json package-lock.json src/main/index.ts test/release.test.ts test/runtime.test.ts
+npx vitest run test/release.test.ts test/runtime.test.ts
+npm run typecheck
+npm run build
+npm run package:candidate:dir
+```
+
+### 停止点 C：本地候选目录人工检查
+
+确认：
+
+- App ID、产品名、渠道和 `userData` 为 Candidate；
+- 正式用户数据未被访问；
+- 公钥存在于打包资源；
+- 策略文件与下一次候选 Tag 匹配；
+- Runtime Manifest 与 Lock 一致；
+- Better Sidebar 和第一方集成插件已打包；
+- 不包含私钥、本地源码路径或开发更新源。
+
+用户确认后提交：
+
+```bash
 git commit -m "build(update): isolate desktop release channels"
 ```
 
 ---
 
-### Task 9: Rebuild the GitHub release workflow around unsigned Windows
+## 任务 9：围绕 Windows 未签名包重建 GitHub Release Workflow
 
-**Files:**
-- Modify: `.github/workflows/release.yml`
-- Modify: `test/release.test.ts`
-- Modify: `docs/client-build-runbook.md`
+**涉及文件：** `.github/workflows/release.yml`、`test/release.test.ts`、`docs/client-build-runbook.md`。
 
-**Interfaces:**
-- Consumes: stable `v*` tag or explicit `candidate_tag`, macOS signing secrets, update-signing private key and native runner artifacts.
-- Produces: draft-then-published GitHub Release whose complete assets pass `verify-release-assets.mjs`.
+### 9.1 增加低成本 release-preflight
 
-- [ ] **Step 1: Change workflow contract tests before YAML**
+任何 macOS 或 Windows 打包 Job 启动前，先在 Linux Runner 执行不打包预检：
 
-Require:
+- 解析正式 Tag 或 `candidate_tag`；
+- 校验 Tag 格式和目标渠道；
+- 校验 Package Version；
+- 校验 `build/update-release-policy.json` 的 `releaseVersion`、`channel`、`mode` 和最低版本；
+- 校验 `core-runtime.lock.json` 的格式、Runtime Tag 和三平台资产声明，不在预检阶段下载 Runtime；
+- 运行发布脚本的纯配置测试；
+- 输出将要构建的平台、版本、渠道和 Runtime Tag，不输出任何 Secret。
 
-- a `candidate_tag` input rather than `windows_prerelease_tag`;
-- macOS arm64/x64 ZIP blockmaps and architecture-specific YAML uploads;
-- unsigned Windows EXE, blockmap and `latest.yml` uploaded directly from `windows-2022`;
-- no `sign-windows`, UKey, Jsign, SafeNet, ModelScope, Feishu or `dshdesktop.com` text;
-- `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY` in the publish job;
-- metadata merge, manifest build and complete asset verification before Release publication;
-- stable publish depends directly on both macOS jobs and `windows-x64`;
-- candidate publish uses candidate build scripts and marks the Release as pre-release;
-- no published asset is overwritten with `--clobber`.
+所有 Native Build Job 必须 `needs: release-preflight`。预检失败时不启动 macOS/Windows Runner，不浪费安装依赖和打包时间。
 
-- [ ] **Step 2: Run the workflow contract and confirm it fails**
+### 9.2 Workflow 契约测试
 
-Run: `npx vitest run test/release.test.ts`
+测试要求：
 
-Expected: FAIL on the inherited Windows signing job, missing updater assets and DSH deployment remnants.
+- 使用 `candidate_tag`，移除旧 `windows_prerelease_tag`；
+- 存在 `release-preflight` 且所有打包 Job 依赖它；
+- macOS 上传 arm64/x64 ZIP blockmap 和架构级 YAML；
+- Windows 直接从 `windows-2022` 上传未签名 EXE、blockmap、`latest.yml`；
+- 删除 `sign-windows`、UKey、Jsign、SafeNet、ModelScope、飞书和 `dshdesktop.com`；
+- 只有 Publish Job 使用 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`；
+- Publish Job 声明 `environment: desktop-release`；
+- 显式传入 `build/update-release-policy.json`；
+- macOS 上传前执行 `hdiutil verify`、`unzip -t`；Windows 上传前执行 `7z t`；
+- Manifest 与完整资产校验发生在 Release 发布前；
+- 正式 Publish 直接依赖两个 macOS Job 和 `windows-x64`；
+- Candidate 标记为 Pre-release；
+- 不使用 `--clobber` 覆盖已发布资产。
 
-- [ ] **Step 3: Update native build jobs**
+### 9.3 原生构建
 
-For stable tags, preserve `latest-mac.yml` as `latest-mac-arm64.yml` and `latest-mac-x64.yml`, and upload each ZIP blockmap. Windows uploads `insight-windows-x64-setup.exe`, its blockmap and `latest.yml` directly as `windows-x64`.
-
-For `candidate_tag`, set the package version from the input, run candidate package scripts, sign/notarize both macOS architectures, and upload candidate-equivalent updater metadata under distinct artifact names.
-
-Delete the complete `sign-windows` job. Do not add a replacement self-hosted runner.
-
-- [ ] **Step 4: Make publication atomic and authenticated**
-
-The publish job downloads three native artifacts, merges macOS metadata, writes the private key to a runner-temp file with mode `0600`, builds the manifest/signature, and runs asset verification.
-
-Create a draft Release, upload the verified set, then publish it. If GitHub immutable releases are enabled, never edit or replace an existing published release. A rerun for an already published version must fail with an instruction to create a new version.
-
-Always remove the runner-temp private key in an `if: always()` cleanup step.
-
-- [ ] **Step 5: Update the Runbook gates**
-
-Document that Windows SmartScreen is expected, Authenticode is absent, and a successful Windows update requires manifest signature, EXE SHA512, N-to-N+1 installation and retained account data. Document that macOS update acceptance requires Developer ID validation plus the same manifest checks.
-
-- [ ] **Step 6: Run workflow tests and local non-packaging checks**
-
-Run: `npx vitest run test/release.test.ts test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts && npm run typecheck && git diff --check`
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit the workflow**
+正式与候选 macOS Job 在签名、公证、装订后执行：
 
 ```bash
-git add .github/workflows/release.yml docs/client-build-runbook.md test/release.test.ts
+hdiutil verify <dmg-path>
+unzip -t <zip-path>
+```
+
+Windows Job 在最终 EXE、blockmap、YAML 生成后执行：
+
+```powershell
+7z t <installer-path>
+```
+
+验证失败时不得上传该 Job 的 Release 输入。
+
+删除完整 `sign-windows` Job，不增加替代自托管 Runner。
+
+### 9.4 原子发布
+
+Publish Job：
+
+- 声明 `environment: desktop-release`；
+- 下载三个原生 Job 产物；
+- 合并 macOS 元数据；
+- 在 Runner Temp 中以 `0600` 写入 Environment 私钥；
+- 显式传入 Release Policy；
+- 构建并验证 Manifest 与签名；
+- 创建草稿 Release；
+- 上传完整且已验证的资产；
+- 最后发布 Release；
+- 在 `if: always()` 中删除 Runner 临时私钥。
+
+已发布版本再次运行必须失败并提示创建新版本，不能修改旧 Release。
+
+### 9.5 验证与提交
+
+```bash
+npx vitest run test/release.test.ts test/build-update-release.test.ts test/merge-mac-update-metadata.test.ts test/verify-release-assets.test.ts
+npm run typecheck
+git diff --check
+```
+
+更新构建手册，明确 Windows SmartScreen 属于当前预期；macOS 必须通过 Developer ID；两个平台都必须通过 Manifest、摘要、N 到 N+1 和数据保留验收。
+
+用户确认后提交：
+
+```bash
 git commit -m "ci(update): publish verified desktop releases"
 ```
 
 ---
 
-### Task 10: Validate UI and packaged candidate update paths before stable release
+## 任务 10：正式发布前验证 UI 与候选更新
 
-**Files:**
-- Modify: `docs/client-build-runbook.md`
-- Create: `docs/incidents/` only if a failure changes future build or update gates.
-
-**Interfaces:**
-- Consumes: two sequential candidate versions on macOS arm64 and Windows x64.
-- Produces: recorded evidence that the complete update lifecycle preserves product behavior and user data.
-
-- [ ] **Step 1: Run the complete local source checks once**
-
-Run:
+### 10.1 源码检查只完整运行一次
 
 ```bash
 npm test
@@ -921,72 +877,97 @@ npm run build
 git diff --check
 ```
 
-Expected: all commands pass; build prepares the locked Core Runtime, first-party integration plugin, default Profile, Shell renderer and update renderer.
+预期：内置 Core Runtime、第一方插件、默认 Profile、Shell Renderer 和 Update Renderer 都正确准备。
 
-- [ ] **Step 2: Validate fixture UI without packaging**
+### 10.2 开发模式 Fixture UI
 
-Start development mode with a fixture update source enabled only through a test-only command-line flag accepted by unpackaged Electron. Exercise idle, checking, available, downloading, downloaded, up-to-date, unsupported and error phases.
+使用只在未打包 Electron 中生效的命令行参数启用 Fixture Update Source，覆盖 `idle`、`checking`、`available`、`downloading`、`downloaded`、`up-to-date`、`unsupported`、`error`。
 
-Expected: update window works before login; authenticated footer badge opens the same window; no fixture can enable installation or contact production GitHub Releases.
+预期：登录前和已登录入口打开同一更新窗口；Fixture 不能启用安装，也不能访问 GitHub 正式源。
 
-- [ ] **Step 3: Build and inspect an isolated local macOS candidate directory**
+### 10.3 发布 Candidate N
 
-Run: `npm run package:candidate:dir`
+GitHub `release-preflight` 通过后才启动两个 macOS 架构和 Windows x64。下载完整资产，在本地再次运行发布验证脚本。
 
-Inspect the packaged `package.json`, resources and app-update configuration.
+预期：Candidate Release 包含渠道专属资产和合法 Manifest 签名。
 
-Expected: App ID/channel are candidate, production userData is untouched, public key is present, Core Runtime manifest matches the lock, Better Sidebar and first-party integration are packaged, and no private signing key or local source path is present.
+### 10.4 安装 Candidate N 并建立数据样本
 
-- [ ] **Step 4: Publish candidate N through GitHub Actions**
+在 macOS arm64 和 Windows x64：
 
-Create a non-production candidate tag through the workflow and wait for both macOS architectures plus unsigned Windows x64 to pass. Download assets and run the workflow's release verification script locally against the complete directory.
+1. 安装 Candidate N；
+2. 登录；
+3. 创建 Harness 会话；
+4. 导入无害测试插件；
+5. 验证 Better Sidebar 打开 Markdown/HTML；
+6. 记录账号 Scope 和 `userData` 路径；
+7. 正常退出。
 
-Expected: candidate Release contains its twelve channel-specific installer/update assets plus a valid manifest signature.
+Windows 可出现 SmartScreen；macOS 必须通过 Gatekeeper。
 
-- [ ] **Step 5: Install candidate N and create retention evidence**
+### 10.5 发布 Candidate N+1 并使用更新器安装
 
-On macOS arm64 and Windows x64, install candidate N, sign in, create a Harness session, import a harmless local test plugin, confirm Better Sidebar opens Markdown/HTML, record account scope and user-data paths, then quit normally.
+等待自动发现或手动点击“检查更新”，完成下载、校验、安装和重启。
 
-Expected: both installations work under candidate identities; Windows may display SmartScreen, macOS passes Gatekeeper.
+两个平台必须确认：
 
-- [ ] **Step 6: Publish and install candidate N+1 through the updater**
+- 客户端实际运行 N+1；
+- Manifest 版本、Shell Commit 和 Core Runtime 与 Release 一致；
+- 登录恢复正常；
+- 多账号隔离正常；
+- 原会话、导入插件和 Better Sidebar 正常；
+- Windows 即使没有 Authenticode，也通过产品 Manifest 认证。
 
-Publish the next candidate version. Wait for automatic discovery or invoke `Check for Updates...`, download, verify, install and restart.
+### 10.6 负向测试
 
-Expected on both platforms: the client runs N+1; the signed manifest version, Shell commit and Core Runtime identity match the Release; login restoration, account isolation, session, imported plugin and Better Sidebar still work. Windows installer authentication succeeds despite no Authenticode signature.
+使用私有 Fixture Source 测试：修改 Manifest 一字节、错误签名、错误平台、错误渠道、Tag/Manifest 版本不一致、下载文件摘要不一致、GitHub 不可用。
 
-- [ ] **Step 7: Exercise negative update cases**
+在测试 `userData` 中写入格式合法但签名伪造的强制策略缓存。重启后必须忽略并只删除该缓存，不能阻止登录/Core。
 
-Against a private fixture feed, test a modified manifest byte, invalid signature, wrong platform, wrong channel, mismatched downloaded file and unavailable GitHub response.
+预期：任何无效产物都不能进入安装；当前版本继续可用；用户数据不变。
 
-Expected: no invalid artifact reaches installation; the current version remains usable; only the updater cache entry is removed; user data is untouched.
+### 10.7 停止点 D 与记录
 
-- [ ] **Step 8: Record the validated release gate**
+将 Candidate Tag、Workflow Run、安装路径、Shell Commit、Runtime 身份、`userData` 根目录和人工结果写入构建手册。
 
-Update the Runbook with exact candidate tags, workflow runs, installed paths, Shell commits, Runtime identities, user-data roots and manual results. If failures changed a permanent gate, add one incident document and link it; otherwise do not create a timeline document.
+只有故障改变了未来门禁时才新增 `docs/incidents/` 记录；一次性失败不写冗长时间线。
 
-- [ ] **Step 9: Commit verification documentation**
+用户确认后提交：
 
 ```bash
-git add docs/client-build-runbook.md docs/incidents
 git commit -m "docs(update): record candidate update validation"
 ```
 
----
+## 后续独立计划
 
-## Deferred follow-up plans
+任务 10 验收后，再按顺序单独设计：
 
-After Task 10 is accepted, create separate designs and plans in this order:
+1. 兼容版本回退：签名版本目录、数据 Schema 预检、元数据快照和隔离数据目录。
+2. 可选官方插件目录：兼容声明和设备级安装，不得更新必需第一方插件。
+3. 社区插件市场：评估定向采用 dshmarket、Fork 或更小的产品内管理器。
+4. 国内更新镜像：只有 GitHub 下载证明确有问题时，才基于现有 `UpdateSource` 增加对象存储/CDN。
+5. Windows Authenticode：分发量、企业策略或支持成本达到必要程度后再购买；届时继续保留产品级 Manifest 签名。
 
-1. **Compatible version rollback** — signed version catalog, data-schema preflight, metadata snapshot and isolated-data fallback.
-2. **Official optional plugin catalog** — compatibility declarations and device-level installation without authority over required first-party plugins.
-3. **Community plugin market evaluation** — compare selective dshmarket adoption, a fork, and a narrower in-product manager; keep it behind explicit user consent or developer mode until arbitrary third-party code permissions are designed.
-4. **Regional update mirror** — implement the existing `UpdateSource` interface against object storage/CDN only when GitHub download evidence justifies it.
-5. **Windows Authenticode** — add Artifact Signing or another organization certificate when distribution volume, enterprise policy or support cost justifies it; retain the product-level manifest signature after signing is added.
+## 实施体验复审结论
 
-## Plan self-review result
+本节是方案阶段审查，证据来自本文步骤、现有仓库脚本和历史构建问题，不代表更新器已完成运行测试。
 
-- Spec coverage: product-fork policy, stable/candidate/development isolation, signed macOS, unsigned Windows automatic update, independent release authentication, GitHub source, pre-login/recovery access, account data retention, required-plugin ownership and selective upstream intake each map to at least one task.
-- Deliberate exclusions: rollback execution and community marketplace are separate subprojects; the v1 manifest contains the compatibility data they will need.
-- Type consistency: `UpdateChannel`, `ReleaseUpdateChannel`, `SignedReleaseManifest`, `UpdateSource`, `ResolvedRelease`, `UpdateExecutor`, `UpdateManager`, `UpdateStatus` and `DesktopUpdateApi` are introduced once and consumed by name in later tasks.
-- Secret handling: only the SPKI public key is committed; the PKCS8 private key is ignored locally, stored as a GitHub secret, materialized only in runner temp and removed unconditionally.
+| 维度 | 评分 | 证据 | 结论 |
+| --- | ---: | --- | --- |
+| 开始路径 | 8/10 | 四阶段路线与停止点 | 实施者无需先理解完整发布链即可从纯测试开始 |
+| 增量反馈 | 9/10 | 任务 1 至 10 的聚焦命令 | 大部分错误能在打包前暴露 |
+| 错误恢复 | 8/10 | 缓存失败开放、下载校验、安装准备失败 | 关键失败都说明保留内容和下一步动作 |
+| 发布安全 | 9/10 | 签名 Manifest、版本绑定策略、Environment Secret | Windows 无证书阶段仍有独立信任链 |
+| 构建效率 | 9/10 | `release-preflight`、本地 Fixture、四个停止点 | 避免把配置错误带入耗时原生打包 |
+| 可维护性 | 8/10 | Shell 独占更新逻辑、Core 只提供锁定制品 | 后续业务开发不需要理解上游发布设施 |
+
+综合评分：8.5/10。当前方案可以进入分阶段实施，但不得把任务 1 至任务 10 作为一次性大改提交。最先执行阶段 A；到每个停止点后先检查 Diff 和人工结果，再决定是否继续。
+
+## 计划自检
+
+- 覆盖范围：产品分支、三渠道隔离、macOS 签名、Windows 未签名更新、发布认证、登录前入口、数据保留、必需插件归属和上游定向采用均有对应任务。
+- 类型一致性：`UpdateChannel`、`SignedReleaseManifest`、`UpdateSource`、`UpdateExecutor`、`UpdateManager`、`UpdateStatus`、`DesktopUpdateApi`、`DesktopUpdateWindowApi` 各自只定义一次。
+- 强制策略安全：策略文件绑定发布版本和渠道；客户端缓存原始字节并在每次启动重新验签。
+- 密钥安全：只提交公钥；私钥只保存在受保护 Environment 和加密恢复库；本机及 Runner 明文均有明确清理步骤。
+- 构建效率：低成本 `release-preflight` 和本地 Fixture 位于原生打包之前；任何阶段失败都停止，不直接重跑 GitHub 打包。
+- 明确延期：版本回退、公共插件市场、国内镜像和 Windows Authenticode 独立立项。
