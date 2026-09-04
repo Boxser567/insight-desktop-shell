@@ -50,3 +50,14 @@ export interface SignedReleaseManifest {
   }
   artifacts: ReleaseArtifact[]
 }
+
+export type UpdateStatus =
+  | { phase: 'idle'; currentVersion: string; lastCheckedAt?: string }
+  | { phase: 'checking'; currentVersion: string; manual: boolean }
+  | { phase: 'available'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
+  | { phase: 'downloading'; currentVersion: string; availableVersion: string; required: boolean; percent: number; manual: boolean }
+  | { phase: 'downloaded'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
+  | { phase: 'installing'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
+  | { phase: 'up-to-date'; currentVersion: string; manual: true }
+  | { phase: 'unsupported'; currentVersion: string; reason: string; manual: boolean }
+  | { phase: 'error'; currentVersion: string; availableVersion?: string; required: boolean; message: string; manual: boolean; retryable: boolean }
