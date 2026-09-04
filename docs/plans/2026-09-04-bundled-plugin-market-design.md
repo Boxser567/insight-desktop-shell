@@ -25,6 +25,8 @@
 
 `dshmarket` 不得获得更新 Shell、`core-runtime.lock.json` 指向的 Runtime、`dsh-better-sidebar` 或 `@insight-ai/desktop-integration` 的能力。市场内发生的网络访问仅限用户主动打开市场后的社区目录读取、插件详情和用户确认的安装/更新操作；首次安装和客户端启动不依赖网络。
 
+`dshmarket@1.41.0` 自带的宿主保护列表不认识因赛AI拥有的 Sidebar 与桌面集成，因此 Shell 在生成 bundled Profile 后对该锁定版本执行一项受测试的宿主策略适配：把两个包加入保护列表，并在 Market 的更新与卸载路由拒绝修改。适配依赖的代码位置不匹配时必须让构建失败，禁止静默产出失去保护的安装包。此适配不 Fork 市场，也不改变普通插件和 Market 自身可卸载、可更新的产品规则；升级 `dshmarket` 时必须重新验证或删除适配。
+
 ## Profile 生命周期
 
 ```mermaid

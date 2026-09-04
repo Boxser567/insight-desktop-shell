@@ -12,6 +12,7 @@
 
 - Pin `dshmarket` to `1.41.0`; never fetch it during first application launch.
 - `dsh-better-sidebar@0.16.1` and `@insight-ai/desktop-integration` remain non-removable.
+- Because the pinned market does not natively protect Insight-owned packages, the generated Profile receives a fail-closed host-policy adaptation for Sidebar and desktop-integration update/uninstall routes.
 - Do not change Core Runtime, `core-runtime.lock.json`, authentication, account isolation, UI layout, or release workflows.
 - Existing version-three Profiles that lack or removed the market must not receive it from an application update.
 - The market and other non-first-party plugins gain no token, Cookie, account ID, path, filesystem, or arbitrary Electron IPC access.

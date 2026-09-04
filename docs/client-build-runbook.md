@@ -134,6 +134,8 @@ npm run prepare:bundled-profile
 
 `npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 和模板版本要求的 Profile，避免无意义地重新安装。
 
+Profile 准备还会执行锁定版本的 Market 宿主策略适配。若 `dshmarket` 内部更新导致保护列表或更新/卸载路由无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
+
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 
 ```bash
@@ -187,6 +189,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
 - `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.41.0`；
+- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 Market update 与 uninstall 的必需插件保护；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。

@@ -4,6 +4,7 @@ import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parse, stringify } from 'yaml'
+import { patchBundledMarket } from './patch-bundled-market.mjs'
 
 const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
@@ -152,6 +153,7 @@ await removeHarnessHomeResidue()
 
 if (await templateIsReady()) {
   await configureDefaultProfile(bundledProfileDirectory)
+  await patchBundledMarket(bundledProfileDirectory)
   console.log(`Refreshed bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
 } else {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-bundled-profile-'))
@@ -171,6 +173,7 @@ if (await templateIsReady()) {
     await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
       'plugin', '--profile', PROFILE, 'install', '--no-frozen-lockfile'
     ])
+    await patchBundledMarket(temporaryProfile)
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })
     await cp(join(temporaryDirectory, 'profiles', PROFILE), bundledProfileDirectory, {
