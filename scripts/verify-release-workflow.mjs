@@ -48,7 +48,7 @@ async function main() {
   ]) {
     requireText(job, 'APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}', name)
     requireText(job, 'CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}', name)
-    requireText(job, 'ulimit -n 10240', name)
+    requireText(job, 'ulimit -n 65536', name)
   }
   requireText(windows, "$PSNativeCommandUseErrorActionPreference = $true", 'windows-x64')
   requireText(windows, '$appExecutable', 'windows-x64')

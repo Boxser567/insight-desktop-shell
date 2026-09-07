@@ -140,7 +140,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
         run: |
           set -euo pipefail
-          ulimit -n 10240
+          ulimit -n 65536
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:arm64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
@@ -271,7 +271,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
         run: |
           set -euo pipefail
-          ulimit -n 10240
+          ulimit -n 65536
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:x64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
