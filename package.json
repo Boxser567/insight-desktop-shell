@@ -22,7 +22,7 @@
     "agent"
   ],
   "scripts": {
-    "postinstall": "install-electron --no",
+    "postinstall": "install-electron --no && patch-package",
     "dev": "npm run prepare:core-runtime && npm run prepare:runtime-manifest && npm run build:desktop-integration && npm run prepare:bundled-profile && electron-vite dev",
     "build": "npm run prepare:core-runtime && npm run build:prepared",
     "build:prepared": "npm run prepare:runtime-manifest && npm run build:desktop-integration && electron-vite build",
@@ -68,6 +68,7 @@
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "esbuild": "0.25.12",
+    "patch-package": "8.0.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.10",
     "yaml": "^2.8.3"

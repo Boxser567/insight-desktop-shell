@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 function section(workflow, name, next) {
   const pattern = next
@@ -19,9 +19,11 @@ async function main() {
   if (!workflowPath || !packagePath || rest.length > 0) {
     throw new Error('Usage: verify-release-workflow.mjs <workflow-yml> <package-json>')
   }
-  const [workflow, packageJson] = await Promise.all([
+  const resolvedPackagePath = resolve(packagePath)
+  const [workflow, packageJson, osxSignPatch] = await Promise.all([
     readFile(resolve(workflowPath), 'utf8'),
-    readFile(resolve(packagePath), 'utf8').then(JSON.parse)
+    readFile(resolvedPackagePath, 'utf8').then(JSON.parse),
+    readFile(join(dirname(resolvedPackagePath), 'patches', '@electron+osx-sign+1.3.3.patch'), 'utf8')
   ])
   const preflight = section(workflow, 'release-preflight', 'macos-apple-silicon')
   const appleSilicon = section(workflow, 'macos-apple-silicon', 'macos-intel')
@@ -82,6 +84,13 @@ async function main() {
   }
 
   const scripts = packageJson.scripts ?? {}
+  if (scripts.postinstall !== 'install-electron --no && patch-package') {
+    throw new Error('Postinstall must apply locked dependency patches after installing Electron.')
+  }
+  if (!osxSignPatch.includes('-        return await Promise.all(children.map(async (child) => {') ||
+      !osxSignPatch.includes('+        for (const child of children) {')) {
+    throw new Error('The osx-sign patch must serialize binary file inspection.')
+  }
   for (const [name, expected] of Object.entries({
     'package:candidate:mac:arm64': {
       builder: 'electron-builder --mac dmg zip --arm64',
