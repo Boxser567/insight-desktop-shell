@@ -326,8 +326,22 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('verify-target.mjs darwin x64')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder.dev.cjs')
-    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac dmg --arm64')
-    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac zip --arm64')
+    expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder --mac dmg zip --arm64')
+    expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder --mac dmg zip --x64')
+    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac dmg zip --arm64')
+    expect(packageJson.scripts['package:mac:x64']).toContain('electron-builder --mac dmg zip --x64')
+    for (const name of [
+      'package:dev:mac:arm64',
+      'package:dev:mac:x64',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:mac:arm64',
+      'package:mac:x64'
+    ]) {
+      const command = packageJson.scripts[name]
+      expect(command).toBeDefined()
+      expect(command?.match(/(?:^|&& )electron-builder --/g)).toHaveLength(1)
+    }
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
