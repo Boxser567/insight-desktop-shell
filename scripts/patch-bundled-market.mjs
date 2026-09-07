@@ -43,6 +43,50 @@ function protectMutationRoute(source, route) {
   return `${source.slice(0, insertAt)}${guard}${source.slice(insertAt)}`
 }
 
+function hideProtectedListEntries(source, route) {
+  const routeAnchor = `path: '/dsh-market/${route}'`
+  const routeStart = source.indexOf(routeAnchor)
+  if (routeStart === -1) {
+    throw new Error(`dshmarket ${route} route was not found; review the pinned market integration before building.`)
+  }
+  const nextRoute = source.indexOf("path: '/dsh-market/", routeStart + routeAnchor.length)
+  const routeEnd = nextRoute === -1 ? source.length : nextRoute
+  const marker = `// Insight Desktop hides required capabilities from market ${route}.`
+  if (source.slice(routeStart, routeEnd).includes(marker)) return source
+
+  const isInstalledRoute = route === 'installed'
+  const responseAnchor = isInstalledRoute
+    ? [
+        '                sendJson(response, 200, {',
+        '                    profile: config.profile,',
+        '                    installed,'
+      ].join('\n')
+    : '                    sendJson(response, 200, { updates });'
+  const responseStart = source.indexOf(responseAnchor, routeStart)
+  if (responseStart === -1 || responseStart >= routeEnd) {
+    throw new Error(`dshmarket ${route} response was not found; review the pinned market integration before building.`)
+  }
+
+  const replacement = isInstalledRoute
+    ? [
+        `                ${marker}`,
+        '                const visibleInstalled = Object.fromEntries(',
+        '                    Object.entries(installed).filter(([name]) => !isProtectedModule(name)),',
+        '                );',
+        '                sendJson(response, 200, {',
+        '                    profile: config.profile,',
+        '                    installed: visibleInstalled,'
+      ].join('\n')
+    : [
+        `                    ${marker}`,
+        '                    const visibleUpdates = Object.fromEntries(',
+        '                        Object.entries(updates).filter(([name]) => !isProtectedModule(name)),',
+        '                    );',
+        '                    sendJson(response, 200, { updates: visibleUpdates });'
+      ].join('\n')
+  return `${source.slice(0, responseStart)}${replacement}${source.slice(responseStart + responseAnchor.length)}`
+}
+
 /** Apply the pinned dshmarket host policy to a prepared desktop Profile. */
 export async function patchBundledMarket(profileDirectory) {
   const marketRoot = join(profileDirectory, 'node_modules', 'dshmarket', 'lib')
@@ -50,6 +94,8 @@ export async function patchBundledMarket(profileDirectory) {
   const routesPath = join(marketRoot, 'routes.js')
   const patchSource = addProtectedPackagePatterns(await readFile(patchPath, 'utf8'))
   let routesSource = await readFile(routesPath, 'utf8')
+  routesSource = hideProtectedListEntries(routesSource, 'installed')
+  routesSource = hideProtectedListEntries(routesSource, 'updates')
   routesSource = protectMutationRoute(routesSource, 'update')
   routesSource = protectMutationRoute(routesSource, 'uninstall')
   await writeFile(patchPath, patchSource, 'utf8')

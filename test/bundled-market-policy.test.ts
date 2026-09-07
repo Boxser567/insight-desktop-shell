@@ -21,6 +21,15 @@ describe('bundled market host policy', () => {
     await writeFile(
       join(library, 'routes.js'),
       [
+        "path: '/dsh-market/installed'",
+        '                const installed = readInstalled(config.profile, activeProfileDir);',
+        '                sendJson(response, 200, {',
+        '                    profile: config.profile,',
+        '                    installed,',
+        '                });',
+        "path: '/dsh-market/updates'",
+        '                    const updates = await checkUpdates();',
+        '                    sendJson(response, 200, { updates });',
         "path: '/dsh-market/update'",
         "                        const name = typeof body.name === 'string' ? body.name : '';",
         "path: '/dsh-market/uninstall'",
@@ -38,8 +47,19 @@ describe('bundled market host policy', () => {
     expect(patch.match(/dsh-better-sidebar/g)).toHaveLength(1)
     expect(patch.match(/@insight-ai\\\/desktop-integration/g)).toHaveLength(1)
     expect(routes.match(/Insight Desktop protects required capabilities/g)).toHaveLength(2)
+    expect(routes.match(/Insight Desktop hides required capabilities/g)).toHaveLength(2)
     expect(routes).toContain('isProtectedModule(name)')
+    expect(routes).toContain('installed: visibleInstalled')
+    expect(routes).toContain('updates: visibleUpdates')
     expect(routes).toContain('cannot be updated from the plugin market')
     expect(routes).toContain('cannot be uninstalled from the plugin market')
+    for (const removablePackage of [
+      'dshmarket',
+      'dsh-memory-evolve',
+      '@changfenhuang/dsh-genui',
+      'dsh-prompt-enhance'
+    ]) {
+      expect(patch).not.toContain(removablePackage)
+    }
   })
 })
