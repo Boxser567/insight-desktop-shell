@@ -82,14 +82,30 @@ async function main() {
   }
 
   const scripts = packageJson.scripts ?? {}
-  for (const [name, command] of Object.entries({
-    'package:candidate:mac:arm64': 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip',
-    'package:candidate:mac:x64': 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip',
-    'package:mac:arm64': 'finalize-mac-release.mjs dist insight-mac-arm64.zip',
-    'package:mac:x64': 'finalize-mac-release.mjs dist insight-mac-x64.zip'
+  for (const [name, expected] of Object.entries({
+    'package:candidate:mac:arm64': {
+      builder: 'electron-builder --mac dmg zip --arm64',
+      finalize: 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip'
+    },
+    'package:candidate:mac:x64': {
+      builder: 'electron-builder --mac dmg zip --x64',
+      finalize: 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip'
+    },
+    'package:mac:arm64': {
+      builder: 'electron-builder --mac dmg zip --arm64',
+      finalize: 'finalize-mac-release.mjs dist insight-mac-arm64.zip'
+    },
+    'package:mac:x64': {
+      builder: 'electron-builder --mac dmg zip --x64',
+      finalize: 'finalize-mac-release.mjs dist insight-mac-x64.zip'
+    }
   })) {
-    if (typeof scripts[name] !== 'string' || !scripts[name].includes(command)) {
+    const command = scripts[name]
+    if (typeof command !== 'string' || !command.includes(expected.finalize)) {
       throw new Error(`Package script ${name} does not finalize macOS update metadata.`)
+    }
+    if (!command.includes(expected.builder) || command.match(/(?:^|&& )electron-builder --/gu)?.length !== 1) {
+      throw new Error(`Package script ${name} must build DMG and ZIP in one electron-builder invocation.`)
     }
   }
   console.log('Release workflow contract is valid.')
