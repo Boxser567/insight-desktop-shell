@@ -457,6 +457,8 @@ describe('GitHub release contract', () => {
     expect(workflow.match(/ulimit -n 65536/g)).toHaveLength(2)
     expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(4)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
+    expect(workflow.match(/syspolicy_check distribution --verbose "\$RELEASE_APP"/g)).toHaveLength(2)
+    expect(workflow).not.toContain('spctl --assess --type execute')
     expect(workflow.match(/hdiutil verify/g)).toHaveLength(2)
     expect(workflow.match(/unzip -t/g)).toHaveLength(2)
     expect(workflow.match(/awk -v team="\$APPLE_TEAM_ID"/g)).toHaveLength(2)
