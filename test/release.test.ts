@@ -218,6 +218,9 @@ describe('GitHub release contract', () => {
     expect(main).toContain('addProfilePluginWithDsh(')
     expect(profile).toContain("const MARKET_PACKAGE = 'dshmarket'")
     expect(profile).toContain("const MARKET_VERSION = '1.41.0'")
+    expect(profile).toContain("bundled-community-plugins.json")
+    expect(profile).toContain("file:.insight-bundled-plugins/")
+    expect(profile).not.toContain("packageName: 'dsh-at-file'")
   })
 
   it('routes manual restarts through the active plugin recovery flow', async () => {

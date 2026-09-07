@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { patchBundledMarket } from './patch-bundled-market.mjs'
 
@@ -13,6 +14,51 @@ const MARKET_PACKAGE = 'dshmarket'
 const MARKET_VERSION = '1.41.0'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
 const DEFAULT_PROFILE_VERSION = 3
+const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
+const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
+const COMMUNITY_PLUGIN_DESCRIPTOR = join(
+  'vendor',
+  'plugins',
+  'bundled-community-plugins.json'
+)
+const COMMUNITY_PLUGIN_FIELDS = [
+  'artifact',
+  'packageName',
+  'sha256',
+  'sourceCommit',
+  'sourceRef',
+  'sourceRepository',
+  'version'
+]
+const EXPECTED_COMMUNITY_PLUGINS = [
+  {
+    packageName: 'dsh-memory-evolve',
+    version: '0.1.0',
+    artifact: 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz',
+    sha256: '3c82d92fa0c305282c2084331ab53121e411149a921d18d35958e6ba10efa5e4',
+    sourceRepository: 'https://github.com/csyangwen/dsh-memory-evolve',
+    sourceRef: 'v26082401',
+    sourceCommit: '21d2a8518bc608c2958b08733f5b5eaf6b514c9c'
+  },
+  {
+    packageName: '@changfenhuang/dsh-genui',
+    version: '0.9.8',
+    artifact: 'vendor/plugins/changfenhuang-dsh-genui-0.9.8.tgz',
+    sha256: '9944aeea5fd864cbf93e29b5437ea4fdc2560637c216112258508c3a739f20ff',
+    sourceRepository: 'https://github.com/omdsh-dev/dsh-genui',
+    sourceRef: 'v0.9.8',
+    sourceCommit: '680693eda677926942c11a499c476c55587d97c1'
+  },
+  {
+    packageName: 'dsh-prompt-enhance',
+    version: '0.1.9',
+    artifact: 'vendor/plugins/dsh-prompt-enhance-0.1.9.tgz',
+    sha256: '2ab3d57a55f399489d518361401b09b97ac0136712d72846f650f4cd25b9f123',
+    sourceRepository: 'https://github.com/rongxingda/dsh-prompt-enhance',
+    sourceRef: 'v0.1.9',
+    sourceCommit: 'ed535fbdf0a10d777e43a1f3130d5ffb4b94a5c2'
+  }
+]
 const projectRoot = process.cwd()
 const desktopIntegrationSource = join(projectRoot, 'packages', 'insight-desktop-integration')
 const bundledProfileRoot = join(projectRoot, 'build', 'bundled-profile')
@@ -33,13 +79,19 @@ async function removeHarnessHomeResidue() {
   await rm(join(bundledProfileRoot, 'storages'), { recursive: true, force: true })
 }
 
-function hasPinnedDefaultPlugins(manifest) {
+function hasPinnedDefaultPlugins(manifest, communityPlugins) {
   return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
     manifest.dependencies?.[MARKET_PACKAGE] === MARKET_VERSION &&
     manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
     manifest.dsh?.profile?.bundles?.includes(SIDEBAR_PACKAGE) &&
     manifest.dsh?.profile?.bundles?.includes(MARKET_PACKAGE) &&
     manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
+    !manifest.dependencies?.['dsh-at-file'] &&
+    !manifest.dsh?.profile?.bundles?.includes('dsh-at-file') &&
+    communityPlugins.every((plugin) =>
+      manifest.dependencies?.[plugin.packageName] === plugin.profileSpecifier &&
+      manifest.dsh?.profile?.bundles?.includes(plugin.packageName)
+    ) &&
     manifest.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION
 }
 
@@ -51,14 +103,97 @@ async function readManifest(path) {
   }
 }
 
-async function templateIsReady() {
+async function sha256(path) {
+  return createHash('sha256').update(await readFile(path)).digest('hex')
+}
+
+function descriptorRecordMatches(record, expected) {
+  return COMMUNITY_PLUGIN_FIELDS.every((field) => record[field] === expected[field]) &&
+    Object.keys(record).sort().join('\n') === COMMUNITY_PLUGIN_FIELDS.slice().sort().join('\n')
+}
+
+async function readCommunityPlugins() {
+  const descriptor = JSON.parse(
+    await readFile(join(projectRoot, COMMUNITY_PLUGIN_DESCRIPTOR), 'utf8')
+  )
+  if (
+    descriptor?.schemaVersion !== 1 ||
+    !Array.isArray(descriptor.plugins) ||
+    descriptor.plugins.length !== EXPECTED_COMMUNITY_PLUGINS.length ||
+    Object.keys(descriptor).sort().join('\n') !== 'plugins\nschemaVersion'
+  ) {
+    throw new Error('The bundled community plugin descriptor is invalid.')
+  }
+
+  const plugins = []
+  for (const [index, expected] of EXPECTED_COMMUNITY_PLUGINS.entries()) {
+    const record = descriptor.plugins[index]
+    if (!record || !descriptorRecordMatches(record, expected)) {
+      throw new Error(`The bundled community plugin descriptor does not match ${expected.packageName}@${expected.version}.`)
+    }
+    if (!/^[a-f0-9]{64}$/u.test(record.sha256) || isAbsolute(record.artifact)) {
+      throw new Error(`${record.packageName} has invalid archive metadata.`)
+    }
+    const artifactPath = resolve(projectRoot, record.artifact)
+    const projectRelativePath = relative(projectRoot, artifactPath)
+    if (projectRelativePath === '..' || projectRelativePath.startsWith(`..${sep}`)) {
+      throw new Error(`${record.packageName} archive escapes the project root.`)
+    }
+    const actualHash = await sha256(artifactPath)
+    if (actualHash !== record.sha256) {
+      throw new Error(
+        `${record.packageName} archive SHA-256 mismatch: expected ${record.sha256}, got ${actualHash}.`
+      )
+    }
+    const archiveName = record.artifact.split('/').at(-1)
+    if (!archiveName) throw new Error(`${record.packageName} archive name is missing.`)
+    plugins.push({
+      ...record,
+      artifactPath,
+      archiveName,
+      profileSpecifier: `${COMMUNITY_PLUGIN_SPEC_PREFIX}${archiveName}`
+    })
+  }
+  return plugins
+}
+
+async function templateIsReady(communityPlugins) {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
-  if (!manifest || !hasPinnedDefaultPlugins(manifest)) return false
-  return existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
+  if (!manifest || !hasPinnedDefaultPlugins(manifest, communityPlugins)) return false
+  const requiredFilesExist = existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
+  if (!requiredFilesExist) return false
+
+  for (const plugin of communityPlugins) {
+    const installedManifest = await readManifest(join(
+      bundledProfileDirectory,
+      'node_modules',
+      ...plugin.packageName.split('/'),
+      'package.json'
+    ))
+    if (
+      installedManifest?.name !== plugin.packageName ||
+      installedManifest?.version !== plugin.version
+    ) return false
+    const retainedArchive = join(
+      bundledProfileDirectory,
+      COMMUNITY_PLUGIN_DIRECTORY,
+      plugin.archiveName
+    )
+    if (!existsSync(retainedArchive) || await sha256(retainedArchive) !== plugin.sha256) return false
+  }
+  return true
+}
+
+async function copyCommunityPluginArchives(profileDirectory, communityPlugins) {
+  const destination = join(profileDirectory, COMMUNITY_PLUGIN_DIRECTORY)
+  await mkdir(destination, { recursive: true })
+  for (const plugin of communityPlugins) {
+    await cp(plugin.artifactPath, join(destination, plugin.archiveName))
+  }
 }
 
 async function writePnpmShim(directory) {
@@ -149,9 +284,10 @@ if (!existsSync(dshEntry) || !existsSync(pnpmEntry)) {
   throw new Error('The locked Core Runtime was not found. Run npm run prepare:core-runtime before preparing the bundled profile.')
 }
 
+const communityPlugins = await readCommunityPlugins()
 await removeHarnessHomeResidue()
 
-if (await templateIsReady()) {
+if (await templateIsReady(communityPlugins)) {
   await configureDefaultProfile(bundledProfileDirectory)
   await patchBundledMarket(bundledProfileDirectory)
   console.log(`Refreshed bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
@@ -169,6 +305,13 @@ if (await templateIsReady()) {
       `${MARKET_PACKAGE}@${MARKET_VERSION}`
     ])
     const temporaryProfile = join(temporaryDirectory, 'profiles', PROFILE)
+    await copyCommunityPluginArchives(temporaryProfile, communityPlugins)
+    for (const plugin of communityPlugins) {
+      await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
+        'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
+        plugin.profileSpecifier
+      ])
+    }
     await configureDefaultProfile(temporaryProfile)
     await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
       'plugin', '--profile', PROFILE, 'install', '--no-frozen-lockfile'

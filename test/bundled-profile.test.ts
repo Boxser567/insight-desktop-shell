@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { initializeBundledProfile } from '../src/main/state/bundled-profile'
 import { isProfileInstallComplete } from '../src/main/state/profile-install-marker'
 
+const communityPlugins = [
+  { name: 'dsh-memory-evolve', version: '0.1.0', archive: 'dsh-memory-evolve-0.1.0.tgz' },
+  { name: '@changfenhuang/dsh-genui', version: '0.9.8', archive: 'changfenhuang-dsh-genui-0.9.8.tgz' },
+  { name: 'dsh-prompt-enhance', version: '0.1.9', archive: 'dsh-prompt-enhance-0.1.9.tgz' }
+] as const
+
 describe('bundled profile initialization', () => {
   const testDir = join(__dirname, '.temp-bundled-profile-test')
 
@@ -16,6 +22,10 @@ describe('bundled profile initialization', () => {
         dependencies: {
           'dsh-better-sidebar': '0.16.1',
           dshmarket: '1.41.0',
+          ...Object.fromEntries(communityPlugins.map((plugin) => [
+            plugin.name,
+            `file:.insight-bundled-plugins/${plugin.archive}`
+          ])),
           '@insight-ai/desktop-integration': 'workspace:*'
         },
         dsh: {
@@ -25,6 +35,7 @@ describe('bundled profile initialization', () => {
               '@deepseek-ai/dsh-web-app',
               'dsh-better-sidebar',
               'dshmarket',
+              ...communityPlugins.map((plugin) => plugin.name),
               '@insight-ai/desktop-integration'
             ]
           }
@@ -38,6 +49,17 @@ describe('bundled profile initialization', () => {
       JSON.stringify({ name: '@insight-ai/desktop-integration' }),
       'utf8'
     )
+    for (const plugin of communityPlugins) {
+      const installed = join(profile, 'node_modules', ...plugin.name.split('/'))
+      await mkdir(installed, { recursive: true })
+      await writeFile(
+        join(installed, 'package.json'),
+        JSON.stringify({ name: plugin.name, version: plugin.version }),
+        'utf8'
+      )
+      await mkdir(join(profile, '.insight-bundled-plugins'), { recursive: true })
+      await writeFile(join(profile, '.insight-bundled-plugins', plugin.archive), plugin.name, 'utf8')
+    }
     await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')
     await writeFile(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n  - packages/*\n', 'utf8')
   }
@@ -57,6 +79,16 @@ describe('bundled profile initialization', () => {
     )
     expect(initialized.dependencies.dshmarket).toBe('1.41.0')
     expect(initialized.dsh.profile.bundles).toContain('dshmarket')
+    for (const plugin of communityPlugins) {
+      expect(initialized.dependencies[plugin.name]).toBe(
+        `file:.insight-bundled-plugins/${plugin.archive}`
+      )
+      expect(initialized.dsh.profile.bundles).toContain(plugin.name)
+      expect(await readFile(
+        join(dshHome, 'profiles', 'web', '.insight-bundled-plugins', plugin.archive),
+        'utf8'
+      )).toBe(plugin.name)
+    }
 
     await writeFile(join(dshHome, 'profiles', 'web', 'package.json'), '{"name":"user-profile"}', 'utf8')
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
@@ -80,6 +112,7 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('dsh-better-sidebar')
+    expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('dsh-memory-evolve')
 
     await writeFile(
       join(profile, 'package.json'),
@@ -140,6 +173,10 @@ describe('bundled profile initialization', () => {
       '@insight-ai/desktop-integration'
     ])
     expect(manifest.insightDesktop.defaultProfileVersion).toBe(3)
+    for (const plugin of communityPlugins) {
+      expect(manifest.dependencies).not.toHaveProperty(plugin.name)
+      expect(manifest.dsh.profile.bundles).not.toContain(plugin.name)
+    }
     expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(await readFile(join(profile, 'pnpm-workspace.yaml'), 'utf8')).toContain('packages/*')
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('bundle\n')
@@ -187,6 +224,10 @@ describe('bundled profile initialization', () => {
     expect(manifest.dsh.profile.bundles).toContain('user-plugin')
     expect(manifest.dependencies).not.toHaveProperty('dshmarket')
     expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
+    for (const plugin of communityPlugins) {
+      expect(manifest.dependencies).not.toHaveProperty(plugin.name)
+      expect(manifest.dsh.profile.bundles).not.toContain(plugin.name)
+    }
     expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
   })
