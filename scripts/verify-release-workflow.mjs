@@ -51,6 +51,10 @@ async function main() {
     requireText(job, 'APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}', name)
     requireText(job, 'CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}', name)
     requireText(job, 'ulimit -n 65536', name)
+    requireText(job, 'syspolicy_check distribution --verbose "$RELEASE_APP"', name)
+    if (job.includes('spctl --assess --type execute')) {
+      throw new Error(`${name} must use syspolicy_check for the application bundle.`)
+    }
   }
   requireText(windows, "$PSNativeCommandUseErrorActionPreference = $true", 'windows-x64')
   requireText(windows, '$appExecutable', 'windows-x64')

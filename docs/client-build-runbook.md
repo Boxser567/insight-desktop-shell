@@ -215,7 +215,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
-- macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后验证应用和 DMG 的 codesign、Gatekeeper、stapling，运行 `hdiutil verify` 与 `unzip -t`，并检查 zip blockmap 和架构更新元数据。
+- macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
 - `publish` 必须直接依赖预检、两个 macOS job 和 Windows job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
 - 同一 tag 已存在 Release 时必须失败；禁止 `--clobber`、覆盖资产或只重跑 publish 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
@@ -233,7 +233,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 **执行：**
 
 - 记录 workflow URL、Release URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
-- macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `spctl --assess --type execute --verbose=4`，再用 `xcrun stapler validate` 检查应用与 DMG；任一失败即停止安装验收。
+- macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
@@ -271,6 +271,7 @@ npm run package:mac:arm64
 | Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
 | macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
 | macOS 签名时出现 `EMFILE: too many open files` | `@electron/osx-sign 1.3.3` 会通过 `Promise.all` 递归检查 App 内的文件；当 Runtime 和内置 Profile 合计超过万级文件时，runner 的软文件句柄限制会被耗尽。依次运行 DMG、ZIP 两个 electron-builder 进程还会重建并重复签名同一个 App；实际 Candidate 曾在首次签名、公证和 DMG 成功后，于第二次 ZIP 签名再次耗尽句柄 | 阶段 9；通过 `patch-package` 将 `osx-sign` 文件检查串行化，方案对应上游 [electron/osx-sign#286](https://github.com/electron/osx-sign/pull/286)；单次 electron-builder 同时构建 `dmg zip`，只装配和签名 App 一次；两个 macOS 构建 Shell 同时保留 `ulimit -n 65536`。`10240`、单纯提高上限和仅合并 target 均已在约 4.2 万文件的实际制品上证实不足；`npm ci` 必须成功应用补丁，签名后仍执行完整 bundle 校验 |
+| Intel App 已通过 codesign、Apple 公证和 staple，但 `spctl --type execute` 报 `a sealed resource is missing or invalid` | `spctl` 的 App 评估可能与底层签名和公证结果冲突；Apple 在 macOS 14 起将 `syspolicy_check distribution` 作为应用分发检查入口，并将旧 `spctl` App 检查标为准确性较低 | 阶段 9；App 改用 `syspolicy_check distribution --verbose`，DMG 仍用 `spctl --type open`；不得因为替换检查工具而省略 `codesign --strict --deep`、stapler、DMG 公证或安装后的 quarantine 验收 |
 | electron-builder 选择 `Apple Development` 或找不到 `Developer ID Application` | `DESKTOP_CSC_LINK` 实际包含的证书类型、Team ID 和私钥是否匹配 | 阶段 9；导入临时钥匙串后、打包前必须精确找到目标 Team 的 `Developer ID Application` 并以哈希传给 `CSC_NAME`，不允许自动选择其他身份 |
 | Windows NSIS 已生成且 `7z t` 通过，但被判定“不是 x64” | 是否错误地把 NSIS 安装器外壳的 PE machine 当成应用架构 | 阶段 9；只校验安装器是有效 PE/NSIS，在 `win-unpacked` 中校验主程序为 x64，并让 PowerShell 对任何外部命令非零状态立即停止 |
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
