@@ -1,0 +1,88 @@
+diff --git a/node_modules/@electron/osx-sign/dist/cjs/util.js b/node_modules/@electron/osx-sign/dist/cjs/util.js
+index 77e64b5..05f37e3 100644
+--- a/node_modules/@electron/osx-sign/dist/cjs/util.js
++++ b/node_modules/@electron/osx-sign/dist/cjs/util.js
+@@ -150,8 +150,9 @@ exports.validateOptsPlatform = validateOptsPlatform;
+ async function walkAsync(dirPath) {
+     (0, exports.debugLog)('Walking... ' + dirPath);
+     async function _walkAsync(dirPath) {
++        const result = [];
+         const children = await fs.readdir(dirPath);
+-        return await Promise.all(children.map(async (child) => {
++        for (const child of children) {
+             const filePath = path.resolve(dirPath, child);
+             const stat = await fs.stat(filePath);
+             if (stat.isFile()) {
+@@ -159,9 +160,12 @@ async function walkAsync(dirPath) {
+                     case '.cstemp': // Temporary file generated from past codesign
+                         (0, exports.debugLog)('Removing... ' + filePath);
+                         await fs.remove(filePath);
+-                        return null;
++                        break;
+                     default:
+-                        return await getFilePathIfBinary(filePath);
++                        const binaryPath = await getFilePathIfBinary(filePath);
++                        if (binaryPath) {
++                            result.push(binaryPath);
++                        }
+                 }
+             }
+             else if (stat.isDirectory() && !stat.isSymbolicLink()) {
+@@ -171,10 +175,10 @@ async function walkAsync(dirPath) {
+                     case '.framework': // Framework
+                         walkResult.push(filePath);
+                 }
+-                return walkResult;
++                result.push(walkResult);
+             }
+-            return null;
+-        }));
++        }
++        return result;
+     }
+     const allPaths = await _walkAsync(dirPath);
+     return compactFlattenedList(allPaths);
+diff --git a/node_modules/@electron/osx-sign/dist/esm/util.js b/node_modules/@electron/osx-sign/dist/esm/util.js
+index d3f66d5..ce9846f 100644
+--- a/node_modules/@electron/osx-sign/dist/esm/util.js
++++ b/node_modules/@electron/osx-sign/dist/esm/util.js
+@@ -114,8 +114,9 @@ export async function validateOptsPlatform(opts) {
+ export async function walkAsync(dirPath) {
+     debugLog('Walking... ' + dirPath);
+     async function _walkAsync(dirPath) {
++        const result = [];
+         const children = await fs.readdir(dirPath);
+-        return await Promise.all(children.map(async (child) => {
++        for (const child of children) {
+             const filePath = path.resolve(dirPath, child);
+             const stat = await fs.stat(filePath);
+             if (stat.isFile()) {
+@@ -123,9 +124,12 @@ export async function walkAsync(dirPath) {
+                     case '.cstemp': // Temporary file generated from past codesign
+                         debugLog('Removing... ' + filePath);
+                         await fs.remove(filePath);
+-                        return null;
++                        break;
+                     default:
+-                        return await getFilePathIfBinary(filePath);
++                        const binaryPath = await getFilePathIfBinary(filePath);
++                        if (binaryPath) {
++                            result.push(binaryPath);
++                        }
+                 }
+             }
+             else if (stat.isDirectory() && !stat.isSymbolicLink()) {
+@@ -135,10 +139,10 @@ export async function walkAsync(dirPath) {
+                     case '.framework': // Framework
+                         walkResult.push(filePath);
+                 }
+-                return walkResult;
++                result.push(walkResult);
+             }
+-            return null;
+-        }));
++        }
++        return result;
+     }
+     const allPaths = await _walkAsync(dirPath);
+     return compactFlattenedList(allPaths);

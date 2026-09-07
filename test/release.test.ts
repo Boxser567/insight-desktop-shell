@@ -318,8 +318,15 @@ describe('GitHub release contract', () => {
       path.join(projectRoot, 'electron-builder.candidate.cjs'),
       'utf8'
     )
+    const osxSignPatch = await readFile(
+      path.join(projectRoot, 'patches', '@electron+osx-sign+1.3.3.patch'),
+      'utf8'
+    )
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
 
+    expect(packageJson.scripts.postinstall).toBe('install-electron --no && patch-package')
+    expect(osxSignPatch).toContain('-        return await Promise.all(children.map(async (child) => {')
+    expect(osxSignPatch).toContain('+        for (const child of children) {')
     expect(packageJson.scripts['package:dev:dir']).toContain('npm run build')
     expect(packageJson.scripts['package:dev:dir']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:mac:arm64']).toContain('verify-target.mjs darwin arm64')
