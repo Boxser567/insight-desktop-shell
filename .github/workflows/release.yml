@@ -10,6 +10,16 @@ on:
         description: Candidate tag, for example v0.1.2-rc.1
         required: true
         type: string
+      target:
+        description: Build scope for a Candidate validation or complete release
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos-arm64
+          - macos-x64
+          - windows-x64
 
 permissions:
   contents: write
@@ -87,6 +97,7 @@ jobs:
   macos-apple-silicon:
     name: macOS Apple Silicon
     needs: release-preflight
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos-arm64'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -226,6 +237,7 @@ jobs:
   macos-intel:
     name: macOS Intel
     needs: release-preflight
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos-x64'
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
@@ -365,6 +377,7 @@ jobs:
   windows-x64:
     name: Windows x64 unsigned
     needs: release-preflight
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'windows-x64'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -418,6 +431,11 @@ jobs:
     needs:
       - release-preflight
       - macos-apple-silicon
+    if: >-
+      always() &&
+      needs.release-preflight.result == 'success' &&
+      needs.macos-apple-silicon.result == 'success' &&
+      (github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos-arm64')
     runs-on: macos-14
     steps:
       - uses: actions/download-artifact@v4
@@ -450,6 +468,7 @@ jobs:
       - macos-sonoma-compatibility
     if: >-
       always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.target == 'all') &&
       needs.release-preflight.result == 'success' &&
       needs.macos-apple-silicon.result == 'success' &&
       needs.macos-intel.result == 'success' &&

@@ -427,6 +427,10 @@ describe('GitHub release contract', () => {
 
     expect(document.errors).toEqual([])
     expect(workflow).toContain('candidate_tag:')
+    expect(workflow).toContain('target:')
+    for (const target of ['all', 'macos-arm64', 'macos-x64', 'windows-x64']) {
+      expect(workflow).toContain(`- ${target}`)
+    }
     expect(workflow).not.toContain('windows_prerelease_tag:')
     expect(preflight).toContain('runs-on: ubuntu-24.04')
     expect(preflight).toContain('verify-release-preflight.mjs')
@@ -440,10 +444,14 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('verify-release-workflow.mjs')
     expect(preflight).not.toMatch(/npm ci|vitest|prepare:core-runtime/)
     expect(appleSilicon).toContain('needs: release-preflight')
+    expect(appleSilicon).toContain("inputs.target == 'macos-arm64'")
     expect(intel).toContain('needs: release-preflight')
+    expect(intel).toContain("inputs.target == 'macos-x64'")
     expect(windows).toContain('needs: release-preflight')
+    expect(windows).toContain("inputs.target == 'windows-x64'")
     expect(sonomaCompatibility).toContain('- release-preflight')
     expect(sonomaCompatibility).toContain('- macos-apple-silicon')
+    expect(sonomaCompatibility).toContain("inputs.target == 'macos-arm64'")
   })
 
   it('builds and validates signed macOS and unsigned Windows inputs on native runners', async () => {
@@ -519,6 +527,7 @@ describe('GitHub release contract', () => {
     if (!publish) throw new Error('Release workflow is missing the publish job.')
 
     expect(publish).toContain('environment: desktop-release')
+    expect(publish).toContain("inputs.target == 'all'")
     expect(publish).toContain('- release-preflight')
     expect(publish).toContain('- macos-apple-silicon')
     expect(publish).toContain('- macos-intel')
