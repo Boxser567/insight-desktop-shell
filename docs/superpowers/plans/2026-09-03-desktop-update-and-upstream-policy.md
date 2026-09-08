@@ -1,5 +1,7 @@
 # 桌面客户端更新与上游管理实施计划
 
+> **状态（2026-09-08）：** 本文保留为已完成的更新状态机与签名 Manifest 实施记录。其中 GitHub Release 客户端发现和 GitHub-only 发布步骤已被[Desktop OSS Update Distribution Implementation Plan](2026-09-08-desktop-update-oss-distribution.md)取代，不得作为首个公开版本的分发方案继续执行。
+
 > 本计划按任务顺序执行。每个阶段都有停止点；未达到当前停止点时，不得触发下一阶段的 GitHub 安装包构建。
 
 **目标：** 将 Insight Desktop 固化为独立维护的产品分支，并为托管在 GitHub Releases 的 macOS 签名包和 Windows 未签名包增加可信整包更新能力。

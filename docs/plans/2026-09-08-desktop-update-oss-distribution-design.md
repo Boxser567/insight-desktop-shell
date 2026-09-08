@@ -85,26 +85,26 @@ desktop/
 ├── candidate/
 │   └── current.json
 └── releases/
-    ├── v0.1.0-rc.1/
+    ├── v0.1.2-rc.1/
     │   ├── insight-update.json
     │   ├── insight-update.json.sig
     │   ├── latest-mac.yml
     │   ├── latest.yml
-    │   ├── insight-0.1.0-rc.1-mac-arm64.dmg
-    │   ├── insight-0.1.0-rc.1-mac-arm64.zip
-    │   ├── insight-0.1.0-rc.1-mac-arm64.zip.blockmap
-    │   ├── insight-0.1.0-rc.1-mac-x64.dmg
-    │   ├── insight-0.1.0-rc.1-mac-x64.zip
-    │   ├── insight-0.1.0-rc.1-mac-x64.zip.blockmap
-    │   ├── insight-0.1.0-rc.1-windows-x64-setup.exe
-    │   └── insight-0.1.0-rc.1-windows-x64-setup.exe.blockmap
-    └── v0.1.0/
+    │   ├── insight-0.1.2-rc.1-mac-arm64.dmg
+    │   ├── insight-0.1.2-rc.1-mac-arm64.zip
+    │   ├── insight-0.1.2-rc.1-mac-arm64.zip.blockmap
+    │   ├── insight-0.1.2-rc.1-mac-x64.dmg
+    │   ├── insight-0.1.2-rc.1-mac-x64.zip
+    │   ├── insight-0.1.2-rc.1-mac-x64.zip.blockmap
+    │   ├── insight-0.1.2-rc.1-windows-x64-setup.exe
+    │   └── insight-0.1.2-rc.1-windows-x64-setup.exe.blockmap
+    └── v0.1.2/
         └── ...
 ```
 
 版本目录必须满足：
 
-- `releases/vX.Y.Z/` 或 `releases/vX.Y.Z-rc.N/` 一经上传即不可变；目标前缀存在时发布失败。
+- `releases/vX.Y.Z/` 或 `releases/vX.Y.Z-rc.N/` 一经上传即不可变；目标前缀存在时，只允许在远端文件完整且全部摘要与本次已签名发布完全一致时幂等复用，任何缺失或差异都失败且不得覆盖。
 - 版本 YAML 只使用相对文件名引用同目录制品，不跨版本或跨 Origin。
 - 不依赖 OSS 目录语义、对象排序或列表接口。
 
@@ -114,7 +114,7 @@ desktop/
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "version": "0.1.0"
+  "version": "0.1.2"
 }
 ```
 
@@ -148,12 +148,12 @@ build once
 1. 预检 tag、渠道、版本、发布策略、Core Runtime 锁、工作流和脚本语法。
 2. 三个平台构建一次并完成当前 Runbook 要求的签名、公证、格式、blockmap 和 YAML 验证。
 3. 汇总制品，生成并签名产品 Manifest，再执行完整资产验证。
-4. 确认 OSS 版本前缀不存在；存在即失败，不覆盖。
+4. 检查 OSS 版本前缀。不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
 5. 上传完整不可变版本目录，并从最终 CDN 域名验证大小、摘要和 Range。
-6. 创建 GitHub Draft Release，上传相同字节并核对摘要。
+6. 创建 GitHub Draft Release，上传相同字节并核对摘要；重跑时只允许复用资产完整且摘要完全一致的 Draft。
 7. 在渠道推广审批前完成真实验收：Candidate 做 N→N+1 更新，Stable 对确切制品做干净安装与覆盖安装。
 8. 审批通过后公开 GitHub Release。
-9. 再次确认目标渠道当前版本严格小于新版本；每个渠道使用独立并发锁。
+9. 直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本；每个渠道使用独立并发锁，且生产角色只允许受保护工作流写渠道指针。
 10. 最后一次性上传新的 `stable/current.json` 或 `candidate/current.json`，这是唯一生效点。
 11. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；可选缓存刷新失败不回写版本对象。
 
@@ -178,9 +178,9 @@ GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放�
 由于尚无已安装用户，首发不需要桥接版本：
 
 1. 在测试前缀和本地 Fixture 完成签名、缓存、重定向、截断、版本不一致和摘要错误测试。
-2. 发布 `0.1.0-rc.1` Candidate，并在三种目标平台/架构做干净安装。
-3. 发布 `0.1.0-rc.2` Candidate，从 rc.1 真实完成检查、下载、安装和重启，验证数据保留。
-4. 使用与最终 Stable 完全相同的 `0.1.0` 制品完成干净安装和覆盖安装。
+2. 使用当前仓库版本发布 `0.1.2-rc.1` Candidate，并在三种目标平台/架构做干净安装。
+3. 发布 `0.1.2-rc.2` Candidate，从 rc.1 真实完成检查、下载、安装和重启，验证数据保留。
+4. 使用最终 `0.1.2` Stable 的确切制品完成干净安装和覆盖安装。
 5. 只有上述结果和官方下载兜底都通过，才更新 `stable/current.json` 并把首个 Stable 对外开放。
 
 ## 验收条件

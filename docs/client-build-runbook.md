@@ -231,7 +231,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
 - 暂存 job 必须直接依赖预检、两个 macOS job 和 Windows job，且只在受保护 Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY` 和 OSS 短期身份。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，将全部文件上传到不可变 `desktop/releases/v<version>/`，再创建包含相同字节的 GitHub Draft；此时不得修改渠道 `current.json`。
 - 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
-- 同一 tag、OSS 版本前缀或 GitHub Release 已存在时必须失败；禁止 `--clobber`、覆盖资产或只重跑暂存 job 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
+- 禁止 `--clobber` 或覆盖 OSS/GitHub 资产。重跑只允许幂等复用文件集完整且摘要与本次完全一致的 OSS 版本目录或 GitHub Draft；任何缺失、差异或已公开同 tag Release 都必须失败，制品内容变化必须创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
 - 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、OSS upload/CDN verify 还是 GitHub Draft upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
