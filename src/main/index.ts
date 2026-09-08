@@ -82,9 +82,9 @@ import { HarnessWorkspaceController } from './workspace/harness-workspace-contro
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
 import { ElectronUpdateExecutor } from './update/update-executor'
-import { GitHubReleaseSource } from './update/github-release-source'
+import { GenericReleaseSource } from './update/generic-release-source'
+import { parseUpdateDistribution } from './update/update-environment'
 import { UpdateManager } from './update/update-manager'
-import { createUpdateFixture, resolveUpdateFixture } from './update/update-fixture'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 import { StartupTracker } from './startup/startup-tracker'
@@ -1521,6 +1521,12 @@ function readUpdatePublicKey(): string {
   }
 }
 
+function readUpdateDistribution() {
+  return parseUpdateDistribution(JSON.parse(
+    readFileSync(desktopResourcePath('update-distribution.json'), 'utf8')
+  ))
+}
+
 async function prepareForUpdateInstall(): Promise<void> {
   await workspaceLifecycle?.stop()
   updateWindowController?.close()
@@ -1529,32 +1535,25 @@ async function prepareForUpdateInstall(): Promise<void> {
 }
 
 async function initializeUpdates(): Promise<void> {
-  const fixtureName = resolveUpdateFixture({
-    packaged: app.isPackaged,
-    name: process.env.INSIGHT_UPDATE_FIXTURE
-  })
-  const fixture = fixtureName
-    ? createUpdateFixture({
-        name: fixtureName,
-        currentVersion: app.getVersion(),
-        userData: app.getPath('userData')
-      })
-    : undefined
-  const publicKeyPem = fixture?.publicKeyPem ?? readUpdatePublicKey()
+  const publicKeyPem = readUpdatePublicKey()
   updateWindowController = createUpdateWindowController()
   updateManager = new UpdateManager({
     currentVersion: app.getVersion(),
     environment: {
-      packaged: fixture ? true : app.isPackaged,
-      channel: fixture ? 'stable' : desktopChannel,
+      packaged: app.isPackaged,
+      channel: desktopChannel,
       platform: process.platform,
       arch: process.arch
     },
-    source: fixture?.source ?? new GitHubReleaseSource({ publicKeyPem }),
-    executor: fixture?.executor ?? new ElectronUpdateExecutor(),
+    source: new GenericReleaseSource({
+      distribution: readUpdateDistribution(),
+      publicKeyPem
+    }),
+    executor: new ElectronUpdateExecutor(),
     publicKeyPem,
     userData: app.getPath('userData'),
-    prepareToInstall: fixture ? async () => undefined : prepareForUpdateInstall,
+    prepareToInstall: prepareForUpdateInstall,
+    openExternal: (url) => shell.openExternal(url),
     resume: {
       subscribe(listener) {
         powerMonitor.on('resume', listener)

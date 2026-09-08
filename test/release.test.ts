@@ -113,7 +113,7 @@ describe('GitHub release contract', () => {
       }
     }
 
-    expect(packageJson.build.artifactName).toBe('insight-${os}-${arch}.${ext}')
+    expect(packageJson.build.artifactName).toBe('insight-${version}-${os}-${arch}.${ext}')
     expect(packageJson.build.extraMetadata.insightDesktopAppId).toBe('com.insight.desktop')
     expect(packageJson.build.extraMetadata.insightDesktopChannel).toBe('stable')
     expect(packageJson.build.extraResources).toContainEqual({
@@ -161,7 +161,7 @@ describe('GitHub release contract', () => {
       filter: ['**/*', '!**/.DS_Store', '!**/__MACOSX/**']
     })
     expect(packageJson.build.nsis.artifactName).toBe(
-      'insight-windows-${arch}-setup.${ext}'
+      'insight-${version}-windows-${arch}-setup.${ext}'
     )
     expect(packageJson.build.nsis.include).toBe('build/installer.nsh')
     expect(packageJson.build.win.target).toEqual([{ target: 'nsis', arch: ['x64'] }])
@@ -253,6 +253,7 @@ describe('GitHub release contract', () => {
       build: {
         publish?: Array<{ provider: string; owner: string; repo: string }>
         detectUpdateChannel?: boolean
+        extraResources: Array<{ from: string; to: string }>
         win: { verifyUpdateCodeSignature: boolean }
       }
     }
@@ -263,6 +264,18 @@ describe('GitHub release contract', () => {
       repo: 'insight-desktop-shell'
     }])
     expect(packageJson.build.detectUpdateChannel).toBe(false)
+    expect(packageJson.build.extraResources).toEqual(expect.arrayContaining([
+      { from: 'build/update-signing-public.pem', to: 'update-signing-public.pem' },
+      { from: 'build/update-distribution.json', to: 'update-distribution.json' }
+    ]))
+    const distribution = JSON.parse(
+      await readFile(path.join(projectRoot, 'build', 'update-distribution.json'), 'utf8')
+    )
+    expect(distribution).toEqual({
+      schema: 1,
+      updateOrigin: 'https://updates.insight-aigc.com'
+    })
+    expect(JSON.stringify(distribution)).not.toMatch(/bucket|access.?key|secret|github|downloadPage/iu)
     for (const [name, command] of Object.entries(packageJson.scripts)) {
       if (name.startsWith('package:')) expect(command).toContain('--publish never')
     }
@@ -378,7 +391,7 @@ describe('GitHub release contract', () => {
     expect(candidateConfig).toContain("insightDesktopChannel: 'candidate'")
     expect(candidateConfig).not.toContain('因赛AI Candidate')
     expect(candidateConfig).not.toContain('com.insight.desktop.candidate')
-    expect(candidateConfig).not.toContain('insight-candidate-${os}-${arch}')
+    expect(candidateConfig).not.toContain('insight-candidate')
     expect(candidateConfig).toContain('publish: null')
     for (const name of [
       'package:candidate:dir',
@@ -390,16 +403,16 @@ describe('GitHub release contract', () => {
       expect(packageJson.scripts[name]).toContain('--publish never')
     }
     expect(packageJson.scripts['package:candidate:mac:arm64']).toContain(
-      'finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip'
+      'finalize-mac-release.mjs dist-candidate candidate $npm_package_version arm64'
     )
     expect(packageJson.scripts['package:candidate:mac:x64']).toContain(
-      'finalize-mac-release.mjs dist-candidate insight-mac-x64.zip'
+      'finalize-mac-release.mjs dist-candidate candidate $npm_package_version x64'
     )
     expect(packageJson.scripts['package:mac:arm64']).toContain(
-      'finalize-mac-release.mjs dist insight-mac-arm64.zip'
+      'finalize-mac-release.mjs dist stable $npm_package_version arm64'
     )
     expect(packageJson.scripts['package:mac:x64']).toContain(
-      'finalize-mac-release.mjs dist insight-mac-x64.zip'
+      'finalize-mac-release.mjs dist stable $npm_package_version x64'
     )
   })
 
@@ -496,7 +509,9 @@ describe('GitHub release contract', () => {
     expect(workflow).toMatch(
       /macos-sonoma-compatibility:\r?\n\s+name: macOS Sonoma distribution compatibility\r?\n(?:[\s\S]*?)runs-on: macos-14\r?\n(?:[\s\S]*?)\s+steps:/
     )
-    expect(workflow).toContain('hdiutil attach release-assets/insight-mac-arm64.dmg')
+    expect(workflow).toContain(
+      'hdiutil attach "release-assets/insight-$RELEASE_VERSION-mac-arm64.dmg"'
+    )
     expect(workflow).toContain('codesign --verify --deep --strict --verbose=4 "$app_path"')
     expect(workflow).toContain('syspolicy_check distribution --verbose "$app_path"')
     expect(workflow).toContain('mount_path="$RUNNER_TEMP/insight-dmg"')
@@ -517,7 +532,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain("Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml')")
   })
 
-  it('publishes only an authenticated complete release through the protected environment', async () => {
+  it('creates only an authenticated complete Draft through the protected environment', async () => {
     const workflow = await readFile(
       path.join(projectRoot, '.github', 'workflows', 'release.yml'),
       'utf8'
@@ -544,9 +559,15 @@ describe('GitHub release contract', () => {
     expect(publish).toContain('gh release create "$RELEASE_TAG"')
     expect(publish).toContain('gh release upload "$RELEASE_TAG" release-assets/*')
     expect(publish.indexOf('gh release create')).toBeLessThan(publish.indexOf('gh release upload'))
-    expect(publish).toContain('gh release edit "$RELEASE_TAG" --draft=false')
+    expect(publish).not.toContain('--draft=false')
     expect(publish).toContain('create_args+=(--prerelease --target "$GITHUB_SHA")')
     expect(publish).not.toContain('--clobber')
+    expect(workflow).toContain('cancel-in-progress: false')
+    expect(workflow).not.toContain('id-token: write')
+    expect(workflow).not.toContain('OSS_ACCESS_KEY')
+    expect(workflow).not.toContain('insight-desktop-updates')
+    expect(workflow).not.toContain('desktop-updates-publisher')
+    expect(workflow).not.toContain('ossutil ')
   })
 
   it('does not retain inherited Windows signing or third-party publication services', async () => {

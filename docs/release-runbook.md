@@ -1,13 +1,36 @@
 # Desktop 发布说明
 
+## 当前发布状态
+
+截至 2026-09-09，桌面客户端尚未对外发布首个版本。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN；客户端不以 GitHub Releases 作为自动更新源。
+
+客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
+
+仓库的生产发布链已经按两阶段模型实现：
+
+- 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
+- 推送 `v*` tag 走 Stable；
+- 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，只创建 GitHub Draft，不读取 OSS 凭证、不公开 Release；
+- 本地发布器从 Draft 下载并复验同一批字节，`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
+- 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
+
+截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
+
 ## 必读资料
 
 - [因赛AI Desktop 客户端构建 Runbook](client-build-runbook.md) 是当前构建步骤、停止条件和人工门禁的权威说明。
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 - [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
-- [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是尚未实现的生产分发目标；当前构建和发布操作仍以本说明及现有 GitHub-only workflow 为准。
+- [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
+
+## 分支与版本规则
+
+- `main` 是唯一长期集成基线；功能、修复和发布基础设施分支通过审核后合入 `main`，不得维护第二条长期发版主线。
+- Candidate 与 Stable 必须从 `main` 上可追溯的提交构建。进入版本冻结后如仍需并行开发，可从 `main` 创建短生命周期 `release/vX.Y.Z`，只接收该版本的阻断修复；发布或取消后合回 `main` 并删除。
+- Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。禁止移动 tag、覆盖 GitHub/OSS 资产或回写低版本渠道指针。
+- 发布前的版本号、策略和 Runtime 锁调整使用独立提交；正式 tag 只打在测试、构建和人工门禁均通过的提交上。
 
 ## 进入安装包构建前
 
@@ -33,9 +56,95 @@
 - `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
 - `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Release。
 
+## 一次性发布准备
+
+1. 确认 `insight-desktop-updates` 保持私有且从未启用 Bucket Versioning。OSS 的 `forbid-overwrite` 在已启用或已暂停 Versioning 的 Bucket 中无效；发布器会主动拒绝这种配置。不要给该 Bucket 开 WORM，因为 `current.json` 是唯一需要覆盖的对象。
+2. 使用专用 RAM 用户的 AccessKey，不使用阿里云主账号 AccessKey。若现有密钥属于主账号，先创建专用 RAM 身份并轮换，不把现有密钥复制到仓库、GitHub、客户端、命令参数或 `.env`。
+3. RAM 策略只授予 Bucket 级 `oss:GetBucketVersioning`、`oss:ListObjects`，以及 `insight-desktop-updates/desktop/*` 的 `oss:GetObject`、`oss:PutObject`；不授予删除对象、修改 Bucket、ACL、CDN 或其他 Bucket 的权限。
+4. 安装精确版本 `ossutil 2.3.0`，运行 `ossutil config credential`，在交互向导中使用 profile `desktop-updates-publisher`、认证模式 `AK` 并选择加密凭证；然后为该 profile 设置 Bucket 所在的实际 Region。不要在 shell 配置中导出 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_SESSION_TOKEN`、`OSSUTIL_CONFIG_FILE` 或 `OSSUTIL_PROFILE`。
+5. 使用 `gh auth status` 确认本机 GitHub CLI 已登录且能读取/编辑 `Boxser567/insight-desktop-shell` Release。GitHub 的 `desktop-release` Environment 只保存与仓库 `build/update-signing-public.pem` 匹配的 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`；密钥不匹配会在 Draft 创建前被签名校验阻止。
+6. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`/desktop/releases/*` 不压缩、不改写、不重定向并支持 HEAD/Range；缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
+
+建议使用以下最小 RAM Policy；`Resource` 中不要扩大到其他 Bucket：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["oss:GetBucketVersioning", "oss:ListObjects"],
+      "Resource": ["acs:oss:*:*:insight-desktop-updates"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["oss:GetObject", "oss:PutObject"],
+      "Resource": ["acs:oss:*:*:insight-desktop-updates/desktop/*"]
+    }
+  ]
+}
+```
+
+准备完成后先执行只读检查：
+
+```bash
+ossutil config set region cn-hangzhou \
+  --profile desktop-updates-publisher
+ossutil version
+ossutil api get-bucket-versioning \
+  --bucket insight-desktop-updates \
+  --output-format json \
+  --profile desktop-updates-publisher \
+  --ignore-env-var
+gh auth status
+```
+
+示例中的 `cn-hangzhou` 必须替换成控制台显示的 Bucket 实际 Region。Bucket Versioning 的 JSON 响应必须没有 `Status`；`Enabled` 和 `Suspended` 都不通过。
+
+## 生产发布流程
+
+实现完成后，GitHub 工作流与本地发布器共同执行：
+
+1. 校验 tag、渠道、版本、发布策略、Runtime 锁和发布配置。
+2. 在 macOS arm64、macOS x64 和 Windows x64 各构建一次，完成签名、公证、YAML、blockmap 和安装器结构验证。
+3. 汇总相同制品，生成并签名 `insight-update.json`，执行完整资产校验。
+4. 创建 GitHub Draft Release 并上传同一批字节；GitHub Actions 不读取 OSS AccessKey。
+5. 本地发布器从 Draft 下载全部 Assets，重新验证签名、文件集、版本和摘要。
+6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
+7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成该版本确切安装包的推广前验收。
+8. 人工确认后公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
+9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary；Candidate 的 N→N+1 必须在 Candidate 指针生效后立即完成，Stable 则必须在推广前已有完整 Candidate 升级证据。
+
 单平台 target 只上传对应 Actions artifact，不创建 tag 或 GitHub Release，也不运行 Publish。它用于关闭一个平台的候选门禁，不能替代完整 Candidate/Stable 发布。人工通过单平台包后，使用同一 `candidate_tag` 和 `target: all` 执行完整 Candidate；Stable 只由已存在的 `vX.Y.Z` tag push 触发，并始终等同于 `all`。
 
 macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。下载后的签名 macOS 候选必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
+
+GitHub workflow 成功并生成 Draft 后，在仓库根目录执行暂存；下面以 Candidate 为例：
+
+```bash
+node scripts/publish-update-to-oss.mjs stage \
+  --tag v1.0.0-rc.1 \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher
+```
+
+`stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。`ossutil put-object` 按安全 basename 的扩展名推导 Content-Type；最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。无凭证的摘要报告保存在被 Git 忽略的 `release-reports/`。
+
+Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
+
+```bash
+node scripts/publish-update-to-oss.mjs promote \
+  --tag v1.0.0-rc.1 \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher \
+  --confirm-version 1.0.0-rc.1
+```
+
+Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
+
+## 首发专用门禁
 
 运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
 
@@ -43,18 +152,25 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明安装后的 Sidebar、用户数据或启动行为正确。
 
+现有 `v0.1.2-rc.1`、`v0.1.2-rc.2` 已是公开 Pre-release，`v0.1.2-rc.3` 只有单平台 Actions artifact，均不能替代新 Draft-only/OSS 两阶段契约的首发验收。准备 `1.0.0` 时必须使用未占用的连续版本：
+
+1. `v1.0.0-rc.1` 在 macOS arm64、macOS x64 和 Windows x64 完成干净安装并推广 Candidate 指针。
+2. `v1.0.0-rc.2` 从 rc.1 在客户端内完成检查、下载、校验、安装和重启；如 rc.2 仍有阻断修复，继续递增 RC，禁止覆盖旧资产。
+3. `v1.0.0` 的确切 Stable 制品完成干净安装与覆盖安装。
+4. 在可信 Manifest 已解析后人为让自动下载失败，确认更新窗口可以从同一版本目录下载适配架构的 DMG/EXE 并完成覆盖安装；完全禁用更新 Origin 时应安全失败。
+5. 上述证据齐全后，才允许首次写入 `stable/current.json`。
+
 ## 最终安装验收
 
-从本次 workflow run 下载确切安装包后，在目标平台完成：
+从本次 GitHub Draft 或 OSS 不可变版本目录下载确切安装包后，在目标平台完成：
 
 - macOS DMG 校验、完整 bundle 签名、Gatekeeper、notarization 和 stapling 检查；
 - macOS 14.5 上保留 quarantine 启动，确认不出现“已损坏”或重复钥匙串授权提示，并连续退出、重启三次；
-- 干净安装和覆盖安装；
-- 首次启动与既有 Profile 升级；
-- Markdown/HTML 在 Sidebar 内打开；
-- 无插件恢复窗口、无无限启动页；
-- 会话、工作区、设置和插件清单符合预期；
-- macOS 签名、公证和 stapling，或 Windows 安装、启动、卸载及所需签名状态。
+- Windows 核对产品 Manifest 摘要，接受当前预期的 SmartScreen/未知发布者提示，但必须能继续安装；
+- 完成干净安装和覆盖安装；Candidate 完成 N→N+1 客户端更新；
+- 验证首次启动、既有 Profile、Sidebar、会话、工作区、设置和插件清单；
+- 验证登录前、Core 失败和更新错误状态仍能进入更新窗口；只有已有可信 Manifest 时才显示同源整包入口；
+- 核对实际版本、应用路径、用户数据目录和 Runtime 身份。
 
 验收前退出同 App ID/channel 的旧实例，并核对实际进程和应用路径。人工结果只对明确命名的安装包、应用路径和 Runtime tag 有效。
 
@@ -64,12 +180,13 @@ DMG、zip、NSIS 和 blockmap 是不同产物层。某一格式失败时要记�
 
 每次候选或正式发布至少记录：
 
-- Shell commit，Core Runtime tag、commit、Node 和 pnpm 版本；
-- `Release desktop installers` run URL、attempt、target 和 job 结果；
-- 安装包文件名、架构、大小，以及对外发布时的 SHA-256；
-- 干净安装与覆盖安装结果；
-- Sidebar Markdown/HTML 结果；
-- 启动恢复、启动页、会话、工作区、设置和插件清单结果；
+- tag、channel、Shell commit、Core Runtime tag/commit、Node 和包管理器版本；
+- `Release desktop installers` run URL、attempt、target 和各 job 结果；
+- OSS 版本前缀、最终 CDN 验证结果、GitHub Draft/Release URL；
+- 安装包与更新元数据的文件名、架构、大小、SHA-256 和 Manifest SHA-512；
+- 推广前 `current.json`、待发布 `current.json` 和实际提交后的响应；
+- 干净安装、覆盖安装、N→N+1、同源整包兜底和数据保留结果；
+- Sidebar Markdown/HTML、启动恢复、启动页、会话、工作区、设置和插件清单结果；
 - 已知的平台或格式问题、确认不受影响的范围和下一验证阶段。
 
 完整记录可直接使用 [客户端构建 Runbook 的模板](client-build-runbook.md#构建记录模板)。

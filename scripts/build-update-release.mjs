@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semver from 'semver'
 import { parseDocument } from 'yaml'
+import { artifactDefinitions, assertReleaseIdentity } from './update-release-contract.mjs'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const commitPattern = /^[0-9a-f]{40}$/u
@@ -110,25 +111,6 @@ function validateRuntimeManifest(value) {
   return value.core
 }
 
-function artifactDefinitions() {
-  const prefix = 'insight'
-  const mac = (arch) => `${prefix}-mac-${arch}`
-  const windows = 'insight-windows-x64-setup.exe'
-  return [
-    ['darwin', 'arm64', 'dmg', `${mac('arm64')}.dmg`],
-    ['darwin', 'arm64', 'zip', `${mac('arm64')}.zip`],
-    ['darwin', 'arm64', 'blockmap', `${mac('arm64')}.zip.blockmap`],
-    ['darwin', 'arm64', 'updater-metadata', 'latest-mac.yml'],
-    ['darwin', 'x64', 'dmg', `${mac('x64')}.dmg`],
-    ['darwin', 'x64', 'zip', `${mac('x64')}.zip`],
-    ['darwin', 'x64', 'blockmap', `${mac('x64')}.zip.blockmap`],
-    ['darwin', 'x64', 'updater-metadata', 'latest-mac.yml'],
-    ['win32', 'x64', 'nsis', windows],
-    ['win32', 'x64', 'blockmap', `${windows}.blockmap`],
-    ['win32', 'x64', 'updater-metadata', 'latest.yml']
-  ]
-}
-
 async function artifact(releaseDir, definition) {
   const [platform, arch, kind, name] = definition
   const path = join(releaseDir, name)
@@ -165,8 +147,7 @@ async function main() {
   const version = args['--version']
   const channel = args['--channel']
   const shellCommit = args['--shell-commit']
-  if (semver.valid(version) !== version) throw new Error('Release version must be valid semver.')
-  if (!['candidate', 'stable'].includes(channel)) throw new Error('Release channel is invalid.')
+  assertReleaseIdentity(channel, version)
   if (!commitPattern.test(shellCommit)) throw new Error('Shell commit must be a 40-character lowercase SHA.')
 
   const releaseDir = resolve(args['--dir'])
@@ -190,7 +171,7 @@ async function main() {
   ])
 
   const artifacts = await Promise.all(
-    artifactDefinitions().map((definition) => artifact(releaseDir, definition))
+    artifactDefinitions(channel, version).map((definition) => artifact(releaseDir, definition))
   )
   artifacts.sort(compareArtifacts)
   const manifest = {

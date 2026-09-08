@@ -97,7 +97,7 @@ Candidate 和 Stable 从首个公开版本起使用自有 HTTPS 域名后的 OSS
 
 更新管理器继续依赖 `UpdateSource` 接口，不在 UI 或应用生命周期代码中拼接存储供应商 URL。每个渠道只读取一个短缓存 `current.json`，再解析不可变版本目录内的产品 Manifest、签名和平台更新元数据。完整对象布局、信任边界和发布顺序以[桌面客户端 OSS 更新分发设计](2026-09-08-desktop-update-oss-distribution-design.md)为准。
 
-工作流每个平台只构建一次，先把已验证制品上传至不可变 OSS 版本目录，再创建包含相同字节的 GitHub Draft。真实安装/更新验收和推广审批通过后，先公开 GitHub Release，最后更新唯一的渠道 `current.json`。已发布 Tag、OSS 版本目录和 Release 资产不得覆盖；修复必须使用新版本。
+工作流每个平台只构建一次并创建包含已验证制品的 GitHub Draft。首版本地发布器下载并复验 Draft 资产，再上传至不可变 OSS 版本目录；真实安装/更新验收通过后，先公开 GitHub Release，最后更新唯一的渠道 `current.json`。已发布 Tag、OSS 版本目录和 Release 资产不得覆盖；修复必须使用新版本。
 
 客户端不能列举 OSS 对象或依赖 GitHub API 顺序发现版本。`current.json` 只负责定位候选版本，应用内置公钥签名的产品 Manifest 才是发布内容和更新策略的信任根。
 
@@ -277,7 +277,7 @@ type UpdateStatus =
 - Manifest 缺失或签名无效：提示发布无法认证，拒绝下载。
 - Tag 与 Manifest 版本不一致：拒绝该 Release，不回退到未明确选择的版本。
 - 产物缺失或摘要不一致：只删除对应更新缓存，拒绝安装。
-- OSS/CDN 不可用：保留当前版本；手动检查显示简短错误和固定自有官方下载页入口，后续可重试。
+- OSS/CDN 不可用：保留当前版本并允许重试。只有可信 Manifest 已解析时，才显示指向同一不可变版本目录 DMG/NSIS 的整包入口；发现或验签失败时不构造未认证下载地址。
 - 下载中断：保留当前版本，之后继续使用更新器缓存重试。
 - Core Runtime 无法停止：取消安装，并尽可能保持当前进程继续运行。
 - 强制更新无法下载：保留“重试”和“退出”。只有缓存 Manifest 与签名重新验证成功且当前版本确实过低时，后续启动才阻止登录/Core。

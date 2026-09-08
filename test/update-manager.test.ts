@@ -82,15 +82,22 @@ function resolvedRelease(input: {
     manifest,
     manifestBytes,
     signatureBytes: sign(null, manifestBytes, privateKey),
-    artifactUrls: new Map(manifest.artifacts.map((artifact) => [
-      artifact.name,
-      new URL(`https://github.com/Boxser567/insight-desktop-shell/releases/download/v${manifest.version}/${artifact.name}`)
-    ]))
+    releaseBaseUrl: new URL(`https://updates.example.test/desktop/releases/v${manifest.version}/`),
+    manualInstallerUrl: new URL(`https://updates.example.test/desktop/releases/v${manifest.version}/app.dmg`)
+  }
+}
+
+function fakeSource(release: ResolvedRelease): UpdateSource {
+  return {
+    resolve: vi.fn().mockResolvedValue(release),
+    releaseBaseUrl: vi.fn(() => release.releaseBaseUrl),
+    manualInstallerUrl: vi.fn(() => release.manualInstallerUrl)
   }
 }
 
 class FakeExecutor implements UpdateExecutor {
   readonly configure = vi.fn()
+  readonly useRelease = vi.fn()
   readonly check = vi.fn<UpdateExecutor['check']>()
   readonly download = vi.fn<UpdateExecutor['download']>()
   readonly quitAndInstall = vi.fn()
@@ -157,16 +164,16 @@ async function setup(input: {
   channel?: 'development' | 'stable'
   now?: () => number
   prepareToInstall?: () => Promise<void>
+  openExternal?: (url: string) => Promise<void>
 } = {}) {
   const userData = await temporaryDirectory()
   const release = input.release ?? resolvedRelease()
-  const source = input.source ?? {
-    resolve: vi.fn().mockResolvedValue(release)
-  }
+  const source = input.source ?? fakeSource(release)
   const executor = input.executor ?? new FakeExecutor(release.manifest.version)
   const timers = new FakeTimers()
   const resume = new FakeResumeSource()
   const prepareToInstall = input.prepareToInstall ?? vi.fn().mockResolvedValue(undefined)
+  const openExternal = input.openExternal ?? vi.fn().mockResolvedValue(undefined)
   const manager = new UpdateManager({
     currentVersion: input.currentVersion ?? '1.0.0',
     environment: {
@@ -180,12 +187,23 @@ async function setup(input: {
     publicKeyPem,
     userData,
     prepareToInstall,
+    openExternal,
     now: input.now,
     random: () => 0,
     timers,
     resume
   })
-  return { manager, release, source, executor, timers, resume, userData, prepareToInstall }
+  return {
+    manager,
+    release,
+    source,
+    executor,
+    timers,
+    resume,
+    userData,
+    prepareToInstall,
+    openExternal
+  }
 }
 
 describe('desktop update manager', () => {
@@ -216,6 +234,7 @@ describe('desktop update manager', () => {
     let finish: ((release: ResolvedRelease) => void) | undefined
     const release = resolvedRelease()
     const source: UpdateSource = {
+      ...fakeSource(release),
       resolve: vi.fn(() => new Promise<ResolvedRelease>((resolve) => { finish = resolve }))
     }
     const { manager, executor } = await setup({ release, source })
@@ -229,6 +248,10 @@ describe('desktop update manager', () => {
     await Promise.all([first, second])
 
     expect(executor.check).toHaveBeenCalledOnce()
+    expect(executor.useRelease).toHaveBeenCalledWith(release.releaseBaseUrl)
+    expect(executor.useRelease.mock.invocationCallOrder[0]!).toBeLessThan(
+      executor.check.mock.invocationCallOrder[0]!
+    )
     expect(manager.status()).toMatchObject({ phase: 'available', availableVersion: '1.1.0' })
   })
 
@@ -259,14 +282,45 @@ describe('desktop update manager', () => {
   })
 
   it('does not consult the executor when the authenticated source fails', async () => {
-    const source: UpdateSource = { resolve: vi.fn().mockRejectedValue(new Error('bad signature')) }
-    const { manager, executor } = await setup({ source })
+    const source: UpdateSource = {
+      ...fakeSource(resolvedRelease()),
+      resolve: vi.fn().mockRejectedValue(new Error('bad signature'))
+    }
+    const { manager, executor, openExternal } = await setup({ source })
     await manager.start()
 
     await manager.check(true)
 
     expect(executor.check).not.toHaveBeenCalled()
-    expect(manager.status()).toMatchObject({ phase: 'error', required: false })
+    expect(manager.status()).toMatchObject({
+      phase: 'error',
+      required: false,
+      manualInstallerAvailable: false
+    })
+    await expect(manager.downloadFullInstaller()).rejects.toThrow('可信完整安装包')
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('keeps verified version context when platform metadata checking fails', async () => {
+    const release = resolvedRelease({
+      mode: 'required',
+      minimumSupportedVersion: '1.1.0'
+    })
+    const executor = new FakeExecutor(release.manifest.version)
+    executor.check.mockRejectedValue(new Error('latest metadata unavailable'))
+    const { manager, openExternal } = await setup({ release, executor })
+    await manager.start()
+
+    await manager.check(false)
+
+    expect(manager.status()).toMatchObject({
+      phase: 'error',
+      availableVersion: '1.1.0',
+      required: true,
+      manualInstallerAvailable: true
+    })
+    await manager.downloadFullInstaller()
+    expect(openExternal).toHaveBeenCalledWith(release.manualInstallerUrl.href)
   })
 
   it.each(['1.0.0', '0.9.0'])('does not offer current or older version %s', async (version) => {
@@ -337,12 +391,14 @@ describe('desktop update manager', () => {
       publicKeyPem,
       userData: first.userData,
       prepareToInstall: vi.fn().mockResolvedValue(undefined),
+      openExternal: vi.fn().mockResolvedValue(undefined),
       timers: new FakeTimers(),
       resume: new FakeResumeSource(),
       random: () => 0
     })
     await restarted.start()
     expect(restarted.status()).toMatchObject({ phase: 'available', required: true })
+    expect(first.executor.useRelease).toHaveBeenLastCalledWith(release.releaseBaseUrl)
 
     vi.mocked(first.source.resolve).mockResolvedValue(resolvedRelease({
       version: '1.2.0',
@@ -374,6 +430,27 @@ describe('desktop update manager', () => {
     await manager.check(false)
 
     expect(executor.download).not.toHaveBeenCalled()
+  })
+
+  it('opens only the verified full installer and retains it after updater failure', async () => {
+    const release = resolvedRelease()
+    const executor = new FakeExecutor(release.manifest.version)
+    executor.download.mockRejectedValue(new Error('automatic download failed'))
+    const { manager, openExternal } = await setup({ release, executor })
+    await manager.start()
+    await manager.check(true)
+
+    await manager.downloadFullInstaller()
+    expect(openExternal).toHaveBeenCalledWith(release.manualInstallerUrl.href)
+
+    await manager.download()
+    expect(manager.status()).toMatchObject({
+      phase: 'error',
+      availableVersion: release.manifest.version,
+      manualInstallerAvailable: true
+    })
+    await manager.downloadFullInstaller()
+    expect(openExternal).toHaveBeenCalledTimes(2)
   })
 
   it('verifies the downloaded size and SHA512 before allowing installation', async () => {
@@ -485,6 +562,7 @@ describe('desktop update manager', () => {
       autoInstallOnAppQuit: true,
       allowPrerelease: false,
       allowDowngrade: true,
+      setFeedURL: vi.fn(),
       on: vi.fn((name: string, handler: (...args: never[]) => void) => {
         handlers.set(name, handler)
         return updater
@@ -501,11 +579,16 @@ describe('desktop update manager', () => {
     executor.on((event) => events.push(event))
 
     executor.configure({ channel: 'candidate', autoInstallOnQuit: false })
+    executor.useRelease(new URL('https://updates.example.test/desktop/releases/v1.1.0/'))
     expect(updater).toMatchObject({
       autoDownload: false,
       autoInstallOnAppQuit: false,
       allowPrerelease: true,
       allowDowngrade: false
+    })
+    expect(updater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'generic',
+      url: 'https://updates.example.test/desktop/releases/v1.1.0/'
     })
     await expect(executor.check()).resolves.toEqual({ version: '1.1.0' })
     await executor.download()

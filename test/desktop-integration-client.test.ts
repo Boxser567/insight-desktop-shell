@@ -44,4 +44,12 @@ describe('desktop integration client', () => {
     expect(build).toContain("'react-dom'")
     expect(build).toContain("'react-dom/*'")
   })
+
+  it('does not render the account update button before a verified update exists', async () => {
+    const components = await readFile('packages/insight-desktop-integration/src/client/components.tsx', 'utf8')
+
+    expect(components).toContain('shouldShowUpdateEntry(status)')
+    expect(components).toContain('return null')
+    expect(components).toContain('availableVersion')
+  })
 })

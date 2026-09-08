@@ -12,12 +12,13 @@ import type {
 const safeIntegerSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const commitSchema = z.string().regex(/^[0-9a-f]{40}$/)
 const sha512Schema = z.string().regex(/^[A-Za-z0-9+/]{86}==$/)
+const artifactNameSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/)
 
 const releaseArtifactSchema = z.object({
   platform: z.enum(['darwin', 'win32']),
   arch: z.enum(['arm64', 'x64']),
   kind: z.enum(['dmg', 'zip', 'nsis', 'blockmap', 'updater-metadata']),
-  name: z.string().min(1),
+  name: artifactNameSchema,
   size: safeIntegerSchema,
   sha512: sha512Schema
 }).strict()
@@ -91,6 +92,18 @@ export function selectTargetArtifacts(
   return artifacts
 }
 
+export function selectManualInstaller(
+  manifest: SignedReleaseManifest,
+  target: UpdateTarget
+): ReleaseArtifact {
+  const kind = target.platform === 'darwin' ? 'dmg' : 'nsis'
+  const artifact = selectTargetArtifacts(manifest, target).find(
+    (candidate) => candidate.kind === kind
+  )
+  if (!artifact) throw new Error('更新 Manifest 缺少目标平台整包安装器。')
+  return artifact
+}
+
 function validateManifest(manifest: SignedReleaseManifest): void {
   if (semver.valid(manifest.version) !== manifest.version) {
     throw new Error('更新版本不是合法语义版本。')
@@ -115,12 +128,7 @@ function validateManifest(manifest: SignedReleaseManifest): void {
   const assetsByName = new Map<string, ReleaseArtifact>()
   for (const artifact of manifest.artifacts) {
     requiredArtifactKinds(artifact.platform, artifact.arch)
-    const identity = [
-      artifact.platform,
-      artifact.arch,
-      artifact.kind,
-      artifact.name
-    ].join('\0')
+    const identity = [artifact.platform, artifact.arch, artifact.kind].join('\0')
     if (identities.has(identity)) {
       throw new Error(`更新 Manifest 包含重复产物：${artifact.name}。`)
     }

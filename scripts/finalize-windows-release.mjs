@@ -3,17 +3,21 @@ import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, join, resolve } from 'node:path'
 import semver from 'semver'
+import { releaseChannelForVersion, windowsInstallerName } from './update-release-contract.mjs'
 
 const require = createRequire(import.meta.url)
 const { buildBlockMap } = require('app-builder-lib/out/targets/blockmap/blockmap')
 
-async function findInstaller(releaseDir) {
+async function findInstaller(releaseDir, expectedName) {
   const entries = await readdir(releaseDir, { withFileTypes: true })
   const installers = entries
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.exe'))
     .map((entry) => join(releaseDir, entry.name))
   if (installers.length !== 1) {
     throw new Error(`Expected exactly one Windows installer, found ${installers.length}.`)
+  }
+  if (basename(installers[0]) !== expectedName) {
+    throw new Error(`Unexpected Windows installer: ${basename(installers[0])}.`)
   }
   return installers[0]
 }
@@ -36,7 +40,8 @@ function validatePe(bytes, filename, expectedMachine) {
 }
 
 async function finalizeRelease(releaseDir, version, appExecutable) {
-  const installer = await findInstaller(releaseDir)
+  const channel = releaseChannelForVersion(version)
+  const installer = await findInstaller(releaseDir, windowsInstallerName(channel, version))
   const [installerBytes, appBytes] = await Promise.all([
     readFile(installer),
     readFile(appExecutable)

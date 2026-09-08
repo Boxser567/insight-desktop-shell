@@ -29,6 +29,7 @@ function setup() {
     }),
     check: vi.fn().mockResolvedValue(undefined),
     download: vi.fn().mockResolvedValue(undefined),
+    downloadFullInstaller: vi.fn().mockResolvedValue(undefined),
     install: vi.fn().mockResolvedValue(undefined),
     skip: vi.fn().mockResolvedValue(undefined)
   }
@@ -77,12 +78,17 @@ describe('desktop update IPC', () => {
     await fixture.handlers.get('updates:open')?.(event(fixture.harness))
     await fixture.handlers.get('updates:check')?.(event(fixture.update))
     await fixture.handlers.get('updates:download')?.(event(fixture.shell))
+    await fixture.handlers.get('updates:download-full-installer')?.(
+      event(fixture.shell),
+      'https://attacker.example/forged.dmg'
+    )
     await fixture.handlers.get('updates:install')?.(event(fixture.harness))
     await fixture.handlers.get('updates:skip')?.(event(fixture.update), '1.1.0')
 
     expect(fixture.open).toHaveBeenCalledOnce()
     expect(fixture.manager.check).toHaveBeenCalledWith(true)
     expect(fixture.manager.download).toHaveBeenCalledOnce()
+    expect(fixture.manager.downloadFullInstaller).toHaveBeenCalledWith()
     expect(fixture.manager.install).toHaveBeenCalledOnce()
     expect(fixture.manager.skip).toHaveBeenCalledWith('1.1.0')
     expect(fixture.update.close).toHaveBeenCalledOnce()
@@ -97,6 +103,7 @@ describe('desktop update IPC', () => {
       'updates:open',
       'updates:check',
       'updates:download',
+      'updates:download-full-installer',
       'updates:install',
       'updates:skip'
     ]) {

@@ -37,6 +37,11 @@ async function main() {
   for (const target of ['all', 'macos-arm64', 'macos-x64', 'windows-x64']) {
     requireText(workflow, `- ${target}`, 'Release workflow target choices')
   }
+  requireText(workflow, 'cancel-in-progress: false', 'Release workflow concurrency')
+  const permissions = /^permissions:\r?\n((?:  [^\r\n]+\r?\n?)*)/mu.exec(workflow)?.[1]?.trim()
+  if (permissions !== 'contents: write') {
+    throw new Error('Release workflow must grant only contents: write.')
+  }
   requireText(preflight, 'verify-release-preflight.mjs', 'Release preflight')
   requireText(preflight, 'verify-release-workflow.mjs', 'Release preflight')
   if (/npm ci|vitest|rollup|esbuild/u.test(preflight)) {
@@ -82,7 +87,7 @@ async function main() {
   requireText(sonomaCompatibility, 'name: macos-apple-silicon', 'macos-sonoma-compatibility')
   requireText(
     sonomaCompatibility,
-    'hdiutil attach release-assets/insight-mac-arm64.dmg',
+    'hdiutil attach "release-assets/insight-$RELEASE_VERSION-mac-arm64.dmg"',
     'macos-sonoma-compatibility'
   )
   requireText(
@@ -128,10 +133,17 @@ async function main() {
     'DESKTOP_WINDOWS_SIGNING_PIN',
     'dshdesktop.com',
     'FEISHU_RELEASE_WEBHOOK',
-    '--clobber'
+    '--clobber',
+    '--draft=false',
+    'id-token: write',
+    'OSS_ACCESS_KEY',
+    'insight-desktop-updates',
+    'desktop-updates-publisher',
+    'ossutil '
   ]) {
     if (workflow.includes(forbidden)) throw new Error(`Release workflow contains ${forbidden}.`)
   }
+  requireText(publish, 'create_args=(--draft', 'Publish job')
 
   const scripts = packageJson.scripts ?? {}
   if (scripts.postinstall !== 'install-electron --no && patch-package') {
@@ -144,19 +156,19 @@ async function main() {
   for (const [name, expected] of Object.entries({
     'package:candidate:mac:arm64': {
       builder: 'electron-builder --mac dmg zip --arm64',
-      finalize: 'finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip'
+      finalize: 'finalize-mac-release.mjs dist-candidate candidate $npm_package_version arm64'
     },
     'package:candidate:mac:x64': {
       builder: 'electron-builder --mac dmg zip --x64',
-      finalize: 'finalize-mac-release.mjs dist-candidate insight-mac-x64.zip'
+      finalize: 'finalize-mac-release.mjs dist-candidate candidate $npm_package_version x64'
     },
     'package:mac:arm64': {
       builder: 'electron-builder --mac dmg zip --arm64',
-      finalize: 'finalize-mac-release.mjs dist insight-mac-arm64.zip'
+      finalize: 'finalize-mac-release.mjs dist stable $npm_package_version arm64'
     },
     'package:mac:x64': {
       builder: 'electron-builder --mac dmg zip --x64',
-      finalize: 'finalize-mac-release.mjs dist insight-mac-x64.zip'
+      finalize: 'finalize-mac-release.mjs dist stable $npm_package_version x64'
     }
   })) {
     const command = scripts[name]
@@ -166,6 +178,10 @@ async function main() {
     if (!command.includes(expected.builder) || command.match(/(?:^|&& )electron-builder --/gu)?.length !== 1) {
       throw new Error(`Package script ${name} must build DMG and ZIP in one electron-builder invocation.`)
     }
+  }
+  if (packageJson.build?.artifactName !== 'insight-${version}-${os}-${arch}.${ext}' ||
+      packageJson.build?.nsis?.artifactName !== 'insight-${version}-windows-${arch}-setup.${ext}') {
+    throw new Error('Stable release asset names must include the release version.')
   }
   console.log('Release workflow contract is valid.')
 }

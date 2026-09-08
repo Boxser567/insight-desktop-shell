@@ -62,6 +62,12 @@ describe('authenticated update release builder', () => {
       tag: 'insight-runtime-v0.1.1-rc.10',
       commit: 'b'.repeat(40)
     })
+    expect(manifest.artifacts.map(({ name }) => name)).toContain(
+      'insight-0.1.2-windows-x64-setup.exe'
+    )
+    expect(manifest.artifacts.map(({ name }) => name)).toContain(
+      'insight-0.1.2-mac-arm64.zip.blockmap'
+    )
     const identities = manifest.artifacts.map(({ platform, arch, kind, name }) =>
       [platform, arch, kind, name].join('\0')
     )
@@ -80,8 +86,8 @@ describe('authenticated update release builder', () => {
       await readFile(path.join(paths.releaseDir, 'insight-update.json'), 'utf8')
     ) as { artifacts: Array<{ name: string }> }
     const names = manifest.artifacts.map((artifact) => artifact.name)
-    expect(names).toContain('insight-mac-arm64.dmg')
-    expect(names).toContain('insight-windows-x64-setup.exe')
+    expect(names).toContain('insight-0.1.2-rc.2-mac-arm64.dmg')
+    expect(names).toContain('insight-0.1.2-rc.2-windows-x64-setup.exe')
     expect(names.every((name) => !name.includes('candidate'))).toBe(true)
   })
 

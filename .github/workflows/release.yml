@@ -87,11 +87,15 @@ jobs:
           set -euo pipefail
           node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.json
           node --check scripts/build-update-release.mjs
+          node --check scripts/build-update-pointer.mjs
           node --check scripts/finalize-mac-release.mjs
           node --check scripts/finalize-windows-release.mjs
           node --check scripts/macos-signing-identity.mjs
           node --check scripts/merge-mac-update-metadata.mjs
           node --check scripts/prepare-macos-signing-keychain.mjs
+          node --check scripts/publish-update-to-oss.mjs
+          node --check scripts/update-release-contract.mjs
+          node --check scripts/verify-distribution-assets.mjs
           node --check scripts/verify-release-assets.mjs
 
   macos-apple-silicon:
@@ -157,6 +161,7 @@ jobs:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
           CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+          RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
         run: |
           set -euo pipefail
           ulimit -n 65536
@@ -164,12 +169,12 @@ jobs:
             npm run package:candidate:mac:arm64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
             echo 'RELEASE_APP=dist-candidate/mac-arm64/因赛AI.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-mac-arm64' >> "$GITHUB_ENV"
+            echo "RELEASE_BASENAME=insight-$RELEASE_VERSION-mac-arm64" >> "$GITHUB_ENV"
           else
             npm run package:mac:arm64
             echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
             echo 'RELEASE_APP=dist/mac-arm64/因赛AI.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-mac-arm64' >> "$GITHUB_ENV"
+            echo "RELEASE_BASENAME=insight-$RELEASE_VERSION-mac-arm64" >> "$GITHUB_ENV"
           fi
       - name: Sign, notarize, and staple Apple Silicon DMG
         env:
@@ -297,6 +302,7 @@ jobs:
           CSC_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
           CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+          RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
         run: |
           set -euo pipefail
           ulimit -n 65536
@@ -304,12 +310,12 @@ jobs:
             npm run package:candidate:mac:x64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
             echo 'RELEASE_APP=dist-candidate/mac/因赛AI.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-mac-x64' >> "$GITHUB_ENV"
+            echo "RELEASE_BASENAME=insight-$RELEASE_VERSION-mac-x64" >> "$GITHUB_ENV"
           else
             npm run package:mac:x64
             echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
             echo 'RELEASE_APP=dist/mac/因赛AI.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-mac-x64' >> "$GITHUB_ENV"
+            echo "RELEASE_BASENAME=insight-$RELEASE_VERSION-mac-x64" >> "$GITHUB_ENV"
           fi
       - name: Sign, notarize, and staple Intel DMG
         env:
@@ -399,12 +405,12 @@ jobs:
           if ($env:RELEASE_CHANNEL -eq 'candidate') {
             npm run package:candidate:win
             $releaseDir = 'dist-candidate'
-            $installer = 'insight-windows-x64-setup.exe'
+            $installer = "insight-$($env:RELEASE_VERSION)-windows-x64-setup.exe"
             $appExecutable = 'dist-candidate/win-unpacked/因赛AI.exe'
           } else {
             npm run package:win
             $releaseDir = 'dist'
-            $installer = 'insight-windows-x64-setup.exe'
+            $installer = "insight-$($env:RELEASE_VERSION)-windows-x64-setup.exe"
             $appExecutable = 'dist/win-unpacked/因赛AI.exe'
           }
           node scripts/finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION $appExecutable
@@ -443,11 +449,13 @@ jobs:
           name: macos-apple-silicon
           path: release-assets
       - name: Verify final Apple Silicon DMG on Sonoma
+        env:
+          RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
         run: |
           set -euo pipefail
           mount_path="$RUNNER_TEMP/insight-dmg"
           mkdir -p "$mount_path"
-          hdiutil attach release-assets/insight-mac-arm64.dmg \
+          hdiutil attach "release-assets/insight-$RELEASE_VERSION-mac-arm64.dmg" \
             -nobrowse -readonly -mountpoint "$mount_path"
           app_path="$mount_path/因赛AI.app"
           test -d "$app_path"
@@ -459,7 +467,7 @@ jobs:
         run: hdiutil detach "$RUNNER_TEMP/insight-dmg" || true
 
   publish:
-    name: Publish verified GitHub Release
+    name: Create verified GitHub Draft
     needs:
       - release-preflight
       - macos-apple-silicon
@@ -567,11 +575,6 @@ jobs:
           fi
           gh release create "$RELEASE_TAG" "${create_args[@]}"
           gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY"
-          if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease --repo "$GITHUB_REPOSITORY"
-          else
-            gh release edit "$RELEASE_TAG" --draft=false --repo "$GITHUB_REPOSITORY"
-          fi
       - name: Remove product update signing key
         if: always()
         run: |

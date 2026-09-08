@@ -8,7 +8,8 @@ export interface ResolvedRelease {
   manifest: SignedReleaseManifest
   manifestBytes: Uint8Array
   signatureBytes: Uint8Array
-  artifactUrls: ReadonlyMap<string, URL>
+  releaseBaseUrl: URL
+  manualInstallerUrl: URL
 }
 
 export interface UpdateSource {
@@ -16,4 +17,6 @@ export interface UpdateSource {
     channel: ReleaseUpdateChannel,
     target: UpdateTarget
   ): Promise<ResolvedRelease>
+  releaseBaseUrl(channel: ReleaseUpdateChannel, version: string): URL
+  manualInstallerUrl(manifest: SignedReleaseManifest, target: UpdateTarget): URL
 }

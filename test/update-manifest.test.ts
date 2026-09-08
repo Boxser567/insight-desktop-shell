@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
+  selectManualInstaller,
   selectTargetArtifacts,
   verifyReleaseManifest
 } from '../src/main/update/release-manifest'
@@ -86,6 +87,10 @@ describe('authenticated release manifest', () => {
       'blockmap',
       'updater-metadata'
     ])
+    expect(selectManualInstaller(manifest, stableTarget).kind).toBe('dmg')
+    expect(selectManualInstaller(manifest, {
+      channel: 'stable', platform: 'win32', arch: 'x64'
+    }).kind).toBe('nsis')
   })
 
   it('allows one authenticated macOS metadata asset to cover both architectures', () => {
@@ -198,6 +203,20 @@ describe('authenticated release manifest', () => {
     ['duplicate artifact', {
       ...baseManifest,
       artifacts: [...baseManifest.artifacts, baseManifest.artifacts[0]]
+    }],
+    ['duplicate target kind', {
+      ...baseManifest,
+      artifacts: [
+        ...baseManifest.artifacts,
+        { ...baseManifest.artifacts[0], name: 'other-mac-arm64.dmg' }
+      ]
+    }],
+    ['unsafe artifact path', {
+      ...baseManifest,
+      artifacts: [
+        { ...baseManifest.artifacts[0], name: '../insight.dmg' },
+        ...baseManifest.artifacts.slice(1)
+      ]
     }],
     ['negative size', {
       ...baseManifest,

@@ -8,7 +8,7 @@ export type UpdateStateEvent =
   | { type: 'installing'; version: string; required: boolean; manual: boolean }
   | { type: 'up-to-date' }
   | { type: 'unsupported'; reason: string; manual: boolean }
-  | { type: 'error'; version?: string; required: boolean; message: string; retryable: boolean; manual: boolean }
+  | { type: 'error'; version?: string; required: boolean; message: string; retryable: boolean; manual: boolean; manualInstallerAvailable: boolean }
   | { type: 'reset' }
 
 export function initialUpdateStatus(
@@ -83,7 +83,8 @@ export function reduceUpdateState(
         required: event.required,
         message: event.message,
         manual: event.manual,
-        retryable: event.retryable
+        retryable: event.retryable,
+        manualInstallerAvailable: event.manualInstallerAvailable
       }
       return event.version === undefined
         ? base

@@ -71,7 +71,7 @@ describe('complete release asset verifier', () => {
     expect(runVerify(signature).stderr).toContain('signature is invalid')
 
     const digest = await builtFixture()
-    await writeFile(path.join(digest.releaseDir, 'insight-mac-arm64.dmg'), 'changed')
+    await writeFile(path.join(digest.releaseDir, 'insight-0.1.2-mac-arm64.dmg'), 'changed')
     expect(runVerify(digest).stderr).toContain('does not match release asset')
 
     const version = await builtFixture()
@@ -80,12 +80,12 @@ describe('complete release asset verifier', () => {
 
   it('rejects unreadable ZIP central directories and invalid Windows installers', async () => {
     const zip = await builtFixture()
-    await writeFile(path.join(zip.releaseDir, 'insight-mac-arm64.zip'), 'not a zip')
+    await writeFile(path.join(zip.releaseDir, 'insight-0.1.2-mac-arm64.zip'), 'not a zip')
     expect(runVerify(zip).status).not.toBe(0)
 
     const pe = await builtFixture()
     await writeFile(
-      path.join(pe.releaseDir, 'insight-windows-x64-setup.exe'),
+      path.join(pe.releaseDir, 'insight-0.1.2-windows-x64-setup.exe'),
       'not a Windows executable'
     )
     expect(runVerify(pe).status).not.toBe(0)
@@ -93,11 +93,11 @@ describe('complete release asset verifier', () => {
 
   it('rejects missing, empty, or unexpected assets', async () => {
     const missing = await builtFixture()
-    await rm(path.join(missing.releaseDir, 'insight-mac-x64.dmg'))
+    await rm(path.join(missing.releaseDir, 'insight-0.1.2-mac-x64.dmg'))
     expect(runVerify(missing).status).not.toBe(0)
 
     const empty = await builtFixture()
-    await writeFile(path.join(empty.releaseDir, 'insight-mac-arm64.zip.blockmap'), '')
+    await writeFile(path.join(empty.releaseDir, 'insight-0.1.2-mac-arm64.zip.blockmap'), '')
     expect(runVerify(empty).status).not.toBe(0)
 
     const unexpected = await builtFixture()

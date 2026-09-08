@@ -14,6 +14,7 @@ const updates: DesktopUpdateWindowApi = Object.freeze({
   open: (): Promise<void> => ipcRenderer.invoke('updates:open'),
   check: (): Promise<void> => ipcRenderer.invoke('updates:check'),
   download: (): Promise<void> => ipcRenderer.invoke('updates:download'),
+  downloadFullInstaller: (): Promise<void> => ipcRenderer.invoke('updates:download-full-installer'),
   install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
   skip: (version: string): Promise<void> => ipcRenderer.invoke('updates:skip', version),
   quit: (): Promise<void> => ipcRenderer.invoke('updates:quit')

@@ -12,6 +12,7 @@ describe('Shell preload contract', () => {
 
       expect(source).not.toContain("from './update-api'")
       expect(source).toContain("ipcRenderer.invoke('updates:status')")
+      expect(source).toContain("ipcRenderer.invoke('updates:download-full-installer')")
       expect(source).toContain("ipcRenderer.on('updates:status-changed', handler)")
       expect(source).toContain("ipcRenderer.removeListener('updates:status-changed', handler)")
     }

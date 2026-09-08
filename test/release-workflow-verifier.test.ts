@@ -40,5 +40,11 @@ describe('release workflow verifier', () => {
 
     await writeFile(workflow, source.replace('permissions:', 'FEISHU_RELEASE_WEBHOOK: forbidden\n\npermissions:'))
     expect(run(workflow).stderr).toContain('FEISHU_RELEASE_WEBHOOK')
+
+    await writeFile(workflow, source.replace(
+      'permissions:\n  contents: write',
+      'permissions:\n  contents: write\n  id-token: write'
+    ))
+    expect(run(workflow).stderr).toContain('must grant only contents')
   })
 })
