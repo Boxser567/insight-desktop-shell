@@ -4,6 +4,7 @@
 
 - [因赛AI Desktop 客户端构建 Runbook](client-build-runbook.md) 是当前构建步骤、停止条件和人工门禁的权威说明。
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
+- [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是尚未实现的生产分发目标；当前构建和发布操作仍以本说明及现有 GitHub-only workflow 为准。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
@@ -25,17 +26,16 @@
 
 ## GitHub Actions
 
-安装包 workflow 名为 `Release desktop installers`，定义在 `.github/workflows/release.yml`。手动运行时 `target` 可选：
+安装包 workflow 名为 `Release desktop installers`，定义在 `.github/workflows/release.yml`。手动运行必须填写尚不存在的 `candidate_tag`，并从以下 `target` 中选择：
 
-- `macos`：构建 Apple Silicon 与 Intel macOS 包；
-- `windows`：使用 `windows-2022` runner 构建 Windows x64 包；
-- `all`：构建全部上述目标；
-- `apple-signing-preflight`：只验证 Apple P12、`Developer ID Application`、Team ID 与 Notary Service 鉴权，不安装依赖或构建应用；
-- `macos-arm64-signed`：在预检通过后构建、签名、公证并上传 Apple Silicon 候选包，不创建 GitHub Release。
+- `macos-arm64`：构建、签名、公证并上传 Apple Silicon 候选包，同时运行 Sonoma 分发兼容检查；
+- `macos-x64`：构建、签名、公证并上传 Intel macOS 候选包；
+- `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
+- `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Release。
 
-普通 `macos`/`all` 手动运行只生成未签名的 macOS DEV artifact，用于原生 runner 构建证明，不能作为可直接安装的候选包。签名候选必须先通过 `apple-signing-preflight`，再单独运行 `macos-arm64-signed`；预检失败时禁止继续构建。候选包与 `v*` 标签路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。
+单平台 target 只上传对应 Actions artifact，不创建 tag 或 GitHub Release，也不运行 Publish。它用于关闭一个平台的候选门禁，不能替代完整 Candidate/Stable 发布。人工通过单平台包后，使用同一 `candidate_tag` 和 `target: all` 执行完整 Candidate；Stable 只由已存在的 `vX.Y.Z` tag push 触发，并始终等同于 `all`。
 
-`macos-arm64-signed` 只关闭 Apple Silicon 的研发分发门禁，不替代正式多平台发布。它不会构建 Intel 或 Windows，不会启动 Windows UKey 签名，也不会创建或更新 GitHub Release。下载后必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
+macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。下载后的签名 macOS 候选必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
 
 运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
 

@@ -238,11 +238,11 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 GitHub Release 下载的确切安装包、`insight-update.json` 和 `insight-update.json.sig`。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
+**输入：** 完整发布验收使用阶段 9 对应 GitHub Release 中的确切安装包、`insight-update.json` 和 `insight-update.json.sig`；单平台候选验收可使用该次 workflow 的确切 Actions artifact，但只关闭对应平台门禁。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
 
 **执行：**
 
-- 记录 workflow URL、Release URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
+- 记录 workflow URL、tag、target、channel、Shell commit、Core Runtime tag/commit、Actions artifact 或 Release URL、资产文件名、文件大小和 SHA-256。完整发布的实际文件必须与产品签名的 release manifest 一致；单平台 artifact 没有完整 manifest 时，以 workflow job 校验、run/commit 和 artifact 身份作为该平台候选证据，不得扩写为完整 Release 通过。
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
@@ -255,7 +255,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 npm run package:mac:arm64
 ```
 
-**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
+**通过条件：** 单平台候选由人工明确确认该 target 的安装、启动和本轮回归行为，仅关闭对应平台门禁。完整 Candidate 或 Stable 仍要求 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
 
 **失败时：** 保留安装包和日志，标记失败格式与平台。一个已验收 DMG 可用于 macOS 功能结论，但 zip/blockmap 故障必须作为独立未解决项记录，不能宣称整个发布完全通过。
 
@@ -305,7 +305,7 @@ npm run package:mac:arm64
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |
 
-更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)。
+更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)；正式签名包的钥匙串访问控制问题见 [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md)。
 
 ## 构建耗时控制
 
