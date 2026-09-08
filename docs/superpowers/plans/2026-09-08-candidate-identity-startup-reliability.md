@@ -147,7 +147,7 @@ git commit -m "fix(release): unify candidate product identity"
 
 - [ ] **Step 1: 写入失败的工作流门禁测试**
 
-要求两个 macOS 构建 Job 记录 `ImageOS`、`ImageVersion`、`sw_vers`、`xcodebuild -version` 和 `xcrun codesign_allocate -i`；要求新增 `macos-sonoma-compatibility` Job：
+要求两个 macOS 构建 Job 记录 `ImageOS`、`ImageVersion`、`sw_vers`、`xcodebuild -version` 和 `xcrun --find codesign_allocate`；要求新增 `macos-sonoma-compatibility` Job：
 
 ```yaml
 needs:
@@ -179,7 +179,6 @@ echo "ImageVersion=${ImageVersion:-unknown}"
 sw_vers
 xcodebuild -version
 xcrun --find codesign_allocate
-xcrun codesign_allocate -i
 ```
 
 不把“固定 Xcode”当作未经证明的修复；Electron 是预编译二进制，`codesign` 也来自 Runner 系统。环境信息用于将后续差异落到具体版本。

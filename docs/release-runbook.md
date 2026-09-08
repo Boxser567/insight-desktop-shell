@@ -37,6 +37,8 @@
 
 运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
 
+完整 Candidate/Stable 发布还会在 `macos-14` 上下载并只读挂载 Apple Silicon 最终 DMG，对镜像内 `因赛AI.app` 重新执行严格 codesign、`syspolicy_check distribution` 和 stapling 检查。该任务是面向 Sonoma 的临时发布阻断条件；它不能代替当前 macOS 14.5 目标机保留 quarantine 的首次启动和连续三次重启验收。GitHub 停止提供 `macos-14` runner 前，必须将这项检查迁移到仍受维护的真实消费端环境。
+
 CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明安装后的 Sidebar、用户数据或启动行为正确。
 
 ## 最终安装验收
@@ -44,6 +46,7 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 从本次 workflow run 下载确切安装包后，在目标平台完成：
 
 - macOS DMG 校验、完整 bundle 签名、Gatekeeper、notarization 和 stapling 检查；
+- macOS 14.5 上保留 quarantine 启动，确认不出现“已损坏”或重复钥匙串授权提示，并连续退出、重启三次；
 - 干净安装和覆盖安装；
 - 首次启动与既有 Profile 升级；
 - Markdown/HTML 在 Sidebar 内打开；

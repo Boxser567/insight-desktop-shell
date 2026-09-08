@@ -216,13 +216,14 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
+- 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
-- `publish` 必须直接依赖预检、两个 macOS job 和 Windows job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
+- `publish` 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
 - 同一 tag 已存在 Release 时必须失败；禁止 `--clobber`、覆盖资产或只重跑 publish 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
 - 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证还是 GitHub upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
-**通过条件：** preflight、三个原生 job 与 publish 全部成功；公开 Release 中的全部资产与已验证 `insight-update.json` 完全一致，Candidate/Stable 属性和版本正确，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
+**通过条件：** preflight、三个原生 job、Sonoma 兼容 job 与 publish 全部成功；公开 Release 中的全部资产与已验证 `insight-update.json` 完全一致，Candidate/Stable 属性和版本正确，macOS 签名、公证、stapling、Sonoma 分发检查与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
 **失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
 
@@ -277,6 +278,7 @@ npm run package:mac:arm64
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
+| 云端签名、公证和 stapling 均通过，但 macOS 14.5 重复要求钥匙串授权 | 先在最终 DMG 内应用上复核严格 codesign、CodeDirectory、CMS 与证书链；构建 runner 通过不等于旧目标系统接受同一签名 | 阶段 9 的 Sonoma 兼容 job 必须通过，阶段 10 仍在目标机保留 quarantine 连续启动三次；未确认目标机通过前不得发布 Stable |
 | codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | `iconutil` 对尺寸完整的 iconset 报 `Invalid Iconset` | 先用 `file`/`sips` 核对全部标准尺寸；若 `iconutil` 自己解包的 iconset 也无法重新封装，则属于宿主工具异常 | 阶段 2/7，使用仓库生成器直接写入标准 ICNS PNG entries，并以 `file`、`sips` 和品牌资产测试验证，不进入远程打包调试 |

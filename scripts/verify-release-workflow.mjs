@@ -28,7 +28,8 @@ async function main() {
   const preflight = section(workflow, 'release-preflight', 'macos-apple-silicon')
   const appleSilicon = section(workflow, 'macos-apple-silicon', 'macos-intel')
   const intel = section(workflow, 'macos-intel', 'windows-x64')
-  const windows = section(workflow, 'windows-x64', 'publish')
+  const windows = section(workflow, 'windows-x64', 'macos-sonoma-compatibility')
+  const sonomaCompatibility = section(workflow, 'macos-sonoma-compatibility', 'publish')
   const publish = section(workflow, 'publish')
 
   requireText(workflow, 'candidate_tag:', 'Release workflow')
@@ -51,6 +52,10 @@ async function main() {
     requireText(job, 'APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}', name)
     requireText(job, 'CSC_NAME: ${{ steps.signing_keychain.outputs.identity }}', name)
     requireText(job, 'ulimit -n 65536', name)
+    requireText(job, 'Record macOS build environment', name)
+    requireText(job, 'sw_vers', name)
+    requireText(job, 'xcodebuild -version', name)
+    requireText(job, 'xcrun --find codesign_allocate', name)
     requireText(job, 'syspolicy_check distribution --verbose "$RELEASE_APP"', name)
     if (job.includes('spctl --assess --type execute')) {
       throw new Error(`${name} must use syspolicy_check for the application bundle.`)
@@ -63,15 +68,43 @@ async function main() {
     'finalize-windows-release.mjs $releaseDir $env:RELEASE_VERSION $appExecutable',
     'windows-x64'
   )
+  requireText(sonomaCompatibility, '- release-preflight', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, '- macos-apple-silicon', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'runs-on: macos-14', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'name: macos-apple-silicon', 'macos-sonoma-compatibility')
+  requireText(
+    sonomaCompatibility,
+    'hdiutil attach release-assets/insight-mac-arm64.dmg',
+    'macos-sonoma-compatibility'
+  )
+  requireText(
+    sonomaCompatibility,
+    'codesign --verify --deep --strict --verbose=4 "$app_path"',
+    'macos-sonoma-compatibility'
+  )
+  requireText(
+    sonomaCompatibility,
+    'syspolicy_check distribution --verbose "$app_path"',
+    'macos-sonoma-compatibility'
+  )
+  requireText(sonomaCompatibility, 'xcrun stapler validate "$app_path"', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'if: always()', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'hdiutil detach "$MOUNT_PATH" || true', 'macos-sonoma-compatibility')
   requireText(publish, 'environment: desktop-release', 'Publish job')
   for (const dependency of [
     '- release-preflight',
     '- macos-apple-silicon',
     '- macos-intel',
-    '- windows-x64'
+    '- windows-x64',
+    '- macos-sonoma-compatibility'
   ]) {
     requireText(publish, dependency, 'Publish job')
   }
+  requireText(
+    publish,
+    "needs.macos-sonoma-compatibility.result == 'success'",
+    'Publish job'
+  )
   requireText(publish, 'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY', 'Publish job')
   if (workflow.slice(0, workflow.indexOf('\n  publish:')).includes('DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')) {
     throw new Error('The update signing private key may only be used by the publish job.')

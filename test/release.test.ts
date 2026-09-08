@@ -411,7 +411,10 @@ describe('GitHub release contract', () => {
       /  macos-intel:\r?\n[\s\S]*?(?=\r?\n  windows-x64:)/
     )?.[0]
     const windows = workflow.match(
-      /  windows-x64:\r?\n[\s\S]*?(?=\r?\n  publish:)/
+      /  windows-x64:\r?\n[\s\S]*?(?=\r?\n  macos-sonoma-compatibility:)/
+    )?.[0]
+    const sonomaCompatibility = workflow.match(
+      /  macos-sonoma-compatibility:\r?\n[\s\S]*?(?=\r?\n  publish:)/
     )?.[0]
 
     expect(document.errors).toEqual([])
@@ -431,6 +434,8 @@ describe('GitHub release contract', () => {
     expect(appleSilicon).toContain('needs: release-preflight')
     expect(intel).toContain('needs: release-preflight')
     expect(windows).toContain('needs: release-preflight')
+    expect(sonomaCompatibility).toContain('- release-preflight')
+    expect(sonomaCompatibility).toContain('- macos-apple-silicon')
   })
 
   it('builds and validates signed macOS and unsigned Windows inputs on native runners', async () => {
@@ -450,9 +455,13 @@ describe('GitHub release contract', () => {
       expect(workflow).toContain(`secrets.${secret}`)
     }
     expect(workflow.match(/Prepare macOS signing keychain/g)).toHaveLength(2)
+    expect(workflow.match(/Record macOS build environment/g)).toHaveLength(2)
+    expect(workflow.match(/^\s+sw_vers$/gm)).toHaveLength(2)
+    expect(workflow.match(/^\s+xcodebuild -version$/gm)).toHaveLength(2)
+    expect(workflow.match(/^\s+xcrun --find codesign_allocate$/gm)).toHaveLength(2)
     expect(workflow.match(/CSC_NAME: \$\{\{ steps\.signing_keychain\.outputs\.identity \}\}/g)).toHaveLength(2)
     expect(workflow.match(/ulimit -n 65536/g)).toHaveLength(2)
-    expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(4)
+    expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(5)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
     expect(workflow.match(/syspolicy_check distribution --verbose "\$RELEASE_APP"/g)).toHaveLength(2)
     expect(workflow).not.toContain('spctl --assess --type execute')
@@ -468,6 +477,13 @@ describe('GitHub release contract', () => {
     expect(workflow).toMatch(
       /windows-x64:\r?\n\s+name: Windows x64 unsigned\r?\n(?:[\s\S]*?)runs-on: windows-2022\r?\n\s+steps:/
     )
+    expect(workflow).toMatch(
+      /macos-sonoma-compatibility:\r?\n\s+name: macOS Sonoma distribution compatibility\r?\n(?:[\s\S]*?)runs-on: macos-14\r?\n(?:[\s\S]*?)\s+steps:/
+    )
+    expect(workflow).toContain('hdiutil attach release-assets/insight-mac-arm64.dmg')
+    expect(workflow).toContain('codesign --verify --deep --strict --verbose=4 "$app_path"')
+    expect(workflow).toContain('syspolicy_check distribution --verbose "$app_path"')
+    expect(workflow).toContain('hdiutil detach "$MOUNT_PATH" || true')
     expect(workflow).toContain('package:candidate:mac:arm64')
     expect(workflow).toContain('package:candidate:mac:x64')
     expect(workflow).toContain('package:candidate:win')
@@ -497,6 +513,8 @@ describe('GitHub release contract', () => {
     expect(publish).toContain('- macos-apple-silicon')
     expect(publish).toContain('- macos-intel')
     expect(publish).toContain('- windows-x64')
+    expect(publish).toContain('- macos-sonoma-compatibility')
+    expect(publish).toContain("needs.macos-sonoma-compatibility.result == 'success'")
     expect(beforePublish).not.toContain('DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')
     expect(publish).toContain('secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')
     expect(publish).toContain('merge-mac-update-metadata.mjs')
