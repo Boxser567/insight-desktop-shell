@@ -10,6 +10,16 @@ const communityPlugins = [
   { name: 'dsh-prompt-enhance', version: '0.1.9', archive: 'dsh-prompt-enhance-0.1.9.tgz' }
 ] as const
 
+const marketPolicy = {
+  patch: '// Insight Desktop required capabilities.\n',
+  routes: [
+    '// Insight Desktop hides required capabilities from market installed.',
+    '// Insight Desktop hides required capabilities from market updates.',
+    '// Insight Desktop protects required capabilities from market update.',
+    '// Insight Desktop protects required capabilities from market uninstall.'
+  ].join('\n')
+}
+
 describe('bundled profile initialization', () => {
   const testDir = join(__dirname, '.temp-bundled-profile-test')
 
@@ -49,6 +59,14 @@ describe('bundled profile initialization', () => {
       JSON.stringify({ name: '@insight-ai/desktop-integration' }),
       'utf8'
     )
+    await mkdir(join(profile, 'node_modules', 'dshmarket', 'lib'), { recursive: true })
+    await writeFile(
+      join(profile, 'node_modules', 'dshmarket', 'package.json'),
+      JSON.stringify({ name: 'dshmarket', version: '1.41.0' }),
+      'utf8'
+    )
+    await writeFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), marketPolicy.patch, 'utf8')
+    await writeFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), marketPolicy.routes, 'utf8')
     for (const plugin of communityPlugins) {
       const installed = join(profile, 'node_modules', ...plugin.name.split('/'))
       await mkdir(installed, { recursive: true })
@@ -62,6 +80,47 @@ describe('bundled profile initialization', () => {
     }
     await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')
     await writeFile(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n  - packages/*\n', 'utf8')
+  }
+
+  async function writeExistingMarketProfile(
+    dshHome: string,
+    version: string,
+    patch: string,
+    routes: string
+  ): Promise<string> {
+    const profile = join(dshHome, 'profiles', 'web')
+    await mkdir(join(profile, 'packages', 'insight-desktop-integration'), { recursive: true })
+    await mkdir(join(profile, 'node_modules', 'dshmarket', 'lib'), { recursive: true })
+    await writeFile(
+      join(profile, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          dshmarket: version,
+          '@insight-ai/desktop-integration': 'workspace:*'
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-base',
+              '@deepseek-ai/dsh-web-app',
+              'dshmarket',
+              '@insight-ai/desktop-integration'
+            ]
+          }
+        },
+        insightDesktop: { defaultProfileVersion: 3 }
+      }),
+      'utf8'
+    )
+    await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'package.json'), '{}', 'utf8')
+    await writeFile(
+      join(profile, 'node_modules', 'dshmarket', 'package.json'),
+      JSON.stringify({ name: 'dshmarket', version }),
+      'utf8'
+    )
+    await writeFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), patch, 'utf8')
+    await writeFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), routes, 'utf8')
+    return profile
   }
 
   afterEach(async () => {
@@ -230,6 +289,35 @@ describe('bundled profile initialization', () => {
     }
     expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
+  })
+
+  it('refreshes host policy files for an installed matching market version', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeVersionThreeTemplate(template)
+    const profile = await writeExistingMarketProfile(dshHome, '1.41.0', 'old patch\n', 'old routes\n')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+
+    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe(marketPolicy.patch)
+    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), 'utf8')).toBe(marketPolicy.routes)
+  })
+
+  it('preserves host files for a user-updated market version', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeVersionThreeTemplate(template)
+    const profile = await writeExistingMarketProfile(
+      dshHome,
+      '1.42.0',
+      'updated patch\n',
+      'updated routes\n'
+    )
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+
+    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe('updated patch\n')
+    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), 'utf8')).toBe('updated routes\n')
   })
 
   it('marks a copied packaged profile complete without reinstalling its dependencies', async () => {

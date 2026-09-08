@@ -10,6 +10,22 @@ import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 const PROFILE = 'web'
 const DEFAULT_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
+const MARKET_PACKAGE = 'dshmarket'
+const MARKET_POLICY_FILES = [
+  {
+    path: join('lib', 'patch.js'),
+    markers: ['// Insight Desktop required capabilities.']
+  },
+  {
+    path: join('lib', 'routes.js'),
+    markers: [
+      '// Insight Desktop hides required capabilities from market installed.',
+      '// Insight Desktop hides required capabilities from market updates.',
+      '// Insight Desktop protects required capabilities from market update.',
+      '// Insight Desktop protects required capabilities from market uninstall.'
+    ]
+  }
+] as const
 
 interface ProfileManifest {
   dependencies?: Record<string, string>
@@ -17,9 +33,21 @@ interface ProfileManifest {
   insightDesktop?: { defaultProfileVersion?: number }
 }
 
+interface PackageManifest {
+  version?: string
+}
+
 async function readProfileManifest(path: string): Promise<ProfileManifest | undefined> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as ProfileManifest
+  } catch {
+    return undefined
+  }
+}
+
+async function readPackageManifest(path: string): Promise<PackageManifest | undefined> {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as PackageManifest
   } catch {
     return undefined
   }
@@ -55,6 +83,27 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   await mkdir(dirname(destinationPackage), { recursive: true })
   await rm(destinationPackage, { recursive: true, force: true })
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
+}
+
+async function refreshBundledMarketPolicy(source: string, destination: string): Promise<void> {
+  const sourcePackage = join(source, 'node_modules', MARKET_PACKAGE)
+  const destinationPackage = join(destination, 'node_modules', MARKET_PACKAGE)
+  const destinationManifest = await readPackageManifest(join(destinationPackage, 'package.json'))
+  if (destinationManifest === undefined) return
+
+  const sourceManifest = await readPackageManifest(join(sourcePackage, 'package.json'))
+  if (
+    sourceManifest?.version === undefined ||
+    sourceManifest.version !== destinationManifest.version
+  ) return
+
+  for (const policyFile of MARKET_POLICY_FILES) {
+    const content = await readFile(join(sourcePackage, policyFile.path), 'utf8')
+    if (policyFile.markers.some(marker => !content.includes(marker))) {
+      throw new Error(`The bundled market policy is incomplete: ${policyFile.path}`)
+    }
+    await writeFile(join(destinationPackage, policyFile.path), content, 'utf8')
+  }
 }
 
 async function ensureWorkspacePackagePattern(profileDirectory: string): Promise<void> {
@@ -111,6 +160,7 @@ export async function initializeBundledProfile(
 
   if (current.insightDesktop?.defaultProfileVersion === 2) {
     await copyDesktopIntegration(source, destination)
+    await refreshBundledMarketPolicy(source, destination)
     await addDesktopIntegrationToManifest(destination)
     await ensureWorkspacePackagePattern(destination)
     await clearProfileInstallMarker(dshHome)
@@ -119,6 +169,7 @@ export async function initializeBundledProfile(
 
   if (current.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION) {
     await copyDesktopIntegration(source, destination)
+    await refreshBundledMarketPolicy(source, destination)
     await addDesktopIntegrationToManifest(destination)
     await ensureWorkspacePackagePattern(destination)
     return true

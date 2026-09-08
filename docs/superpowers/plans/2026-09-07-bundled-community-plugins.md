@@ -4,7 +4,7 @@
 
 **Goal:** Add three fixed community plugins to the first-run desktop Profile as default-enabled, user-removable plugins while retaining dsh-market as the only user-facing plugin manager.
 
-**Architecture:** Shell keeps three reviewed `.tgz` files as build inputs and installs them through the existing DSH CLI while preparing `bundled-profile`. Runtime installation, enable/disable, update and uninstall continue to operate through the active account's dsh-market/Profile; no device registry, management CLI, remote policy client or new plugin settings UI is introduced.
+**Architecture:** Shell keeps three reviewed `.tgz` files as build inputs and installs them through the existing DSH CLI while preparing `bundled-profile`. Runtime enable/disable and uninstall continue to operate through the active account's dsh-market/Profile; updates are available only when dsh-market can match the local artifact to a supported online source. No device registry, management CLI, remote policy client or new plugin settings UI is introduced.
 
 **Tech Stack:** Node.js ESM build scripts, DSH CLI, pnpm Profile workspace, Electron/Vitest, existing dshmarket adapter.
 
@@ -19,6 +19,8 @@
 - Keep `dsh-better-sidebar@0.16.1` and `@insight-ai/desktop-integration@0.1.0` non-removable and non-updatable from Market.
 - dsh-market operations continue to affect only the active account Profile during this phase.
 - New account Profiles receive all factory plugins enabled by default. Existing Profiles retain their current plugin selection.
+- Memory, configuration, cache, session and business data remain account-scoped. Memory Evolve's default `~/.agents/skills` library is the explicit device-scoped exception and is shared by all local accounts.
+- A fixed archive and digest provide reproducibility, not a Host permission sandbox. Record a source capability review before accepting each default-enabled third-party package.
 - Do not modify Core Runtime, authentication, account storage, plugin IPC, updater or release workflows.
 - Build output must not contain absolute paths to Downloads, `/private/tmp` or a developer clone.
 - Verify macOS locally before dispatching macOS or Windows GitHub Actions. Linux is out of scope.
@@ -43,9 +45,9 @@
 
 - [ ] **Step 1: Check out and verify Memory Evolve**
 
-Clone tag `v26082401` into a temporary directory, verify `git rev-parse HEAD` equals `21d2a8518bc608c2958b08733f5b5eaf6b514c9c`, run its declared test/build commands, then run `pnpm pack --pack-destination <shell>/vendor/plugins`. Rename the generated archive to `dsh-memory-evolve-0.1.0.tgz` only if its packed `package/package.json` names `dsh-memory-evolve@0.1.0` and contains `lib/index.js`, `lib/client.js` and `cordis.patch.yml`.
+Clone tag `v26082401` into a temporary directory and verify `git rev-parse HEAD` equals `21d2a8518bc608c2958b08733f5b5eaf6b514c9c`. Run `DSH_SOURCE=<shell-root> npm run build`, then use the locked Core Runtime Node with an isolated `DSH_HOME` to run `node --test tests/*.test.js`. Do not use the upstream `npm test` script: the pinned package quotes the glob and Node receives `tests/*.test.js` literally. Run the tests outside a restricted sandbox because the suite binds loopback ports. Stage the upstream `package.json`, license and readmes plus `cordis.patch.yml`, built `lib`, packaged skills, `vendor/mermaid.min.js` and `scripts/sync-worker.mjs`, then run `npm pack --ignore-scripts` from that staging directory. Rename the generated archive to `dsh-memory-evolve-0.1.0.tgz` only if its packed `package/package.json` names `dsh-memory-evolve@0.1.0` and contains `lib/index.js`, `lib/client.js` and `cordis.patch.yml`.
 
-Expected: source test and build exit 0; the archive contains only distributable package files. Its `private: true` flag is acceptable for local packing but confirms that the Shell cannot rely on npm publication.
+Expected: source build exits 0 and all 776 tests pass under the locked Node 24.9.0. The staged files remain byte-for-byte identical to the reviewed checkout, while source, tests, TypeScript configuration and upstream developer-machine paths are excluded from the archive. Reject `.git`, `node_modules`, `.DS_Store` and developer checkout paths. Record compressed and unpacked sizes before accepting the package. Its `private: true` flag is acceptable for local packing but confirms that the Shell cannot rely on npm publication.
 
 - [ ] **Step 2: Check out and verify GenUI**
 
@@ -59,7 +61,7 @@ Clone tag `v0.1.9`, verify commit `ed535fbdf0a10d777e43a1f3130d5ffb4b94a5c2`, ru
 
 - [ ] **Step 4: Save license and source records**
 
-Copy each checked-out LICENSE into `vendor/plugins/licenses`. Write `vendor/plugins/README.md` with package name, version, repository, tag, commit, license and the exact commands run. State that this directory is a reviewed Shell build input, not a plugin registry or runtime manager.
+Copy each checked-out LICENSE into `vendor/plugins/licenses`. Write `vendor/plugins/README.md` with package name, version, repository, tag, commit, license and the exact commands run. For each package, record its Host and browser capabilities: injected Harness services, file read/write locations, network access, subprocess use, startup side effects and raw HTML rendering. Record Memory Evolve's device-wide `~/.agents/skills` exception explicitly. State that this directory is a reviewed Shell build input, not a plugin registry or runtime manager, and that a digest does not restrict runtime permissions.
 
 - [ ] **Step 5: Generate the build-only descriptor with real hashes**
 
@@ -69,9 +71,9 @@ Each record must contain `packageName`, `version`, repository-relative `artifact
 
 - [ ] **Step 6: Inspect all archives and commit build inputs**
 
-Run `tar -tzf` for each archive, `shasum -a 256 -c` against the descriptor values, and `git diff --check`.
+Run `tar -tzf` for each archive, `shasum -a 256 -c` against the descriptor values, inspect `npm pack --dry-run --json` size/file-count output, and run `git diff --check`.
 
-Expected: no `.git`, `node_modules`, `.DS_Store`, source checkout path or unbuilt entry is present.
+Expected: no `.git`, `node_modules`, `.DS_Store`, source checkout path or unbuilt entry is present. Record each archive's compressed size, unpacked size and file count in `vendor/plugins/README.md` so installer-size changes remain visible.
 
 ```bash
 git add vendor/plugins
@@ -86,12 +88,12 @@ git commit -m "build(plugins): vendor community plugin packages"
 - Create: `test/verify-bundled-community-plugin.test.ts`
 
 **Interfaces:**
-- Consumes: one descriptor record, locked Core Runtime Node, DSH entry and pnpm entry.
+- Consumes: one descriptor record, locked Core Runtime Node, DSH entry, pnpm entry and the existing packaged-Harness readiness probe.
 - Produces: `verifyBundledCommunityPlugin(projectRoot, packageName): Promise<void>`.
 
 - [ ] **Step 1: Write failing validation and cleanup tests**
 
-Test unknown package, digest mismatch, packed name/version mismatch, missing runtime/client entry, DSH add failure and temporary-directory cleanup after failure.
+Test unknown package, digest mismatch, packed name/version mismatch, missing runtime/client entry, DSH add failure, Harness boot/load failure and temporary-directory cleanup after failure.
 
 ```ts
 await expect(verifyBundledCommunityPlugin(root, 'missing-plugin')).rejects.toThrow(
@@ -114,9 +116,10 @@ Reuse the same locked Node, DSH entry, pnpm entry, constrained environment and p
 3. Run `dsh plugin --profile web add --save-exact --allow-build=node-pty <artifact>`.
 4. Run `dsh plugin --profile web install --no-frozen-lockfile`.
 5. Verify the Profile dependency, bundle entry and installed package version.
-6. Remove the temporary DSH home in `finally`.
+6. Start Harness from the disposable Profile with the same process lifecycle and RPC-readiness rules as `smoke-packaged-harness.mjs`; fail on plugin load errors, early exit or readiness timeout, then terminate the process cleanly.
+7. Remove the temporary DSH home in `finally`.
 
-The script prints the package name before each phase and accepts exactly one package-name argument. It is a build verifier, not a general plugin manager.
+Extract and reuse the existing smoke process helper instead of maintaining a second readiness protocol. The script prints the package name before each phase and accepts exactly one package-name argument. It is a build verifier, not a general plugin manager.
 
 - [ ] **Step 4: Verify each plugin separately**
 
@@ -128,7 +131,7 @@ node scripts/verify-bundled-community-plugin.mjs @changfenhuang/dsh-genui
 node scripts/verify-bundled-community-plugin.mjs dsh-prompt-enhance
 ```
 
-Expected: all three disposable Profile installations succeed without changing `build/bundled-profile` or user data.
+Expected: all three disposable Profile installations and Host boots succeed without changing `build/bundled-profile` or user data. Browser-client behavior is verified later in the combined fresh-account DEV run.
 
 - [ ] **Step 5: Commit the focused verifier**
 
@@ -206,7 +209,9 @@ git commit -m "feat(profile): bundle optional community plugins"
 **Files:**
 - Modify: `scripts/patch-bundled-market.mjs`
 - Modify: `scripts/patch-bundled-market.d.mts`
+- Modify: `src/main/state/bundled-profile.ts`
 - Modify: `test/bundled-market-policy.test.ts`
+- Modify: `test/bundled-profile.test.ts`
 
 **Interfaces:**
 - Consumes: the existing hard-coded required package patterns for Sidebar and desktop integration.
@@ -233,6 +238,10 @@ git add scripts/patch-bundled-market.mjs scripts/patch-bundled-market.d.mts test
 git commit -m "fix(plugins): hide required market actions"
 ```
 
+- [ ] **Step 5: Refresh the policy in compatible existing Profiles**
+
+Real DEV inspection must use an account Profile that predates this task. When that Profile still contains the same `dshmarket` version as the bundled template, refresh only its patched `lib/patch.js` and `lib/routes.js` before Harness starts. Do not add a removed market, backfill community plugins, change the Profile manifest, or overwrite a user-updated market version. Cover matching, absent and different-version paths in `bundled-profile.test.ts`.
+
 ### Task 5: Follow the staged client verification curve
 
 **Files:**
@@ -251,6 +260,9 @@ npm run typecheck
 npm test
 npm run build
 npm run prepare:bundled-profile
+node scripts/verify-bundled-community-plugin.mjs dsh-memory-evolve
+node scripts/verify-bundled-community-plugin.mjs @changfenhuang/dsh-genui
+node scripts/verify-bundled-community-plugin.mjs dsh-prompt-enhance
 ```
 
 Expected: every command exits 0. Stop on the first failure.
@@ -260,7 +272,7 @@ Expected: every command exits 0. Stop on the first failure.
 Use a separate DEV user-data/account scope rather than deleting the normal profile. Confirm:
 
 1. dsh-market opens and lists the three new packages as installed and enabled.
-2. All three show disable and uninstall controls.
+2. All three show disable and uninstall controls; an update control is optional and must appear only when dsh-market resolves a supported online source.
 3. Sidebar and desktop integration do not show actionable update/uninstall controls.
 4. Memory Evolve opens its settings and performs one harmless memory action.
 5. GenUI renders one minimal example from its documented demo.
@@ -271,15 +283,15 @@ Wait for user confirmation before continuing.
 
 - [ ] **Step 3: Perform removal and account-isolation checks**
 
-In the DEV account, uninstall one new factory plugin, restart and confirm it stays absent for that account. Sign into a second test account and confirm its fresh Profile still contains the factory plugin. Write a harmless Memory Evolve record in one account and confirm the other account cannot see it.
+In the DEV account, uninstall one new factory plugin, restart and confirm it stays absent for that account. Sign into a second test account and confirm its fresh Profile still contains the factory plugin. Write a harmless Memory Evolve record in one account and confirm the other account cannot see it. Create or select a harmless test skill through Memory Evolve and confirm both accounts see the same device-level skill library; remove test residue afterward.
 
-This verifies the accepted temporary behavior: dsh-market actions are Profile-scoped, not device-scoped.
+This verifies the accepted temporary behavior: dsh-market actions are Profile-scoped, while the skill library is intentionally device-scoped.
 
 - [ ] **Step 4: Verify the unpacked local application**
 
 Run: `npm run package:dev:dir`
 
-Expected: the app in `dist-dev` starts with all plugins, login works and the DEV acceptance subset passes. Wait for user confirmation.
+Expected: the app in `dist-dev` starts with all plugins, login works and the DEV acceptance subset passes. Compare the unpacked application size with the last accepted build and record the plugin-related delta. Wait for user confirmation.
 
 - [ ] **Step 5: Verify a local DMG**
 

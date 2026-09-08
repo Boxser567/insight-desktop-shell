@@ -154,10 +154,11 @@ rg -n 'require\(.+\./chunks/' out/preload/*.cjs
 
 **执行：**
 
-需要先验证实时 DEV 行为时，宿主 Node 必须使用 22.x；Vite 7 的开发服务器依赖该版本提供的 `crypto.hash()`。本地 Core 覆盖已经准备完成时直接启动 Electron Vite，不能运行会重新下载锁定 Runtime 的 `npm run dev`：
+需要先验证实时 DEV 行为时，宿主 Node 必须满足项目声明的 `^22.19 || >=24`；Vite 7 的开发服务器依赖这些版本提供的 `crypto.hash()`。先同时检查版本和能力，避免 PATH 指向不支持该 API 的系统 Node。本地 Core 覆盖已经准备完成时直接启动 Electron Vite，不能运行会重新下载锁定 Runtime 的 `npm run dev`：
 
 ```bash
 node --version
+node -p 'typeof require("node:crypto").hash'
 npm exec electron-vite -- dev
 ```
 
@@ -180,8 +181,10 @@ npm run package:dev:mac:arm64
 ```bash
 npm run build
 npm run prepare:bundled-profile
-npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.directories.output=dist-dev-validation
+CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish never --config electron-builder.dev.cjs --config.directories.output=dist-dev-validation
 ```
+
+目录应用只用于本地结构与启动验证，不需要证书。显式关闭证书自动发现可避免 electron-builder 因钥匙串中存在 Developer ID 而遍历签名 bundled Profile 的大量文件；正式 DMG 和 GitHub Candidate 不得复用该开关。
 
 检查目标应用内：
 
@@ -189,7 +192,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
 - `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.41.0`；
-- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 Market update 与 uninstall 的必需插件保护；
+- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
@@ -205,6 +208,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
 - 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
+- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主策略文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
 - 打开设置中的 Plugin Market；卸载 `dshmarket` 后重启同一应用，确认市场不会恢复，登录、设置、退出和 Sidebar 仍可用。另用新账号范围确认首次初始化仍预装市场。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
@@ -290,7 +294,9 @@ npm run package:mac:arm64
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |
 | pnpm 非 TTY 清理、OOM 或下载失败 | Node/pnpm 版本、store、`CI=1`、并发和网络 | 阶段 3/6，不进入 builder |
 | `npm test` 的发布说明测试报 `spawnSync python3 ENOEXEC` | `command -v python3`、`file "$(command -v python3)"`；检查 PATH 首项是否为空文件或损坏的 Homebrew shim | 阶段 2；改用可执行的系统 Python 或修复本机 shim，不修改测试来掩盖宿主环境故障 |
-| Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version`；普通 build 成功不能证明 Vite 7 DEV 可启动 | 阶段 7，切换到 Node 22 后重启，不改产品代码 |
+| Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version` 和 `node -p 'typeof require("node:crypto").hash'`；PATH 可能指向 Node 20，即使 Core Runtime 内置了新版 Node，普通 build 成功也不能证明 Vite 7 DEV 可启动 | 阶段 7，显式切换到满足 `^22.19 || >=24` 的宿主 Node 后重启，不改产品代码 |
+| 仅构建 DEV 目录应用却长时间停在 codesign | 钥匙串中存在签名身份，electron-builder 自动遍历 Runtime 与 bundled Profile；检查 `codesign` 当前目标和 `CSC_IDENTITY_AUTO_DISCOVERY` | 阶段 7；终止无必要的目录签名，使用独立输出并设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`；正式安装包仍按阶段 9 完整签名 |
+| 新模板已隐藏必需插件，但既有账号 Market 仍显示停用/卸载 | 比较 bundled Profile 与活跃账号 `dshmarket/lib/routes.js` 的 installed/updates 过滤标记；旧 Profile 可能只有 update/uninstall 守卫 | 阶段 8；同版本市场应由 Shell 启动刷新两份宿主策略文件，不得用完整 Profile 覆盖或回填用户已删除的可选插件 |
 | Dev 终端按 `Ctrl+C` 只打印 `^C`，客户端或 5173 端口仍存活 | 比较 Dev 进程 `PGID/TPGID`；检查交互式登录 Shell 是否夺走终端控制权，以及 Development 主进程是否处理 `SIGINT/SIGTERM` | 阶段 7；禁止带残留进程继续下一轮验证，先恢复进程组与优雅退出链路 |
 | `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |

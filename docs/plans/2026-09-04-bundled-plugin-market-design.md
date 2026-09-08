@@ -1,6 +1,6 @@
 # 出厂插件与插件市场设计
 
-> 状态：approved；市场能力已实施，社区出厂插件扩展待实施（2026-09-07）
+> 状态：implemented；社区出厂插件进入分阶段验收（2026-09-08）
 
 ## 目标
 
@@ -23,10 +23,10 @@
 | 必需第一方 | `@insight-ai/desktop-integration` | 随包 | 不可卸载、不可独立更新 | Shell 发布 |
 | 必需内置能力 | `dsh-better-sidebar@0.16.1` | 随包 | 不可卸载、不可独立更新 | Shell 发布 |
 | 出厂可选市场 | `dshmarket@1.41.0` | 随包 | 可卸载、可由用户手动更新 | 用户 |
-| 出厂可选记忆 | `dsh-memory-evolve@0.1.0`，tag `v26082401` | 随包、默认启用 | 可禁用、更新、卸载 | 用户 |
-| 出厂可选生成式 UI | `@changfenhuang/dsh-genui@0.9.8`，tag `v0.9.8` | 随包、默认启用 | 可禁用、更新、卸载 | 用户 |
-| 出厂可选提示词增强 | `dsh-prompt-enhance@0.1.9`，tag `v0.1.9` | 随包、默认启用 | 可禁用、更新、卸载 | 用户 |
-| 社区或本地插件 | 用户选择的包 | 不自动安装 | 可安装、禁用、更新、卸载 | 用户 |
+| 出厂可选记忆 | `dsh-memory-evolve@0.1.0`，tag `v26082401` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
+| 出厂可选生成式 UI | `@changfenhuang/dsh-genui@0.9.8`，tag `v0.9.8` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
+| 出厂可选提示词增强 | `dsh-prompt-enhance@0.1.9`，tag `v0.1.9` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
+| 社区或本地插件 | 用户选择的包 | 不自动安装 | 可安装、禁用、卸载；取决于安装源的更新能力 | 用户 |
 
 `dshmarket` 不得获得更新 Shell、`core-runtime.lock.json` 指向的 Runtime、`dsh-better-sidebar` 或 `@insight-ai/desktop-integration` 的能力。市场内发生的网络访问仅限用户主动打开市场后的社区目录读取、插件详情和用户确认的安装/更新操作；首次安装和客户端启动不依赖网络。
 
@@ -44,13 +44,15 @@ flowchart LR
   Update["Shell 应用升级"] --> Preserve["保留用户 Profile 选择"]
 ```
 
-默认 Profile 只在新的 Harness Home 完整复制。用户卸载 `dshmarket` 后，重启或 Shell 升级不得将其自动装回。Shell 继续只修复安装所有权插件的本地副本；不得把这种修复扩大到市场或社区插件。
+默认 Profile 只在新的 Harness Home 完整复制。用户卸载 `dshmarket` 后，重启或 Shell 升级不得将其自动装回。Shell 继续只修复安装所有权插件的完整本地副本；市场和社区插件不得通过该路径重新安装或升级。
+
+市场宿主策略是例外的安装安全适配，不是市场版本管理。对于现有账号，只有已安装市场的物理版本与 bundled Profile 完全一致时，Shell 才在 Harness 启动前刷新 `dshmarket/lib/patch.js` 与 `dshmarket/lib/routes.js`，使同一 Shell 版本新增的必需插件隐藏和变更守卫能进入旧 Profile。市场已卸载时不创建任何文件；用户已升级为其他版本时不覆盖其代码。采用新市场版本前必须重新验证宿主策略，不能假设旧补丁继续适用。
 
 当前 Profile 的恢复分类将 `dshmarket` 当作核心包，必须在本变更中删除该特殊待遇。这样它既能在设置市场中自我卸载，也能在启动故障恢复或安全模式中作为可移除插件处理。安全模式仍不得允许移除 Sidebar 或桌面集成。
 
 当前 dsh-market 和本地导入操作直接修改活跃账号的 DSH Profile，因此安装、禁用、更新和卸载暂时只影响当前账号。新账号首次创建 Profile 时获得全部出厂插件；现有账号保留自己的插件选择。设备级跨账号统一安装和卸载是后续生态平台能力，本轮明确不实现。
 
-插件配置、密钥、缓存、记忆、会话和业务资产继续按当前账号隔离。尤其是 `dsh-memory-evolve`，只有在双账号验收确认记忆和配置没有串用后才可进入安装包。
+插件配置、密钥、缓存、记忆、会话和业务资产继续按当前账号隔离。尤其是 `dsh-memory-evolve`，只有在双账号验收确认记忆和配置没有串用后才可进入安装包。技能库属于明确例外：`dsh-memory-evolve` 沿用上游默认的 `~/.agents/skills`，与用户自行导入的插件一样视为设备级扩展资源，所有本机账号共享；本阶段不为其增加账号级目录覆盖或 Shell 维护补丁。
 
 ## 新增插件接纳结论
 
@@ -65,17 +67,17 @@ flowchart LR
 
 任一出厂可选插件加载失败时，Harness 应按既有插件恢复流程处理；用户可移除该插件后继续使用客户端。可选插件不可用不得阻断登录、恢复、设置、退出、Harness 对话或 Sidebar 的 Markdown/HTML 打开能力。
 
-市场提供的社区插件仍是不受 Insight 信任的第三方代码。它们只能使用已有的无敏感客户端消息通道；不得因为市场预装而获得账号令牌、Cookie、账号 ID、目录路径、文件系统或任意 Electron IPC 权限。
+市场提供的社区插件仍是不受 Insight 信任的第三方代码。浏览器客户端只使用已有的无敏感消息通道，不得获得账号令牌、Cookie 或任意 Electron IPC；但插件 Host 与普通 Harness 插件一样运行在 Node.js 进程内，可能访问其注入服务、文件系统、网络和子进程，固定版本与 SHA-256 只保证制品来源和内容稳定，不构成权限沙箱。每个默认启用的第三方版本在进入 bundled Profile 前必须记录源代码能力审查，至少覆盖文件读写目录、网络请求、子进程、注入服务、启动副作用和浏览器 HTML 渲染；超出本节声明的数据归属或影响登录、恢复、对话和 Sidebar 基线时不得随包发布。
 
 ## 验证曲线
 
 按低成本到高成本顺序执行，任一步失败均停止后续打包：
 
-1. 三个候选插件分别在 disposable Profile 中完成构建、安装和 Host/Client 加载；一个失败就停止，不进入组合 Profile。
+1. 三个候选插件分别在 disposable Profile 中完成构建、安装和 Host 启动；一个失败就停止，不进入组合 Profile。浏览器 Client 在组合后的新 DEV 账号中验证，避免用“包已安装”替代真实启动证据。
 2. 针对 Profile 模板、插件分类和卸载命令的单元测试，覆盖所有新增插件可卸载、Sidebar/桌面集成不可卸载。
 3. `npm run typecheck`、相关 Vitest 测试、`npm run build` 与 `npm run prepare:bundled-profile`；检查生成模板的 `package.json`、lockfile 和五个可选插件的物理目录。
 4. 新 DEV 账号人工验收：市场和三个新增插件默认启用；Memory Evolve、GenUI、Prompt Enhance 的核心入口可用；Sidebar 仍能打开 Markdown/HTML。
-5. DEV 中逐个禁用、卸载、重启，确认当前账号不恢复该插件，其他基本能力正常；再用第二账号确认配置、记忆和会话数据不串用。
+5. DEV 中逐个禁用、卸载、重启，确认当前账号不恢复该插件，其他基本能力正常；再用第二账号确认配置、记忆和会话数据不串用，并确认两账号看到同一个设备级技能库。
 6. DEV 验收通过后执行本地目录应用，再执行本地 DMG；人工确认后才触发 GitHub Actions 的 macOS 与 Windows 构建。
 
 若此变更新增构建、Profile 或市场依赖故障，必须在同一变更中更新 `docs/client-build-runbook.md`；单次故障时间线写入 `docs/incidents/`。
