@@ -1,28 +1,15 @@
 import { createHash } from 'node:crypto'
 import { readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import semver from 'semver'
+import { assertReleaseIdentity, macArchiveName } from './update-release-contract.mjs'
 
 async function main() {
-  const [releaseDirectory, archiveName, ...rest] = process.argv.slice(2)
-  if (!releaseDirectory || !archiveName || rest.length > 0) {
-    throw new Error('Usage: finalize-mac-release.mjs <release-dir> <zip-name>')
+  const [releaseDirectory, channel, version, arch, ...rest] = process.argv.slice(2)
+  if (!releaseDirectory || !channel || !version || !arch || rest.length > 0) {
+    throw new Error('Usage: finalize-mac-release.mjs <release-dir> <candidate|stable> <semver> <arm64|x64>')
   }
-
-  const packageJson = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
-  const version = packageJson.version
-  if (semver.valid(version) !== version) {
-    throw new Error('package.json must contain a valid semantic version.')
-  }
-
-  const match = /^(insight-candidate|insight)-mac-(arm64|x64)\.zip$/u.exec(archiveName)
-  if (!match) throw new Error(`Unexpected macOS release archive: ${archiveName}`)
-  const expectedPrefix = semver.prerelease(version)?.[0] === 'rc'
-    ? 'insight-candidate'
-    : 'insight'
-  if (match[1] !== expectedPrefix) {
-    throw new Error(`macOS release archive does not match version ${version}.`)
-  }
+  assertReleaseIdentity(channel, version)
+  const archiveName = macArchiveName(channel, version, arch)
 
   const directory = resolve(releaseDirectory)
   const archivePath = join(directory, basename(archiveName))

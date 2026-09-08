@@ -16,6 +16,7 @@ build/bundled-profile/
 build/core-runtime/
 build/runtime-manifest.json
 dist-*-validation/
+release-reports/
 /pnpm-lock.yaml
 .env
 .env.*

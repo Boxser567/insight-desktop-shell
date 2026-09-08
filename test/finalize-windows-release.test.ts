@@ -10,7 +10,7 @@ describe('Windows release finalizer', () => {
   it('rebuilds the blockmap and updater metadata for the final installer', async () => {
     const releaseDir = await mkdtemp(path.join(tmpdir(), 'dsh-windows-release-'))
     try {
-      const installerName = 'dsh-desktop-windows-x64-setup.exe'
+      const installerName = 'insight-1.2.3-windows-x64-setup.exe'
       const installer = path.join(releaseDir, installerName)
       const app = path.join(releaseDir, 'win-unpacked', '因赛AI.exe')
       const content = createPeFixture(0x14c)
@@ -48,7 +48,7 @@ describe('Windows release finalizer', () => {
     const releaseDir = await mkdtemp(path.join(tmpdir(), 'dsh-windows-release-'))
     try {
       await writeFile(
-        path.join(releaseDir, 'insight-windows-x64-setup.exe'),
+        path.join(releaseDir, 'insight-1.2.3-windows-x64-setup.exe'),
         'not a Windows executable'
       )
       const app = path.join(releaseDir, 'win-unpacked', '因赛AI.exe')
@@ -75,7 +75,7 @@ describe('Windows release finalizer', () => {
     const releaseDir = await mkdtemp(path.join(tmpdir(), 'dsh-windows-release-'))
     try {
       await writeFile(
-        path.join(releaseDir, 'insight-windows-x64-setup.exe'),
+        path.join(releaseDir, 'insight-1.2.3-windows-x64-setup.exe'),
         createPeFixture(0x14c)
       )
       const app = path.join(releaseDir, 'win-unpacked', '因赛AI.exe')

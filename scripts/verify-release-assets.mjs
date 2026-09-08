@@ -1,16 +1,23 @@
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import semver from 'semver'
 import { parseDocument } from 'yaml'
 import { z } from 'zod'
+import {
+  artifactDefinitions,
+  assertReleaseIdentity,
+  assertSafeAssetName,
+  releaseAssetNames
+} from './update-release-contract.mjs'
 
 const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const artifactSchema = z.object({
   platform: z.enum(['darwin', 'win32']),
   arch: z.enum(['arm64', 'x64']),
   kind: z.enum(['dmg', 'zip', 'nsis', 'blockmap', 'updater-metadata']),
-  name: z.string().min(1),
+  name: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u),
   size: safeInteger,
   sha512: z.string().regex(/^[A-Za-z0-9+/]{86}==$/u)
 }).strict()
@@ -52,27 +59,6 @@ function parseArguments(argv) {
 
 function usage() {
   return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path>'
-}
-
-function artifactDefinitions(channel) {
-  const prefix = channel === 'candidate' ? 'insight-candidate' : 'insight'
-  const mac = (arch) => `${prefix}-mac-${arch}`
-  const windows = channel === 'candidate'
-    ? 'insight-candidate-windows-x64-setup.exe'
-    : 'insight-windows-x64-setup.exe'
-  return [
-    ['darwin', 'arm64', 'dmg', `${mac('arm64')}.dmg`],
-    ['darwin', 'arm64', 'zip', `${mac('arm64')}.zip`],
-    ['darwin', 'arm64', 'blockmap', `${mac('arm64')}.zip.blockmap`],
-    ['darwin', 'arm64', 'updater-metadata', 'latest-mac.yml'],
-    ['darwin', 'x64', 'dmg', `${mac('x64')}.dmg`],
-    ['darwin', 'x64', 'zip', `${mac('x64')}.zip`],
-    ['darwin', 'x64', 'blockmap', `${mac('x64')}.zip.blockmap`],
-    ['darwin', 'x64', 'updater-metadata', 'latest-mac.yml'],
-    ['win32', 'x64', 'nsis', windows],
-    ['win32', 'x64', 'blockmap', `${windows}.blockmap`],
-    ['win32', 'x64', 'updater-metadata', 'latest.yml']
-  ]
 }
 
 function identity(values) {
@@ -143,9 +129,17 @@ async function verifyUpdaterMetadata(releaseDir, manifest, expectedDefinitions) 
     const expectedNames = metadataName === 'latest-mac.yml'
       ? expectedDefinitions.filter((entry) => entry[2] === 'zip').map((entry) => entry[3]).sort()
       : expectedDefinitions.filter((entry) => entry[2] === 'nsis').map((entry) => entry[3]).sort()
-    const actualNames = metadata.files.map((file) => basename(file.url ?? '')).sort()
+    const actualNames = metadata.files.map((file) => {
+      if (typeof file?.url !== 'string' || file.url !== basename(file.url)) {
+        throw new Error(`Updater metadata contains a non-basename URL: ${metadataName}`)
+      }
+      return assertSafeAssetName(file.url)
+    }).sort()
     if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
       throw new Error(`Updater metadata references the wrong platform or architecture: ${metadataName}`)
+    }
+    if (typeof metadata.path !== 'string' || !actualNames.includes(metadata.path)) {
+      throw new Error(`Updater metadata path is invalid: ${metadataName}`)
     }
     for (const file of metadata.files) {
       const name = basename(file.url)
@@ -160,20 +154,16 @@ async function verifyUpdaterMetadata(releaseDir, manifest, expectedDefinitions) 
   }
 }
 
-async function main() {
-  const args = parseArguments(process.argv.slice(2))
-  const releaseDir = resolve(args['--dir'])
-  const version = args['--version']
-  const channel = args['--channel']
-  if (semver.valid(version) !== version) throw new Error('Release version must be valid semver.')
-  if (!['candidate', 'stable'].includes(channel)) throw new Error('Release channel is invalid.')
+export async function verifyReleaseAssets({ releaseDir, version, channel, publicKeyPath }) {
+  releaseDir = resolve(releaseDir)
+  assertReleaseIdentity(channel, version)
 
   const manifestPath = join(releaseDir, 'insight-update.json')
   const signaturePath = join(releaseDir, 'insight-update.json.sig')
   const [manifestBytes, signatureBytes, publicKeyPem] = await Promise.all([
     readFile(manifestPath),
     readFile(signaturePath),
-    readFile(resolve(args['--public-key']), 'utf8')
+    readFile(resolve(publicKeyPath), 'utf8')
   ])
   if (
     manifestBytes.length === 0 ||
@@ -198,7 +188,7 @@ async function main() {
     throw new Error('Release manifest version, channel, policy, or compatibility is invalid.')
   }
 
-  const definitions = artifactDefinitions(channel)
+  const definitions = artifactDefinitions(channel, version)
   const expectedIdentities = definitions.map(identity).sort()
   const actualIdentities = manifest.artifacts
     .map((entry) => identity([entry.platform, entry.arch, entry.kind, entry.name]))
@@ -222,11 +212,7 @@ async function main() {
     duplicateFiles.set(artifact.name, artifact)
   }
 
-  const expectedFiles = [...new Set([
-    ...definitions.map((entry) => entry[3]),
-    'insight-update.json',
-    'insight-update.json.sig'
-  ])].sort()
+  const expectedFiles = releaseAssetNames(channel, version)
   const directoryEntries = await readdir(releaseDir, { withFileTypes: true })
   if (directoryEntries.some((entry) => !entry.isFile())) {
     throw new Error('Release asset directory may contain files only.')
@@ -250,6 +236,19 @@ async function main() {
   }
 
   await verifyUpdaterMetadata(releaseDir, manifest, definitions)
+  return manifest
 }
 
-await main()
+async function main() {
+  const args = parseArguments(process.argv.slice(2))
+  await verifyReleaseAssets({
+    releaseDir: args['--dir'],
+    version: args['--version'],
+    channel: args['--channel'],
+    publicKeyPath: args['--public-key']
+  })
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  await main()
+}

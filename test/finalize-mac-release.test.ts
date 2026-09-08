@@ -19,22 +19,27 @@ async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'insight-mac-release-'))
   temporaryDirectories.push(root)
   const releaseDirectory = path.join(root, 'release')
-  const archiveName = 'insight-candidate-mac-arm64.zip'
+  const archiveName = 'insight-candidate-0.1.2-rc.1-mac-arm64.zip'
   const archive = createZipFixture('candidate')
   await mkdir(releaseDirectory)
   await Promise.all([
-    writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.1.2-rc.1' })),
     writeFile(path.join(releaseDirectory, archiveName), archive),
     writeFile(path.join(releaseDirectory, `${archiveName}.blockmap`), 'blockmap')
   ])
   return { root, releaseDirectory, archiveName, archive }
 }
 
-function run(value: Awaited<ReturnType<typeof fixture>>) {
+function run(
+  value: Awaited<ReturnType<typeof fixture>>,
+  channel = 'candidate',
+  version = '0.1.2-rc.1'
+) {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'finalize-mac-release.mjs'),
     value.releaseDirectory,
-    value.archiveName
+    channel,
+    version,
+    'arm64'
   ], { cwd: value.root, encoding: 'utf8' })
 }
 
@@ -65,12 +70,6 @@ describe('macOS release finalizer', () => {
     expect(run(missingBlockmap).status).not.toBe(0)
 
     const wrongChannel = await fixture()
-    const stableName = 'insight-mac-arm64.zip'
-    await Promise.all([
-      writeFile(path.join(wrongChannel.releaseDirectory, stableName), wrongChannel.archive),
-      writeFile(path.join(wrongChannel.releaseDirectory, `${stableName}.blockmap`), 'blockmap')
-    ])
-    wrongChannel.archiveName = stableName
-    expect(run(wrongChannel).stderr).toContain('does not match version')
+    expect(run(wrongChannel, 'stable').status).not.toBe(0)
   })
 })

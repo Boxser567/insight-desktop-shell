@@ -14,10 +14,10 @@ module.exports = {
     insightDesktopAppId: 'com.insight.desktop.candidate',
     insightDesktopChannel: 'candidate'
   },
-  artifactName: 'insight-candidate-${os}-${arch}.${ext}',
+  artifactName: 'insight-candidate-${version}-${os}-${arch}.${ext}',
   nsis: {
     ...packageJson.build.nsis,
-    artifactName: 'insight-candidate-windows-${arch}-setup.${ext}'
+    artifactName: 'insight-candidate-${version}-windows-${arch}-setup.${ext}'
   },
   publish: null
 }

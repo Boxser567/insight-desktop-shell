@@ -219,7 +219,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 
 ### 阶段 9：生产安装包构建与分发暂存
 
-> 过渡状态：截至 2026-09-08，客户端 Phase A 已切换为真实 OSS/CDN 更新协议并删除运行时模拟更新；`.github/workflows/release.yml` 仍会直接公开 GitHub Release，尚未实现 OSS 暂存、推广审批和 `current.json` 提交。完成[OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)的 Phase B/C 前，本阶段不得用于首个生产 Stable。
+> 实现状态：截至 2026-09-08，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、本地 OSS 发布器和 CDN 复验门禁均已实现。尚缺真实 Candidate/Stable 制品和三平台安装证据；未完成阶段 10 前不得执行 Stable `promote`。
 
 **输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、本机 ossutil RAM Profile 和 GitHub `desktop-release` Environment。
 
@@ -231,10 +231,21 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
 - `publish` job 必须直接依赖预检、两个 macOS job 和 Windows job，且只在受保护 Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
 - 本地发布器通过已登录的 `gh` 下载 Draft 全部 Assets，重新验证签名、文件集、版本和摘要；再通过指定 ossutil Profile 上传不可变 `desktop/releases/v<version>/`。AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
+- 本地发布机必须安装 `ossutil 2.3.0`，使用固定 `desktop-updates-publisher` Profile，且不得存在 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` 或 `OSS_SESSION_TOKEN` 环境变量。Bucket 必须从未启用 Versioning；发布器会在写入前调用 `get-bucket-versioning` 并失败关闭。
 - 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、缓存、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
 - 禁止 `--clobber` 或覆盖 OSS/GitHub 资产。重跑只允许幂等复用文件集完整且摘要与本次完全一致的 OSS 版本目录或 GitHub Draft；任何缺失、差异或已公开同 tag Release 都必须失败，制品内容变化必须创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
 - 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、GitHub Draft upload、本地 OSS upload 还是 CDN verify；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
+
+Draft 创建后执行版本目录暂存：
+
+```bash
+node scripts/publish-update-to-oss.mjs stage \
+  --tag <vX.Y.Z 或 vX.Y.Z-rc.N> \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher
+```
 
 **通过条件：** preflight、三个原生 job、GitHub Draft 与本地暂存全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
@@ -254,6 +265,15 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
 - 人工验收通过后才执行本地 `promote`：先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`。等待或确认指针在约定 TTL 内收敛后，从外部网络再次完成检查、下载和安装 canary。
+
+```bash
+node scripts/publish-update-to-oss.mjs promote \
+  --tag <vX.Y.Z 或 vX.Y.Z-rc.N> \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher \
+  --confirm-version <X.Y.Z 或 X.Y.Z-rc.N>
+```
 
 正式 macOS 本地打包命令为：
 

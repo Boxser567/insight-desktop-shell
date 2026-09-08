@@ -56,6 +56,12 @@ describe('authenticated update release builder', () => {
       tag: 'insight-runtime-v0.1.1-rc.10',
       commit: 'b'.repeat(40)
     })
+    expect(manifest.artifacts.map(({ name }) => name)).toContain(
+      'insight-0.1.2-windows-x64-setup.exe'
+    )
+    expect(manifest.artifacts.map(({ name }) => name)).toContain(
+      'insight-0.1.2-mac-arm64.zip.blockmap'
+    )
     const identities = manifest.artifacts.map(({ platform, arch, kind, name }) =>
       [platform, arch, kind, name].join('\0')
     )

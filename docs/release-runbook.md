@@ -6,14 +6,15 @@
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
-仓库当前 `.github/workflows/release.yml` 仍是过渡实现：
+仓库的生产发布链已经按两阶段模型实现：
 
 - 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
 - 推送 `v*` tag 走 Stable；
-- 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，并直接把 GitHub Draft 公开；
-- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json` 或执行推广前安装门禁；因此客户端链路虽已具备，当前生产 Origin 还没有可供首发消费的完整发布数据。
+- 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，只创建 GitHub Draft，不读取 OSS 凭证、不公开 Release；
+- 本地发布器从 Draft 下载并复验同一批字节，`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
+- 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-因此，在[桌面客户端 OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)完成并验收前，不得使用当前工作流发布生产 Stable，也不得把其 GitHub Release 当作首发自动更新源。
+截至 2026-09-08，代码与本地测试已经完成，但尚未运行真实 GitHub Draft、OSS 上传和三平台安装演练。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。真实 Candidate N→N+1 和 Stable 安装证据齐全前不得执行 Stable `promote`。
 
 ## 必读资料
 
@@ -38,7 +39,52 @@
 
 本地阶段未通过时禁止用 GitHub Actions 继续远程调试。Shell 发布标签不得隐式升级 Core Runtime；Runtime 锁变更必须是独立、可审核的 Shell 提交。
 
-## 改造后的生产发布流程
+## 一次性发布准备
+
+1. 确认 `insight-desktop-updates` 保持私有且从未启用 Bucket Versioning。OSS 的 `forbid-overwrite` 在已启用或已暂停 Versioning 的 Bucket 中无效；发布器会主动拒绝这种配置。不要给该 Bucket 开 WORM，因为 `current.json` 是唯一需要覆盖的对象。
+2. 使用专用 RAM 用户的 AccessKey，不使用阿里云主账号 AccessKey。若现有密钥属于主账号，先创建专用 RAM 身份并轮换，不把现有密钥复制到仓库、GitHub、客户端、命令参数或 `.env`。
+3. RAM 策略只授予 Bucket 级 `oss:GetBucketVersioning`、`oss:ListObjects`，以及 `insight-desktop-updates/desktop/*` 的 `oss:GetObject`、`oss:PutObject`；不授予删除对象、修改 Bucket、ACL、CDN 或其他 Bucket 的权限。
+4. 安装精确版本 `ossutil 2.3.0`，运行 `ossutil config credential`，在交互向导中使用 profile `desktop-updates-publisher`、认证模式 `AK` 并选择加密凭证；然后为该 profile 设置 Bucket 所在的实际 Region。不要在 shell 配置中导出 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_SESSION_TOKEN`、`OSSUTIL_CONFIG_FILE` 或 `OSSUTIL_PROFILE`。
+5. 使用 `gh auth status` 确认本机 GitHub CLI 已登录且能读取/编辑 `Boxser567/insight-desktop-shell` Release。GitHub 的 `desktop-release` Environment 只保存与仓库 `build/update-signing-public.pem` 匹配的 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`；密钥不匹配会在 Draft 创建前被签名校验阻止。
+6. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`/desktop/releases/*` 不压缩、不改写、不重定向并支持 HEAD/Range；缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
+
+建议使用以下最小 RAM Policy；`Resource` 中不要扩大到其他 Bucket：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["oss:GetBucketVersioning", "oss:ListObjects"],
+      "Resource": ["acs:oss:*:*:insight-desktop-updates"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["oss:GetObject", "oss:PutObject"],
+      "Resource": ["acs:oss:*:*:insight-desktop-updates/desktop/*"]
+    }
+  ]
+}
+```
+
+准备完成后先执行只读检查：
+
+```bash
+ossutil config set region cn-hangzhou \
+  --profile desktop-updates-publisher
+ossutil version
+ossutil api get-bucket-versioning \
+  --bucket insight-desktop-updates \
+  --output-format json \
+  --profile desktop-updates-publisher \
+  --ignore-env-var
+gh auth status
+```
+
+示例中的 `cn-hangzhou` 必须替换成控制台显示的 Bucket 实际 Region。Bucket Versioning 的 JSON 响应必须没有 `Status`；`Enabled` 和 `Suspended` 都不通过。
+
+## 生产发布流程
 
 实现完成后，GitHub 工作流与本地发布器共同执行：
 
@@ -53,6 +99,31 @@
 9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary。
 
 `current.json` 是唯一生效点。其更新前的任何失败都必须保留旧指针；禁止覆盖版本目录、已发布 tag 或 Release 资产。
+
+GitHub workflow 成功并生成 Draft 后，在仓库根目录执行暂存；下面以 Candidate 为例：
+
+```bash
+node scripts/publish-update-to-oss.mjs stage \
+  --tag v0.1.2-rc.2 \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher
+```
+
+`stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。`ossutil put-object` 按安全 basename 的扩展名推导 Content-Type；最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。无凭证的摘要报告保存在被 Git 忽略的 `release-reports/`。
+
+完成对应平台的确切安装包和 N→N+1 人工验收后，才执行：
+
+```bash
+node scripts/publish-update-to-oss.mjs promote \
+  --tag v0.1.2-rc.2 \
+  --bucket insight-desktop-updates \
+  --origin https://updates.insight-aigc.com \
+  --profile desktop-updates-publisher \
+  --confirm-version 0.1.2-rc.2
+```
+
+Stable 使用相同命令和 `v0.1.2` / `0.1.2`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 
 ## 首发专用门禁
 

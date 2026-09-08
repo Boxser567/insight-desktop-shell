@@ -324,7 +324,7 @@ Commit: `git commit -m "feat: add verified full installer fallback"`
 - Create: `test/build-update-pointer.test.ts`
 - Modify: `test/release.test.ts`
 
-- [ ] **Step 1: 把期望文件名写进测试**
+- [x] **Step 1: 把期望文件名写进测试**
 
 Stable 采用 `insight-<version>-...`，Candidate 采用 `insight-candidate-<version>-...`。例如：
 
@@ -336,15 +336,15 @@ insight-candidate-0.1.2-rc.2-mac-x64.dmg
 
 YAML 中只允许相对 basename，且必须与签名 Manifest 中相同 target/kind 的文件名一致。
 
-- [ ] **Step 2: 更新 electron-builder 与 finalize 脚本**
+- [x] **Step 2: 更新 electron-builder 与 finalize 脚本**
 
 在 artifactName 中使用 `${version}` 宏。把 macOS finalize CLI 改为显式接收 release dir、channel、version、arch 后自行推导 ZIP 名，避免 npm script 硬编码无版本文件名；Windows finalize 继续显式校验传入版本和唯一安装器。
 
-- [ ] **Step 3: 更新 Manifest 构建/验证清单**
+- [x] **Step 3: 更新 Manifest 构建/验证清单**
 
 `artifactDefinitions(channel, version)` 成为两份脚本共享的唯一命名规则；若不抽共享模块能保持脚本简单，则用契约测试锁定两份输出，不额外创建抽象层。
 
-- [ ] **Step 4: 实现 current.json 生成与单调性校验**
+- [x] **Step 4: 实现 current.json 生成与单调性校验**
 
 `build-update-pointer.mjs` 接收 `--channel`、`--version`、`--output`，只输出：
 
@@ -354,7 +354,7 @@ YAML 中只允许相对 basename，且必须与签名 Manifest 中相同 target/
 
 另支持 `--current <path>`：文件不存在表示首发；存在时必须严格同渠道且 `next > current`。拒绝重复版本、降级、Candidate/Stable 格式混用和未知字段。
 
-- [ ] **Step 5: 运行发布脚本测试并提交**
+- [x] **Step 5: 运行发布脚本测试并提交**
 
 Run: `npm test -- test/finalize-mac-release.test.ts test/finalize-windows-release.test.ts test/build-update-release.test.ts test/verify-release-assets.test.ts test/build-update-pointer.test.ts test/release.test.ts`
 
@@ -377,7 +377,7 @@ Commit: `git commit -m "feat: version desktop release assets"`
 - Create: `scripts/verify-distribution-assets.mjs`
 - Create: `test/verify-distribution-assets.test.ts`
 
-- [ ] **Step 1: 先把 GitHub 与 OSS 身份隔离写入测试**
+- [x] **Step 1: 先把 GitHub 与 OSS 身份隔离写入测试**
 
 断言：
 
@@ -387,7 +387,7 @@ Commit: `git commit -m "feat: version desktop release assets"`
 - GitHub Draft 被创建并上传全部已验证资产，但 workflow 不再执行 `--draft=false`；
 - GitHub Actions 不具备 OSS 写权限，本地发布器是首版唯一 OSS 写入方。
 
-- [ ] **Step 2: 固定本地发布器命令边界**
+- [x] **Step 2: 固定本地发布器命令边界**
 
 `publish-update-to-oss.mjs` 只接受两个子命令：
 
@@ -410,7 +410,7 @@ CLI 拒绝未知参数、非法 tag/channel、非固定 Origin、其他 Bucket �
 
 发布器固定要求 `ossutil 2.3.0`，每次调用都传递 `--profile desktop-updates-publisher --ignore-env-var`，只从本机 ossutil Profile 读取 RAM AccessKey 和 Region。脚本不得接收、读取或打印 AccessKey 参数、仓库 `.env` 或 `OSS_ACCESS_KEY_*` 环境变量。
 
-- [ ] **Step 3: 实现不可变版本目录暂存**
+- [x] **Step 3: 实现不可变版本目录暂存**
 
 `stage` 创建权限为 `0700` 的临时目录，通过已登录的 `gh` 下载指定 Draft Release 的全部 Assets，然后执行现有 `verify-release-assets.mjs`。下载结果必须与签名 Manifest 文件集完全一致；Git tag 自动生成的源码 ZIP/TAR 不属于输入。
 
@@ -425,11 +425,11 @@ CLI 拒绝未知参数、非法 tag/channel、非固定 Origin、其他 Bucket �
 
 重跑时先读取远端完整文件集。只有文件集和 Manifest 摘要全部相同才跳过上传并继续；任何缺失或差异都失败，不删除、不覆盖。无论成功或失败都删除临时下载目录，但保留不含凭证的摘要报告。
 
-- [ ] **Step 4: 从最终 CDN 验证分发字节**
+- [x] **Step 4: 从最终 CDN 验证分发字节**
 
 `verify-distribution-assets.mjs` 读取本地签名 Manifest 和固定 `releaseBaseUrl`，逐个验证 GET/HEAD 大小、SHA-512、`Accept-Ranges`/206、缓存头、Manifest/签名和平台 YAML。测试使用本地 HTTP server 覆盖截断、错误摘要、无 Range、错误缓存和重定向 Origin。
 
-- [ ] **Step 5: 实现显式推广与唯一指针提交**
+- [x] **Step 5: 实现显式推广与唯一指针提交**
 
 `promote` 重新下载并验证 Draft Assets，从 CDN 完整复验版本目录，然后直接从 OSS 读取 `desktop/<channel>/current.json`。NotFound 只在渠道首发时允许；已存在时必须通过 `build-update-pointer.mjs --current` 验证严格递增。
 
@@ -443,7 +443,7 @@ CLI 拒绝未知参数、非法 tag/channel、非固定 Origin、其他 Bucket �
 
 只有第 3 步允许替换现有对象，其他上传全部禁止覆盖。发布只允许在指定发布者电脑单进程执行；首版不实现跨机器并发发布、自动回退或 CDN 刷新 API。
 
-- [ ] **Step 6: 运行静态与脚本验证并提交**
+- [x] **Step 6: 运行静态与脚本验证并提交**
 
 Run: `npm test -- test/release-workflow-verifier.test.ts test/release.test.ts test/publish-update-to-oss.test.ts test/verify-distribution-assets.test.ts`
 
@@ -467,19 +467,19 @@ Commit: `git commit -m "feat: publish verified desktop updates from local host"`
 - Modify: `docs/client-build-runbook.md`
 - Modify: `docs/release-runbook.md`
 
-- [ ] **Step 1: 建立本地 Generic Provider 测试 Origin**
+- [x] **Step 1: 建立本地 Generic Provider 测试 Origin**
 
 测试代码使用临时本地 HTTP server 提供 pointer、签名 Manifest、YAML 和假安装包；该 server 不由产品代码或环境变量创建。把 fetch、executor 和下载完成事件串起来，覆盖一次完整检查→可用→下载→SHA-512→已下载状态。
 
-- [ ] **Step 2: 覆盖必须失败关闭的场景**
+- [x] **Step 2: 覆盖必须失败关闭的场景**
 
 至少覆盖：断网、403、404、500、指针旧缓存、跨 Origin 重定向、错误签名、错误渠道、Manifest/YAML 版本不一致、缺失 blockmap、下载截断、最终摘要错误、强制更新重启恢复、重复 check/download、已验签后的同源整包动作，以及未验签时不提供整包动作。
 
-- [ ] **Step 3: 证明当前版本不受破坏**
+- [x] **Step 3: 证明当前版本不受破坏**
 
 所有失败用例必须断言 `quitAndInstall()` 未调用，当前安装目录未修改，仅删除不可信下载缓存；强制更新只保留可信策略缓存。
 
-- [ ] **Step 4: 运行完整本地门禁**
+- [x] **Step 4: 运行完整本地门禁**
 
 Run: `npm test`
 
@@ -489,7 +489,7 @@ Run: `npm run build`
 
 Expected: 全部通过；Development 构建不请求生产更新源。
 
-- [ ] **Step 5: 根据最终命令同步 Runbook 并提交**
+- [x] **Step 5: 根据最终命令同步 Runbook 并提交**
 
 只修正实际实现与文档之间的命令、job 名、Environment 名和证据字段；不要扩展本文明确延后的能力。
 
@@ -521,7 +521,7 @@ Commit: `git commit -m "test: cover generic desktop update recovery"`
 
 - [ ] **Step 5: 收口发布记录**
 
-在 release record 中写入所有证据与失败范围。只有全部验收完成，才移除 Runbook 的“现有 workflow 仍是过渡实现”警告。
+在 release record 中写入所有证据与失败范围。只有全部验收完成，才把 Runbook 的状态从“代码完成、真实发布待验收”更新为“首发闭环已验证”。
 
 Commit: `git commit -m "docs: record first OSS desktop release"`
 
@@ -529,11 +529,11 @@ Commit: `git commit -m "docs: record first OSS desktop release"`
 
 ## 最终自检
 
-- [ ] `current.json` 只有 schema/channel/version，客户端不接受远端 URL。
-- [ ] 强制更新缓存恢复后可以重建 Generic Provider feed。
-- [ ] OSS 版本目录与 GitHub Release 永不覆盖；相同完整字节只做幂等复用。
-- [ ] GitHub 公开早于渠道指针，`current.json` 是唯一最后提交点。
-- [ ] 客户端没有 GitHub API 自动发现、双源回退或任意 URL IPC。
-- [ ] 客户端只内置 `https://updates.insight-aigc.com`，已验签后才能生成同源 DMG/NSIS 地址。
-- [ ] GitHub Actions 不保存 OSS AccessKey，本地发布器只读取指定 ossutil Profile。
+- [x] `current.json` 只有 schema/channel/version，客户端不接受远端 URL。
+- [x] 强制更新缓存恢复后可以重建 Generic Provider feed。
+- [x] OSS 版本目录与 GitHub Release 永不覆盖；相同完整字节只做幂等复用。
+- [x] GitHub 公开早于渠道指针，`current.json` 是唯一最后提交点。
+- [x] 客户端没有 GitHub API 自动发现、双源回退或任意 URL IPC。
+- [x] 客户端只内置 `https://updates.insight-aigc.com`，已验签后才能生成同源 DMG/NSIS 地址。
+- [x] GitHub Actions 不保存 OSS AccessKey，本地发布器只读取指定 ossutil Profile。
 - [ ] Candidate rc.1→rc.2 与 Stable 干净/覆盖安装均有真实记录。

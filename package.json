@@ -42,12 +42,12 @@
     "package:dev:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.dev.cjs",
     "package:dev:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.dev.cjs",
     "package:candidate:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never --config electron-builder.candidate.cjs",
-    "package:candidate:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip",
-    "package:candidate:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip",
+    "package:candidate:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version arm64",
+    "package:candidate:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version x64",
     "package:candidate:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.candidate.cjs",
     "package:mac": "npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --publish never",
-    "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist insight-mac-arm64.zip",
-    "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist insight-mac-x64.zip",
+    "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version arm64",
+    "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version x64",
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
@@ -180,7 +180,7 @@
         ]
       }
     ],
-    "artifactName": "insight-${os}-${arch}.${ext}",
+    "artifactName": "insight-${version}-${os}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
@@ -207,7 +207,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "insight-windows-${arch}-setup.${ext}",
+      "artifactName": "insight-${version}-windows-${arch}-setup.${ext}",
       "include": "build/installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

@@ -64,12 +64,12 @@ export async function writeReleaseFixture(
     mkdir(releaseDir, { recursive: true }),
     mkdir(configDir, { recursive: true })
   ])
-  const prefix = channel === 'candidate' ? 'insight-candidate' : 'insight'
+  const prefix = channel === 'candidate'
+    ? `insight-candidate-${version}`
+    : `insight-${version}`
   const macArm64 = `${prefix}-mac-arm64`
   const macX64 = `${prefix}-mac-x64`
-  const windows = channel === 'candidate'
-    ? 'insight-candidate-windows-x64-setup.exe'
-    : 'insight-windows-x64-setup.exe'
+  const windows = `${prefix}-windows-x64-setup.exe`
   const files = new Map<string, Buffer>([
     [`${macArm64}.dmg`, Buffer.from('arm64 dmg')],
     [`${macArm64}.zip`, createZipFixture('arm64')],

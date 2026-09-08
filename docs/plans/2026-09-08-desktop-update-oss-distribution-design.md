@@ -2,9 +2,9 @@
 
 ## 状态与目标
 
-本文记录 2026-09-08 已批准、尚待实现的首发更新方案。当前尚未向用户发布任何桌面客户端，因此不设计 GitHub 旧客户端迁移、桥接版本或历史协议兼容。
+本文记录 2026-09-08 已批准并已完成代码实现的首发更新方案。当前尚未向用户发布任何桌面客户端，因此不设计 GitHub 旧客户端迁移、桥接版本或历史协议兼容。
 
-首个公开版本发布前，必须完成本文对应的客户端、发布流水线和真实安装验收。现有 GitHub-only 工作流只是过渡实现，不得据此发布生产 Stable。
+首个公开版本发布前，仍必须完成真实 GitHub Draft、OSS/CDN 上传和三平台安装验收。GitHub workflow 只创建 Draft，客户端更新的唯一生效点是本地发布器最后提交的渠道指针。
 
 目标不是构建复杂的更新平台，而是建立一条足够小且不会把已安装用户困住的更新链：
 
@@ -91,14 +91,14 @@ desktop/
     │   ├── insight-update.json.sig
     │   ├── latest-mac.yml
     │   ├── latest.yml
-    │   ├── insight-0.1.2-rc.1-mac-arm64.dmg
-    │   ├── insight-0.1.2-rc.1-mac-arm64.zip
-    │   ├── insight-0.1.2-rc.1-mac-arm64.zip.blockmap
-    │   ├── insight-0.1.2-rc.1-mac-x64.dmg
-    │   ├── insight-0.1.2-rc.1-mac-x64.zip
-    │   ├── insight-0.1.2-rc.1-mac-x64.zip.blockmap
-    │   ├── insight-0.1.2-rc.1-windows-x64-setup.exe
-    │   └── insight-0.1.2-rc.1-windows-x64-setup.exe.blockmap
+    │   ├── insight-candidate-0.1.2-rc.1-mac-arm64.dmg
+    │   ├── insight-candidate-0.1.2-rc.1-mac-arm64.zip
+    │   ├── insight-candidate-0.1.2-rc.1-mac-arm64.zip.blockmap
+    │   ├── insight-candidate-0.1.2-rc.1-mac-x64.dmg
+    │   ├── insight-candidate-0.1.2-rc.1-mac-x64.zip
+    │   ├── insight-candidate-0.1.2-rc.1-mac-x64.zip.blockmap
+    │   ├── insight-candidate-0.1.2-rc.1-windows-x64-setup.exe
+    │   └── insight-candidate-0.1.2-rc.1-windows-x64-setup.exe.blockmap
     └── v0.1.2/
         └── ...
 ```
