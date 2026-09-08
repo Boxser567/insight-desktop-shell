@@ -140,7 +140,7 @@ build once
    -> local publisher downloads and verifies Draft assets
    -> upload immutable OSS version directory
    -> verify through final CDN domain
-   -> pre-promotion install/update smoke
+   -> pre-promotion exact-installer smoke
    -> publish GitHub Release
    -> update channel/current.json last
    -> post-release canary
@@ -155,11 +155,11 @@ build once
 5. 本地发布器使用已登录的 `gh` 下载 Draft 全部资产，重新执行产品签名、文件集、版本和摘要验证；不得同步 Git tag 自动生成的源码压缩包。
 6. 本地发布器使用仅保存在发布者电脑上的 RAM AccessKey 检查 OSS 版本前缀。不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
 7. 上传完整不可变版本目录，并从 `https://updates.insight-aigc.com` 验证大小、摘要、缓存和 Range。
-8. 在渠道推广前完成真实验收：Candidate 做 N→N+1 更新，Stable 对确切制品做干净安装与覆盖安装。
+8. 在渠道推广前完成确切安装包验收；Stable 还必须已有 Candidate N→N+1 和同源整包兜底证据。
 9. 人工确认后公开 GitHub Release。
 10. 本地发布器直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本。
 11. 最后一次性上传新的 `stable/current.json` 或 `candidate/current.json`，这是唯一生效点。
-12. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；可选缓存刷新失败不回写版本对象。
+12. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；Candidate 在此时完成 N→N+1，失败后发布更高 RC，不自动降级。可选缓存刷新失败不回写版本对象。
 
 任何推广前失败都不修改 `current.json`。推广后 canary 失败时暂停下一次发布并保留诊断入口，不覆盖版本对象，也不自动把指针改回低版本；回退行为必须经过明确决策，避免与客户端禁止降级规则冲突。
 
@@ -182,8 +182,8 @@ GitHub Release 仍保留相同字节供人工运维灾备，但客户端不实�
 由于尚无已安装用户，首发不需要桥接版本：
 
 1. 在测试前缀和本地 HTTP 测试 Origin 完成签名、缓存、重定向、截断、版本不一致和摘要错误测试；不在产品运行时保留模拟更新入口。
-2. 使用当前仓库版本发布 `0.1.2-rc.1` Candidate，并在三种目标平台/架构做干净安装。
-3. 发布 `0.1.2-rc.2` Candidate，从 rc.1 真实完成检查、下载、安装和重启，验证数据保留。
+2. 使用当前仓库版本暂存 `0.1.2-rc.1` Candidate，在三种目标平台/架构做干净安装后推广 Candidate 指针。
+3. 暂存并验收 `0.1.2-rc.2` 确切安装包，推广 Candidate 指针后立即从 rc.1 真实完成检查、下载、安装和重启，验证数据保留。
 4. 使用最终 `0.1.2` Stable 的确切制品完成干净安装和覆盖安装。
 5. 只有上述结果和同源整包下载兜底都通过，才更新 `stable/current.json` 并把首个 Stable 对外开放。
 

@@ -261,10 +261,10 @@ node scripts/publish-update-to-oss.mjs stage \
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
-- Candidate 至少完成一次 N→N+1 客户端内更新；在可信 Manifest 已解析后人为让自动下载失败，确认“下载完整安装包”能打开同一不可变版本目录内适配架构的 DMG/NSIS 并完成覆盖安装。完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
+- Candidate 的确切安装包完成干净安装和静态验证后，允许执行 Candidate `promote` 使其指针生效；随后立即从已安装的前一个 Candidate 完成 N→N+1 客户端内更新。在可信 Manifest 已解析后人为让自动下载失败，确认“下载完整安装包”能打开同一不可变版本目录内适配架构的 DMG/NSIS 并完成覆盖安装。完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
-- 人工验收通过后才执行本地 `promote`：先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`。等待或确认指针在约定 TTL 内收敛后，从外部网络再次完成检查、下载和安装 canary。
+- Candidate 在确切安装包验收后执行本地 `promote`，再完成 N→N+1 canary；失败时不得回写低版本，只能停止并修复到更高 RC。Stable 只有在 Candidate 升级、同源整包兜底和 Stable 确切安装包全部通过后才执行 `promote`。发布器先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`，并在约定 TTL 内确认收敛。
 
 ```bash
 node scripts/publish-update-to-oss.mjs promote \
@@ -290,7 +290,7 @@ npm run package:mac:arm64
 有两个不可跳过的人工门禁：
 
 1. 阶段 8 的独立本地 DEV 应用。执行者必须先报告应用绝对路径、Shell commit、Core Runtime tag/commit、用户数据目录以及全新或升级 Profile，再等待人工操作结果。
-2. 阶段 10 的最终 DMG/Windows installer。必须从具体 OSS 版本目录或 GitHub Draft 下载，报告文件名和校验信息，再等待首次安装、覆盖安装、Candidate N→N+1 和同源整包兜底结果；收到结论前不得执行渠道推广。
+2. 阶段 10 的最终 DMG/Windows installer。必须从具体 OSS 版本目录或 GitHub Draft 下载并报告文件名和校验信息。Candidate 收到确切安装包验收后才可推广，指针生效后再等待 N→N+1 和同源整包兜底结果；Stable 收到全部 Candidate 证据及 Stable 首次/覆盖安装结论前不得推广。
 
 人工回复只对当时明确命名的应用和制品有效。旧版应用仍在运行、只检查插件列表、只看到包内文件或只完成 builder，均不能代替 Markdown/HTML 的实际 Sidebar 行为。
 

@@ -94,9 +94,9 @@ gh auth status
 4. 创建 GitHub Draft Release 并上传同一批字节；GitHub Actions 不读取 OSS AccessKey。
 5. 本地发布器从 Draft 下载全部 Assets，重新验证签名、文件集、版本和摘要。
 6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
-7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成 Candidate N→N+1 或 Stable 确切制品验收。
+7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成该版本确切安装包的推广前验收。
 8. 人工确认后公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
-9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary。
+9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary；Candidate 的 N→N+1 必须在 Candidate 指针生效后立即完成，Stable 则必须在推广前已有完整 Candidate 升级证据。
 
 `current.json` 是唯一生效点。其更新前的任何失败都必须保留旧指针；禁止覆盖版本目录、已发布 tag 或 Release 资产。
 
@@ -112,7 +112,7 @@ node scripts/publish-update-to-oss.mjs stage \
 
 `stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。`ossutil put-object` 按安全 basename 的扩展名推导 Content-Type；最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。无凭证的摘要报告保存在被 Git 忽略的 `release-reports/`。
 
-完成对应平台的确切安装包和 N→N+1 人工验收后，才执行：
+Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
 
 ```bash
 node scripts/publish-update-to-oss.mjs promote \

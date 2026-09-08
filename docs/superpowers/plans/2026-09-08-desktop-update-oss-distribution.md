@@ -505,11 +505,11 @@ Commit: `git commit -m "test: cover generic desktop update recovery"`
 
 - [ ] **Step 1: 发布并验收 rc.1**
 
-从受保护 workflow 暂存当前仓库版本 `0.1.2-rc.1`，在 macOS arm64、macOS x64、Windows x64 完成干净安装。记录 OSS/CDN、GitHub Draft、摘要、签名、公证和用户数据目录。
+从受保护 workflow 暂存当前仓库版本 `0.1.2-rc.1`，在 macOS arm64、macOS x64、Windows x64 完成干净安装；随后推广 Candidate 指针，为 N→N+1 准备真实已安装基线。记录 OSS/CDN、GitHub Draft/Release、摘要、签名、公证和用户数据目录。
 
 - [ ] **Step 2: 发布并验收 rc.2 的真实更新**
 
-先批准 rc.1 Candidate 指针，再暂存 rc.2。从已安装 rc.1 在客户端内完成检查、下载、进度、校验、安装和重启。另保留已验证 rc.2 Manifest，人为让 `electron-updater` 自动下载失败，确认客户端可从同一版本目录打开适配架构的 DMG/NSIS；完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
+先批准 rc.1 Candidate 指针，再暂存并验收 rc.2 的确切安装包。推广 rc.2 Candidate 指针后，从已安装 rc.1 在客户端内完成检查、下载、进度、校验、安装和重启。另保留已验证 rc.2 Manifest，人为让 `electron-updater` 自动下载失败，确认客户端可从同一版本目录打开适配架构的 DMG/NSIS；完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
 
 - [ ] **Step 3: 验收确切 Stable 制品**
 
