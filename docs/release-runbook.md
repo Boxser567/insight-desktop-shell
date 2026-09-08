@@ -22,6 +22,7 @@
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 - [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
+- [因赛AI Desktop 1.0 正式发布前验证计划](superpowers/plans/2026-09-09-desktop-v1-release-verification.md) 是本次首发逐项执行、停止判断与证据收集清单。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
 
