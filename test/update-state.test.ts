@@ -79,7 +79,8 @@ describe('desktop update state', () => {
       required: true,
       message: 'offline',
       retryable: true,
-      manual: false
+      manual: false,
+      manualInstallerAvailable: true
     })
 
     expect(failed).toEqual({
@@ -89,7 +90,8 @@ describe('desktop update state', () => {
       required: true,
       message: 'offline',
       retryable: true,
-      manual: false
+      manual: false,
+      manualInstallerAvailable: true
     })
   })
 
@@ -151,7 +153,8 @@ describe('desktop update state', () => {
       required: false,
       message: 'offline',
       retryable: true,
-      manual: false
+      manual: false,
+      manualInstallerAvailable: false
     })).toThrow('上下文')
 
     const available = reduceUpdateState(checking, {
@@ -165,7 +168,8 @@ describe('desktop update state', () => {
       required: false,
       message: 'offline',
       retryable: true,
-      manual: true
+      manual: true,
+      manualInstallerAvailable: false
     })).toThrow('版本')
   })
 })

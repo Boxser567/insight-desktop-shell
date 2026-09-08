@@ -6,6 +6,7 @@ export interface DesktopUpdateApi {
   open(): Promise<void>
   check(): Promise<void>
   download(): Promise<void>
+  downloadFullInstaller(): Promise<void>
   install(): Promise<void>
   skip(version: string): Promise<void>
 }

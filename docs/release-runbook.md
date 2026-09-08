@@ -4,12 +4,14 @@
 
 截至 2026-09-08，桌面客户端尚未对外发布首个版本。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN；客户端不以 GitHub Releases 作为自动更新源。
 
+客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
+
 仓库当前 `.github/workflows/release.yml` 仍是过渡实现：
 
 - 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
 - 推送 `v*` tag 走 Stable；
 - 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，并直接把 GitHub Draft 公开；
-- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json`、执行推广前安装门禁或提供客户端同源整包下载兜底。
+- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json` 或执行推广前安装门禁；因此客户端链路虽已具备，当前生产 Origin 还没有可供首发消费的完整发布数据。
 
 因此，在[桌面客户端 OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)完成并验收前，不得使用当前工作流发布生产 Stable，也不得把其 GitHub Release 当作首发自动更新源。
 

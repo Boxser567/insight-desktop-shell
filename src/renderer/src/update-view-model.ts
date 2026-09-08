@@ -1,12 +1,13 @@
 import type { UpdateStatus } from '../../shared/update-contracts'
 
-export type UpdateViewAction = 'check' | 'download' | 'install' | 'retry' | 'skip' | 'quit'
+export type UpdateViewAction = 'check' | 'download' | 'download-full-installer' | 'install' | 'retry' | 'skip' | 'quit'
 
 export interface UpdateViewModel {
   title: string
   detail: string
   primary?: UpdateViewAction
   secondary?: UpdateViewAction
+  recovery?: 'download-full-installer'
   busy: boolean
 }
 
@@ -27,6 +28,7 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
         detail: `${status.currentVersion} → ${status.availableVersion}`,
         primary: 'download',
         secondary: status.required ? undefined : 'skip',
+        recovery: 'download-full-installer',
         busy: false
       }
     case 'downloading':
@@ -63,6 +65,7 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
         detail: status.message,
         primary: status.retryable ? 'retry' : undefined,
         secondary: status.required ? 'quit' : undefined,
+        recovery: status.manualInstallerAvailable ? 'download-full-installer' : undefined,
         busy: false
       }
   }

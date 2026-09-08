@@ -23,6 +23,7 @@ export interface UpdateExecutor {
     channel: ReleaseUpdateChannel
     autoInstallOnQuit: false
   }): void
+  useRelease(baseUrl: URL): void
   check(): Promise<ExecutorUpdate | undefined>
   download(): Promise<void>
   quitAndInstall(): void
@@ -63,6 +64,10 @@ export class ElectronUpdateExecutor implements UpdateExecutor {
     this.updater.autoInstallOnAppQuit = options.autoInstallOnQuit
     this.updater.allowPrerelease = options.channel === 'candidate'
     this.updater.allowDowngrade = false
+  }
+
+  useRelease(baseUrl: URL): void {
+    this.updater.setFeedURL({ provider: 'generic', url: baseUrl.href })
   }
 
   async check(): Promise<ExecutorUpdate | undefined> {

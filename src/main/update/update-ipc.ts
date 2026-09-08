@@ -22,6 +22,7 @@ interface UpdateManagerApi {
   subscribe(listener: (status: UpdateStatus) => void): () => void
   check(manual: boolean): Promise<void>
   download(): Promise<void>
+  downloadFullInstaller(): Promise<void>
   install(): Promise<void>
   skip(version: string): Promise<void>
 }
@@ -31,6 +32,7 @@ const UPDATE_CHANNELS = [
   'updates:open',
   'updates:check',
   'updates:download',
+  'updates:download-full-installer',
   'updates:install',
   'updates:skip',
   'updates:quit'
@@ -62,6 +64,10 @@ export function registerUpdateIpc(input: {
   input.ipcMain.handle('updates:download', async (event) => {
     assertBaseSender(event, input)
     await input.manager.download()
+  })
+  input.ipcMain.handle('updates:download-full-installer', async (event) => {
+    assertBaseSender(event, input)
+    await input.manager.downloadFullInstaller()
   })
   input.ipcMain.handle('updates:install', async (event) => {
     assertBaseSender(event, input)

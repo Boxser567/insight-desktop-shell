@@ -8,14 +8,16 @@
 
 **Tech Stack:** Electron 43、electron-updater 6、TypeScript、Zod、Vitest、Node.js 发布脚本、GitHub Actions、GitHub CLI、Alibaba Cloud OSS/CDN、ossutil 2.3.0。
 
+**执行状态（2026-09-08）：** Phase A（Task 1–4）已完成编码与聚焦验证；Phase B 的发布资产改名和本地 OSS 发布器仍按计划后置，尚未执行。
+
 ## Global Constraints
 
 - 当前无已发布客户端，不实现 GitHub 桥接版、旧协议迁移或客户端自动双源回退。
 - 不新增自研下载器、增量补丁、历史版本列表、自动降级或复杂回滚编排。
 - Windows 继续允许未签名 NSIS，但产品 Manifest、平台 YAML 版本和最终文件 SHA-512 三者必须一致。
-- Development 继续禁用真实更新；Fixture 不能访问生产域名或执行真实安装。
+- Development 继续禁用真实更新；测试只使用 test doubles 或测试进程创建的本地 HTTP server，不保留产品运行时 Fixture。
 - 删除产品运行时的 `INSIGHT_UPDATE_FIXTURE`、`createUpdateFixture()` 和全部模拟更新场景；单元测试可保留 test doubles，本地端到端测试使用测试进程创建的 HTTP server，二者都不进入产品运行时。
-- 登录前浮动更新入口和登录后账号旁更新入口默认不渲染；只有真实可信更新处于 `available`、`downloading`、`downloaded`，或带可信目标的 required/error 状态时才显示。
+- 登录前浮动更新入口和登录后账号旁更新入口默认不渲染；只有真实可信更新处于 `available`、`downloading`、`downloaded`、`installing`，或带可信整包目标的 `error` 状态时才显示。
 - 工作必须在干净分支或独立 worktree 中执行；不得提交当前工作区已有的其他修改。
 - 生产客户端只内置 `https://updates.insight-aigc.com`，不配置外部下载页、Bucket URL、GitHub URL 或任何 AccessKey。
 - 客户端阶段不依赖 OSS Region 或写入身份；发布阶段使用私有 Bucket `insight-desktop-updates` 和只保存在发布者电脑上的专用 RAM 凭证。
@@ -38,7 +40,7 @@
 - Modify: `package.json`
 - Modify: `test/release.test.ts`
 
-- [ ] **Step 1: 记录唯一生产 Origin**
+- [x] **Step 1: 记录唯一生产 Origin**
 
 在 `build/update-distribution.json` 写入已经部署的值，结构只能是：
 
@@ -51,7 +53,7 @@
 
 `updateOrigin` 必须只有 HTTPS Origin，不允许 path、query、fragment 或凭证。配置中不得出现 Bucket、Region、下载页、GitHub 或写入凭证。
 
-- [ ] **Step 2: 先写严格解析和路径推导测试**
+- [x] **Step 2: 先写严格解析和路径推导测试**
 
 覆盖合法配置、未知字段、HTTP、带 path/query/fragment、非法 channel/version，以及以下确定性结果：
 
@@ -65,7 +67,7 @@ currentPointerUrl('candidate')
 
 测试中只使用 `.example.test`，不能读取生产网络。
 
-- [ ] **Step 3: 实现单一配置解析器**
+- [x] **Step 3: 实现单一配置解析器**
 
 `update-environment.ts` 导出：
 
@@ -82,11 +84,11 @@ export function parseUpdateDistribution(value: unknown): UpdateDistribution
 
 Candidate 只允许 `X.Y.Z-rc.N`，Stable 只允许 `X.Y.Z`。`artifactUrl()` 只接受安全 basename；路径通过已验证字段生成，不能接受远端返回的 URL。
 
-- [ ] **Step 4: 把配置作为只读资源打包**
+- [x] **Step 4: 把配置作为只读资源打包**
 
 在 `package.json` 的 `build.extraResources` 中把该文件映射到 `update-distribution.json`。更新 `test/release.test.ts`，证明公钥和分发配置均存在、私钥不进入应用。
 
-- [ ] **Step 5: 运行聚焦验证并提交**
+- [x] **Step 5: 运行聚焦验证并提交**
 
 Run: `npm test -- test/update-environment.test.ts test/release.test.ts`
 
@@ -106,7 +108,7 @@ Commit: `git commit -m "feat: define desktop update distribution"`
 - Modify: `src/main/update/release-manifest.ts`
 - Modify: `test/update-manifest.test.ts`
 
-- [ ] **Step 1: 先写渠道指针与网络边界测试**
+- [x] **Step 1: 先写渠道指针与网络边界测试**
 
 覆盖：
 
@@ -117,7 +119,7 @@ Commit: `git commit -m "feat: define desktop update distribution"`
 - 指针请求发送 `Cache-Control: no-cache`，不可变 Manifest/签名不依赖远端列表；
 - Manifest 的 artifact `name` 必须是安全 basename，拒绝 `/`、`\\`、`..` 和控制字符；同一 platform/arch/kind 只能有一个产物。
 
-- [ ] **Step 2: 收窄 UpdateSource 返回值**
+- [x] **Step 2: 收窄 UpdateSource 返回值**
 
 将当前未被消费的 `artifactUrls` 删除，并为强制更新恢复路径增加纯函数式目录解析：
 
@@ -137,13 +139,13 @@ export interface UpdateSource {
 }
 ```
 
-- [ ] **Step 3: 实现 GenericReleaseSource**
+- [x] **Step 3: 实现 GenericReleaseSource**
 
 构造函数只接收 `UpdateDistribution`、`publicKeyPem` 和可注入 `fetch`。流程固定为 pointer → 派生 version base → manifest/signature → Ed25519 验证 → 从目标产物选择 DMG/NSIS 并派生 `manualInstallerUrl`；不列举 OSS，不访问 GitHub，不接受远端 URL。
 
 所有 fetch 使用 `redirect: 'follow'` 后检查 `response.url` 的 Origin 和精确路径。响应非 2xx 时返回简短用户错误，不在错误信息输出凭证或完整响应体。
 
-- [ ] **Step 4: 加固 Manifest 文件名与整包选择**
+- [x] **Step 4: 加固 Manifest 文件名与整包选择**
 
 在 `release-manifest.ts` 的 Zod schema 中把 `name` 限制为一个安全文件名，并拒绝重复的 platform/arch/kind。新增：
 
@@ -156,7 +158,7 @@ export function selectManualInstaller(
 
 macOS 只返回当前架构的唯一 `dmg`，Windows x64 只返回唯一 `nsis`。现有发布脚本产生的 DMG/ZIP/EXE/blockmap/YAML 名必须全部通过。
 
-- [ ] **Step 5: 运行聚焦验证并提交**
+- [x] **Step 5: 运行聚焦验证并提交**
 
 Run: `npm test -- test/generic-release-source.test.ts test/update-manifest.test.ts`
 
@@ -172,14 +174,13 @@ Commit: `git commit -m "feat: resolve signed updates from generic origin"`
 
 - Modify: `src/main/update/update-executor.ts`
 - Modify: `src/main/update/update-manager.ts`
-- Modify: `src/main/update/update-fixture.ts`
 - Modify: `src/main/index.ts`
 - Modify: `test/update-manager.test.ts`
 - Delete: `src/main/update/github-release-source.ts`
 - Delete: `test/github-release-source.test.ts`
 - Delete: `src/main/update/update-fixture.ts`
 
-- [ ] **Step 1: 为 executor feed 绑定写失败测试**
+- [x] **Step 1: 为 executor feed 绑定写失败测试**
 
 `UpdateExecutor` 增加：
 
@@ -195,7 +196,7 @@ updater.setFeedURL({ provider: 'generic', url: baseUrl.href })
 
 并继续保持 `autoDownload = false`、`allowDowngrade = false` 和 Candidate prerelease 设置。
 
-- [ ] **Step 2: 覆盖正常检查与强制更新恢复**
+- [x] **Step 2: 覆盖正常检查与强制更新恢复**
 
 为 `UpdateManager` 添加测试，证明：
 
@@ -205,17 +206,17 @@ updater.setFeedURL({ provider: 'generic', url: baseUrl.href })
 - 恢复后用户立即点击下载，不依赖上一次进程内存 URL；
 - 跳过、无更新、下载摘要错误和差分失败整包回退的现有行为不回归。
 
-- [ ] **Step 3: 实现 manager/executor 改造**
+- [x] **Step 3: 实现 manager/executor 改造**
 
 只在签名 Manifest 已验证或可信强制策略已恢复后调用 `useRelease()`。确认候选版本高于当前版本且没有被跳过后，先保存已验证 Manifest、`manualInstallerUrl` 和 feed，再调用 executor 检查 YAML；这样平台更新器失败时仍可提供由产品 Manifest 认证的整包。不要把 update Origin 或整包 URL 暴露给渲染进程。
 
-- [ ] **Step 4: 切换生产构造并删除 GitHub 客户端源**
+- [x] **Step 4: 切换生产构造并删除 GitHub 客户端源**
 
-`src/main/index.ts` 从打包资源读取并解析 `update-distribution.json`，使用 `GenericReleaseSource`。Fixture 继续使用内存源并实现 `releaseBaseUrl()`。
+`src/main/index.ts` 从打包资源读取并解析 `update-distribution.json`，使用 `GenericReleaseSource`。产品运行时的 Fixture、环境变量注入和模拟执行器全部删除。
 
 删除 GitHub API source 和对应测试，避免死代码形成第二套生产发现逻辑。GitHub 仍只存在于发布工作流。
 
-- [ ] **Step 5: 运行聚焦验证并提交**
+- [x] **Step 5: 运行聚焦验证并提交**
 
 Run: `npm test -- test/update-manager.test.ts test/generic-release-source.test.ts test/update-state.test.ts`
 
@@ -249,7 +250,7 @@ Commit: `git commit -m "feat: bind updater to verified release directory"`
 - Modify: `test/update-window.test.ts`
 - Modify: `test/shell-preload-contract.test.ts`
 
-- [ ] **Step 1: 先写 IPC、状态与视图模型测试**
+- [x] **Step 1: 先写 IPC、状态与视图模型测试**
 
 在 `DesktopUpdateApi` 增加 `downloadFullInstaller(): Promise<void>`，新增 `updates:download-full-installer`。测试必须证明：
 
@@ -260,7 +261,7 @@ Commit: `git commit -m "feat: bind updater to verified release directory"`
 - 发现失败、验签失败和 packaged unsupported 状态不显示整包入口；
 - required error 仍保留“重试”“退出”，若已有可信安装包地址则同时显示整包入口。
 
-- [ ] **Step 2: 扩展最小视图模型**
+- [x] **Step 2: 扩展最小视图模型**
 
 不要把第三个动作塞入现有 primary/secondary 互斥逻辑。增加一个独立恢复动作：
 
@@ -281,17 +282,17 @@ export interface UpdateViewModel {
 
 `UpdateStatus` 的 `error` 分支增加 `manualInstallerAvailable: boolean`；`available` 分支天然表示已经存在可信整包地址。状态中不得出现 URL 或文件名。
 
-- [ ] **Step 3: 主进程只打开已验证整包 URL**
+- [x] **Step 3: 主进程只打开已验证整包 URL**
 
 `UpdateManagerOptions` 增加 `openExternal(url: string): Promise<void>`。`UpdateManager` 只保存 `GenericReleaseSource` 在验签并选择当前平台 DMG/NSIS 后返回的 `manualInstallerUrl`，并提供不向 renderer 暴露 URL 的 `downloadFullInstaller(): Promise<void>`。更新目标变化、被跳过或确认无更新时必须清除旧 URL；普通检查开始时清除旧 URL，但可信强制更新缓存仍有效时保留并从已签名 Manifest 重建。
 
 `registerUpdateIpc` 只调用 manager 的零参数方法；不得接收或转发 renderer 提供的 URL，也不得从未验签的 `current.json` 直接构造下载。
 
-- [ ] **Step 4: 同步三个 preload**
+- [x] **Step 4: 同步三个 preload**
 
 `update.ts`、`shell.ts`、`harness.ts` 暴露相同零参数方法，保持 API 对象冻结和订阅清理行为。按钮文案固定为“下载完整安装包”。
 
-- [ ] **Step 5: 运行聚焦验证并提交**
+- [x] **Step 5: 运行聚焦验证并提交**
 
 Run: `npm test -- test/update-manager.test.ts test/update-state.test.ts test/update-api-contract.test.ts test/update-window.test.ts test/shell-preload-contract.test.ts`
 
@@ -466,7 +467,7 @@ Commit: `git commit -m "feat: publish verified desktop updates from local host"`
 - Modify: `docs/client-build-runbook.md`
 - Modify: `docs/release-runbook.md`
 
-- [ ] **Step 1: 建立本地 Generic Provider Fixture**
+- [ ] **Step 1: 建立本地 Generic Provider 测试 Origin**
 
 测试代码使用临时本地 HTTP server 提供 pointer、签名 Manifest、YAML 和假安装包；该 server 不由产品代码或环境变量创建。把 fetch、executor 和下载完成事件串起来，覆盖一次完整检查→可用→下载→SHA-512→已下载状态。
 

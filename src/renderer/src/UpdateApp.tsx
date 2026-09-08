@@ -7,6 +7,7 @@ import type { UpdateStatus } from '../../shared/update-contracts'
 const actionLabels: Record<UpdateViewAction, string> = {
   check: '检查更新',
   download: '下载更新',
+  'download-full-installer': '下载完整安装包',
   install: '安装并重启',
   retry: '重试',
   skip: '跳过这个版本',
@@ -20,6 +21,8 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
       return api.check()
     case 'download':
       return api.download()
+    case 'download-full-installer':
+      return api.downloadFullInstaller()
     case 'install':
       return api.install()
     case 'skip':
@@ -77,6 +80,11 @@ export function UpdateApp(): React.JSX.Element {
           <button type="button" className="quiet" onClick={() => window.close()}>稍后提醒我</button>
         )}
         <span />
+        {model.recovery && (
+          <button type="button" className="secondary" onClick={() => execute(model.recovery!)}>
+            {actionLabels[model.recovery]}
+          </button>
+        )}
         {model.secondary && (
           <button type="button" className="secondary" onClick={() => execute(model.secondary!)}>
             {actionLabels[model.secondary]}

@@ -48,6 +48,7 @@ export interface UpdateManagerOptions {
   publicKeyPem: string
   userData: string
   prepareToInstall(): Promise<void>
+  openExternal(url: string): Promise<void>
   now?: () => number
   random?: () => number
   timers?: UpdateManagerTimers
@@ -81,6 +82,8 @@ export class UpdateManager {
   private removeResumeListener?: () => void
   private removeExecutorListener?: () => void
   private activeManifest?: SignedReleaseManifest
+  private activeReleaseBaseUrl?: URL
+  private manualInstallerUrl?: URL
   private executorVersion?: string
   private downloadCompletion?: DownloadCompletion
   private lastCheckedAt?: number
@@ -172,6 +175,19 @@ export class UpdateManager {
     return this.run(() => this.performDownload())
   }
 
+  downloadFullInstaller(): Promise<void> {
+    return this.run(async () => {
+      const status = this.statusValue
+      if (
+        !this.manualInstallerUrl ||
+        (status.phase !== 'available' && status.phase !== 'error')
+      ) {
+        throw new Error('没有可下载的可信完整安装包。')
+      }
+      await this.options.openExternal(this.manualInstallerUrl.href)
+    })
+  }
+
   skip(version: string): Promise<void> {
     return this.run(async () => {
       const status = this.statusValue
@@ -180,8 +196,7 @@ export class UpdateManager {
       }
       if (status.required) return
       await writeSkippedVersion(this.skippedVersionPath(), version)
-      this.activeManifest = undefined
-      this.executorVersion = undefined
+      this.clearActiveRelease()
       this.publish(initialUpdateStatus(this.options.currentVersion))
     })
   }
@@ -208,6 +223,9 @@ export class UpdateManager {
   private async performCheck(manual: boolean): Promise<void> {
     if (!this.support.supported) return
     const previous = this.statusValue
+    const cachedRequired = isRequiredStatus(previous)
+    let verifiedContext: ReturnType<typeof versionContext> | undefined
+    if (!cachedRequired) this.clearActiveRelease()
     this.publish(reduceUpdateState(previous, { type: 'check', manual }))
     try {
       const release = await this.options.source.resolve(
@@ -215,13 +233,11 @@ export class UpdateManager {
         this.support.target
       )
       this.lastCheckedAt = this.now()
-      const cachedRequired = isRequiredStatus(previous)
       if (!semver.gt(release.manifest.version, this.options.currentVersion)) {
         if (cachedRequired) {
           throw new Error('可信发布记录不能解除尚未满足的强制更新。')
         }
-        this.activeManifest = undefined
-        this.executorVersion = undefined
+        this.clearActiveRelease()
         this.publish(reduceUpdateState(this.statusValue, { type: 'up-to-date' }))
         return
       }
@@ -237,6 +253,7 @@ export class UpdateManager {
         manual,
         required
       })) {
+        this.clearActiveRelease()
         this.publish(initialUpdateStatus(
           this.options.currentVersion,
           new Date(this.lastCheckedAt).toISOString()
@@ -244,12 +261,12 @@ export class UpdateManager {
         return
       }
 
-      const executorUpdate = await this.options.executor.check()
-      if (executorUpdate?.version !== release.manifest.version) {
-        throw new Error('平台更新器版本与可信发布记录不一致。')
+      verifiedContext = {
+        version: release.manifest.version,
+        required,
+        manual
       }
-      this.executorVersion = executorUpdate.version
-      this.activeManifest = release.manifest
+      this.bindRelease(release)
       if (manifestRequiresUpdate) {
         await writeRequiredUpdatePolicy({
           path: this.requiredPolicyPath(),
@@ -261,6 +278,11 @@ export class UpdateManager {
       } else if (!cachedRequired) {
         await rm(this.requiredPolicyPath(), { force: true })
       }
+      const executorUpdate = await this.options.executor.check()
+      if (executorUpdate?.version !== release.manifest.version) {
+        throw new Error('平台更新器版本与可信发布记录不一致。')
+      }
+      this.executorVersion = executorUpdate.version
       this.publish(reduceUpdateState(this.statusValue, {
         type: 'available',
         version: release.manifest.version,
@@ -269,7 +291,7 @@ export class UpdateManager {
       }))
     } catch (error) {
       this.lastCheckedAt = this.now()
-      this.fail(error, previous)
+      this.fail(error, previous, verifiedContext)
     }
   }
 
@@ -280,6 +302,10 @@ export class UpdateManager {
     }
     try {
       if (this.executorVersion !== status.availableVersion) {
+        if (!this.activeReleaseBaseUrl) {
+          throw new Error('可信更新下载地址不可用。')
+        }
+        this.options.executor.useRelease(this.activeReleaseBaseUrl)
         const update = await this.options.executor.check()
         if (update?.version !== status.availableVersion) {
           throw new Error('平台更新器版本与可信发布记录不一致。')
@@ -361,6 +387,15 @@ export class UpdateManager {
     })
     if (!cached) return
     this.activeManifest = cached.manifest
+    this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
+      cached.manifest.channel,
+      cached.manifest.version
+    )
+    this.manualInstallerUrl = this.options.source.manualInstallerUrl(
+      cached.manifest,
+      this.support.target
+    )
+    this.options.executor.useRelease(this.activeReleaseBaseUrl)
     this.publish(reduceUpdateState(
       reduceUpdateState(this.statusValue, { type: 'check', manual: false }),
       {
@@ -372,9 +407,13 @@ export class UpdateManager {
     ))
   }
 
-  private fail(error: unknown, previous: UpdateStatus): void {
+  private fail(
+    error: unknown,
+    previous: UpdateStatus,
+    verifiedContext?: ReturnType<typeof versionContext>
+  ): void {
     const message = error instanceof Error ? error.message : String(error)
-    const context = versionContext(previous)
+    const context = verifiedContext ?? versionContext(previous)
     const manual = this.statusValue.phase === 'checking'
       ? this.statusValue.manual
       : context.manual
@@ -384,7 +423,8 @@ export class UpdateManager {
       required: context.required,
       message,
       retryable: true,
-      manual
+      manual,
+      manualInstallerAvailable: this.manualInstallerUrl !== undefined
     }))
   }
 
@@ -400,6 +440,21 @@ export class UpdateManager {
   private publish(status: UpdateStatus): void {
     this.statusValue = status
     for (const listener of this.listeners) listener(status)
+  }
+
+  private bindRelease(release: ResolvedRelease): void {
+    this.activeManifest = release.manifest
+    this.activeReleaseBaseUrl = release.releaseBaseUrl
+    this.manualInstallerUrl = release.manualInstallerUrl
+    this.executorVersion = undefined
+    this.options.executor.useRelease(release.releaseBaseUrl)
+  }
+
+  private clearActiveRelease(): void {
+    this.activeManifest = undefined
+    this.activeReleaseBaseUrl = undefined
+    this.manualInstallerUrl = undefined
+    this.executorVersion = undefined
   }
 
   private skippedVersionPath(): string {

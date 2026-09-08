@@ -60,4 +60,4 @@ export type UpdateStatus =
   | { phase: 'installing'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
   | { phase: 'up-to-date'; currentVersion: string; manual: true }
   | { phase: 'unsupported'; currentVersion: string; reason: string; manual: boolean }
-  | { phase: 'error'; currentVersion: string; availableVersion?: string; required: boolean; message: string; manual: boolean; retryable: boolean }
+  | { phase: 'error'; currentVersion: string; availableVersion?: string; required: boolean; message: string; manual: boolean; retryable: boolean; manualInstallerAvailable: boolean }

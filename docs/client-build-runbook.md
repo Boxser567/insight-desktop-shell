@@ -219,7 +219,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 
 ### 阶段 9：生产安装包构建与分发暂存
 
-> 过渡状态：截至 2026-09-08，`.github/workflows/release.yml` 仍会直接公开 GitHub Release，尚未实现 OSS 暂存、推广审批和 `current.json` 提交。完成[OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)前，本阶段不得用于首个生产 Stable。
+> 过渡状态：截至 2026-09-08，客户端 Phase A 已切换为真实 OSS/CDN 更新协议并删除运行时模拟更新；`.github/workflows/release.yml` 仍会直接公开 GitHub Release，尚未实现 OSS 暂存、推广审批和 `current.json` 提交。完成[OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)的 Phase B/C 前，本阶段不得用于首个生产 Stable。
 
 **输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、本机 ossutil RAM Profile 和 GitHub `desktop-release` Environment。
 

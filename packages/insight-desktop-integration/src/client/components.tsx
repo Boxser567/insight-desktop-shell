@@ -5,6 +5,7 @@ import type { AccountSummary } from '../../../../src/shared/auth-contracts'
 import type { DesktopClientInfo } from '../../../../src/shared/harness-account-api'
 import type { DesktopUpdateApi } from '../../../../src/shared/update-api'
 import type { UpdateStatus } from '../../../../src/shared/update-contracts'
+import { shouldShowUpdateEntry } from '../../../../src/shared/update-visibility'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -18,13 +19,6 @@ export interface AccountFooterActions {
   openSettings(): void
   signOut(): Promise<void>
   updates: DesktopUpdateApi
-}
-
-function updateHighlighted(status: UpdateStatus | undefined): boolean {
-  return status?.phase === 'available' ||
-    status?.phase === 'downloading' ||
-    status?.phase === 'downloaded' ||
-    (status?.phase === 'error' && status.required)
 }
 
 /** Render the authenticated update entry without inspecting Harness DOM. */
@@ -41,13 +35,16 @@ export function UpdateButton({ updates }: { updates: DesktopUpdateApi }) {
       unsubscribe()
     }
   }, [updates])
+  if (!shouldShowUpdateEntry(status)) return null
+
+  const version = status && 'availableVersion' in status ? status.availableVersion : undefined
   return (
     <button
       type="button"
       data-insight-desktop-update-button
-      data-active={updateHighlighted(status) ? 'true' : undefined}
+      data-active="true"
       aria-label="打开客户端更新"
-      title="检查客户端更新"
+      title={version ? `发现客户端 ${version} 更新` : '客户端更新'}
       onClick={() => void updates.open()}
     >
       ↓
