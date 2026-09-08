@@ -87,6 +87,8 @@ import { UpdateManager } from './update/update-manager'
 import { createUpdateFixture, resolveUpdateFixture } from './update/update-fixture'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
+import { StartupTracker } from './startup/startup-tracker'
+import { registerStartupIpc } from './startup/startup-ipc'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
 type SafeModeAction =
@@ -130,6 +132,9 @@ let workspaceLifecycle: WorkspaceLifecycle | undefined
 let updateManager: UpdateManager | undefined
 let updateWindowController: UpdateWindowController<BrowserWindow> | undefined
 let disposeUpdateIpc: (() => void) | undefined
+let disposeStartupIpc: (() => void) | undefined
+let startupTracker: StartupTracker | undefined
+let startupLaunchRevision = 0
 const startInSafeMode = shouldStartInSafeMode(process.argv)
 
 function appendRendererPluginFailureLog(message: string): void {
@@ -259,6 +264,7 @@ function requireCurrentDshHome(): string {
 function applyWorkspaceForCurrentSession(): void {
   if (!authManager || !authEnvironment || !workspaceLifecycle) return
   const view = authManager.current()
+  if (view.kind !== 'authenticated') startupLaunchRevision += 1
   const account = authManager.activeAccount()
   const workspaceAccount = account
     ? (() => {
@@ -268,6 +274,20 @@ function applyWorkspaceForCurrentSession(): void {
       })()
     : undefined
   void workspaceLifecycle.apply(view, workspaceAccount).catch(showUnexpectedError)
+}
+
+function beginStartup(): void {
+  startupLaunchRevision += 1
+  startupTracker?.reset('正在恢复工作区…')
+  startupTracker?.transition('preparing-profile', '正在准备本地运行环境…')
+}
+
+async function openStartingHarness(url: string): Promise<void> {
+  const revision = startupLaunchRevision
+  startupTracker?.transition('loading-client', '正在加载客户端…')
+  await openHarness(url)
+  if (revision !== startupLaunchRevision) return
+  startupTracker?.transition('ready', 'Harness 界面已显示')
 }
 
 function isTrustedShellUrl(rawUrl: string): boolean {
@@ -840,6 +860,7 @@ function launchHarness(): Promise<void> {
     safeModeVisible = false
     const dshHome = requireCurrentDshHome()
     nativeTheme.themeSource = harnessThemePreference()
+    beginStartup()
     await showSplash()
     // The repair only holds on a stopped Harness, and a restart still has the
     // previous one running: start() stops it, but that is after the repair.
@@ -847,14 +868,17 @@ function launchHarness(): Promise<void> {
     await runtime.stop()
     const initialized = await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
     if (initialized) runtime.note('[desktop] initialized bundled web profile')
+    startupTracker?.transition('repairing-profile', '正在检查插件与依赖…')
     // Before anything else runs pnpm: a store the profile does not pin makes
     // every package operation fail, repairs included.
     const pinned = await ensureStoreDirPinned(dshHome).catch(() => undefined)
     if (pinned) runtime.note(`[desktop] pinned the profile's pnpm store: ${pinned}`)
     await repairProfilePackages(dshHome)
+    startupTracker?.transition('auditing-runtime', '正在检查运行环境…')
     await pruneMissingProfileBundles(dshHome).catch(() => false)
     await reportProfileConsistency(dshHome)
     await auditInstalledLaunchAgents(dshHome)
+    startupTracker?.transition('starting-runtime', '正在启动智能体服务…')
     await runtime.start(launchDirectory)
   })().finally(() => {
     harnessLaunchOperation = undefined
@@ -869,10 +893,13 @@ function launchSafeHarness(): Promise<void> {
     safeModeVisible = true
     const dshHome = requireCurrentDshHome()
     nativeTheme.themeSource = harnessThemePreference()
+    beginStartup()
     await showSplash()
     await runtime.stop()
     await ensureSafeModeProfile(dshHome)
+    startupTracker?.transition('auditing-runtime', '正在检查安全模式环境…')
     runtime.note('[desktop] safe mode: third-party web profile bundles are blocked')
+    startupTracker?.transition('starting-runtime', '正在启动智能体服务…')
     await runtime.start(launchDirectory, SAFE_MODE_PROFILE)
   })().finally(() => {
     harnessLaunchOperation = undefined
@@ -1665,12 +1692,13 @@ async function bootstrap(): Promise<void> {
         : spawn(executablePath, args, options),
     onChanged: (snapshot) => {
       if (snapshot.phase === 'ready' && snapshot.url) {
-        void openHarness(snapshot.url).catch(showUnexpectedError)
+        void openStartingHarness(snapshot.url).catch(showUnexpectedError)
       } else if (snapshot.phase === 'failed') {
         void showRuntimeFailure(snapshot)
       }
     }
   })
+  startupTracker = new StartupTracker({ log: (message) => runtime.note(message) })
   workspaceController = new HarnessWorkspaceController(
     runtime,
     harnessWorkspaceView,
@@ -1699,6 +1727,12 @@ async function bootstrap(): Promise<void> {
   registerAuthIpc({
     ipcMain,
     manager: authManager,
+    shellWindow: () => mainWindow
+  })
+  disposeStartupIpc = registerStartupIpc({
+    ipcMain,
+    tracker: startupTracker,
+    assertTrusted: (event) => assertTrustedShellEvent(event, mainWindow),
     shellWindow: () => mainWindow
   })
   registerHarnessAccountIpc({
@@ -1812,6 +1846,7 @@ async function bootstrap(): Promise<void> {
     return { ok: runtime.snapshot().phase === 'ready' }
   })
   installMenu()
+  startupTracker.reset('正在安全恢复登录状态…')
   await loadShell(window)
   await authManager.restore()
 }
@@ -1868,6 +1903,8 @@ if (isDaemonLaunch(process.env, process.platform)) {
       quitting = true
       disposeUpdateIpc?.()
       disposeUpdateIpc = undefined
+      disposeStartupIpc?.()
+      disposeStartupIpc = undefined
       void (async () => {
         await updateManager?.stop()
         await (workspaceLifecycle?.stop() ?? runtime.stop())

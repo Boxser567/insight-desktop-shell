@@ -24,6 +24,9 @@ describe('Shell preload contract', () => {
     )
 
     expect(source).toContain("exposeInMainWorld('insightAuth'")
+    expect(source).toContain("exposeInMainWorld('insightStartup'")
+    expect(source).toContain("ipcRenderer.invoke('startup:current')")
+    expect(source).toContain("ipcRenderer.on('startup:changed', handler)")
     expect(source).toContain("ipcRenderer.invoke('auth:current')")
     expect(source).toContain("ipcRenderer.invoke('auth:login-sms'")
     expect(source).toContain("ipcRenderer.invoke('auth:login-password'")

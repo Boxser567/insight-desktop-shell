@@ -202,6 +202,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 检查复制后的用户 Profile：`dsh-better-sidebar@0.16.1` 依赖、bundle 注册和 `.install-complete` 均存在。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
+- 检查 `harness.log` 中 `[desktop] startup phase` 的单调计时。Shell 的 `ready` 只表示 Harness 视图已接管窗口，不代表所有插件完成初始化；Profile 修复耗时从 `repairing-profile` 到 `auditing-runtime` 计算，连续热启动达到 300ms 才进入 Profile 快速路径优化。
 
 **通过条件：** 人工明确回复上述行为通过，并在记录中写明应用路径、Runtime tag、全新/升级 Profile 类型及用户数据目录。
 

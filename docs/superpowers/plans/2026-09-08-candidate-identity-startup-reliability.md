@@ -301,6 +301,8 @@ git commit -m "feat(startup): keep visible progress through runtime launch"
 
 ### Task 4: 只在计时证明后优化热启动
 
+**2026-09-08 决策结果：跳过本 Task。** 隔离 Dev 首次实测从 `repairing-profile` 3ms 到 `auditing-runtime` 61ms，Profile 修复阶段约 58ms，低于 300ms 门槛。当前约 4.4s 的 Harness 视图接管时间主要发生在 `starting-runtime` 之后；该结果不支持在本分支增加 Profile 缓存复杂度。
+
 **Files:**
 - Modify: `src/main/state/bundled-profile.ts`
 - Modify: `src/main/index.ts`

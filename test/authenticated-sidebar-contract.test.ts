@@ -77,6 +77,9 @@ describe('authenticated single-sidebar integration contract', () => {
     const view = await readFile('src/main/workspace/harness-workspace-view.ts', 'utf8')
 
     expect(app).toContain('authenticated-host')
+    expect(app).toContain('window.insightStartup.subscribe')
+    expect(app).toContain("startup.phase !== 'ready'")
+    expect(app).toContain('startup.detail')
     expect(app).not.toContain('AuthenticatedShell')
     expect(styles).not.toMatch(/account-sidebar|workspace-shell|shell-rail/u)
     expect(view).toContain('view.setBounds({ x: 0, y: 0, width: content.width, height: content.height })')
