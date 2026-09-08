@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { accountMenuActions } from './account-menu-model'
-import { AccountFooter, BrandMark, BrandName, ClientSettings, HiddenSettingsTrigger, MacDragOverlay } from './components'
+import { AccountFooter, BrandMark, BrandName, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, UpdateButton } from './components'
 import { en, zh } from './locales'
 import { installStyles } from './styles'
 
@@ -19,7 +19,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(installStyles, 'insight-desktop: styles')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'insight-desktop: dictionaries')
   const t = ctx.locale.bind(NS)
-  const actions = accountMenuActions(ctx.settingsDialog, window.insightDesktopAccount)
+  const actions = {
+    ...accountMenuActions(ctx.settingsDialog, window.insightDesktopAccount),
+    updates: window.insightDesktopUpdates
+  }
 
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {

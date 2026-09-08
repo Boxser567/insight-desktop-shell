@@ -35,6 +35,6 @@ npm run package:win
 
 Each target must be built on its matching operating system and architecture. The GitHub Actions release workflow builds the Windows installer on `windows-2022`.
 
-## Upstream synchronization
+## Reference upstream
 
-This repository periodically merges `dataelement/dsh-desktop`. Preserve the independent Core Runtime and bundled profile when resolving conflicts; do not restore registry-owned DSH dependencies or patch files that the locked Core artifact no longer consumes.
+This repository treats `dataelement/dsh-desktop` as a reference upstream. Changes are reviewed by upstream commit range and accepted through selective adoption; whole-repository merges are not the normal upgrade path. Every adoption must preserve the independently locked Core Runtime, bundled profile, product identity, account isolation, and first-party integrations. See [Upstream intake](docs/upstream-intake.md) for the review record.

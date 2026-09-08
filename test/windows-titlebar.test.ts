@@ -59,7 +59,10 @@ describe('Windows titlebar menu', () => {
     expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
       "label: zh ? '退出登录' : 'Sign Out'"
     )
-    expect(desktopMenuCommands).not.toContain('check-for-updates')
+    expect(desktopMenuCommands).toContain('check-for-updates')
+    expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
+      "command: 'check-for-updates'"
+    )
     expect(desktopMenuCommands).toContain('toggle-fullscreen')
     expect(isDesktopMenuCommand('copy')).toBe(true)
     expect(isDesktopMenuCommand('run-shell-command')).toBe(false)
@@ -116,11 +119,11 @@ describe('Windows titlebar menu', () => {
     })
   })
 
-  it('omits removed mobile and updater commands', async () => {
+  it('keeps removed mobile commands out while exposing the controlled updater command', async () => {
     const main = await readFile('src/main/index.ts', 'utf8')
 
     expect(desktopMenuCommands).not.toContain('about')
-    expect(main).not.toContain('checkForUpdates')
+    expect(main).toContain("case 'check-for-updates':")
     expect(main).not.toContain('showAbout')
   })
 

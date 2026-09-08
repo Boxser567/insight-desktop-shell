@@ -7,6 +7,10 @@ import type {
 import type {
   ShellAuthApi
 } from '../shared/shell-api'
+import type { DesktopUpdateApi } from '../shared/update-api'
+import type { UpdateStatus } from '../shared/update-contracts'
+import type { ShellStartupApi } from '../shared/startup-api'
+import type { StartupView } from '../shared/startup-contracts'
 
 const auth: ShellAuthApi = Object.freeze({
   current: () => ipcRenderer.invoke('auth:current'),
@@ -26,4 +30,33 @@ const auth: ShellAuthApi = Object.freeze({
   signOut: () => ipcRenderer.invoke('auth:sign-out')
 })
 
+const updates: DesktopUpdateApi = Object.freeze({
+  status: (): Promise<UpdateStatus> => ipcRenderer.invoke('updates:status'),
+  subscribe: (listener: (status: UpdateStatus) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => {
+      listener(status)
+    }
+    ipcRenderer.on('updates:status-changed', handler)
+    return () => ipcRenderer.removeListener('updates:status-changed', handler)
+  },
+  open: (): Promise<void> => ipcRenderer.invoke('updates:open'),
+  check: (): Promise<void> => ipcRenderer.invoke('updates:check'),
+  download: (): Promise<void> => ipcRenderer.invoke('updates:download'),
+  install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
+  skip: (version: string): Promise<void> => ipcRenderer.invoke('updates:skip', version)
+})
+
+const startup: ShellStartupApi = Object.freeze({
+  current: (): Promise<StartupView> => ipcRenderer.invoke('startup:current'),
+  subscribe: (listener: (view: StartupView) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, view: StartupView): void => {
+      listener(view)
+    }
+    ipcRenderer.on('startup:changed', handler)
+    return () => ipcRenderer.removeListener('startup:changed', handler)
+  }
+})
+
 contextBridge.exposeInMainWorld('insightAuth', auth)
+contextBridge.exposeInMainWorld('insightStartup', startup)
+contextBridge.exposeInMainWorld('insightDesktopUpdates', updates)

@@ -1,20 +1,19 @@
 {
   "name": "insight-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2-rc.2",
   "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
-  "author": "DataElement",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dataelement/dsh-desktop.git"
+    "url": "git+https://github.com/Boxser567/insight-desktop-shell.git"
   },
   "bugs": {
-    "url": "https://github.com/dataelement/dsh-desktop/issues"
+    "url": "https://github.com/Boxser567/insight-desktop-shell/issues"
   },
-  "homepage": "https://github.com/dataelement/dsh-desktop#readme",
+  "homepage": "https://github.com/Boxser567/insight-desktop-shell#readme",
   "keywords": [
     "deepseek",
     "harness",
@@ -23,7 +22,7 @@
     "agent"
   ],
   "scripts": {
-    "postinstall": "install-electron --no",
+    "postinstall": "install-electron --no && patch-package",
     "dev": "npm run prepare:core-runtime && npm run prepare:runtime-manifest && npm run build:desktop-integration && npm run prepare:bundled-profile && electron-vite dev",
     "build": "npm run prepare:core-runtime && npm run build:prepared",
     "build:prepared": "npm run prepare:runtime-manifest && npm run build:desktop-integration && electron-vite build",
@@ -37,30 +36,39 @@
     "typecheck:desktop-integration": "tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir",
-    "package:dev:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --config electron-builder.dev.cjs",
-    "package:dev:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --arm64 --publish never --config electron-builder.dev.cjs && electron-builder --mac zip --arm64 --publish never --config electron-builder.dev.cjs",
-    "package:dev:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --x64 --publish never --config electron-builder.dev.cjs && electron-builder --mac zip --x64 --publish never --config electron-builder.dev.cjs",
+    "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never",
+    "package:dev:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never --config electron-builder.dev.cjs",
+    "package:dev:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.dev.cjs",
+    "package:dev:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.dev.cjs",
     "package:dev:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.dev.cjs",
-    "package:mac": "npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --publish never && electron-builder --mac zip --publish never",
-    "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --arm64 --publish never && electron-builder --mac zip --arm64 --publish never",
-    "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg --x64 --publish never && electron-builder --mac zip --x64 --publish never",
+    "package:candidate:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never --config electron-builder.candidate.cjs",
+    "package:candidate:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip",
+    "package:candidate:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate insight-mac-x64.zip",
+    "package:candidate:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.candidate.cjs",
+    "package:mac": "npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --publish never",
+    "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist insight-mac-arm64.zip",
+    "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist insight-mac-x64.zip",
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "qrcode": "^1.5.4",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "semver": "^7.8.5",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "@types/semver": "^7.8.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "esbuild": "0.25.12",
+    "patch-package": "8.0.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.10",
     "yaml": "^2.8.3"
@@ -90,6 +98,18 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Boxser567",
+        "repo": "insight-desktop-shell"
+      }
+    ],
+    "detectUpdateChannel": false,
+    "extraMetadata": {
+      "insightDesktopAppId": "com.insight.desktop",
+      "insightDesktopChannel": "stable"
+    },
     "files": [
       "out/**/*",
       "node_modules/**/*",
@@ -117,6 +137,10 @@
       {
         "from": "build/runtime-manifest.json",
         "to": "runtime-manifest.json"
+      },
+      {
+        "from": "build/update-signing-public.pem",
+        "to": "update-signing-public.pem"
       },
       {
         "from": "build/core-runtime",

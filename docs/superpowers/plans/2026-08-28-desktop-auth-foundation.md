@@ -12,7 +12,7 @@
 
 - 不复制、引用、嵌入或构建 `/Users/boxser.shi/Documents/inside/insight-web-platform`；只使用已经确认的 API 行为。
 - 首版只实现验证码登录、密码登录、会话恢复、用户摘要、设置和退出；不显示注册、忘记密码或邀请码。
-- 未打包运行与 `dshDesktopChannel: development` 使用 `https://gapi-test.insight-aigc.com`；正式包使用 `https://gapi.insight-aigc.com`。
+- 未打包运行与 `insightDesktopChannel: development` 使用 `https://gapi-test.insight-aigc.com`；正式包使用 `https://gapi.insight-aigc.com`。
 - Renderer、Harness、Core Runtime 和插件不得读取访问令牌、Cookie 或完整用户 ID。
 - 密码、短信验证码、图形验证码、访问令牌和 Cookie 不得写入日志。
 - 未认证、网络不可用或会话失效时不得启动或显示 Harness。

@@ -107,7 +107,7 @@ Electron Main 继续是认证会话的唯一写入者。Harness preload 只向�
 
 ## Upstream 设计约束
 
-本方案允许小型、显式、可测试的 upstream 接口扩展，但禁止侵入式布局修改。
+`dataelement/dsh-desktop` 只作为参考上游。本方案允许定向采用小型、显式、可测试的 upstream 接口扩展，但禁止整体合并上游或进行侵入式布局修改。
 
 ### 必须保持
 
@@ -123,7 +123,7 @@ Electron Main 继续是认证会话的唯一写入者。Harness preload 只向�
 - 通过 DOM 选择器、模拟点击、私有路由或全局 CSS 操纵 upstream 页面；
 - 让 Core Runtime 读取桌面访问令牌或接管登录生命周期；
 - 把用户导入的插件包改为账号级重复安装；
-- 在同一升级批次同时合并 Shell upstream 和更新 Core Runtime 锁。
+- 在同一升级批次同时定向采用 Shell upstream 变更和更新 Core Runtime 锁。
 
 ### 升级决策矩阵
 
@@ -134,7 +134,7 @@ Electron Main 继续是认证会话的唯一写入者。Harness preload 只向�
 | Core Runtime 制品版本 | manifest、目标平台、第一方插件和默认 Profile 契约一致 | 保持当前锁定版本，不随 upstream 自动升级 |
 | Better Sidebar 版本 | Markdown/HTML 打开、恢复和 Safe Mode 不回归 | 单独修复或回退 Sidebar；不改变账号集成 |
 
-Shell upstream 与 Core Runtime 升级必须拆成两个可独立回退的提交和验证批次。每次只改变一个上游输入，先完成本地 DEV 人工验收，再决定是否生成安装包或触发 GitHub 平台构建。
+Shell upstream 定向采用与 Core Runtime 升级必须拆成两个可独立回退的提交和验证批次。每次只改变一个上游输入，先完成本地 DEV 人工验收，再决定是否生成安装包或触发 GitHub 平台构建。
 
 ## 验证曲线
 

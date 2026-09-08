@@ -28,12 +28,18 @@ const stylesheet = `
   width: 100%;
   min-width: 0;
 }
+[data-insight-desktop-account-row] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 [data-insight-desktop-account-button] {
   appearance: none;
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 50px;
   padding: 5px 8px;
   border: 0;
@@ -43,6 +49,27 @@ const stylesheet = `
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+[data-insight-desktop-update-button] {
+  appearance: none;
+  flex: none;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+[data-insight-desktop-update-button]:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+[data-insight-desktop-update-button][data-active="true"] {
+  color: #fff;
+  background: #315efb;
 }
 [data-insight-desktop-account-button]:hover,
 [data-insight-desktop-account-button][aria-expanded="true"] {

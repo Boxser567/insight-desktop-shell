@@ -24,6 +24,46 @@ import {
   isAbortedNavigationError,
   shouldLoadHarnessUrl
 } from '../src/main/window-navigation'
+import { resolveApplicationChannel } from '../src/main/application-channel'
+
+describe('application release channel', () => {
+  it('forces unpackaged Electron onto the development channel', () => {
+    expect(resolveApplicationChannel({
+      packaged: false,
+      configuredChannel: 'stable',
+      appId: 'com.insight.desktop'
+    })).toBe('development')
+  })
+
+  it.each(['development', 'candidate', 'stable'] as const)(
+    'accepts the explicit packaged %s channel',
+    (configuredChannel) => {
+      expect(resolveApplicationChannel({
+        packaged: true,
+        configuredChannel,
+        appId: undefined
+      })).toBe(configuredChannel)
+    }
+  )
+
+  it('supports only the legacy stable App ID when channel metadata is absent', () => {
+    expect(resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: undefined,
+      appId: 'com.insight.desktop'
+    })).toBe('stable')
+    expect(() => resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: undefined,
+      appId: 'com.insight.desktop.candidate'
+    })).toThrow('no supported update channel')
+    expect(() => resolveApplicationChannel({
+      packaged: true,
+      configuredChannel: 'preview',
+      appId: 'com.insight.desktop'
+    })).toThrow('no supported update channel')
+  })
+})
 
 describe('Harness launch contract', () => {
   it('changes account directories only while Harness is stopped', () => {
@@ -350,12 +390,12 @@ describe('harness failure cause extraction', () => {
 })
 
 describe('offending plugin extraction', () => {
-  it('extracts plugin name from loader entry failure in stderr', () => {
+  it('does not offer the required Sidebar after a loader entry failure', () => {
     const logs = [
       '[stderr] [harness-node] DSH entry failed: Error: dsh: plugin tree failed to load: failed to apply loader entry web-ui-better-sidebar (dsh-better-sidebar): webserver: duplicate prefix route "/sidebar/api"',
       '[stderr] Error: webserver: duplicate prefix route "/sidebar/api"'
     ]
-    expect(extractOffendingPlugin(logs)).toBe('dsh-better-sidebar')
+    expect(extractOffendingPlugin(logs)).toBeUndefined()
   })
 
   it('extracts scoped plugin name from loader entry failure', () => {
@@ -396,12 +436,13 @@ describe('offending plugin extraction', () => {
 
   it('extracts only third-party packages from the frontend boot failure list', () => {
     const logs = [
-      '[stderr] Failed to load plugins\n@deepseek-ai/dsh-client-ui-directory-picker-native\n@insight-ai/desktop-integration\ndsh-remote\nweb boot: 3 entries did not activate'
+      '[stderr] Failed to load plugins\n@deepseek-ai/dsh-client-ui-directory-picker-native\n@insight-ai/desktop-integration\ndshmarket\ndsh-remote\nweb boot: 4 entries did not activate'
     ]
-    expect(extractOffendingPlugins(logs)).toEqual(['dsh-remote'])
+    expect(extractOffendingPlugins(logs)).toEqual(['dshmarket', 'dsh-remote'])
     expect(extractPluginFailureReferences(logs)).toEqual([
       '@deepseek-ai/dsh-client-ui-directory-picker-native',
       '@insight-ai/desktop-integration',
+      'dshmarket',
       'dsh-remote'
     ])
   })
@@ -448,7 +489,6 @@ describe('offending plugin extraction', () => {
       '[stderr] Error: failed to apply loader entry sidebar (dsh-better-sidebar): duplicate prefix route "/sidebar/api"'
     ]
     expect(extractOffendingPlugins(logs)).toEqual([
-      'dsh-better-sidebar',
       '@example/dsh-tools'
     ])
   })

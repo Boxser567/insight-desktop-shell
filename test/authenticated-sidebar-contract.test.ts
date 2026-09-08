@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
@@ -41,13 +42,14 @@ describe('authenticated single-sidebar integration contract', () => {
     }
   })
 
-  it('prepares a version-three Profile with protected first-party integration', async () => {
+  it('prepares a version-four Profile with protected first-party integration', async () => {
     const prepare = await readFile('scripts/prepare-bundled-profile.mjs', 'utf8')
     const installationOwned = await readFile('src/main/state/installation-owned-bundles.ts', 'utf8')
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
 
     expect(prepare).toContain("const SIDEBAR_VERSION = '0.16.1'")
-    expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 3")
+    expect(prepare).toContain("const MARKET_VERSION = '1.44.0'")
+    expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 4")
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
     expect(prepare).toContain("packages.includes('packages/*')")
@@ -57,18 +59,44 @@ describe('authenticated single-sidebar integration contract', () => {
 
   it.skipIf(!existsSync(generatedProfileRoot))('matches the generated bundled Profile', async () => {
     const manifest = JSON.parse(await readFile(`${generatedProfileRoot}/package.json`, 'utf8'))
+    const descriptor = JSON.parse(await readFile('vendor/plugins/bundled-community-plugins.json', 'utf8')) as {
+      plugins: Array<{ packageName: string, version: string, artifact: string, sha256: string }>
+    }
     const workspace = await readFile(`${generatedProfileRoot}/pnpm-workspace.yaml`, 'utf8')
     const patch = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/cordis.patch.yml`, 'utf8')
     const bundledClient = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/lib/client.js`, 'utf8')
     const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
     expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.16.1')
+    expect(manifest.dependencies.dshmarket).toBe('1.44.0')
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
+    expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(3)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(4)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)
+    expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(true)
+    expect(manifest.dependencies).not.toHaveProperty('dsh-at-file')
+    expect(manifest.dsh.profile.bundles).not.toContain('dsh-at-file')
+    expect(JSON.stringify(manifest)).not.toMatch(/Downloads|\/private\/tmp|[A-Za-z]:\\\\/u)
+    for (const plugin of descriptor.plugins) {
+      const archive = plugin.artifact.split('/').at(-1)
+      if (!archive) throw new Error(`Missing archive name for ${plugin.packageName}`)
+      expect(manifest.dependencies[plugin.packageName]).toBe(
+        `file:.insight-bundled-plugins/${archive}`
+      )
+      expect(manifest.dsh.profile.bundles).toContain(plugin.packageName)
+      const installedManifest = JSON.parse(await readFile(
+        `${generatedProfileRoot}/node_modules/${plugin.packageName}/package.json`,
+        'utf8'
+      ))
+      expect(installedManifest.version).toBe(plugin.version)
+      const retainedArchive = await readFile(
+        `${generatedProfileRoot}/.insight-bundled-plugins/${archive}`
+      )
+      expect(createHash('sha256').update(retainedArchive).digest('hex')).toBe(plugin.sha256)
+    }
   })
 
   it('leaves no authenticated Shell rail and fills the window with Harness', async () => {
@@ -77,6 +105,9 @@ describe('authenticated single-sidebar integration contract', () => {
     const view = await readFile('src/main/workspace/harness-workspace-view.ts', 'utf8')
 
     expect(app).toContain('authenticated-host')
+    expect(app).toContain('window.insightStartup.subscribe')
+    expect(app).toContain("startup.phase !== 'ready'")
+    expect(app).toContain('startup.detail')
     expect(app).not.toContain('AuthenticatedShell')
     expect(styles).not.toMatch(/account-sidebar|workspace-shell|shell-rail/u)
     expect(view).toContain('view.setBounds({ x: 0, y: 0, width: content.width, height: content.height })')

@@ -27,7 +27,7 @@ macOS 通过 Electron UtilityProcess 启动 Harness，Windows 使用随 Core Run
 
 ## 数据与插件
 
-Profile、插件、工作区和会话都位于应用安装目录之外，升级不会覆盖它们。默认 Better Sidebar Profile 随安装包提供；用户仍可显式导入本地插件。启动失败时，恢复流程和 Safe Mode 只处理 Profile，不删除用户工作区或会话。
+Profile、插件、工作区和会话都位于应用安装目录之外，升级不会覆盖它们。默认 Profile 随安装包提供必需的 Better Sidebar 和可卸载的 `dshmarket`；用户可通过 Plugin Market 管理社区插件，也可继续显式导入本地插件。Electron Shell 拥有 Harness 子进程生命周期，桌面环境中的市场重启必须通过 Shell IPC，不能由插件脱离宿主创建替代进程。启动失败时，恢复流程和 Safe Mode 只处理 Profile，不删除用户工作区或会话。
 
 ## 升级上游
 

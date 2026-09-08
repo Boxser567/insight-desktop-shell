@@ -11,7 +11,8 @@ module.exports = {
   extraMetadata: {
     name: 'insight-desktop-dev',
     productName: '因赛AI Dev',
-    dshDesktopChannel: 'development'
+    insightDesktopAppId: 'com.insight.desktop.dev',
+    insightDesktopChannel: 'development'
   },
   artifactName: 'insight-dev-${os}-${arch}.${ext}',
   nsis: {

@@ -29,6 +29,8 @@ describe('desktop integration client', () => {
     expect(source).toContain("name: 'settings.trigger'")
     expect(source).toContain('priority: -100')
     expect(source).toContain('HiddenSettingsTrigger')
+    expect(source).toContain('UpdateButton')
+    expect(source).toContain('window.insightDesktopUpdates')
     expect(source).not.toContain("ctx.slots.inject('sidebar.settings'")
     expect(source).not.toMatch(/querySelector|\.click\(|fetch\(|token|cookie/iu)
   })

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -41,6 +41,32 @@ export async function moveRuntimeDirectory(source, destination, operations = { c
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'EXDEV') throw error
     await operations.copyDirectory(source, destination, { recursive: true })
   }
+}
+
+/** Remove a host-bound Node shim that cannot be valid after Runtime extraction. */
+export async function removeInvalidBundledNodeShim(directory, platform = process.platform) {
+  if (platform === 'win32') return false
+  const shim = join(directory, 'node_modules', '.bin', 'node')
+  let shimStat
+  try {
+    shimStat = await lstat(shim)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
+    throw error
+  }
+  if (!shimStat.isSymbolicLink()) return false
+
+  const target = await readlink(shim)
+  if (!isAbsolute(target)) {
+    try {
+      await stat(resolve(dirname(shim), target))
+      return false
+    } catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+    }
+  }
+  await rm(shim)
+  return true
 }
 
 function run(command, args, cwd) {
@@ -87,6 +113,7 @@ async function main() {
     await mkdir(extracted)
     await run('tar', ['-xzf', archive, '-C', extracted], projectRoot)
     await assertRuntime(extracted, runtime, target)
+    await removeInvalidBundledNodeShim(extracted)
     await rm(outputDirectory, { recursive: true, force: true })
     await moveRuntimeDirectory(extracted, outputDirectory)
     console.log(`Prepared locked Core Runtime: ${target}`)

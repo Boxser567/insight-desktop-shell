@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { SessionView } from '../../shared/auth-contracts'
+import type { StartupView } from '../../shared/startup-contracts'
 import brandMark from '../../../build/brand-mark.svg'
 import { LoginView } from './LoginView'
+import { UpdateBadge } from './UpdateBadge'
 
 function StatusPage(props: {
   title: string
@@ -27,6 +29,11 @@ function StatusPage(props: {
 /** Root Shell surface driven entirely by the renderer-safe session projection. */
 export function App(): React.JSX.Element {
   const [session, setSession] = useState<SessionView>({ kind: 'restoring' })
+  const [startup, setStartup] = useState<StartupView>({
+    phase: 'restoring-session',
+    detail: '正在安全恢复登录状态…',
+    elapsedMs: 0
+  })
 
   useEffect(() => {
     const unsubscribe = window.insightAuth.subscribe(setSession)
@@ -36,8 +43,16 @@ export function App(): React.JSX.Element {
     return unsubscribe
   }, [])
 
+  useEffect(() => {
+    const unsubscribe = window.insightStartup.subscribe(setStartup)
+    void window.insightStartup.current().then(setStartup)
+    return unsubscribe
+  }, [])
+
   let content: React.JSX.Element
-  if (session.kind === 'authenticated') {
+  if (session.kind === 'authenticated' && startup.phase !== 'ready') {
+    content = <StatusPage title="正在启动因赛AI" detail={startup.detail} />
+  } else if (session.kind === 'authenticated') {
     content = <main className="authenticated-host" aria-hidden="true" />
   } else if (session.kind === 'restoring') {
     content = <StatusPage title="正在启动因赛AI" detail="正在安全恢复登录状态…" />
@@ -57,10 +72,12 @@ export function App(): React.JSX.Element {
       />
     )
   }
+  const shellVisible = session.kind !== 'authenticated' || startup.phase !== 'ready'
   return (
     <>
-      {session.kind !== 'authenticated' && <div className="app-drag-region" aria-hidden="true" />}
+      {shellVisible && <div className="app-drag-region" aria-hidden="true" />}
       {content}
+      {shellVisible && <UpdateBadge />}
     </>
   )
 }

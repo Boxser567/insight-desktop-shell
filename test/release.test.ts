@@ -1,6 +1,9 @@
-import { readFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseDocument } from 'yaml'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
 
@@ -11,6 +14,55 @@ const releaseAssets = [
 ]
 
 describe('GitHub release contract', () => {
+  it('generates update signing keys outside the repository with a private mode', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'insight-update-keys-'))
+    try {
+      const privateKey = path.join(directory, 'private.pem')
+      const publicKey = path.join(directory, 'public.pem')
+      const script = path.join(projectRoot, 'scripts', 'generate-update-signing-keypair.mjs')
+      const generated = spawnSync(process.execPath, [
+        script,
+        '--private-key', privateKey,
+        '--public-key', publicKey
+      ], { encoding: 'utf8' })
+      expect(generated.status, generated.stderr).toBe(0)
+      expect((await stat(privateKey)).mode & 0o777).toBe(0o600)
+      expect(await readFile(publicKey, 'utf8')).toContain('BEGIN PUBLIC KEY')
+
+      const rejected = spawnSync(process.execPath, [
+        script,
+        '--private-key', path.join(projectRoot, 'build', 'forbidden-private.pem'),
+        '--public-key', path.join(directory, 'unused-public.pem')
+      ], { encoding: 'utf8' })
+      expect(rejected.status).not.toBe(0)
+      expect(rejected.stderr).toContain('outside the repository')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the Insight repository identity without inheriting the reference upstream author', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as {
+      author?: string
+      repository?: { url?: string }
+      bugs?: { url?: string }
+      homepage?: string
+    }
+
+    expect(packageJson.repository?.url).toBe(
+      'git+https://github.com/Boxser567/insight-desktop-shell.git'
+    )
+    expect(packageJson.bugs?.url).toBe(
+      'https://github.com/Boxser567/insight-desktop-shell/issues'
+    )
+    expect(packageJson.homepage).toBe(
+      'https://github.com/Boxser567/insight-desktop-shell#readme'
+    )
+    expect(packageJson.author).toBeUndefined()
+  })
+
   it('keeps the package and lockfile versions aligned', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
@@ -53,6 +105,7 @@ describe('GitHub release contract', () => {
     ) as {
       build: {
         artifactName: string
+        extraMetadata: { insightDesktopAppId: string; insightDesktopChannel: string }
         extraResources: Array<{ from: string; to: string }>
         win: { target: Array<{ target: string; arch: string[] }> }
         nsis: { artifactName: string; include: string }
@@ -61,6 +114,8 @@ describe('GitHub release contract', () => {
     }
 
     expect(packageJson.build.artifactName).toBe('insight-${os}-${arch}.${ext}')
+    expect(packageJson.build.extraMetadata.insightDesktopAppId).toBe('com.insight.desktop')
+    expect(packageJson.build.extraMetadata.insightDesktopChannel).toBe('stable')
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/app-icon.png',
       to: 'icon.png'
@@ -87,6 +142,11 @@ describe('GitHub release contract', () => {
       from: 'build/runtime-manifest.json',
       to: 'runtime-manifest.json'
     })
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: 'build/update-signing-public.pem',
+      to: 'update-signing-public.pem'
+    })
+    expect(JSON.stringify(packageJson.build.extraResources)).not.toMatch(/private.*key|private.*pem/i)
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/core-runtime',
       to: 'runtime'
@@ -146,13 +206,21 @@ describe('GitHub release contract', () => {
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-ui-directory-picker-native'")
   })
 
-  it('exposes trusted local plugin import without configuring a marketplace', async () => {
+  it('keeps trusted local plugin import alongside the bundled marketplace', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+    const profile = await readFile(
+      path.join(projectRoot, 'scripts', 'prepare-bundled-profile.mjs'),
+      'utf8'
+    )
 
     expect(main).toContain("label: isChinese ? '导入本地插件…' : 'Import Local Plugin…'")
     expect(main).toContain('resolveLocalPluginImport(selectedPath)')
     expect(main).toContain('addProfilePluginWithDsh(')
-    expect(main).not.toMatch(/marketplace|plugin market/i)
+    expect(profile).toContain("const MARKET_PACKAGE = 'dshmarket'")
+    expect(profile).toContain("const MARKET_VERSION = '1.44.0'")
+    expect(profile).toContain("bundled-community-plugins.json")
+    expect(profile).toContain("file:.insight-bundled-plugins/")
+    expect(profile).not.toContain("packageName: 'dsh-at-file'")
   })
 
   it('routes manual restarts through the active plugin recovery flow', async () => {
@@ -176,18 +244,28 @@ describe('GitHub release contract', () => {
     expect(main).toContain('logs: [...rendererPluginFailureLogs]')
   })
 
-  it('does not configure automatic updates', async () => {
+  it('configures GitHub updates without allowing local package commands to publish', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as {
       dependencies: Record<string, string>
+      scripts: Record<string, string>
       build: {
-        publish?: unknown
+        publish?: Array<{ provider: string; owner: string; repo: string }>
+        detectUpdateChannel?: boolean
         win: { verifyUpdateCodeSignature: boolean }
       }
     }
-    expect(packageJson.dependencies['electron-updater']).toBeUndefined()
-    expect(packageJson.build.publish).toBeUndefined()
+    expect(packageJson.dependencies['electron-updater']).toBe('^6.8.9')
+    expect(packageJson.build.publish).toEqual([{
+      provider: 'github',
+      owner: 'Boxser567',
+      repo: 'insight-desktop-shell'
+    }])
+    expect(packageJson.build.detectUpdateChannel).toBe(false)
+    for (const [name, command] of Object.entries(packageJson.scripts)) {
+      if (name.startsWith('package:')) expect(command).toContain('--publish never')
+    }
     expect(packageJson.build.win.verifyUpdateCodeSignature).toBe(false)
   })
 
@@ -221,7 +299,11 @@ describe('GitHub release contract', () => {
       'package:win',
       'package:dev:mac:arm64',
       'package:dev:mac:x64',
-      'package:dev:win'
+      'package:dev:win',
+      'package:candidate:dir',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:candidate:win'
     ]) {
       expect(packageJson.scripts[script]).toContain('--publish never')
     }
@@ -235,23 +317,49 @@ describe('GitHub release contract', () => {
       path.join(projectRoot, 'electron-builder.dev.cjs'),
       'utf8'
     )
+    const candidateConfig = await readFile(
+      path.join(projectRoot, 'electron-builder.candidate.cjs'),
+      'utf8'
+    )
+    const osxSignPatch = await readFile(
+      path.join(projectRoot, 'patches', '@electron+osx-sign+1.3.3.patch'),
+      'utf8'
+    )
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
 
+    expect(packageJson.scripts.postinstall).toBe('install-electron --no && patch-package')
+    expect(osxSignPatch).toContain('-        return await Promise.all(children.map(async (child) => {')
+    expect(osxSignPatch).toContain('+        for (const child of children) {')
     expect(packageJson.scripts['package:dev:dir']).toContain('npm run build')
     expect(packageJson.scripts['package:dev:dir']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:mac:arm64']).toContain('verify-target.mjs darwin arm64')
     expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('verify-target.mjs darwin x64')
     expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder.dev.cjs')
-    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac dmg --arm64')
-    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac zip --arm64')
+    expect(packageJson.scripts['package:dev:mac:arm64']).toContain('electron-builder --mac dmg zip --arm64')
+    expect(packageJson.scripts['package:dev:mac:x64']).toContain('electron-builder --mac dmg zip --x64')
+    expect(packageJson.scripts['package:mac:arm64']).toContain('electron-builder --mac dmg zip --arm64')
+    expect(packageJson.scripts['package:mac:x64']).toContain('electron-builder --mac dmg zip --x64')
+    for (const name of [
+      'package:dev:mac:arm64',
+      'package:dev:mac:x64',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:mac:arm64',
+      'package:mac:x64'
+    ]) {
+      const command = packageJson.scripts[name]
+      expect(command).toBeDefined()
+      expect(command?.match(/(?:^|&& )electron-builder --/g)).toHaveLength(1)
+    }
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
     expect(developmentConfig).toContain("appId: 'com.insight.desktop.dev'")
     expect(developmentConfig).toContain("productName: '因赛AI Dev'")
     expect(developmentConfig).toContain("output: 'dist-dev'")
-    expect(developmentConfig).toContain("dshDesktopChannel: 'development'")
+    expect(developmentConfig).toContain("insightDesktopAppId: 'com.insight.desktop.dev'")
+    expect(developmentConfig).toContain("insightDesktopChannel: 'development'")
     expect(developmentConfig).toContain(
       "artifactName: 'insight-dev-${os}-${arch}.${ext}'"
     )
@@ -260,42 +368,85 @@ describe('GitHub release contract', () => {
     )
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))")
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
-    expect(main).toContain('const developmentBuild = isDevelopmentBuild()')
+    expect(main).not.toContain('insight-desktop-candidate')
+    expect(main).toContain('const desktopChannel = applicationChannel()')
+    expect(candidateConfig).toContain("appId: 'com.insight.desktop'")
+    expect(candidateConfig).toContain("productName: '因赛AI'")
+    expect(candidateConfig).toContain("output: 'dist-candidate'")
+    expect(candidateConfig).toContain("name: 'insight-desktop'")
+    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight.desktop'")
+    expect(candidateConfig).toContain("insightDesktopChannel: 'candidate'")
+    expect(candidateConfig).not.toContain('因赛AI Candidate')
+    expect(candidateConfig).not.toContain('com.insight.desktop.candidate')
+    expect(candidateConfig).not.toContain('insight-candidate-${os}-${arch}')
+    expect(candidateConfig).toContain('publish: null')
+    for (const name of [
+      'package:candidate:dir',
+      'package:candidate:mac:arm64',
+      'package:candidate:mac:x64',
+      'package:candidate:win'
+    ]) {
+      expect(packageJson.scripts[name]).toContain('electron-builder.candidate.cjs')
+      expect(packageJson.scripts[name]).toContain('--publish never')
+    }
+    expect(packageJson.scripts['package:candidate:mac:arm64']).toContain(
+      'finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip'
+    )
+    expect(packageJson.scripts['package:candidate:mac:x64']).toContain(
+      'finalize-mac-release.mjs dist-candidate insight-mac-x64.zip'
+    )
+    expect(packageJson.scripts['package:mac:arm64']).toContain(
+      'finalize-mac-release.mjs dist insight-mac-arm64.zip'
+    )
+    expect(packageJson.scripts['package:mac:x64']).toContain(
+      'finalize-mac-release.mjs dist insight-mac-x64.zip'
+    )
   })
 
-  it('builds and publishes every supported platform', async () => {
+  it('preflights one complete release before starting native builds', async () => {
     const workflow = await readFile(
       path.join(projectRoot, '.github', 'workflows', 'release.yml'),
       'utf8'
     )
+    const document = parseDocument(workflow)
+    const preflight = workflow.match(
+      /  release-preflight:\r?\n[\s\S]*?(?=\r?\n  macos-apple-silicon:)/
+    )?.[0]
+    const appleSilicon = workflow.match(
+      /  macos-apple-silicon:\r?\n[\s\S]*?(?=\r?\n  macos-intel:)/
+    )?.[0]
+    const intel = workflow.match(
+      /  macos-intel:\r?\n[\s\S]*?(?=\r?\n  windows-x64:)/
+    )?.[0]
+    const windows = workflow.match(
+      /  windows-x64:\r?\n[\s\S]*?(?=\r?\n  macos-sonoma-compatibility:)/
+    )?.[0]
+    const sonomaCompatibility = workflow.match(
+      /  macos-sonoma-compatibility:\r?\n[\s\S]*?(?=\r?\n  publish:)/
+    )?.[0]
 
-    expect(workflow).toContain('runs-on: macos-15')
-    expect(workflow).toContain('runs-on: macos-15-intel')
-    expect(workflow).toContain('runs-on: windows-2022')
-    expect(workflow).toContain('npm run package:dev:win')
-    expect(workflow).toContain('Smoke test packaged Windows shell')
-    expect(workflow).toContain('Smoke test packaged Windows Harness')
-    expect(workflow).toContain("Join-Path $env:APPDATA 'insight-desktop-dev'")
-    expect(workflow).toContain("$executable = 'dist-dev\\win-unpacked\\因赛AI Dev.exe'")
-    expect(workflow).toContain('Packaged Windows shell unauthenticated smoke test passed.')
-    expect(workflow).toContain(
-      "node scripts/smoke-packaged-harness.mjs 'dist-dev\\win-unpacked\\resources'"
-    )
-    expect(workflow).toContain('windows_prerelease_tag:')
-    expect(workflow).toContain('Publish validated Windows development pre-release')
-    expect(workflow).toContain('gh release create $env:PRERELEASE_TAG')
-    expect(workflow).toContain('--prerelease')
-    expect(workflow).toContain('name: windows-x64-dev')
-    expect(workflow).toContain('dist-dev/insight-dev-windows-x64-setup.exe')
-    for (const asset of releaseAssets) expect(workflow).toContain(asset)
-    expect(
-      workflow.match(
-        /npm version --no-git-tag-version --allow-same-version "\$\{\{ github\.ref_name \}\}"/g
-      )
-    ).toHaveLength(3)
+    expect(document.errors).toEqual([])
+    expect(workflow).toContain('candidate_tag:')
+    expect(workflow).not.toContain('windows_prerelease_tag:')
+    expect(preflight).toContain('runs-on: ubuntu-24.04')
+    expect(preflight).toContain('verify-release-preflight.mjs')
+    expect(preflight).toContain('CANDIDATE_TAG: ${{ inputs.candidate_tag }}')
+    expect(preflight).toContain('refs/tags/$release_tag')
+    expect(preflight).not.toContain("release_tag='${{ inputs.candidate_tag }}'")
+    expect(preflight).toContain('--package package.json')
+    expect(preflight).toContain('--policy build/update-release-policy.json')
+    expect(preflight).toContain('--runtime-lock core-runtime.lock.json')
+    expect(preflight).toContain('Run dependency-free release checks')
+    expect(preflight).toContain('verify-release-workflow.mjs')
+    expect(preflight).not.toMatch(/npm ci|vitest|prepare:core-runtime/)
+    expect(appleSilicon).toContain('needs: release-preflight')
+    expect(intel).toContain('needs: release-preflight')
+    expect(windows).toContain('needs: release-preflight')
+    expect(sonomaCompatibility).toContain('- release-preflight')
+    expect(sonomaCompatibility).toContain('- macos-apple-silicon')
   })
 
-  it('signs and notarizes both macOS architectures on tag releases', async () => {
+  it('builds and validates signed macOS and unsigned Windows inputs on native runners', async () => {
     const workflow = await readFile(
       path.join(projectRoot, '.github', 'workflows', 'release.yml'),
       'utf8'
@@ -312,10 +463,19 @@ describe('GitHub release contract', () => {
       expect(workflow).toContain(`secrets.${secret}`)
     }
     expect(workflow.match(/Prepare macOS signing keychain/g)).toHaveLength(2)
-    expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(4)
+    expect(workflow.match(/Record macOS build environment/g)).toHaveLength(2)
+    expect(workflow.match(/^\s+sw_vers$/gm)).toHaveLength(2)
+    expect(workflow.match(/^\s+xcodebuild -version$/gm)).toHaveLength(2)
+    expect(workflow.match(/^\s+xcrun --find codesign_allocate$/gm)).toHaveLength(2)
+    expect(workflow.match(/CSC_NAME: \$\{\{ steps\.signing_keychain\.outputs\.identity \}\}/g)).toHaveLength(2)
+    expect(workflow.match(/ulimit -n 65536/g)).toHaveLength(2)
+    expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(5)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
-    expect(workflow.match(/CSC_IDENTITY_AUTO_DISCOVERY: 'false'/g)).toHaveLength(2)
-    expect(workflow).not.toContain("CSC_LINK: ''")
+    expect(workflow.match(/syspolicy_check distribution --verbose "\$RELEASE_APP"/g)).toHaveLength(2)
+    expect(workflow).not.toContain('spctl --assess --type execute')
+    expect(workflow.match(/hdiutil verify/g)).toHaveLength(2)
+    expect(workflow.match(/unzip -t/g)).toHaveLength(2)
+    expect(workflow.match(/awk -v team="\$APPLE_TEAM_ID"/g)).toHaveLength(2)
     expect(workflow).toMatch(
       /macos-apple-silicon:\r?\n\s+name: macOS Apple Silicon\r?\n(?:[\s\S]*?)runs-on: macos-15\r?\n\s+steps:/
     )
@@ -323,68 +483,83 @@ describe('GitHub release contract', () => {
       /macos-intel:\r?\n\s+name: macOS Intel\r?\n(?:[\s\S]*?)runs-on: macos-15-intel\r?\n\s+steps:/
     )
     expect(workflow).toMatch(
-      /windows-x64:\r?\n\s+name: Windows x64\r?\n(?:[\s\S]*?)runs-on: windows-2022\r?\n\s+steps:/
+      /windows-x64:\r?\n\s+name: Windows x64 unsigned\r?\n(?:[\s\S]*?)runs-on: windows-2022\r?\n\s+steps:/
     )
-  })
-
-  it('isolates Apple credential preflight and the signed arm64 candidate from publication', async () => {
-    const workflow = await readFile(
-      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
-      'utf8'
-    )
-    const preflight = workflow.match(
-      /  apple-signing-preflight:\r?\n[\s\S]*?(?=\r?\n  macos-apple-silicon:)/
-    )?.[0]
-    const appleSilicon = workflow.match(
-      /  macos-apple-silicon:\r?\n[\s\S]*?(?=\r?\n  macos-intel:)/
-    )?.[0]
-    const intel = workflow.match(
-      /  macos-intel:\r?\n[\s\S]*?(?=\r?\n  windows-x64:)/
-    )?.[0]
-    const windows = workflow.match(
-      /  windows-x64:\r?\n[\s\S]*?(?=\r?\n  sign-windows:)/
-    )?.[0]
-    const publish = workflow.match(/  publish:\r?\n[\s\S]*$/)?.[0]
-
-    expect(workflow).toContain('- apple-signing-preflight')
-    expect(workflow).toContain('- macos-arm64-signed')
-    expect(preflight).toContain("inputs.target == 'apple-signing-preflight'")
-    expect(preflight).toContain('runs-on: macos-15')
-    expect(preflight).toContain('Developer ID Application')
-    expect(preflight).toContain('($APPLE_TEAM_ID)')
-    expect(preflight).toContain('xcrun notarytool history')
-    expect(preflight).toContain('if: always()')
-    expect(appleSilicon).toContain("inputs.target == 'macos-arm64-signed'")
-    expect(appleSilicon).toContain('name: macos-apple-silicon-signed-candidate')
-    expect(intel).not.toContain("inputs.target == 'macos-arm64-signed'")
-    expect(windows).not.toContain("inputs.target == 'macos-arm64-signed'")
-    expect(publish).not.toContain("inputs.target == 'macos-arm64-signed'")
-    expect(publish).toContain("startsWith(github.ref, 'refs/tags/v')")
-  })
-
-  it('signs Windows installers on the local UKey runner before publishing', async () => {
-    const workflow = await readFile(
-      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
-      'utf8'
-    )
-
-    expect(workflow).toContain('name: windows-x64-unsigned')
-    expect(workflow).toContain('Sign Windows package locally with UKey')
-    expect(workflow).toContain('runs-on: [self-hosted, macOS, ARM64]')
-    expect(workflow).toContain('--storetype ETOKEN')
-    expect(workflow).toContain('--storepass "file:$pin_file"')
-    expect(workflow).toContain('--tsmode RFC3161')
-    expect(workflow).toContain('secrets.DESKTOP_WINDOWS_SIGNING_PIN')
-    expect(workflow).toContain(`printf '%s' "$WINDOWS_SIGNING_PIN" > "$pin_file"`)
-    expect(workflow).toContain('unset WINDOWS_SIGNING_PIN')
-    expect(workflow).not.toContain('security find-generic-password')
-    expect(workflow).not.toContain('WINDOWS_SIGNING_KEYCHAIN_SERVICE')
-    expect(workflow).toContain('finalize-windows-release.mjs')
-    expect(workflow).toContain('version="${GITHUB_REF_NAME#v}"')
-    expect(workflow).toContain('pattern: macos-*')
     expect(workflow).toMatch(
-      /publish:[\s\S]*?needs\.sign-windows\.result == 'success'[\s\S]*?- sign-windows/
+      /macos-sonoma-compatibility:\r?\n\s+name: macOS Sonoma distribution compatibility\r?\n(?:[\s\S]*?)runs-on: macos-14\r?\n(?:[\s\S]*?)\s+steps:/
     )
+    expect(workflow).toContain('hdiutil attach release-assets/insight-mac-arm64.dmg')
+    expect(workflow).toContain('codesign --verify --deep --strict --verbose=4 "$app_path"')
+    expect(workflow).toContain('syspolicy_check distribution --verbose "$app_path"')
+    expect(workflow).toContain('mount_path="$RUNNER_TEMP/insight-dmg"')
+    expect(workflow).toContain('hdiutil detach "$RUNNER_TEMP/insight-dmg" || true')
+    expect(workflow).not.toContain('${{ runner.temp }}')
+    expect(workflow).toContain('package:candidate:mac:arm64')
+    expect(workflow).toContain('package:candidate:mac:x64')
+    expect(workflow).toContain('package:candidate:win')
+    expect(workflow).toContain('npm run package:mac:arm64')
+    expect(workflow).toContain('npm run package:mac:x64')
+    expect(workflow).toContain('npm run package:win')
+    expect(workflow).toContain('latest-mac-arm64.yml')
+    expect(workflow).toContain('latest-mac-x64.yml')
+    expect(workflow).toContain('finalize-windows-release.mjs')
+    expect(workflow).toContain('$PSNativeCommandUseErrorActionPreference = $true')
+    expect(workflow).toContain('$appExecutable')
+    expect(workflow).toContain('7z t $installerPath')
+    expect(workflow).toContain("Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml')")
+  })
+
+  it('publishes only an authenticated complete release through the protected environment', async () => {
+    const workflow = await readFile(
+      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
+      'utf8'
+    )
+    const publish = workflow.match(/  publish:\r?\n[\s\S]*$/)?.[0]
+    const beforePublish = workflow.slice(0, workflow.indexOf('\n  publish:'))
+    if (!publish) throw new Error('Release workflow is missing the publish job.')
+
+    expect(publish).toContain('environment: desktop-release')
+    expect(publish).toContain('- release-preflight')
+    expect(publish).toContain('- macos-apple-silicon')
+    expect(publish).toContain('- macos-intel')
+    expect(publish).toContain('- windows-x64')
+    expect(publish).toContain('- macos-sonoma-compatibility')
+    expect(publish).toContain("needs.macos-sonoma-compatibility.result == 'success'")
+    expect(beforePublish).not.toContain('DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')
+    expect(publish).toContain('secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')
+    expect(publish).toContain('merge-mac-update-metadata.mjs')
+    expect(publish).toContain('build-update-release.mjs')
+    expect(publish).toContain('verify-release-assets.mjs')
+    expect(publish).toContain('--compatibility build/update-compatibility.json')
+    expect(publish).toContain('--policy build/update-release-policy.json')
+    expect(publish).toContain('gh release create "$RELEASE_TAG"')
+    expect(publish).toContain('gh release upload "$RELEASE_TAG" release-assets/*')
+    expect(publish.indexOf('gh release create')).toBeLessThan(publish.indexOf('gh release upload'))
+    expect(publish).toContain('gh release edit "$RELEASE_TAG" --draft=false')
+    expect(publish).toContain('create_args+=(--prerelease --target "$GITHUB_SHA")')
+    expect(publish).not.toContain('--clobber')
+  })
+
+  it('does not retain inherited Windows signing or third-party publication services', async () => {
+    const workflow = await readFile(
+      path.join(projectRoot, '.github', 'workflows', 'release.yml'),
+      'utf8'
+    )
+
+    for (const inheritedService of [
+      'sign-windows',
+      'UKey',
+      'ETOKEN',
+      'Jsign',
+      'SafeNet',
+      'ModelScope',
+      'Feishu',
+      'dshdesktop.com',
+      'self-hosted',
+      'DESKTOP_WINDOWS_SIGNING_PIN'
+    ]) {
+      expect(workflow).not.toContain(inheritedService)
+    }
   })
 
   it('permits Better Sidebar’s required native build during profile preparation', async () => {

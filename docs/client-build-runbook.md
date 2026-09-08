@@ -11,8 +11,10 @@
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
 - Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
+- `dshmarket` 是新 Profile 中可卸载的出厂插件。构建必须固定版本并包含完整文件；用户卸载后，重启和应用升级不得自动恢复。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
+- 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；不得用局部上传、覆盖同版本资产或单平台发布修补线上版本。
 - GitHub Actions 成功只证明 job 和产物生成完成，不能替代本地行为或最终安装包验收。
 - 每轮验收必须说明 Shell commit、Core Runtime tag/commit、应用绝对路径、目标平台/架构和用户数据目录。Electron 单实例机制不得把旧进程冒充为新构建。
 - 用户数据操作必须精确、可恢复。不得用宽泛删除命令清理会话、工作区、设置或插件；任何测试 Profile 变更前先记录并备份确切目录。
@@ -26,14 +28,14 @@
 | 仅文档 | 阶段 2 | 文档链接、命令存在性和 `git diff --check`；不构建应用 |
 | 不涉及 Runtime 或打包的 Shell UI | 阶段 2 | 当前开发平台；定向 UI 测试后执行受影响的普通 build/DEV 行为 |
 | Shell main/preload 或用户数据行为 | 阶段 2 | 当前开发平台，并覆盖受影响的 macOS/Windows 路径；必须验证既有用户数据不丢失 |
-| 默认 Profile 或 Better Sidebar | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
+| 默认 Profile、Better Sidebar 或 `dshmarket` | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
-| upstream Shell 合并 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
+| upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
 
-upstream Shell 合并的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项被 upstream 覆盖都先恢复并测试，再进入打包。
+upstream Shell 变更的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项会被候选变更覆盖，都先完成本地适配并测试，再进入打包。
 
-Core Runtime 锁更新和 Shell upstream 合并必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
+Core Runtime 锁更新和 Shell upstream 定向采用必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
 
 Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行为，不能替代阶段 3–5 的 Core 源码证明、原生 Runtime Release 和锁更新。覆盖验证通过后，正式收口必须关闭 watcher、从新目录重新准备锁定 Runtime/Profile，并确认没有源码软链接、本机绝对路径或 DEV 状态文件，再继续阶段 6。
 
@@ -48,7 +50,7 @@ Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行
 - 查看 `git status --short --branch`、目标提交范围和相关 diff。
 - 记录 Shell commit、`core-runtime.lock.json` 的 tag/commit/平台哈希、Node/pnpm 版本和构建目标。
 - 区分用户修改、构建输出、缓存和本轮允许修改的文件；不得为获得“干净工作树”清理不属于本轮的内容。
-- upstream 合并按上一节审计产品约束，并核对单侧栏设计中的升级决策矩阵。
+- upstream 变更按 [上游接收规范](upstream-intake.md) 审计，并核对单侧栏设计中的升级决策矩阵。
 
 **通过条件：** 变更类别、验证起点、必需平台、应用身份和用户数据目录均已明确，未跟踪文件所有权清楚。
 
@@ -130,9 +132,19 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1` 和模板版本要求的 Profile，避免无意义地重新安装。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 和模板版本要求的 Profile，避免无意义地重新安装。
 
-**通过条件：** 测试、类型检查和普通 build 均通过，生成的 manifest/Runtime/Profile 与锁和默认插件版本一致。
+Profile 准备还会执行锁定版本的 Market 宿主适配，包括必需插件保护、列表隐藏和桌面重启委托。若 `dshmarket` 内部更新导致保护列表、更新/卸载路由或客户端重启动作无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
+
+Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
+
+```bash
+rg -n 'require\(.+\./chunks/' out/preload/*.cjs
+```
+
+预期无输出。多个 preload 复用同一个运行时 helper 时，Rollup 可能生成共享 `chunks/*.cjs`；Electron sandbox preload 无法加载该相对模块，随后会同时出现 preload 加载失败、桥接 API 为 `undefined`、账号入口消失或辅助窗口空白。跨 preload 只共享会在编译后擦除的 TypeScript 类型；少量运行时 IPC bridge 保持在各自入口内，并由契约测试校验一致性。
+
+**通过条件：** 测试、类型检查和普通 build 均通过，生成的 manifest/Runtime/Profile 与锁和默认插件版本一致；所有 sandbox preload 均不依赖相对共享 chunk。
 
 **失败时：** 不生成 DMG、zip、NSIS，也不触发 GitHub installer。按失败属于测试、Runtime 下载、Profile 或 Electron build 回到相应阶段。
 
@@ -148,6 +160,8 @@ npm run prepare:bundled-profile
 node --version
 npm exec electron-vite -- dev
 ```
+
+退出时使用 `Ctrl+C`，并确认 Electron 与 Vite 一同结束、开发端口已经释放。macOS 上为读取 `.zprofile` 和 `.zshrc` 启动的交互式 Shell 必须位于独立进程会话；否则它退出后可能把终端前台进程组留在失效 PID，表现为终端只打印 `^C` 而 Dev 客户端继续运行。
 
 先构建成本较低的目录应用：
 
@@ -174,6 +188,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
+- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.44.0`；
+- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
@@ -188,9 +204,12 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的用户 Profile：`dsh-better-sidebar@0.16.1` 依赖、bundle 注册和 `.install-complete` 均存在。
+- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
+- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
+- 打开设置中的 Plugin Market；卸载一个可选出厂插件并点击“立即重启”，确认 Shell 重新启动 Harness、没有插件恢复页或孤儿 Harness 进程、该插件不会恢复，登录、设置、退出和 Sidebar 仍可用。另行卸载 `dshmarket` 并重启同一应用，确认市场不会恢复；再用新账号范围确认首次初始化仍预装市场与可选出厂插件。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
+- 检查 `harness.log` 中 `[desktop] startup phase` 的单调计时。Shell 的 `ready` 只表示 Harness 视图已接管窗口，不代表所有插件完成初始化；Profile 修复耗时从 `repairing-profile` 到 `auditing-runtime` 计算，连续热启动达到 300ms 才进入 Profile 快速路径优化。
 
 **通过条件：** 人工明确回复上述行为通过，并在记录中写明应用路径、Runtime tag、全新/升级 Profile 类型及用户数据目录。
 
@@ -202,30 +221,32 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 **执行：**
 
-- 使用 `.github/workflows/release.yml` 的 `Release desktop installers`，按发布范围选择 `macos`、`windows` 或 `all`。
-- Windows x64 由 `windows-2022` runner 负责；macOS 由相应原生 runner 构建。
-- 当前 `workflow_dispatch` 的 macOS 路径生成未签名的 `因赛AI Dev` artifact：它显式设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，只用于目标 runner 构建证明，不得进入阶段 10。只有 `v*` 标签路径在配置完整 secrets 后导入 `Developer ID Application`、签名、公证、stapling 并执行 Gatekeeper 验证。
-- Windows DEV 路径分别验证两个状态：干净用户目录中的 Shell 必须稳定停留在未登录界面且不得提前启动 Harness；随后 `scripts/smoke-packaged-harness.mjs` 直接使用安装包内置的 Node、Runtime、默认 Profile 和桌面 patch 创建 Unicode 路径工作区与会话。不要用登录前 Shell 是否出现 Harness endpoint 判断 Runtime 是否可用，也不要为 CI 增加登录绕过开关。
-- 需要验证 Apple 分发凭据时先运行 `target: apple-signing-preflight`。它只导入 P12、核对 `Developer ID Application` 与 Team ID，并调用 Notary Service，不安装依赖或构建应用；任一检查失败即停止。
-- 预检通过后可运行 `target: macos-arm64-signed` 生成 Apple Silicon 签名候选包。该目标复用正式签名、公证、stapling 与 Gatekeeper 检查，但不构建 Intel/Windows，不执行 UKey 签名，也不创建 GitHub Release。
-- 观察失败发生在 install、test、Runtime、Profile、builder、签名/公证、blockmap 还是 upload；只重跑基础设施型失败的受影响 job。
+- Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
+- 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
+- macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
+- 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
+- Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
+- `publish` 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
+- 同一 tag 已存在 Release 时必须失败；禁止 `--clobber`、覆盖资产或只重跑 publish 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
+- Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
+- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证还是 GitHub upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
-**通过条件：** 目标 job 成功，预期安装包与伴随文件存在，文件名和架构符合目标；macOS 若要进入阶段 10，还必须来自签名发布链并通过 workflow 中的签名、公证、stapling 与 Gatekeeper 检查。
+**通过条件：** preflight、三个原生 job、Sonoma 兼容 job 与 publish 全部成功；公开 Release 中的全部资产与已验证 `insight-update.json` 完全一致，Candidate/Stable 属性和版本正确，macOS 签名、公证、stapling、Sonoma 分发检查与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
 **失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 run 下载的确切安装包。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 DMG；可接受 `macos-arm64-signed` 候选包或正式 `v*` 标签包，未签名 DEV artifact 不是本阶段输入。`Apple Development` 身份不能替代外部分发身份。
+**输入：** 从阶段 9 对应 GitHub Release 下载的确切安装包、`insight-update.json` 和 `insight-update.json.sig`。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
 
 **执行：**
 
-- 记录 workflow URL、artifact 文件名、文件大小和对外发布时的 SHA-256。
-- macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `spctl --assess --type execute --verbose=4`，再用 `xcrun stapler validate` 检查应用与 DMG；任一失败即停止安装验收。
+- 记录 workflow URL、Release URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
+- macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
-- macOS 正式包额外验证签名、公证和 stapling；Windows 验证安装、启动、卸载及需要的签名状态。
+- macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
 
 正式 macOS 本地打包命令为：
 
@@ -233,7 +254,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 npm run package:mac:arm64
 ```
 
-**通过条件：** 人工明确确认最终安装包的首次安装、覆盖安装和核心行为通过；发布记录完整。
+**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
 
 **失败时：** 保留安装包和日志，标记失败格式与平台。一个已验收 DMG 可用于 macOS 功能结论，但 zip/blockmap 故障必须作为独立未解决项记录，不能宣称整个发布完全通过。
 
@@ -254,16 +275,31 @@ npm run package:mac:arm64
 | Markdown/HTML 打开外部应用 | Sidebar 是否真实加载、是否曾被恢复流程卸载 | 阶段 8 |
 | 无限启动页 | Harness Utility Process、Profile 安装标记、Runtime 身份 | 阶段 8 |
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
-| Windows Vitest 启动时报缺少 `@rollup/rollup-win32-x64-msvc` | 根 `optionalDependencies` 与 lockfile 的 Windows package 节点 | 阶段 2/9，修复后只跑 Windows |
+| `release-preflight` 在原生 job 前失败 | tag/channel、`package.json` 与 lockfile 版本、发布策略版本、三个 Runtime target 和共同 Core commit | 阶段 9；只修正元数据并重跑，不下载 Runtime 或启动原生构建 |
+| 手动触发 workflow 返回 HTTP 422，提示 `Unrecognized named-value: runner` | job 级配置是否引用 `${{ runner.temp }}`；workflow dispatch 解析时 runner 上下文尚不存在 | 阶段 9；改用步骤运行时提供的 `$RUNNER_TEMP`，并由发布契约测试拒绝 job 级 `runner.temp`，此类失败不会启动或消耗 runner |
+| macOS DMG、ZIP 和 blockmap 已生成但缺少 `latest-mac.yml` | `publish: null` 或 `--publish never` 不保证 electron-builder 生成更新元数据；检查架构打包命令是否执行 `finalize-mac-release.mjs` | 阶段 7/9；根据最终 ZIP 重建并校验 YAML，不为生成元数据启用自动发布 |
+| Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
+| macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
+| macOS 签名时出现 `EMFILE: too many open files` | `@electron/osx-sign 1.3.3` 会通过 `Promise.all` 递归检查 App 内的文件；当 Runtime 和内置 Profile 合计超过万级文件时，runner 的软文件句柄限制会被耗尽。依次运行 DMG、ZIP 两个 electron-builder 进程还会重建并重复签名同一个 App；实际 Candidate 曾在首次签名、公证和 DMG 成功后，于第二次 ZIP 签名再次耗尽句柄 | 阶段 9；通过 `patch-package` 将 `osx-sign` 文件检查串行化，方案对应上游 [electron/osx-sign#286](https://github.com/electron/osx-sign/pull/286)；单次 electron-builder 同时构建 `dmg zip`，只装配和签名 App 一次；两个 macOS 构建 Shell 同时保留 `ulimit -n 65536`。`10240`、单纯提高上限和仅合并 target 均已在约 4.2 万文件的实际制品上证实不足；`npm ci` 必须成功应用补丁，签名后仍执行完整 bundle 校验 |
+| Intel App 已通过 codesign、Apple 公证和 staple，但 `spctl --type execute` 报 `a sealed resource is missing or invalid` | `spctl` 的 App 评估可能与底层签名和公证结果冲突；Apple 在 macOS 14 起将 `syspolicy_check distribution` 作为应用分发检查入口，并将旧 `spctl` App 检查标为准确性较低 | 阶段 9；App 改用 `syspolicy_check distribution --verbose`，DMG 仍用 `spctl --type open`；不得因为替换检查工具而省略 `codesign --strict --deep`、stapler、DMG 公证或安装后的 quarantine 验收 |
+| electron-builder 选择 `Apple Development` 或找不到 `Developer ID Application` | `DESKTOP_CSC_LINK` 实际包含的证书类型、Team ID 和私钥是否匹配 | 阶段 9；导入临时钥匙串后、打包前必须精确找到目标 Team 的 `Developer ID Application` 并以哈希传给 `CSC_NAME`，不允许自动选择其他身份 |
+| Windows NSIS 已生成且 `7z t` 通过，但被判定“不是 x64” | 是否错误地把 NSIS 安装器外壳的 PE machine 当成应用架构 | 阶段 9；只校验安装器是有效 PE/NSIS，在 `win-unpacked` 中校验主程序为 x64，并让 PowerShell 对任何外部命令非零状态立即停止 |
+| Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
-| `xattr -d -r` 报 Runtime `.bin/node: No such file` | 先检查应用根目录的 quarantine 是否已删除，再检查 `.bin/node` 是否错误指向 CI runner 的绝对路径；同时确认包内真实 Node 文件存在 | 真实 Node 存在且应用可启动时可继续阶段 9 DEV 验证，但必须单独跟踪失效链接；真实 Node 缺失则退回阶段 6 |
+| 云端签名、公证和 stapling 均通过，但 macOS 14.5 重复要求钥匙串授权 | 先在最终 DMG 内应用上复核严格 codesign、CodeDirectory、CMS 与证书链；构建 runner 通过不等于旧目标系统接受同一签名 | 阶段 9 的 Sonoma 兼容 job 必须通过，阶段 10 仍在目标机保留 quarantine 连续启动三次；未确认目标机通过前不得发布 Stable |
+| codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | `iconutil` 对尺寸完整的 iconset 报 `Invalid Iconset` | 先用 `file`/`sips` 核对全部标准尺寸；若 `iconutil` 自己解包的 iconset 也无法重新封装，则属于宿主工具异常 | 阶段 2/7，使用仓库生成器直接写入标准 ICNS PNG entries，并以 `file`、`sips` 和品牌资产测试验证，不进入远程打包调试 |
 | DMG 成功、zip/blockmap 失败 | 独立分发格式与 artifact 命名，不先否定应用行为 | 阶段 7/9，格式问题单独跟踪 |
 | GitHub 上传 Unicorn/单 sidecar 失败 | Release 资产列表与失败 step | 阶段 4/9，只重跑失败 job |
 | pnpm 非 TTY 清理、OOM 或下载失败 | Node/pnpm 版本、store、`CI=1`、并发和网络 | 阶段 3/6，不进入 builder |
+| `npm test` 的发布说明测试报 `spawnSync python3 ENOEXEC` | `command -v python3`、`file "$(command -v python3)"`；检查 PATH 首项是否为空文件或损坏的 Homebrew shim | 阶段 2；改用可执行的系统 Python 或修复本机 shim，不修改测试来掩盖宿主环境故障 |
 | Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version`；普通 build 成功不能证明 Vite 7 DEV 可启动 | 阶段 7，切换到 Node 22 后重启，不改产品代码 |
+| 新模板已隐藏必需插件，但既有账号 Market 仍显示停用/卸载 | 比较 bundled Profile 与活跃账号 `dshmarket/lib/routes.js` 的 installed/updates 过滤标记；旧 Profile 可能只有 update/uninstall 守卫 | 阶段 8；同版本市场应由 Shell 启动刷新三份宿主适配文件，不得用完整 Profile 覆盖或回填用户已删除的可选插件 |
+| 在 Market 卸载插件后点击“立即重启”进入 Harness 恢复页，但新 Harness 仍在后台端口运行 | 检查市场日志是否先记录 `uninstall exit=0` 再记录 `restart scheduled`，同时核对原 Harness 是正常退出而 Shell 仍判为意外失败；这是独立 DSH 自重启绕过 Electron 生命周期所有权，不是插件卸载残留 | 阶段 8，禁止 installer；同版本 `dshmarket/client/client.js` 必须由 Shell 刷新桌面重启能力与委托，重启前等待市场写操作完成，桥接缺失时失败关闭，只允许经过 `harness:restart`，并检查无 PPID 1 的孤儿 Harness |
+| Dev 终端按 `Ctrl+C` 只打印 `^C`，客户端或 5173 端口仍存活 | 比较 Dev 进程 `PGID/TPGID`；检查交互式登录 Shell 是否夺走终端控制权，以及 Development 主进程是否处理 `SIGINT/SIGTERM` | 阶段 7；禁止带残留进程继续下一轮验证，先恢复进程组与优雅退出链路 |
+| `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |
 
@@ -275,7 +311,7 @@ npm run package:mac:arm64
 - 先跑定向测试，再跑一次完整 `npm test`。相关源码没有变化时，不为提交、推送或重跑上传重复执行已通过的全量检查。
 - 先生成目录应用，目录应用资源和行为通过后才生成 DMG、zip 或 NSIS。
 - 原生 runner 只处理本机不能证明的平台、签名和安装器行为；本地可复现问题先本地解决。
-- 某平台的依赖或 lockfile 修复不改变其他平台已构建的输入时，只重跑该平台；新提交不能通过“重跑失败 job”带入，必须从新提交启动对应单平台 workflow。
+- 同一次 run 的纯基础设施失败可重跑失败 job；任何源码、依赖、lockfile、策略或制品修复都必须创建新 Candidate 版本并从新提交启动完整 workflow，不能与旧 run 的成功制品混合发布。
 - 编译成功但单个上传失败时只重跑失败 job；先确认是否需要重新编译。
 - 把 Runtime 下载、Profile 准备、测试、普通 build、目录应用、安装包和上传分别计时，优化重复最高的阶段，不减少校验项。
 - 测试用户数据使用独立 App ID/channel，并保留精确命名的备份。禁止把清理整个应用数据作为常规提速手段。
