@@ -13,15 +13,18 @@ afterEach(async () => {
   ))
 })
 
-async function builtFixture() {
+async function builtFixture(
+  version = '0.1.2',
+  channel: 'candidate' | 'stable' = 'stable'
+) {
   const root = await mkdtemp(path.join(tmpdir(), 'insight-release-verify-'))
   temporaryDirectories.push(root)
-  const paths = await writeReleaseFixture(root)
+  const paths = await writeReleaseFixture(root, version, channel)
   const result = spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'build-update-release.mjs'),
     '--dir', paths.releaseDir,
-    '--version', '0.1.2',
-    '--channel', 'stable',
+    '--version', version,
+    '--channel', channel,
     '--shell-commit', 'a'.repeat(40),
     '--runtime-manifest', paths.runtimeManifest,
     '--compatibility', paths.compatibility,
@@ -32,12 +35,16 @@ async function builtFixture() {
   return paths
 }
 
-function runVerify(paths: Awaited<ReturnType<typeof builtFixture>>, version = '0.1.2') {
+function runVerify(
+  paths: Awaited<ReturnType<typeof builtFixture>>,
+  version = '0.1.2',
+  channel: 'candidate' | 'stable' = 'stable'
+) {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'verify-release-assets.mjs'),
     '--dir', paths.releaseDir,
     '--version', version,
-    '--channel', 'stable',
+    '--channel', channel,
     '--public-key', paths.publicKey
   ], { encoding: 'utf8' })
 }
@@ -46,6 +53,12 @@ describe('complete release asset verifier', () => {
   it('accepts an authenticated, complete release set', async () => {
     const paths = await builtFixture()
     const result = runVerify(paths)
+    expect(result.status, result.stderr).toBe(0)
+  })
+
+  it('accepts unified artifact names for a Candidate release', async () => {
+    const paths = await builtFixture('0.1.2-rc.2', 'candidate')
+    const result = runVerify(paths, '0.1.2-rc.2', 'candidate')
     expect(result.status, result.stderr).toBe(0)
   })
 

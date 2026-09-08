@@ -54,12 +54,10 @@ function usage() {
   return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path>'
 }
 
-function artifactDefinitions(channel) {
-  const prefix = channel === 'candidate' ? 'insight-candidate' : 'insight'
+function artifactDefinitions() {
+  const prefix = 'insight'
   const mac = (arch) => `${prefix}-mac-${arch}`
-  const windows = channel === 'candidate'
-    ? 'insight-candidate-windows-x64-setup.exe'
-    : 'insight-windows-x64-setup.exe'
+  const windows = 'insight-windows-x64-setup.exe'
   return [
     ['darwin', 'arm64', 'dmg', `${mac('arm64')}.dmg`],
     ['darwin', 'arm64', 'zip', `${mac('arm64')}.zip`],
@@ -198,7 +196,7 @@ async function main() {
     throw new Error('Release manifest version, channel, policy, or compatibility is invalid.')
   }
 
-  const definitions = artifactDefinitions(channel)
+  const definitions = artifactDefinitions()
   const expectedIdentities = definitions.map(identity).sort()
   const actualIdentities = manifest.artifacts
     .map((entry) => identity([entry.platform, entry.arch, entry.kind, entry.name]))

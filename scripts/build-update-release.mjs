@@ -110,12 +110,10 @@ function validateRuntimeManifest(value) {
   return value.core
 }
 
-function artifactDefinitions(channel) {
-  const prefix = channel === 'candidate' ? 'insight-candidate' : 'insight'
+function artifactDefinitions() {
+  const prefix = 'insight'
   const mac = (arch) => `${prefix}-mac-${arch}`
-  const windows = channel === 'candidate'
-    ? 'insight-candidate-windows-x64-setup.exe'
-    : 'insight-windows-x64-setup.exe'
+  const windows = 'insight-windows-x64-setup.exe'
   return [
     ['darwin', 'arm64', 'dmg', `${mac('arm64')}.dmg`],
     ['darwin', 'arm64', 'zip', `${mac('arm64')}.zip`],
@@ -192,7 +190,7 @@ async function main() {
   ])
 
   const artifacts = await Promise.all(
-    artifactDefinitions(channel).map((definition) => artifact(releaseDir, definition))
+    artifactDefinitions().map((definition) => artifact(releaseDir, definition))
   )
   artifacts.sort(compareArtifacts)
   const manifest = {
