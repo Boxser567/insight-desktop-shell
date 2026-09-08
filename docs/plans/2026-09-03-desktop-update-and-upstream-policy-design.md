@@ -47,7 +47,7 @@ dataelement/dsh-desktop
 - 登录前、Core Runtime 启动失败或插件启动失败时，仍可使用更新入口。
 - 同时支持可选更新和可信的强制更新。旧版本低于声明的最低支持版本时，允许业务协议或必需插件随整包强制升级。
 - 更新后保留账号数据、Harness 会话、用户设置、工作区、资产和用户自行导入的插件。
-- 更新源可替换。未来增加 CDN 或国内镜像时，不重写客户端更新状态机。
+- 从首个公开版本起使用自有 HTTPS 域名后的 OSS/CDN 更新源；未来替换 Bucket、CDN 或源站时，通过同一域名迁移，不重写客户端更新状态机。
 - 继续吸收 DSH Desktop 中有价值的实现，但不恢复其产品身份、Runtime 管理、插件市场、签名硬件或部署服务。
 
 ## 第一阶段不做的内容
@@ -93,13 +93,13 @@ macOS 同时使用更新器的平台签名检查和本文定义的产品级发�
 
 ## 更新源
 
-第一阶段使用公开的 `Boxser567/insight-desktop-shell` GitHub Releases。现有 GitHub Actions 已能构建多平台产物，可直接在同一 Release 中发布更新元数据，无需新增托管服务。
+Candidate 和 Stable 从首个公开版本起使用自有 HTTPS 域名后的 OSS/CDN。GitHub Releases 只保存相同字节的公开镜像、构建记录和人工灾备下载，不参与客户端自动更新发现或自动回退。
 
-更新管理器依赖 `UpdateSource` 接口，不在 UI 或应用生命周期代码中拼接 GitHub URL。该接口按渠道解析经过认证的发布描述。未来接入通用 HTTPS、对象存储、CDN 或国内镜像时，只需实现同一接口并提供相同的签名字节。
+更新管理器继续依赖 `UpdateSource` 接口，不在 UI 或应用生命周期代码中拼接存储供应商 URL。每个渠道只读取一个短缓存 `current.json`，再解析不可变版本目录内的产品 Manifest、签名和平台更新元数据。完整对象布局、信任边界和发布顺序以[桌面客户端 OSS 更新分发设计](2026-09-08-desktop-update-oss-distribution-design.md)为准。
 
-仓库可用时应启用 Immutable Releases。工作流先创建草稿 Release，上传并校验全部产物，最后一次性发布。已发布 Tag 和产物不得覆盖；修复必须使用新版本。
+工作流每个平台只构建一次，先把已验证制品上传至不可变 OSS 版本目录，再创建包含相同字节的 GitHub Draft。真实安装/更新验收和推广审批通过后，先公开 GitHub Release，最后更新唯一的渠道 `current.json`。已发布 Tag、OSS 版本目录和 Release 资产不得覆盖；修复必须使用新版本。
 
-版本发现不能依赖 GitHub API 返回顺序。客户端按渠道解析合法 Tag，进行有上限的分页，并从完整候选集合中选择最高语义版本。到达分页上限但仍有下一页时，应返回明确错误，不能基于不完整结果静默选版本。
+客户端不能列举 OSS 对象或依赖 GitHub API 顺序发现版本。`current.json` 只负责定位候选版本，应用内置公钥签名的产品 Manifest 才是发布内容和更新策略的信任根。
 
 ## 可信发布 Manifest
 
@@ -153,7 +153,7 @@ interface SignedReleaseManifest {
 
 Ed25519 私钥只在仓库外的系统临时目录生成，随后写入受保护的 GitHub Actions Environment Secret，并保存一份受访问控制的加密恢复副本。确认两个存储位置后立即删除本机明文。私钥不得保存在仓库内，即使路径已被 `.gitignore` 忽略。应用只内置公钥。轮换密钥时，先发布同时信任新旧公钥的版本，后续版本才能移除旧公钥；加密恢复副本用于避免 GitHub Secret 丢失后无法完成该过渡。
 
-下载前，客户端必须校验 Manifest 签名、Schema、渠道、语义版本、更新策略、目标平台、目标架构和兼容性声明。选中的 GitHub Tag 必须与签名 Manifest 版本完全一致。`minimumSupportedVersion` 不能高于发布版本。下载后必须用实际文件重新计算大小和 SHA512。Windows 安装器即使没有 Authenticode，也必须能被认证为 Insight 发布的原始文件。
+下载前，客户端必须校验 Manifest 签名、Schema、渠道、语义版本、更新策略、目标平台、目标架构和兼容性声明。渠道指针、签名 Manifest 和 `electron-updater` 平台 YAML 的版本必须完全一致。`minimumSupportedVersion` 不能高于发布版本。下载后必须用实际文件重新计算大小和 SHA512。Windows 安装器即使没有 Authenticode，也必须能被认证为 Insight 发布的原始文件。
 
 可选更新允许跳过。只有当前版本低于签名 Manifest 中的 `minimumSupportedVersion` 时，更新才属于强制更新。强制更新不可跳过，并持续显示到安装完成。
 
@@ -277,7 +277,7 @@ type UpdateStatus =
 - Manifest 缺失或签名无效：提示发布无法认证，拒绝下载。
 - Tag 与 Manifest 版本不一致：拒绝该 Release，不回退到未明确选择的版本。
 - 产物缺失或摘要不一致：只删除对应更新缓存，拒绝安装。
-- GitHub 不可用或触发限流：保留当前版本；手动检查显示简短错误，后续可重试。
+- OSS/CDN 不可用：保留当前版本；手动检查显示简短错误和固定自有官方下载页入口，后续可重试。
 - 下载中断：保留当前版本，之后继续使用更新器缓存重试。
 - Core Runtime 无法停止：取消安装，并尽可能保持当前进程继续运行。
 - 强制更新无法下载：保留“重试”和“退出”。只有缓存 Manifest 与签名重新验证成功且当前版本确实过低时，后续启动才阻止登录/Core。
@@ -292,13 +292,13 @@ type UpdateStatus =
 1. 纯单元测试：签名、发布策略、渠道、目标选择、状态转换、定时规则和跳过版本。
 2. IPC 与 Preload 契约测试：证明不可信渲染进程不能接触安装路径或更新内部信息。
 3. 发布脚本 Fixture：显式发布策略、Manifest、签名、摘要、macOS 元数据合并、必需产物及截断文件拒绝。
-4. 开发模式 Fixture UI：覆盖全部状态，但不接触 GitHub 正式源，也不允许真实安装。
+4. 开发模式 Fixture UI：覆盖全部状态，但不接触 OSS/CDN 正式源，也不允许真实安装。
 5. 本地未签名 DEV 包：证明开发渠道无法发现正式更新。
 6. macOS 候选渠道：完成原生 DMG/ZIP 校验以及 N 到 N+1 安装和数据保留。
 7. Windows 候选渠道：完成原生 NSIS 校验、Manifest 验证、N 到 N+1 安装、SmartScreen 预期和数据保留。
 8. 两个平台候选路径以及登录、账号隔离、Better Sidebar 和内置 Runtime 验收通过后，才允许发布正式版。
 
-不得为了验证更新窗口、状态机、Manifest 或错误提示而提前构建安装包。不得在本地聚焦测试、Build、Fixture UI 和对应平台本地 Smoke 通过前触发 GitHub 安装包任务。
+不得为了验证更新窗口、状态机、Manifest 或错误提示而提前构建安装包。不得在本地聚焦测试、Build、Fixture UI 和对应平台本地 Smoke 通过前触发远程安装包任务。
 
 ## 文档维护
 

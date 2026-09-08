@@ -1,70 +1,90 @@
 # Desktop 发布说明
 
+## 当前发布状态
+
+截至 2026-09-08，桌面客户端尚未对外发布首个版本。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN；客户端不以 GitHub Releases 作为自动更新源。
+
+仓库当前 `.github/workflows/release.yml` 仍是过渡实现：
+
+- 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
+- 推送 `v*` tag 走 Stable；
+- 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，并直接把 GitHub Draft 公开；
+- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json`、执行推广前安装门禁或提供客户端官方下载兜底。
+
+因此，在[桌面客户端 OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)完成并验收前，不得使用当前工作流发布生产 Stable，也不得把其 GitHub Release 当作首发自动更新源。
+
 ## 必读资料
 
-- [因赛AI Desktop 客户端构建 Runbook](client-build-runbook.md) 是当前构建步骤、停止条件和人工门禁的权威说明。
-- [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
+- [客户端构建运行手册](client-build-runbook.md)：构建步骤、停止条件和人工门禁的权威说明。
+- [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md)：首发更新源、对象布局、信任边界和原子发布顺序。
+- [桌面客户端更新与上游管理方案](plans/2026-09-03-desktop-update-and-upstream-policy-design.md)：更新状态机、强制更新和数据兼容策略。
+- [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)：Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 
-重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
+重大 Core、Shell、默认插件、工具链或上游更新前必须阅读 Runbook 和相关复盘。历史临时做法不得覆盖当前脚本和已批准设计。
 
-## 进入安装包构建前
+## 进入远程安装包构建前
 
-触发 GitHub 安装包前，必须完成 Runbook 阶段 1–8，并保留以下证据：
+必须完成客户端构建 Runbook 阶段 1–8，并保留以下证据：
 
 - 变更范围、Shell commit、Core Runtime tag/commit、目标平台和用户数据目录已记录；
 - 定向测试、`npm test`、`npm run typecheck` 和普通 build 已按变更范围通过；
 - `core-runtime.lock.json` 指向资产完整、哈希和 `runtime.json` 一致的已验收 Runtime Release；
 - 独立本地 DEV 应用的绝对路径和 Runtime 身份明确；
-- 全新 Profile 与既有 Profile 启动均正常，会话、工作区、设置和用户插件未丢失；
-- `dsh-better-sidebar@0.16.1` 已复制并注册，Markdown 和 HTML 实际在 Sidebar 内打开；
+- 全新 Profile 与既有 Profile 启动正常，会话、工作区、设置和用户插件未丢失；
+- 必需 Sidebar 插件已复制并注册，Markdown 和 HTML 实际在 Sidebar 内打开；
 - 没有插件恢复窗口或无限启动页，并已收到明确人工验收结果。
 
-本地阶段未通过时禁止用 GitHub Actions 继续远程调试。Shell 发布标签也不得隐式升级 Core Runtime；Runtime 锁变更必须是独立、可审核的 Shell 提交。
+本地阶段未通过时禁止用 GitHub Actions 继续远程调试。Shell 发布标签不得隐式升级 Core Runtime；Runtime 锁变更必须是独立、可审核的 Shell 提交。
 
-## GitHub Actions
+## 改造后的生产发布流程
 
-安装包 workflow 名为 `Release desktop installers`，定义在 `.github/workflows/release.yml`。手动运行时 `target` 可选：
+实现完成后，`Release desktop installers` 应执行：
 
-- `macos`：构建 Apple Silicon 与 Intel macOS 包；
-- `windows`：使用 `windows-2022` runner 构建 Windows x64 包；
-- `all`：构建全部上述目标；
-- `apple-signing-preflight`：只验证 Apple P12、`Developer ID Application`、Team ID 与 Notary Service 鉴权，不安装依赖或构建应用；
-- `macos-arm64-signed`：在预检通过后构建、签名、公证并上传 Apple Silicon 候选包，不创建 GitHub Release。
+1. 校验 tag、渠道、版本、发布策略、Runtime 锁和发布配置。
+2. 在 macOS arm64、macOS x64 和 Windows x64 各构建一次，完成签名、公证、YAML、blockmap 和安装器结构验证。
+3. 汇总相同制品，生成并签名 `insight-update.json`，执行完整资产校验。
+4. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
+5. 从最终自有 CDN 域名验证 HTTPS、HEAD、Range、大小和摘要。
+6. 创建 GitHub Draft Release，上传相同字节并核对 OSS/GitHub 摘要。
+7. 等待受保护推广环境审批。审批前，Candidate 必须完成 N→N+1 更新；Stable 必须完成对确切制品的干净安装和覆盖安装。
+8. 公开 GitHub Release，再确认渠道版本单调递增。
+9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary。
 
-普通 `macos`/`all` 手动运行只生成未签名的 macOS DEV artifact，用于原生 runner 构建证明，不能作为可直接安装的候选包。签名候选必须先通过 `apple-signing-preflight`，再单独运行 `macos-arm64-signed`；预检失败时禁止继续构建。候选包与 `v*` 标签路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。
+`current.json` 是唯一生效点。其更新前的任何失败都必须保留旧指针；禁止覆盖版本目录、已发布 tag 或 Release 资产。
 
-`macos-arm64-signed` 只关闭 Apple Silicon 的研发分发门禁，不替代正式多平台发布。它不会构建 Intel 或 Windows，不会启动 Windows UKey 签名，也不会创建或更新 GitHub Release。下载后必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
+## 首发专用门禁
 
-运行时按阶段区分 install、test、Runtime、Profile、builder、签名/公证、blockmap 和 upload 失败；纯上传基础设施故障只重跑失败 job。
+首发没有存量客户端，不需要 GitHub 桥接版本。必须按以下顺序验证：
 
-CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明安装后的 Sidebar、用户数据或启动行为正确。
+1. `0.1.0-rc.1` 在 macOS arm64、macOS x64 和 Windows x64 完成干净安装。
+2. `0.1.0-rc.2` 从 rc.1 在客户端内完成检查、下载、校验、安装和重启。
+3. `0.1.0` 的确切 Stable 制品完成干净安装与覆盖安装。
+4. 人为让更新检查失败，确认更新窗口可以打开固定自有官方下载页，并能下载 DMG/EXE 完成覆盖安装。
+5. 上述证据齐全后，才允许首次写入 `stable/current.json` 并公开产品下载入口。
 
 ## 最终安装验收
 
-从本次 workflow run 下载确切安装包后，在目标平台完成：
+必须从 OSS 不可变版本目录或对应 GitHub Draft 下载本次确切安装包，不得用本地重建包替代：
 
-- macOS DMG 校验、完整 bundle 签名、Gatekeeper、notarization 和 stapling 检查；
-- 干净安装和覆盖安装；
-- 首次启动与既有 Profile 升级；
-- Markdown/HTML 在 Sidebar 内打开；
-- 无插件恢复窗口、无无限启动页；
-- 会话、工作区、设置和插件清单符合预期；
-- macOS 签名、公证和 stapling，或 Windows 安装、启动、卸载及所需签名状态。
+- macOS 验证 DMG、完整 bundle 签名、Gatekeeper、公证和 stapling；
+- Windows 核对产品 Manifest 摘要，接受当前预期的 SmartScreen/未知发布者提示，但必须能继续安装；
+- 完成干净安装和覆盖安装；Candidate 完成 N→N+1 客户端更新；
+- 验证首次启动、既有 Profile、Sidebar、会话、工作区、设置和插件清单；
+- 验证登录前、Core 失败和更新错误状态仍能进入更新窗口及官方下载页；
+- 核对实际版本、应用路径、用户数据目录和 Runtime 身份。
 
-验收前退出同 App ID/channel 的旧实例，并核对实际进程和应用路径。人工结果只对明确命名的安装包、应用路径和 Runtime tag 有效。
-
-DMG、zip、NSIS 和 blockmap 是不同产物层。某一格式失败时要记录影响范围；例如已单独验收的 DMG 可保留 macOS 功能结论，但 zip 失败仍是未解决的发布格式问题，不能写成整次发布完全通过。
+DMG、ZIP、NSIS 和 blockmap 是不同产物层。某一格式失败时记录准确影响范围；ZIP 或 blockmap 失败时，即使 DMG 人工安装成功，也不能宣称自动更新通过。
 
 ## 发布记录
 
-每次候选或正式发布至少记录：
+每次 Candidate 或 Stable 至少记录：
 
-- Shell commit，Core Runtime tag、commit、Node 和 pnpm 版本；
-- `Release desktop installers` run URL、attempt、target 和 job 结果；
-- 安装包文件名、架构、大小，以及对外发布时的 SHA-256；
-- 干净安装与覆盖安装结果；
-- Sidebar Markdown/HTML 结果；
-- 启动恢复、启动页、会话、工作区、设置和插件清单结果；
+- tag、channel、Shell commit、Core Runtime tag/commit、Node 和包管理器版本；
+- `Release desktop installers` run URL、attempt 和各 job 结果；
+- OSS 版本前缀、最终 CDN 验证结果、GitHub Draft/Release URL；
+- 安装包与更新元数据的文件名、架构、大小、SHA-256 和 Manifest SHA-512；
+- 推广前 `current.json`、待发布 `current.json` 和实际提交后的响应；
+- 干净安装、覆盖安装、N→N+1、官方下载兜底和数据保留结果；
 - 已知的平台或格式问题、确认不受影响的范围和下一验证阶段。
 
-完整记录可直接使用 [客户端构建 Runbook 的模板](client-build-runbook.md#构建记录模板)。
+完整记录可使用[客户端构建 Runbook 的模板](client-build-runbook.md#构建记录模板)。

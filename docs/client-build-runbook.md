@@ -132,9 +132,9 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 和模板版本要求的 Profile，避免无意义地重新安装。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 和模板版本要求的 Profile，避免无意义地重新安装。
 
-Profile 准备还会执行锁定版本的 Market 宿主策略适配。若 `dshmarket` 内部更新导致保护列表或更新/卸载路由无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
+Profile 准备还会执行锁定版本的 Market 宿主适配，包括必需插件保护、列表隐藏和桌面重启委托。若 `dshmarket` 内部更新导致保护列表、更新/卸载路由或客户端重启动作无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 
@@ -191,8 +191,8 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
-- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.41.0`；
-- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫；
+- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.44.0`；
+- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
@@ -207,9 +207,9 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.41.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
-- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主策略文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
-- 打开设置中的 Plugin Market；卸载 `dshmarket` 后重启同一应用，确认市场不会恢复，登录、设置、退出和 Sidebar 仍可用。另用新账号范围确认首次初始化仍预装市场。
+- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
+- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
+- 打开设置中的 Plugin Market；卸载一个可选出厂插件并点击“立即重启”，确认 Shell 重新启动 Harness、没有插件恢复页或孤儿 Harness 进程、该插件不会恢复，登录、设置、退出和 Sidebar 仍可用。另行卸载 `dshmarket` 并重启同一应用，确认市场不会恢复；再用新账号范围确认首次初始化仍预装市场与可选出厂插件。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
 
@@ -217,9 +217,11 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 
 **失败时：** 立即停止。保留日志和精确 Profile 备份；根据失败落在资源、Profile、Utility Process 或交互层回到阶段 5、6 或 7。不得以卸载内置 Sidebar 作为通过条件。
 
-### 阶段 9：GitHub Desktop 安装包构建
+### 阶段 9：生产安装包构建与分发暂存
 
-**输入：** 阶段 1–8 的记录和明确人工通过结论。
+> 过渡状态：截至 2026-09-08，`.github/workflows/release.yml` 仍会直接公开 GitHub Release，尚未实现 OSS 暂存、推广审批和 `current.json` 提交。完成[OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)前，本阶段不得用于首个生产 Stable。
+
+**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的生产更新域名、官方下载页、OSS/CDN 和 OIDC 发布配置。
 
 **执行：**
 
@@ -227,27 +229,30 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
-- `publish` 必须直接依赖预检、两个 macOS job 和 Windows job，且只在 GitHub `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，先创建 draft、再上传全部资产，最后才公开 Release。
-- 同一 tag 已存在 Release 时必须失败；禁止 `--clobber`、覆盖资产或只重跑 publish 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
+- 暂存 job 必须直接依赖预检、两个 macOS job 和 Windows job，且只在受保护 Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY` 和 OSS 短期身份。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，将全部文件上传到不可变 `desktop/releases/v<version>/`，再创建包含相同字节的 GitHub Draft；此时不得修改渠道 `current.json`。
+- 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
+- 同一 tag、OSS 版本前缀或 GitHub Release 已存在时必须失败；禁止 `--clobber`、覆盖资产或只重跑暂存 job 来替换已有版本。任何制品内容变化都创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
-- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证还是 GitHub upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
+- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、OSS upload/CDN verify 还是 GitHub Draft upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
-**通过条件：** preflight、三个原生 job 与 publish 全部成功；公开 Release 中的全部资产与已验证 `insight-update.json` 完全一致，Candidate/Stable 属性和版本正确，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
+**通过条件：** preflight、三个原生 job 与暂存 job 全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
 **失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 GitHub Release 下载的确切安装包、`insight-update.json` 和 `insight-update.json.sig`。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
+**输入：** 从阶段 9 的 OSS 不可变版本目录或对应 GitHub Draft 下载的确切安装包、`insight-update.json` 和 `insight-update.json.sig`。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
 
 **执行：**
 
-- 记录 workflow URL、Release URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
+- 记录 workflow URL、OSS 版本前缀、最终 CDN URL、GitHub Draft URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
+- Candidate 至少完成一次 N→N+1 客户端内更新；人为让更新检查失败，确认“下载完整安装包”能打开固定自有官方下载页并完成覆盖安装。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
+- 人工验收通过后才批准推广 job：先公开 GitHub Release，再确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`。等待或确认指针在约定 TTL 内收敛后，从外部网络再次完成检查、下载和安装 canary。
 
 正式 macOS 本地打包命令为：
 
@@ -255,7 +260,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 npm run package:mac:arm64
 ```
 
-**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
+**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，Candidate 的 N→N+1、更新失败后的官方下载兜底和推广后 canary 通过；更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
 
 **失败时：** 保留安装包和日志，标记失败格式与平台。一个已验收 DMG 可用于 macOS 功能结论，但 zip/blockmap 故障必须作为独立未解决项记录，不能宣称整个发布完全通过。
 
@@ -264,7 +269,7 @@ npm run package:mac:arm64
 有两个不可跳过的人工门禁：
 
 1. 阶段 8 的独立本地 DEV 应用。执行者必须先报告应用绝对路径、Shell commit、Core Runtime tag/commit、用户数据目录以及全新或升级 Profile，再等待人工操作结果。
-2. 阶段 10 的最终 DMG/Windows installer。必须从具体 workflow run 下载，报告文件名和校验信息，再等待首次安装与覆盖安装结果。
+2. 阶段 10 的最终 DMG/Windows installer。必须从具体 OSS 版本目录或 GitHub Draft 下载，报告文件名和校验信息，再等待首次安装、覆盖安装、Candidate N→N+1 和官方下载兜底结果；收到结论前不得批准渠道推广。
 
 人工回复只对当时明确命名的应用和制品有效。旧版应用仍在运行、只检查插件列表、只看到包内文件或只完成 builder，均不能代替 Markdown/HTML 的实际 Sidebar 行为。
 
@@ -296,7 +301,8 @@ npm run package:mac:arm64
 | `npm test` 的发布说明测试报 `spawnSync python3 ENOEXEC` | `command -v python3`、`file "$(command -v python3)"`；检查 PATH 首项是否为空文件或损坏的 Homebrew shim | 阶段 2；改用可执行的系统 Python 或修复本机 shim，不修改测试来掩盖宿主环境故障 |
 | Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version` 和 `node -p 'typeof require("node:crypto").hash'`；PATH 可能指向 Node 20，即使 Core Runtime 内置了新版 Node，普通 build 成功也不能证明 Vite 7 DEV 可启动 | 阶段 7，显式切换到满足 `^22.19 || >=24` 的宿主 Node 后重启，不改产品代码 |
 | 仅构建 DEV 目录应用却长时间停在 codesign | 钥匙串中存在签名身份，electron-builder 自动遍历 Runtime 与 bundled Profile；检查 `codesign` 当前目标和 `CSC_IDENTITY_AUTO_DISCOVERY` | 阶段 7；终止无必要的目录签名，使用独立输出并设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`；正式安装包仍按阶段 9 完整签名 |
-| 新模板已隐藏必需插件，但既有账号 Market 仍显示停用/卸载 | 比较 bundled Profile 与活跃账号 `dshmarket/lib/routes.js` 的 installed/updates 过滤标记；旧 Profile 可能只有 update/uninstall 守卫 | 阶段 8；同版本市场应由 Shell 启动刷新两份宿主策略文件，不得用完整 Profile 覆盖或回填用户已删除的可选插件 |
+| 新模板已隐藏必需插件，但既有账号 Market 仍显示停用/卸载 | 比较 bundled Profile 与活跃账号 `dshmarket/lib/routes.js` 的 installed/updates 过滤标记；旧 Profile 可能只有 update/uninstall 守卫 | 阶段 8；同版本市场应由 Shell 启动刷新三份宿主适配文件，不得用完整 Profile 覆盖或回填用户已删除的可选插件 |
+| 在 Market 卸载插件后点击“立即重启”进入 Harness 恢复页，但新 Harness 仍在后台端口运行 | 检查市场日志是否先记录 `uninstall exit=0` 再记录 `restart scheduled`，同时核对原 Harness 是正常退出而 Shell 仍判为意外失败；这是独立 DSH 自重启绕过 Electron 生命周期所有权，不是插件卸载残留 | 阶段 8，禁止 installer；同版本 `dshmarket/client/client.js` 必须由 Shell 刷新桌面重启能力与委托，重启前等待市场写操作完成，桥接缺失时失败关闭，只允许经过 `harness:restart`，并检查无 PPID 1 的孤儿 Harness |
 | Dev 终端按 `Ctrl+C` 只打印 `^C`，客户端或 5173 端口仍存活 | 比较 Dev 进程 `PGID/TPGID`；检查交互式登录 Shell 是否夺走终端控制权，以及 Development 主进程是否处理 `SIGINT/SIGTERM` | 阶段 7；禁止带残留进程继续下一轮验证，先恢复进程组与优雅退出链路 |
 | `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
@@ -329,6 +335,9 @@ npm run package:mac:arm64
 - Node / npm / pnpm / Electron：
 - 应用名、App ID/channel、绝对路径：
 - 用户数据目录与备份：
+- OSS 版本前缀 / 最终 CDN URL：
+- GitHub Draft / Release URL：
+- 推广前后 current.json：
 
 | 阶段 | 命令或操作 | 结果 | 耗时 | 证据/产物路径 |
 | --- | --- | --- | --- | --- |
@@ -344,6 +353,7 @@ npm run package:mac:arm64
 - 恢复窗口/启动页：
 - 会话、工作区、设置、插件清单：
 - 单侧栏、品牌、账号入口、统一设置和原生退出逃生路径：
+- N→N+1 / 下载完整安装包兜底：
 
 ## 未解决项
 
