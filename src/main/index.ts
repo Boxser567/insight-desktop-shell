@@ -453,11 +453,6 @@ function configureAppIdentity(): void {
     app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))
     return
   }
-  if (desktopChannel === 'candidate') {
-    app.setName('因赛AI Candidate')
-    app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-candidate'))
-    return
-  }
 
   app.setName('因赛AI')
   // Keep the historical lowercase directory stable across product-name and

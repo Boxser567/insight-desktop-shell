@@ -2,22 +2,17 @@ const packageJson = require('./package.json')
 
 module.exports = {
   ...packageJson.build,
-  appId: 'com.insight.desktop.candidate',
-  productName: '因赛AI Candidate',
+  appId: 'com.insight.desktop',
+  productName: '因赛AI',
   directories: {
     ...packageJson.build.directories,
     output: 'dist-candidate'
   },
   extraMetadata: {
-    name: 'insight-desktop-candidate',
-    productName: '因赛AI Candidate',
-    insightDesktopAppId: 'com.insight.desktop.candidate',
+    name: 'insight-desktop',
+    productName: '因赛AI',
+    insightDesktopAppId: 'com.insight.desktop',
     insightDesktopChannel: 'candidate'
-  },
-  artifactName: 'insight-candidate-${os}-${arch}.${ext}',
-  nsis: {
-    ...packageJson.build.nsis,
-    artifactName: 'insight-candidate-windows-${arch}-setup.${ext}'
   },
   publish: null
 }

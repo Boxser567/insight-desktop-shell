@@ -15,14 +15,8 @@ async function main() {
     throw new Error('package.json must contain a valid semantic version.')
   }
 
-  const match = /^(insight-candidate|insight)-mac-(arm64|x64)\.zip$/u.exec(archiveName)
+  const match = /^insight-mac-(arm64|x64)\.zip$/u.exec(archiveName)
   if (!match) throw new Error(`Unexpected macOS release archive: ${archiveName}`)
-  const expectedPrefix = semver.prerelease(version)?.[0] === 'rc'
-    ? 'insight-candidate'
-    : 'insight'
-  if (match[1] !== expectedPrefix) {
-    throw new Error(`macOS release archive does not match version ${version}.`)
-  }
 
   const directory = resolve(releaseDirectory)
   const archivePath = join(directory, basename(archiveName))

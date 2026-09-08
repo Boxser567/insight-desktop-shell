@@ -359,16 +359,18 @@ describe('GitHub release contract', () => {
       "artifactName: 'insight-dev-windows-${arch}-setup.${ext}'"
     )
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))")
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-candidate'))")
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
+    expect(main).not.toContain('insight-desktop-candidate')
     expect(main).toContain('const desktopChannel = applicationChannel()')
-    expect(candidateConfig).toContain("appId: 'com.insight.desktop.candidate'")
-    expect(candidateConfig).toContain("productName: '因赛AI Candidate'")
+    expect(candidateConfig).toContain("appId: 'com.insight.desktop'")
+    expect(candidateConfig).toContain("productName: '因赛AI'")
     expect(candidateConfig).toContain("output: 'dist-candidate'")
-    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight.desktop.candidate'")
+    expect(candidateConfig).toContain("name: 'insight-desktop'")
+    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight.desktop'")
     expect(candidateConfig).toContain("insightDesktopChannel: 'candidate'")
-    expect(candidateConfig).toContain("artifactName: 'insight-candidate-${os}-${arch}.${ext}'")
-    expect(candidateConfig).toContain("artifactName: 'insight-candidate-windows-${arch}-setup.${ext}'")
+    expect(candidateConfig).not.toContain('因赛AI Candidate')
+    expect(candidateConfig).not.toContain('com.insight.desktop.candidate')
+    expect(candidateConfig).not.toContain('insight-candidate-${os}-${arch}')
     expect(candidateConfig).toContain('publish: null')
     for (const name of [
       'package:candidate:dir',
@@ -380,10 +382,10 @@ describe('GitHub release contract', () => {
       expect(packageJson.scripts[name]).toContain('--publish never')
     }
     expect(packageJson.scripts['package:candidate:mac:arm64']).toContain(
-      'finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip'
+      'finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip'
     )
     expect(packageJson.scripts['package:candidate:mac:x64']).toContain(
-      'finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip'
+      'finalize-mac-release.mjs dist-candidate insight-mac-x64.zip'
     )
     expect(packageJson.scripts['package:mac:arm64']).toContain(
       'finalize-mac-release.mjs dist insight-mac-arm64.zip'

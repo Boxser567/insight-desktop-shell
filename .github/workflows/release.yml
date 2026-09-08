@@ -144,8 +144,8 @@ jobs:
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:arm64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
-            echo 'RELEASE_APP=dist-candidate/mac-arm64/因赛AI Candidate.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-candidate-mac-arm64' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist-candidate/mac-arm64/因赛AI.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-mac-arm64' >> "$GITHUB_ENV"
           else
             npm run package:mac:arm64
             echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
@@ -275,8 +275,8 @@ jobs:
           if [ "$RELEASE_CHANNEL" = 'candidate' ]; then
             npm run package:candidate:mac:x64
             echo 'RELEASE_DIR=dist-candidate' >> "$GITHUB_ENV"
-            echo 'RELEASE_APP=dist-candidate/mac/因赛AI Candidate.app' >> "$GITHUB_ENV"
-            echo 'RELEASE_BASENAME=insight-candidate-mac-x64' >> "$GITHUB_ENV"
+            echo 'RELEASE_APP=dist-candidate/mac/因赛AI.app' >> "$GITHUB_ENV"
+            echo 'RELEASE_BASENAME=insight-mac-x64' >> "$GITHUB_ENV"
           else
             npm run package:mac:x64
             echo 'RELEASE_DIR=dist' >> "$GITHUB_ENV"
@@ -370,8 +370,8 @@ jobs:
           if ($env:RELEASE_CHANNEL -eq 'candidate') {
             npm run package:candidate:win
             $releaseDir = 'dist-candidate'
-            $installer = 'insight-candidate-windows-x64-setup.exe'
-            $appExecutable = 'dist-candidate/win-unpacked/因赛AI Candidate.exe'
+            $installer = 'insight-windows-x64-setup.exe'
+            $appExecutable = 'dist-candidate/win-unpacked/因赛AI.exe'
           } else {
             npm run package:win
             $releaseDir = 'dist'

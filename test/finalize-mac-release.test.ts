@@ -19,7 +19,7 @@ async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'insight-mac-release-'))
   temporaryDirectories.push(root)
   const releaseDirectory = path.join(root, 'release')
-  const archiveName = 'insight-candidate-mac-arm64.zip'
+  const archiveName = 'insight-mac-arm64.zip'
   const archive = createZipFixture('candidate')
   await mkdir(releaseDirectory)
   await Promise.all([
@@ -56,7 +56,7 @@ describe('macOS release finalizer', () => {
     })
   })
 
-  it('rejects a missing blockmap or a channel-mismatched archive', async () => {
+  it('rejects a missing blockmap or a legacy candidate archive name', async () => {
     const missingBlockmap = await fixture()
     await rm(path.join(
       missingBlockmap.releaseDirectory,
@@ -65,12 +65,12 @@ describe('macOS release finalizer', () => {
     expect(run(missingBlockmap).status).not.toBe(0)
 
     const wrongChannel = await fixture()
-    const stableName = 'insight-mac-arm64.zip'
+    const stableName = 'insight-candidate-mac-arm64.zip'
     await Promise.all([
       writeFile(path.join(wrongChannel.releaseDirectory, stableName), wrongChannel.archive),
       writeFile(path.join(wrongChannel.releaseDirectory, `${stableName}.blockmap`), 'blockmap')
     ])
     wrongChannel.archiveName = stableName
-    expect(run(wrongChannel).stderr).toContain('does not match version')
+    expect(run(wrongChannel).stderr).toContain('Unexpected macOS release archive')
   })
 })

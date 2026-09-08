@@ -98,11 +98,11 @@ async function main() {
   for (const [name, expected] of Object.entries({
     'package:candidate:mac:arm64': {
       builder: 'electron-builder --mac dmg zip --arm64',
-      finalize: 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-arm64.zip'
+      finalize: 'finalize-mac-release.mjs dist-candidate insight-mac-arm64.zip'
     },
     'package:candidate:mac:x64': {
       builder: 'electron-builder --mac dmg zip --x64',
-      finalize: 'finalize-mac-release.mjs dist-candidate insight-candidate-mac-x64.zip'
+      finalize: 'finalize-mac-release.mjs dist-candidate insight-mac-x64.zip'
     },
     'package:mac:arm64': {
       builder: 'electron-builder --mac dmg zip --arm64',
