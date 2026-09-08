@@ -58,6 +58,25 @@ describe('desktop auth session manager', () => {
     expect(manager.activeAccount()).toEqual(account)
   })
 
+  it('restores a refreshed session when secure persistence is denied', async () => {
+    const service = api({
+      currentUser: vi
+        .fn()
+        .mockRejectedValueOnce(new AuthApiError('expired', 'expired'))
+        .mockResolvedValueOnce(account)
+    })
+    const store = persistence()
+    vi.mocked(store.save).mockRejectedValue(new Error('secure storage unavailable'))
+    const tokens: Array<string | undefined> = []
+    const manager = new AuthSessionManager(service, store, (token) => tokens.push(token))
+
+    await manager.restore()
+
+    expect(tokens).toEqual(['stored-token', 'fresh-token'])
+    expect(store.clear).not.toHaveBeenCalled()
+    expect(manager.current()).toEqual({ kind: 'authenticated', account: account.summary })
+  })
+
   it('keeps credentials and reports offline without exposing an account', async () => {
     const service = api({
       currentUser: vi.fn().mockRejectedValue(new AuthApiError('offline', 'offline'))
@@ -120,7 +139,7 @@ describe('desktop auth session manager', () => {
     expect(manager.activeAccount()).toBeUndefined()
   })
 
-  it('clears a newly issued token when secure persistence fails', async () => {
+  it('keeps the active login when secure persistence is denied', async () => {
     const store = persistence(undefined)
     vi.mocked(store.save).mockRejectedValue(new Error('secure storage unavailable'))
     const tokens: Array<string | undefined> = []
@@ -128,10 +147,10 @@ describe('desktop auth session manager', () => {
 
     await expect(
       manager.loginSms({ phone: '13800138000', code: '123456' })
-    ).resolves.toMatchObject({ ok: false, reason: 'service-error' })
+    ).resolves.toEqual({ ok: true })
 
-    expect(tokens).toEqual(['sms-token', undefined])
-    expect(store.clear).toHaveBeenCalledOnce()
-    expect(manager.current()).toEqual({ kind: 'unauthenticated' })
+    expect(tokens).toEqual(['sms-token'])
+    expect(store.clear).not.toHaveBeenCalled()
+    expect(manager.current()).toEqual({ kind: 'authenticated', account: account.summary })
   })
 })

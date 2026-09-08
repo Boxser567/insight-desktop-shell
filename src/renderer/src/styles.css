@@ -59,7 +59,7 @@ button, input { -webkit-app-region: no-drag; }
 .login-brand strong { font-size: 22px; }
 .login-brand span { margin-top: 3px; color: rgba(255,255,255,.72); font-size: 13px; }
 .login-visual > p { position: relative; z-index: 1; max-width: 410px; margin: 0; font-size: 24px; line-height: 1.5; font-weight: 550; }
-.login-panel { display: grid; place-items: center; padding: 48px; }
+.login-panel { display: grid; place-items: center; padding: 48px; overflow-y: auto; }
 .login-card { width: min(380px, 100%); }
 .login-card header h1 { margin: 0; font-size: 32px; }
 .login-card header p { margin: 10px 0 30px; color: var(--muted); }
@@ -88,4 +88,8 @@ button, input { -webkit-app-region: no-drag; }
   .login-page { grid-template-columns: 1fr; }
   .login-visual { display: none; }
   .login-panel { padding: 28px; }
+}
+
+@media (max-height: 600px) {
+  .login-panel { place-items: start center; padding-block: 28px; }
 }

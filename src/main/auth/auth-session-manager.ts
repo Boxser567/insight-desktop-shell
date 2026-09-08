@@ -160,8 +160,16 @@ export class AuthSessionManager {
       if (!(error instanceof AuthApiError) || error.kind !== 'expired') throw error
       const refreshed = await this.api.refresh()
       this.setAccessToken(refreshed.accessToken)
-      await this.credentials.save(refreshed.accessToken)
+      await this.persistAccessToken(refreshed.accessToken)
       return this.api.currentUser()
+    }
+  }
+
+  private async persistAccessToken(token: string): Promise<void> {
+    try {
+      await this.credentials.save(token)
+    } catch {
+      // Secure persistence may be denied while the active in-memory session remains valid.
     }
   }
 
@@ -173,8 +181,8 @@ export class AuthSessionManager {
     try {
       const result = await authenticate()
       this.setAccessToken(result.accessToken)
-      await this.credentials.save(result.accessToken)
       this.account = await this.api.currentUser()
+      await this.persistAccessToken(result.accessToken)
       this.transition({ kind: 'authenticated', account: this.account.summary })
       return { ok: true }
     } catch (error) {

@@ -33,6 +33,10 @@ async function main() {
   const publish = section(workflow, 'publish')
 
   requireText(workflow, 'candidate_tag:', 'Release workflow')
+  requireText(workflow, 'target:', 'Release workflow')
+  for (const target of ['all', 'macos-arm64', 'macos-x64', 'windows-x64']) {
+    requireText(workflow, `- ${target}`, 'Release workflow target choices')
+  }
   requireText(preflight, 'verify-release-preflight.mjs', 'Release preflight')
   requireText(preflight, 'verify-release-workflow.mjs', 'Release preflight')
   if (/npm ci|vitest|rollup|esbuild/u.test(preflight)) {
@@ -45,6 +49,9 @@ async function main() {
   ]) {
     requireText(job, 'needs: release-preflight', name)
   }
+  requireText(appleSilicon, "inputs.target == 'macos-arm64'", 'macos-apple-silicon')
+  requireText(intel, "inputs.target == 'macos-x64'", 'macos-intel')
+  requireText(windows, "inputs.target == 'windows-x64'", 'windows-x64')
   for (const [name, job] of [
     ['macos-apple-silicon', appleSilicon],
     ['macos-intel', intel]
@@ -70,6 +77,7 @@ async function main() {
   )
   requireText(sonomaCompatibility, '- release-preflight', 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, '- macos-apple-silicon', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, "inputs.target == 'macos-arm64'", 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, 'runs-on: macos-14', 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, 'name: macos-apple-silicon', 'macos-sonoma-compatibility')
   requireText(
@@ -95,6 +103,7 @@ async function main() {
     throw new Error('Workflow dispatch cannot resolve runner.temp from job-level configuration.')
   }
   requireText(publish, 'environment: desktop-release', 'Publish job')
+  requireText(publish, "inputs.target == 'all'", 'Publish job')
   for (const dependency of [
     '- release-preflight',
     '- macos-apple-silicon',

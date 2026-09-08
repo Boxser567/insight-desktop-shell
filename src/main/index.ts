@@ -595,10 +595,10 @@ function installPluginRecoveryNavigation(window: BrowserWindow): void {
 function createWindow(): BrowserWindow {
   const isWindows = process.platform === 'win32'
   const window = new BrowserWindow({
-    width: 1380,
-    height: 900,
-    minWidth: 900,
-    minHeight: 640,
+    width: 1024,
+    height: 720,
+    minWidth: 800,
+    minHeight: 480,
     show: false,
     title: '',
     icon: desktopIconPath(),

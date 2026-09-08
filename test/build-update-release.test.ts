@@ -14,24 +14,30 @@ afterEach(async () => {
   ))
 })
 
-async function fixture() {
+async function fixture(
+  version = '0.1.2',
+  channel: 'candidate' | 'stable' = 'stable'
+) {
   const root = await mkdtemp(path.join(tmpdir(), 'insight-release-build-'))
   temporaryDirectories.push(root)
-  return writeReleaseFixture(root)
+  return writeReleaseFixture(root, version, channel)
 }
 
-function runBuild(paths: Awaited<ReturnType<typeof fixture>>, extra: string[] = []) {
+function runBuild(
+  paths: Awaited<ReturnType<typeof fixture>>,
+  version = '0.1.2',
+  channel: 'candidate' | 'stable' = 'stable'
+) {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'build-update-release.mjs'),
     '--dir', paths.releaseDir,
-    '--version', '0.1.2',
-    '--channel', 'stable',
+    '--version', version,
+    '--channel', channel,
     '--shell-commit', 'a'.repeat(40),
     '--runtime-manifest', paths.runtimeManifest,
     '--compatibility', paths.compatibility,
     '--policy', paths.policy,
-    '--private-key', paths.privateKey,
-    ...extra
+    '--private-key', paths.privateKey
   ], { encoding: 'utf8' })
 }
 
@@ -63,6 +69,20 @@ describe('authenticated update release builder', () => {
     for (const artifact of manifest.artifacts) {
       expect(artifact.size).toBe((await stat(path.join(paths.releaseDir, artifact.name))).size)
     }
+  })
+
+  it('uses the unified product artifact names for Candidate releases', async () => {
+    const paths = await fixture('0.1.2-rc.2', 'candidate')
+    const result = runBuild(paths, '0.1.2-rc.2', 'candidate')
+    expect(result.status, result.stderr).toBe(0)
+
+    const manifest = JSON.parse(
+      await readFile(path.join(paths.releaseDir, 'insight-update.json'), 'utf8')
+    ) as { artifacts: Array<{ name: string }> }
+    const names = manifest.artifacts.map((artifact) => artifact.name)
+    expect(names).toContain('insight-mac-arm64.dmg')
+    expect(names).toContain('insight-windows-x64-setup.exe')
+    expect(names.every((name) => !name.includes('candidate'))).toBe(true)
   })
 
   it('requires an exact policy version and channel without defaults', async () => {

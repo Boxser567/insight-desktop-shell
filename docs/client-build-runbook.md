@@ -222,6 +222,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 **执行：**
 
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
+- Candidate 在最终三平台发布前可以用 `target: macos-arm64`、`macos-x64` 或 `windows-x64` 只验证一个原生制品。单平台验证只上传 Actions artifact，不创建 tag 或 Release；`macos-arm64` 仍继续运行 Sonoma 分发兼容检查。人工通过后使用同一 `candidate_tag` 和 `target: all` 执行完整发布，Stable tag push 始终等同于 `all`。
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
@@ -237,11 +238,11 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 10：最终安装包验收
 
-**输入：** 从阶段 9 对应 GitHub Release 下载的确切安装包、`insight-update.json` 和 `insight-update.json.sig`。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
+**输入：** 完整发布验收使用阶段 9 对应 GitHub Release 中的确切安装包、`insight-update.json` 和 `insight-update.json.sig`；单平台候选验收可使用该次 workflow 的确切 Actions artifact，但只关闭对应平台门禁。macOS 必须是使用 `Developer ID Application` 完整签名并已 notarize/staple 的 Candidate 或 Stable DMG；未签名 DEV artifact 不是本阶段输入，`Apple Development` 身份不能替代外部分发身份。Windows 当前为未签名 installer。
 
 **执行：**
 
-- 记录 workflow URL、Release URL、tag、channel、Shell commit、Core Runtime tag/commit、资产文件名、文件大小和 SHA-256；实际文件必须与产品签名的 release manifest 一致。
+- 记录 workflow URL、tag、target、channel、Shell commit、Core Runtime tag/commit、Actions artifact 或 Release URL、资产文件名、文件大小和 SHA-256。完整发布的实际文件必须与产品签名的 release manifest 一致；单平台 artifact 没有完整 manifest 时，以 workflow job 校验、run/commit 和 artifact 身份作为该平台候选证据，不得扩写为完整 Release 通过。
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
@@ -254,7 +255,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 npm run package:mac:arm64
 ```
 
-**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
+**通过条件：** 单平台候选由人工明确确认该 target 的安装、启动和本轮回归行为，仅关闭对应平台门禁。完整 Candidate 或 Stable 仍要求 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，N→N+1 更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
 
 **失败时：** 保留安装包和日志，标记失败格式与平台。一个已验收 DMG 可用于 macOS 功能结论，但 zip/blockmap 故障必须作为独立未解决项记录，不能宣称整个发布完全通过。
 
@@ -277,6 +278,7 @@ npm run package:mac:arm64
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
 | `release-preflight` 在原生 job 前失败 | tag/channel、`package.json` 与 lockfile 版本、发布策略版本、三个 Runtime target 和共同 Core commit | 阶段 9；只修正元数据并重跑，不下载 Runtime 或启动原生构建 |
 | 手动触发 workflow 返回 HTTP 422，提示 `Unrecognized named-value: runner` | job 级配置是否引用 `${{ runner.temp }}`；workflow dispatch 解析时 runner 上下文尚不存在 | 阶段 9；改用步骤运行时提供的 `$RUNNER_TEMP`，并由发布契约测试拒绝 job 级 `runner.temp`，此类失败不会启动或消耗 runner |
+| 三平台构建成功，但 Publish 报缺少 `insight-candidate-*` | Candidate 已统一产品名和制品名，但 Manifest 构建器或验证器仍按旧渠道前缀查找文件 | 阶段 9；Candidate 与 Stable 均使用 `insight-*` 制品名，渠道只记录在签名 Manifest 和发布策略中；用 Candidate fixture 同时验证 Manifest 构建与完整资产校验后再触发远程构建 |
 | macOS DMG、ZIP 和 blockmap 已生成但缺少 `latest-mac.yml` | `publish: null` 或 `--publish never` 不保证 electron-builder 生成更新元数据；检查架构打包命令是否执行 `finalize-mac-release.mjs` | 阶段 7/9；根据最终 ZIP 重建并校验 YAML，不为生成元数据启用自动发布 |
 | Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
 | macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |
@@ -287,7 +289,7 @@ npm run package:mac:arm64
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
-| 云端签名、公证和 stapling 均通过，但 macOS 14.5 重复要求钥匙串授权 | 先在最终 DMG 内应用上复核严格 codesign、CodeDirectory、CMS 与证书链；构建 runner 通过不等于旧目标系统接受同一签名 | 阶段 9 的 Sonoma 兼容 job 必须通过，阶段 10 仍在目标机保留 quarantine 连续启动三次；未确认目标机通过前不得发布 Stable |
+| 云端签名、公证和 stapling 均通过，但 macOS 重复要求访问 `因赛AI Safe Storage` | 先比较该钥匙串条目的创建时间与云端 DMG 下载时间；本地未签名 Candidate 若曾使用正式产品名和 `insight-desktop` 用户目录，会先创建同名条目，其访问控制不接受后续 Developer ID 应用。拒绝授权还会让本地 token 加密失败，不应误报远端认证服务不可用 | 阶段 7 的快速功能验证只运行隔离的 `因赛AI Dev`，禁止打开未签名但使用正式身份的 Candidate；阶段 10 删除已确认由未签名构建创建的精确旧条目后，再用云端签名 DMG 创建新条目并连续启动三次。安全存储拒绝时只保留当次内存登录，不写明文 token；Sonoma job 和最终 quarantine 验收仍不可省略 |
 | codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | `iconutil` 对尺寸完整的 iconset 报 `Invalid Iconset` | 先用 `file`/`sips` 核对全部标准尺寸；若 `iconutil` 自己解包的 iconset 也无法重新封装，则属于宿主工具异常 | 阶段 2/7，使用仓库生成器直接写入标准 ICNS PNG entries，并以 `file`、`sips` 和品牌资产测试验证，不进入远程打包调试 |
@@ -303,7 +305,7 @@ npm run package:mac:arm64
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |
 
-更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)。
+更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)；正式签名包的钥匙串访问控制问题见 [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md)。
 
 ## 构建耗时控制
 

@@ -1,6 +1,6 @@
 {
   "name": "insight-desktop",
-  "version": "0.1.2-rc.2",
+  "version": "0.1.2-rc.3",
   "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
   "type": "module",
