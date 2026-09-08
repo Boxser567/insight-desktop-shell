@@ -56,7 +56,7 @@ describe('profile-plugin-command', () => {
 
     expect(result).toEqual({ ok: true })
     expect(JSON.parse(await readFile(reportPath, 'utf8'))).toEqual({
-      argv: ['plugin', '--profile', 'web', 'remove', '@example/plugin'],
+      argv: ['plugin', '--profile', 'web', 'remove', '--workspace-root', '@example/plugin'],
       dshHome: testDir,
       pnpmVersion: 'test-pnpm',
       pnpmStatus: 0
@@ -72,7 +72,9 @@ describe('profile pnpm shim and failure reporting', () => {
       '--profile',
       'web',
       'add',
+      '--workspace-root',
       '--save-exact',
+      '--allow-build=node-pty',
       '/Users/me/plugin.tgz'
     ])
   })

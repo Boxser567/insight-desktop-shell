@@ -4,6 +4,7 @@
 
 - [因赛AI Desktop 客户端构建 Runbook](client-build-runbook.md) 是当前构建步骤、停止条件和人工门禁的权威说明。
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
+- [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是尚未实现的生产分发目标；当前构建和发布操作仍以本说明及现有 GitHub-only workflow 为准。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
 
@@ -17,6 +18,7 @@
 - 独立本地 DEV 应用的绝对路径和 Runtime 身份明确；
 - 全新 Profile 与既有 Profile 启动均正常，会话、工作区、设置和用户插件未丢失；
 - `dsh-better-sidebar@0.16.1` 已复制并注册，Markdown 和 HTML 实际在 Sidebar 内打开；
+- `dshmarket@1.44.0` 已复制并完成宿主适配，必需插件受保护，用户卸载的可选插件不会被升级流程回填；
 - 没有插件恢复窗口或无限启动页，并已收到明确人工验收结果。
 
 本地阶段未通过时禁止用 GitHub Actions 继续远程调试。Shell 发布标签也不得隐式升级 Core Runtime；Runtime 锁变更必须是独立、可审核的 Shell 提交。

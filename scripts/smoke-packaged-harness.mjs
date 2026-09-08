@@ -122,6 +122,45 @@ async function stopProcess(child) {
   }
 }
 
+export async function probePackagedHarness({
+  nodeExecutable,
+  buildArguments,
+  workingDirectory,
+  environment,
+  afterReady,
+  stabilityMs = 0,
+  failOnStderr = false
+}) {
+  const port = await reservePort()
+  const url = `http://127.0.0.1:${port}`
+  let stdout = ''
+  let stderr = ''
+  const child = spawn(nodeExecutable, buildArguments(port), {
+    cwd: workingDirectory,
+    env: environment,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true
+  })
+  child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
+  child.stderr.on('data', chunk => { stderr += chunk.toString('utf8') })
+  const output = () => [stdout, stderr].filter(Boolean).join('\n')
+
+  try {
+    await waitForReady(url, child, output)
+    if (afterReady) await afterReady(url)
+    if (stabilityMs > 0) await sleep(stabilityMs)
+    if (child.exitCode !== null) {
+      throw new Error(`Packaged Harness exited after readiness (code ${child.exitCode}).\n${output()}`)
+    }
+    if (failOnStderr && stderr.trim().length > 0) {
+      throw new Error(`Packaged Harness reported stderr after readiness.\n${output()}`)
+    }
+    return { stdout, stderr }
+  } finally {
+    await stopProcess(child)
+  }
+}
+
 export async function smokePackagedHarness(resourceRoot) {
   const resolvedResourceRoot = resolve(resourceRoot)
   const runtimeMetadata = JSON.parse(
@@ -135,9 +174,6 @@ export async function smokePackagedHarness(resourceRoot) {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'insight-packaged-harness-smoke-'))
   const dshHome = join(temporaryRoot, 'dsh-home')
   const workspacePath = join(temporaryRoot, '数据项素-工作区')
-  let child
-  let stdout = ''
-  let stderr = ''
   try {
     await mkdir(join(dshHome, 'profiles'), { recursive: true })
     await cp(paths.bundledProfile, join(dshHome, 'profiles', 'web'), {
@@ -146,11 +182,11 @@ export async function smokePackagedHarness(resourceRoot) {
     })
     await mkdir(workspacePath)
 
-    const port = await reservePort()
-    const url = `http://127.0.0.1:${port}`
-    child = spawn(paths.nodeExecutable, buildPackagedHarnessArguments(paths, port), {
-      cwd: workspacePath,
-      env: {
+    await probePackagedHarness({
+      nodeExecutable: paths.nodeExecutable,
+      buildArguments: (port) => buildPackagedHarnessArguments(paths, port),
+      workingDirectory: workspacePath,
+      environment: {
         ...process.env,
         DSH_HOME: dshHome,
         NO_COLOR: '1',
@@ -162,32 +198,20 @@ export async function smokePackagedHarness(resourceRoot) {
         PNPM_CONFIG_PACKAGE_IMPORT_METHOD: 'clone-or-copy',
         PNPM_CONFIG_SIDE_EFFECTS_CACHE: 'false'
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
+      afterReady: async (url) => {
+        const workspace = await invokeHarnessRpc(url, 'workspace.create', { path: workspacePath })
+        const session = await invokeHarnessRpc(url, 'session.create', {
+          workspaceId: workspace.workspace.workspaceId
+        })
+        if (typeof session.sessionId !== 'string' || session.sessionId.length === 0) {
+          throw new Error('Harness did not return a session id for the selected workspace.')
+        }
+      },
+      stabilityMs: 20_000,
+      failOnStderr: true
     })
-    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
-    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8') })
-    const output = () => [stdout, stderr].filter(Boolean).join('\n')
-
-    await waitForReady(url, child, output)
-    const workspace = await invokeHarnessRpc(url, 'workspace.create', { path: workspacePath })
-    const session = await invokeHarnessRpc(url, 'session.create', {
-      workspaceId: workspace.workspace.workspaceId
-    })
-    if (typeof session.sessionId !== 'string' || session.sessionId.length === 0) {
-      throw new Error('Harness did not return a session id for the selected workspace.')
-    }
-
-    await sleep(20_000)
-    if (child.exitCode !== null) {
-      throw new Error(`Packaged Harness exited after workspace and session creation (code ${child.exitCode}).\n${output()}`)
-    }
-    if (stderr.trim().length > 0) {
-      throw new Error(`Packaged Harness reported stderr after workspace and session creation.\n${output()}`)
-    }
     console.log('Packaged Harness runtime smoke test passed.')
   } finally {
-    if (child) await stopProcess(child)
     await rm(temporaryRoot, { recursive: true, force: true })
   }
 }

@@ -75,6 +75,7 @@ describe('plugin-recovery', () => {
     )
 
     await expect(listInstalledProfilePlugins(testDir)).resolves.toEqual([
+      'dshmarket',
       'plugin-a',
       '@example/plugin-b'
     ])
@@ -84,7 +85,7 @@ describe('plugin-recovery', () => {
     await expect(listInstalledProfilePlugins(join(testDir, 'missing'))).resolves.toEqual([])
   })
 
-  it('uninstalls specific offending plugin from package.json dependencies and bundles', async () => {
+  it('uninstalls the optional market while preserving required plugins', async () => {
     const pkgPath = profilePackageJsonPath(testDir)
     const originalPkg = {
       name: 'dsh-profile-web',
@@ -106,7 +107,7 @@ describe('plugin-recovery', () => {
       }
     }
     await writeFile(pkgPath, JSON.stringify(originalPkg, null, 2))
-    await mkdir(join(testDir, 'profiles', 'web', 'node_modules', 'dsh-better-sidebar'), {
+    await mkdir(join(testDir, 'profiles', 'web', 'node_modules', 'dshmarket'), {
       recursive: true
     })
     await writeFile(
@@ -127,28 +128,28 @@ describe('plugin-recovery', () => {
 
     const success = await uninstallPluginFromProfile(
       testDir,
-      'dsh-better-sidebar',
+      'dshmarket',
       simulateDshPluginRemove
     )
     expect(success).toBe(true)
 
     const updatedPkg = JSON.parse(await readFile(pkgPath, 'utf8'))
     expect(updatedPkg.dependencies).toEqual({
+      'dsh-better-sidebar': '^0.13.1',
       '@linxin666/dsh-web-ui-all': '^0.2.2',
-      dshmarket: '1.9.0'
     })
     expect(updatedPkg.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      'dshmarket',
+      'dsh-better-sidebar',
       '@linxin666/dsh-web-ui-all'
     ])
     const updatedLockfile = parse(
       await readFile(join(testDir, 'profiles', 'web', 'pnpm-lock.yaml'), 'utf8')
     )
     expect(updatedLockfile.importers['.'].dependencies).toEqual({
+      'dsh-better-sidebar': { specifier: '^0.13.1', version: '0.13.1' },
       '@linxin666/dsh-web-ui-all': { specifier: '^0.2.2', version: '0.2.2' },
-      dshmarket: { specifier: '1.9.0', version: '1.9.0' }
     })
   })
 
@@ -216,7 +217,7 @@ describe('plugin-recovery', () => {
     expect(success).toBe(false)
   })
 
-  it('never treats Harness core packages as uninstallable third-party packages', async () => {
+  it('protects Harness and installation-owned packages while leaving the market removable', async () => {
     const pkgPath = profilePackageJsonPath(testDir)
     const manifest = {
       dependencies: {
@@ -237,7 +238,8 @@ describe('plugin-recovery', () => {
     await writeFile(pkgPath, JSON.stringify(manifest))
 
     expect(isThirdPartyPackageName('@deepseek-ai/dsh-client-ui-directory-picker-native')).toBe(false)
-    expect(isThirdPartyPackageName('dshmarket')).toBe(false)
+    expect(isThirdPartyPackageName('dshmarket')).toBe(true)
+    expect(isThirdPartyPackageName('dsh-better-sidebar')).toBe(false)
     expect(isThirdPartyPackageName('@insight-ai/desktop-integration')).toBe(false)
     expect(isThirdPartyPackageName('@linxin666/dsh-web-ui-all')).toBe(true)
     await expect(
@@ -253,6 +255,8 @@ describe('plugin-recovery', () => {
       JSON.stringify({
         dependencies: {
           '@insight-ai/desktop-integration': 'workspace:*',
+          'dsh-better-sidebar': '0.16.1',
+          dshmarket: '1.41.0',
           'user-plugin': '1.0.0'
         },
         dsh: {
@@ -261,6 +265,8 @@ describe('plugin-recovery', () => {
               '@deepseek-ai/dsh-base',
               '@deepseek-ai/dsh-web-app',
               '@insight-ai/desktop-integration',
+              'dsh-better-sidebar',
+              'dshmarket',
               'user-plugin'
             ]
           }
@@ -270,11 +276,15 @@ describe('plugin-recovery', () => {
 
     await expect(resetPluginProfile(testDir)).resolves.toBe(true)
     const manifest = JSON.parse(await readFile(pkgPath, 'utf8'))
-    expect(manifest.dependencies).toEqual({ '@insight-ai/desktop-integration': 'workspace:*' })
+    expect(manifest.dependencies).toEqual({
+      '@insight-ai/desktop-integration': 'workspace:*',
+      'dsh-better-sidebar': '0.16.1'
+    })
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      '@insight-ai/desktop-integration'
+      '@insight-ai/desktop-integration',
+      'dsh-better-sidebar'
     ])
   })
 
@@ -788,13 +798,15 @@ describe('plugin-recovery', () => {
     expect(updated.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      'dshmarket',
       'dsh-existing-plugin'
     ])
   })
 
   it('leaves clean profile manifests unmodified when pruning missing bundles', async () => {
     const pkgPath = profilePackageJsonPath(testDir)
+    await mkdir(join(testDir, 'profiles', 'web', 'node_modules', 'dshmarket'), {
+      recursive: true
+    })
     await writeFile(
       pkgPath,
       JSON.stringify({

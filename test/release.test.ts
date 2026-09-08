@@ -206,13 +206,21 @@ describe('GitHub release contract', () => {
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-ui-directory-picker-native'")
   })
 
-  it('exposes trusted local plugin import without configuring a marketplace', async () => {
+  it('keeps trusted local plugin import alongside the bundled marketplace', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
+    const profile = await readFile(
+      path.join(projectRoot, 'scripts', 'prepare-bundled-profile.mjs'),
+      'utf8'
+    )
 
     expect(main).toContain("label: isChinese ? '导入本地插件…' : 'Import Local Plugin…'")
     expect(main).toContain('resolveLocalPluginImport(selectedPath)')
     expect(main).toContain('addProfilePluginWithDsh(')
-    expect(main).not.toMatch(/marketplace|plugin market/i)
+    expect(profile).toContain("const MARKET_PACKAGE = 'dshmarket'")
+    expect(profile).toContain("const MARKET_VERSION = '1.44.0'")
+    expect(profile).toContain("bundled-community-plugins.json")
+    expect(profile).toContain("file:.insight-bundled-plugins/")
+    expect(profile).not.toContain("packageName: 'dsh-at-file'")
   })
 
   it('routes manual restarts through the active plugin recovery flow', async () => {

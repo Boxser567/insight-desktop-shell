@@ -11,6 +11,7 @@
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
 - Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
+- `dshmarket` 是新 Profile 中可卸载的出厂插件。构建必须固定版本并包含完整文件；用户卸载后，重启和应用升级不得自动恢复。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
 - 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；不得用局部上传、覆盖同版本资产或单平台发布修补线上版本。
@@ -27,7 +28,7 @@
 | 仅文档 | 阶段 2 | 文档链接、命令存在性和 `git diff --check`；不构建应用 |
 | 不涉及 Runtime 或打包的 Shell UI | 阶段 2 | 当前开发平台；定向 UI 测试后执行受影响的普通 build/DEV 行为 |
 | Shell main/preload 或用户数据行为 | 阶段 2 | 当前开发平台，并覆盖受影响的 macOS/Windows 路径；必须验证既有用户数据不丢失 |
-| 默认 Profile 或 Better Sidebar | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
+| 默认 Profile、Better Sidebar 或 `dshmarket` | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
 | upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
@@ -131,7 +132,9 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1` 和模板版本要求的 Profile，避免无意义地重新安装。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 和模板版本要求的 Profile，避免无意义地重新安装。
+
+Profile 准备还会执行锁定版本的 Market 宿主适配，包括必需插件保护、列表隐藏和桌面重启委托。若 `dshmarket` 内部更新导致保护列表、更新/卸载路由或客户端重启动作无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 
@@ -185,6 +188,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
+- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.44.0`；
+- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
@@ -199,7 +204,9 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的用户 Profile：`dsh-better-sidebar@0.16.1` 依赖、bundle 注册和 `.install-complete` 均存在。
+- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
+- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
+- 打开设置中的 Plugin Market；卸载一个可选出厂插件并点击“立即重启”，确认 Shell 重新启动 Harness、没有插件恢复页或孤儿 Harness 进程、该插件不会恢复，登录、设置、退出和 Sidebar 仍可用。另行卸载 `dshmarket` 并重启同一应用，确认市场不会恢复；再用新账号范围确认首次初始化仍预装市场与可选出厂插件。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
 - 检查 `harness.log` 中 `[desktop] startup phase` 的单调计时。Shell 的 `ready` 只表示 Harness 视图已接管窗口，不代表所有插件完成初始化；Profile 修复耗时从 `repairing-profile` 到 `auditing-runtime` 计算，连续热启动达到 300ms 才进入 Profile 快速路径优化。
@@ -288,6 +295,8 @@ npm run package:mac:arm64
 | pnpm 非 TTY 清理、OOM 或下载失败 | Node/pnpm 版本、store、`CI=1`、并发和网络 | 阶段 3/6，不进入 builder |
 | `npm test` 的发布说明测试报 `spawnSync python3 ENOEXEC` | `command -v python3`、`file "$(command -v python3)"`；检查 PATH 首项是否为空文件或损坏的 Homebrew shim | 阶段 2；改用可执行的系统 Python 或修复本机 shim，不修改测试来掩盖宿主环境故障 |
 | Vite DEV 报 `crypto.hash is not a function` | 宿主 `node --version`；普通 build 成功不能证明 Vite 7 DEV 可启动 | 阶段 7，切换到 Node 22 后重启，不改产品代码 |
+| 新模板已隐藏必需插件，但既有账号 Market 仍显示停用/卸载 | 比较 bundled Profile 与活跃账号 `dshmarket/lib/routes.js` 的 installed/updates 过滤标记；旧 Profile 可能只有 update/uninstall 守卫 | 阶段 8；同版本市场应由 Shell 启动刷新三份宿主适配文件，不得用完整 Profile 覆盖或回填用户已删除的可选插件 |
+| 在 Market 卸载插件后点击“立即重启”进入 Harness 恢复页，但新 Harness 仍在后台端口运行 | 检查市场日志是否先记录 `uninstall exit=0` 再记录 `restart scheduled`，同时核对原 Harness 是正常退出而 Shell 仍判为意外失败；这是独立 DSH 自重启绕过 Electron 生命周期所有权，不是插件卸载残留 | 阶段 8，禁止 installer；同版本 `dshmarket/client/client.js` 必须由 Shell 刷新桌面重启能力与委托，重启前等待市场写操作完成，桥接缺失时失败关闭，只允许经过 `harness:restart`，并检查无 PPID 1 的孤儿 Harness |
 | Dev 终端按 `Ctrl+C` 只打印 `^C`，客户端或 5173 端口仍存活 | 比较 Dev 进程 `PGID/TPGID`；检查交互式登录 Shell 是否夺走终端控制权，以及 Development 主进程是否处理 `SIGINT/SIGTERM` | 阶段 7；禁止带残留进程继续下一轮验证，先恢复进程组与优雅退出链路 |
 | `Unable to load preload script` 同时报 `module not found: ./chunks/*.cjs`，账号入口消失或辅助窗口空白 | `out/preload/*.cjs` 是否引用 Rollup 共享 chunk；多个 sandbox preload 是否导入同一个运行时 helper | 阶段 6；让各 preload 构建为自包含文件并完成真实 Electron 冷启动，禁止仅凭 Vite build 成功继续 |
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
