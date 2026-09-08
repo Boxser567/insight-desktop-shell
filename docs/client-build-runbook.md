@@ -276,6 +276,7 @@ npm run package:mac:arm64
 | 无限启动页 | Harness Utility Process、Profile 安装标记、Runtime 身份 | 阶段 8 |
 | `runtime.json` 缺失或不匹配 | Runtime Release、Shell 锁、测试是否错误依赖 `build/` | 阶段 4–6 |
 | `release-preflight` 在原生 job 前失败 | tag/channel、`package.json` 与 lockfile 版本、发布策略版本、三个 Runtime target 和共同 Core commit | 阶段 9；只修正元数据并重跑，不下载 Runtime 或启动原生构建 |
+| 手动触发 workflow 返回 HTTP 422，提示 `Unrecognized named-value: runner` | job 级配置是否引用 `${{ runner.temp }}`；workflow dispatch 解析时 runner 上下文尚不存在 | 阶段 9；改用步骤运行时提供的 `$RUNNER_TEMP`，并由发布契约测试拒绝 job 级 `runner.temp`，此类失败不会启动或消耗 runner |
 | macOS DMG、ZIP 和 blockmap 已生成但缺少 `latest-mac.yml` | `publish: null` 或 `--publish never` 不保证 electron-builder 生成更新元数据；检查架构打包命令是否执行 `finalize-mac-release.mjs` | 阶段 7/9；根据最终 ZIP 重建并校验 YAML，不为生成元数据启用自动发布 |
 | Linux preflight 报缺少 Rollup/esbuild 平台二进制 | preflight 是否误运行 `npm ci`、Vitest、Vite 或其他原生构建工具；Vite 内嵌版本可能需要另一套 optional binary | 阶段 9；恢复零安装 Node 门禁，不逐个追加与产品目标无关的 Linux 原生包 |
 | macOS Intel 或 Windows Vitest 缺少对应 `@rollup/rollup-<platform>` | 根 `optionalDependencies` 与 lockfile 是否显式包含 `darwin-x64`、`win32-x64-msvc` 的精确版本和具体 package 节点；npm 不保证从其他平台生成完整 optional lock | 阶段 2/9；在原生构建前修复，并先用目标 OS/CPU 的临时 `npm ci` 验证解析 |

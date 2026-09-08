@@ -419,8 +419,6 @@ jobs:
       - release-preflight
       - macos-apple-silicon
     runs-on: macos-14
-    env:
-      MOUNT_PATH: ${{ runner.temp }}/insight-dmg
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -429,17 +427,18 @@ jobs:
       - name: Verify final Apple Silicon DMG on Sonoma
         run: |
           set -euo pipefail
-          mkdir -p "$MOUNT_PATH"
+          mount_path="$RUNNER_TEMP/insight-dmg"
+          mkdir -p "$mount_path"
           hdiutil attach release-assets/insight-mac-arm64.dmg \
-            -nobrowse -readonly -mountpoint "$MOUNT_PATH"
-          app_path="$MOUNT_PATH/因赛AI.app"
+            -nobrowse -readonly -mountpoint "$mount_path"
+          app_path="$mount_path/因赛AI.app"
           test -d "$app_path"
           codesign --verify --deep --strict --verbose=4 "$app_path"
           syspolicy_check distribution --verbose "$app_path"
           xcrun stapler validate "$app_path"
       - name: Detach validation DMG
         if: always()
-        run: hdiutil detach "$MOUNT_PATH" || true
+        run: hdiutil detach "$RUNNER_TEMP/insight-dmg" || true
 
   publish:
     name: Publish verified GitHub Release

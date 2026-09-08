@@ -89,7 +89,11 @@ async function main() {
   )
   requireText(sonomaCompatibility, 'xcrun stapler validate "$app_path"', 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, 'if: always()', 'macos-sonoma-compatibility')
-  requireText(sonomaCompatibility, 'hdiutil detach "$MOUNT_PATH" || true', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'mount_path="$RUNNER_TEMP/insight-dmg"', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'hdiutil detach "$RUNNER_TEMP/insight-dmg" || true', 'macos-sonoma-compatibility')
+  if (workflow.includes('${{ runner.temp }}')) {
+    throw new Error('Workflow dispatch cannot resolve runner.temp from job-level configuration.')
+  }
   requireText(publish, 'environment: desktop-release', 'Publish job')
   for (const dependency of [
     '- release-preflight',
