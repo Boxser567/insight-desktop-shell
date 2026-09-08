@@ -8,7 +8,7 @@
 
 **Tech Stack:** Electron 43、electron-updater 6、TypeScript、Zod、Vitest、Node.js 发布脚本、GitHub Actions、GitHub CLI、Alibaba Cloud OSS/CDN、ossutil 2.3.0。
 
-**执行状态（2026-09-08）：** Phase A（Task 1–4）已完成编码与聚焦验证；Phase B 的发布资产改名和本地 OSS 发布器仍按计划后置，尚未执行。
+**执行状态（2026-09-08）：** Phase A（Task 1–4）、Phase B（Task 5–6）和 Phase C 的本地失败矩阵（Task 7）已完成编码与本地门禁；Task 8 的真实 GitHub Draft、OSS/CDN 暂存与推广、三平台安装、Candidate N→N+1 和 Stable 放行尚未执行。
 
 ## Global Constraints
 
