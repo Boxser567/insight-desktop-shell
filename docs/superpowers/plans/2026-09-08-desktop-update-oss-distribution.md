@@ -14,6 +14,8 @@
 - 不新增自研下载器、增量补丁、历史版本列表、自动降级或复杂回滚编排。
 - Windows 继续允许未签名 NSIS，但产品 Manifest、平台 YAML 版本和最终文件 SHA-512 三者必须一致。
 - Development 继续禁用真实更新；Fixture 不能访问生产域名或执行真实安装。
+- 删除产品运行时的 `INSIGHT_UPDATE_FIXTURE`、`createUpdateFixture()` 和全部模拟更新场景；单元测试可保留 test doubles，本地端到端测试使用测试进程创建的 HTTP server，二者都不进入产品运行时。
+- 登录前浮动更新入口和登录后账号旁更新入口默认不渲染；只有真实可信更新处于 `available`、`downloading`、`downloaded`，或带可信目标的 required/error 状态时才显示。
 - 工作必须在干净分支或独立 worktree 中执行；不得提交当前工作区已有的其他修改。
 - 生产客户端只内置 `https://updates.insight-aigc.com`，不配置外部下载页、Bucket URL、GitHub URL 或任何 AccessKey。
 - 客户端阶段不依赖 OSS Region 或写入身份；发布阶段使用私有 Bucket `insight-desktop-updates` 和只保存在发布者电脑上的专用 RAM 凭证。
@@ -175,6 +177,7 @@ Commit: `git commit -m "feat: resolve signed updates from generic origin"`
 - Modify: `test/update-manager.test.ts`
 - Delete: `src/main/update/github-release-source.ts`
 - Delete: `test/github-release-source.test.ts`
+- Delete: `src/main/update/update-fixture.ts`
 
 - [ ] **Step 1: 为 executor feed 绑定写失败测试**
 
@@ -236,7 +239,10 @@ Commit: `git commit -m "feat: bind updater to verified release directory"`
 - Modify: `src/preload/harness.ts`
 - Modify: `src/renderer/src/update-view-model.ts`
 - Modify: `src/renderer/src/UpdateApp.tsx`
+- Modify: `src/renderer/src/UpdateBadge.tsx`
 - Modify: `src/renderer/src/update.css`
+- Modify: `packages/insight-desktop-integration/src/client/components.tsx`
+- Modify: `test/desktop-integration-client.test.ts`
 - Modify: `test/update-api-contract.test.ts`
 - Modify: `test/update-manager.test.ts`
 - Modify: `test/update-state.test.ts`
@@ -270,6 +276,8 @@ export interface UpdateViewModel {
 ```
 
 `available`、可信下载失败和可信 required error 状态显示“下载完整安装包”。发现或验签失败只显示“重试”，因为客户端尚无可信版本和文件名。
+
+`UpdateBadge` 和 Harness `UpdateButton` 共用同一纯函数可见性规则：`idle`、`checking`、`up-to-date`、`unsupported` 和没有可信目标的普通 `error` 返回 `null`；真实可用、下载中、已下载、安装中和可信 required/error 才渲染。按钮标题包含 `availableVersion`，点击只打开真实更新窗口，不主动制造状态。
 
 `UpdateStatus` 的 `error` 分支增加 `manualInstallerAvailable: boolean`；`available` 分支天然表示已经存在可信整包地址。状态中不得出现 URL 或文件名。
 
@@ -452,7 +460,6 @@ Commit: `git commit -m "feat: publish verified desktop updates from local host"`
 
 **Files:**
 
-- Modify: `src/main/update/update-fixture.ts`
 - Modify: `test/update-manager.test.ts`
 - Modify: `test/update-window.test.ts`
 - Create: `test/generic-update-flow.test.ts`
@@ -461,7 +468,7 @@ Commit: `git commit -m "feat: publish verified desktop updates from local host"`
 
 - [ ] **Step 1: 建立本地 Generic Provider Fixture**
 
-Fixture 使用临时本地 HTTP server 提供 pointer、签名 Manifest、YAML 和假安装包；禁止读取生产域名。把 fetch、executor 和下载完成事件串起来，覆盖一次完整检查→可用→下载→SHA-512→已下载状态。
+测试代码使用临时本地 HTTP server 提供 pointer、签名 Manifest、YAML 和假安装包；该 server 不由产品代码或环境变量创建。把 fetch、executor 和下载完成事件串起来，覆盖一次完整检查→可用→下载→SHA-512→已下载状态。
 
 - [ ] **Step 2: 覆盖必须失败关闭的场景**
 

@@ -253,6 +253,7 @@ describe('GitHub release contract', () => {
       build: {
         publish?: Array<{ provider: string; owner: string; repo: string }>
         detectUpdateChannel?: boolean
+        extraResources: Array<{ from: string; to: string }>
         win: { verifyUpdateCodeSignature: boolean }
       }
     }
@@ -263,6 +264,18 @@ describe('GitHub release contract', () => {
       repo: 'insight-desktop-shell'
     }])
     expect(packageJson.build.detectUpdateChannel).toBe(false)
+    expect(packageJson.build.extraResources).toEqual(expect.arrayContaining([
+      { from: 'build/update-signing-public.pem', to: 'update-signing-public.pem' },
+      { from: 'build/update-distribution.json', to: 'update-distribution.json' }
+    ]))
+    const distribution = JSON.parse(
+      await readFile(path.join(projectRoot, 'build', 'update-distribution.json'), 'utf8')
+    )
+    expect(distribution).toEqual({
+      schema: 1,
+      updateOrigin: 'https://updates.insight-aigc.com'
+    })
+    expect(JSON.stringify(distribution)).not.toMatch(/bucket|access.?key|secret|github|downloadPage/iu)
     for (const [name, command] of Object.entries(packageJson.scripts)) {
       if (name.startsWith('package:')) expect(command).toContain('--publish never')
     }

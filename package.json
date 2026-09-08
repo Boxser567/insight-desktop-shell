@@ -143,6 +143,10 @@
         "to": "update-signing-public.pem"
       },
       {
+        "from": "build/update-distribution.json",
+        "to": "update-distribution.json"
+      },
+      {
         "from": "build/core-runtime",
         "to": "runtime"
       },
