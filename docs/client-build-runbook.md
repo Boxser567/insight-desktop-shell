@@ -221,7 +221,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 
 > 过渡状态：截至 2026-09-08，`.github/workflows/release.yml` 仍会直接公开 GitHub Release，尚未实现 OSS 暂存、推广审批和 `current.json` 提交。完成[OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)前，本阶段不得用于首个生产 Stable。
 
-**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的生产更新域名、官方下载页、OSS/CDN 和 OIDC 发布配置。
+**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、本机 ossutil RAM Profile 和 GitHub `desktop-release` Environment。
 
 **执行：**
 
@@ -229,13 +229,14 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
-- 暂存 job 必须直接依赖预检、两个 macOS job 和 Windows job，且只在受保护 Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY` 和 OSS 短期身份。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，将全部文件上传到不可变 `desktop/releases/v<version>/`，再创建包含相同字节的 GitHub Draft；此时不得修改渠道 `current.json`。
-- 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
+- `publish` job 必须直接依赖预检、两个 macOS job 和 Windows job，且只在受保护 Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
+- 本地发布器通过已登录的 `gh` 下载 Draft 全部 Assets，重新验证签名、文件集、版本和摘要；再通过指定 ossutil Profile 上传不可变 `desktop/releases/v<version>/`。AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
+- 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、缓存、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
 - 禁止 `--clobber` 或覆盖 OSS/GitHub 资产。重跑只允许幂等复用文件集完整且摘要与本次完全一致的 OSS 版本目录或 GitHub Draft；任何缺失、差异或已公开同 tag Release 都必须失败，制品内容变化必须创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
-- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、OSS upload/CDN verify 还是 GitHub Draft upload；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
+- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、GitHub Draft upload、本地 OSS upload 还是 CDN verify；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
-**通过条件：** preflight、三个原生 job 与暂存 job 全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
+**通过条件：** preflight、三个原生 job、GitHub Draft 与本地暂存全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling 与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
 **失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
 
@@ -249,10 +250,10 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
-- Candidate 至少完成一次 N→N+1 客户端内更新；人为让更新检查失败，确认“下载完整安装包”能打开固定自有官方下载页并完成覆盖安装。
+- Candidate 至少完成一次 N→N+1 客户端内更新；在可信 Manifest 已解析后人为让自动下载失败，确认“下载完整安装包”能打开同一不可变版本目录内适配架构的 DMG/NSIS 并完成覆盖安装。完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
-- 人工验收通过后才批准推广 job：先公开 GitHub Release，再确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`。等待或确认指针在约定 TTL 内收敛后，从外部网络再次完成检查、下载和安装 canary。
+- 人工验收通过后才执行本地 `promote`：先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`。等待或确认指针在约定 TTL 内收敛后，从外部网络再次完成检查、下载和安装 canary。
 
 正式 macOS 本地打包命令为：
 
@@ -260,7 +261,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm exec electron-builder -- --dir --publish n
 npm run package:mac:arm64
 ```
 
-**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，Candidate 的 N→N+1、更新失败后的官方下载兜底和推广后 canary 通过；更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
+**通过条件：** 人工明确确认 Candidate 或 Stable 的 macOS 与 Windows 最终安装包均完成首次安装、覆盖安装和核心行为，Candidate 的 N→N+1、自动下载失败后的同源整包兜底和推广后 canary 通过；更新后版本正确且登录、会话、工作区、账号隔离、设置、用户插件和内置 Sidebar 数据不丢失；发布记录完整。
 
 **失败时：** 保留安装包和日志，标记失败格式与平台。一个已验收 DMG 可用于 macOS 功能结论，但 zip/blockmap 故障必须作为独立未解决项记录，不能宣称整个发布完全通过。
 
@@ -269,7 +270,7 @@ npm run package:mac:arm64
 有两个不可跳过的人工门禁：
 
 1. 阶段 8 的独立本地 DEV 应用。执行者必须先报告应用绝对路径、Shell commit、Core Runtime tag/commit、用户数据目录以及全新或升级 Profile，再等待人工操作结果。
-2. 阶段 10 的最终 DMG/Windows installer。必须从具体 OSS 版本目录或 GitHub Draft 下载，报告文件名和校验信息，再等待首次安装、覆盖安装、Candidate N→N+1 和官方下载兜底结果；收到结论前不得批准渠道推广。
+2. 阶段 10 的最终 DMG/Windows installer。必须从具体 OSS 版本目录或 GitHub Draft 下载，报告文件名和校验信息，再等待首次安装、覆盖安装、Candidate N→N+1 和同源整包兜底结果；收到结论前不得执行渠道推广。
 
 人工回复只对当时明确命名的应用和制品有效。旧版应用仍在运行、只检查插件列表、只看到包内文件或只完成 builder，均不能代替 Markdown/HTML 的实际 Sidebar 行为。
 

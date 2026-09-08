@@ -9,7 +9,7 @@
 - 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
 - 推送 `v*` tag 走 Stable；
 - 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，并直接把 GitHub Draft 公开；
-- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json`、执行推广前安装门禁或提供客户端官方下载兜底。
+- 尚未上传 OSS 不可变版本目录、生成渠道 `current.json`、执行推广前安装门禁或提供客户端同源整包下载兜底。
 
 因此，在[桌面客户端 OSS 更新分发改造计划](superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)完成并验收前，不得使用当前工作流发布生产 Stable，也不得把其 GitHub Release 当作首发自动更新源。
 
@@ -38,16 +38,16 @@
 
 ## 改造后的生产发布流程
 
-实现完成后，`Release desktop installers` 应执行：
+实现完成后，GitHub 工作流与本地发布器共同执行：
 
 1. 校验 tag、渠道、版本、发布策略、Runtime 锁和发布配置。
 2. 在 macOS arm64、macOS x64 和 Windows x64 各构建一次，完成签名、公证、YAML、blockmap 和安装器结构验证。
 3. 汇总相同制品，生成并签名 `insight-update.json`，执行完整资产校验。
-4. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
-5. 从最终自有 CDN 域名验证 HTTPS、HEAD、Range、大小和摘要。
-6. 创建 GitHub Draft Release，上传相同字节并核对 OSS/GitHub 摘要。
-7. 等待受保护推广环境审批。审批前，Candidate 必须完成 N→N+1 更新；Stable 必须完成对确切制品的干净安装和覆盖安装。
-8. 公开 GitHub Release，再确认渠道版本单调递增。
+4. 创建 GitHub Draft Release 并上传同一批字节；GitHub Actions 不读取 OSS AccessKey。
+5. 本地发布器从 Draft 下载全部 Assets，重新验证签名、文件集、版本和摘要。
+6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
+7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成 Candidate N→N+1 或 Stable 确切制品验收。
+8. 人工确认后公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
 9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary。
 
 `current.json` 是唯一生效点。其更新前的任何失败都必须保留旧指针；禁止覆盖版本目录、已发布 tag 或 Release 资产。
@@ -59,8 +59,8 @@
 1. 当前仓库版本 `0.1.2-rc.1` 在 macOS arm64、macOS x64 和 Windows x64 完成干净安装。
 2. `0.1.2-rc.2` 从 rc.1 在客户端内完成检查、下载、校验、安装和重启。
 3. `0.1.2` 的确切 Stable 制品完成干净安装与覆盖安装。
-4. 人为让更新检查失败，确认更新窗口可以打开固定自有官方下载页，并能下载 DMG/EXE 完成覆盖安装。
-5. 上述证据齐全后，才允许首次写入 `stable/current.json` 并公开产品下载入口。
+4. 在可信 Manifest 已解析后人为让自动下载失败，确认更新窗口可以从同一版本目录下载适配架构的 DMG/EXE 并完成覆盖安装；完全禁用更新 Origin 时应安全失败。
+5. 上述证据齐全后，才允许首次写入 `stable/current.json`。
 
 ## 最终安装验收
 
@@ -70,7 +70,7 @@
 - Windows 核对产品 Manifest 摘要，接受当前预期的 SmartScreen/未知发布者提示，但必须能继续安装；
 - 完成干净安装和覆盖安装；Candidate 完成 N→N+1 客户端更新；
 - 验证首次启动、既有 Profile、Sidebar、会话、工作区、设置和插件清单；
-- 验证登录前、Core 失败和更新错误状态仍能进入更新窗口及官方下载页；
+- 验证登录前、Core 失败和更新错误状态仍能进入更新窗口；只有已有可信 Manifest 时才显示同源整包入口；
 - 核对实际版本、应用路径、用户数据目录和 Runtime 身份。
 
 DMG、ZIP、NSIS 和 blockmap 是不同产物层。某一格式失败时记录准确影响范围；ZIP 或 blockmap 失败时，即使 DMG 人工安装成功，也不能宣称自动更新通过。
@@ -84,7 +84,7 @@ DMG、ZIP、NSIS 和 blockmap 是不同产物层。某一格式失败时记录�
 - OSS 版本前缀、最终 CDN 验证结果、GitHub Draft/Release URL；
 - 安装包与更新元数据的文件名、架构、大小、SHA-256 和 Manifest SHA-512；
 - 推广前 `current.json`、待发布 `current.json` 和实际提交后的响应；
-- 干净安装、覆盖安装、N→N+1、官方下载兜底和数据保留结果；
+- 干净安装、覆盖安装、N→N+1、同源整包兜底和数据保留结果；
 - 已知的平台或格式问题、确认不受影响的范围和下一验证阶段。
 
 完整记录可使用[客户端构建 Runbook 的模板](client-build-runbook.md#构建记录模板)。

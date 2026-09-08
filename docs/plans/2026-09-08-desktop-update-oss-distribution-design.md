@@ -10,8 +10,8 @@
 
 - 正常情况可在客户端内检查、下载并安装整包更新；
 - 差分下载失败时由 `electron-updater` 回退到整包下载；
-- 更新服务不可用时，客户端始终提供“下载完整安装包”入口，打开与更新 CDN 独立部署的固定产品官网页面；
-- 更新域名、OSS Bucket 或 CDN 供应商变更时，不要求已安装用户重新下载客户端才能迁移源站。
+- 可信 Manifest 已解析但自动下载失败时，客户端提供“下载完整安装包”入口，直接打开同一不可变版本目录内的 DMG 或 NSIS；
+- `updates.insight-aigc.com` 保持不变时，其背后的 OSS Bucket 或 CDN 供应商可以迁移而不要求已安装用户重新下载客户端。
 
 本文扩展[桌面客户端更新与上游管理方案](2026-09-03-desktop-update-and-upstream-policy-design.md)。签名、公证、应用数据保留与构建门禁继续遵守[客户端构建运行手册](../client-build-runbook.md)。具体工程步骤见[桌面客户端 OSS 更新分发改造计划](../superpowers/plans/2026-09-08-desktop-update-oss-distribution.md)。
 
@@ -31,7 +31,7 @@
 
 ```text
 固定自有域名
-https://<更新域名>/desktop/
+https://updates.insight-aigc.com/desktop/
           |
           +-- stable/current.json
           +-- candidate/current.json
@@ -56,6 +56,7 @@ https://<更新域名>/desktop/
 6. 读取该目录的 `latest-mac.yml` 或 `latest.yml`，并要求其版本与已验证 Manifest 完全一致。
 7. 下载更新；差分不可用时允许 `electron-updater` 自动回退整包。
 8. 下载后重新计算实际文件大小和 SHA-512，只有与 Manifest 一致才允许安装。
+9. Manifest 已验证后，根据目标平台选择同目录的 DMG 或 NSIS 作为人工整包地址；渲染进程只获得“是否可用”，不获得或提交 URL。
 
 `current.json` 只是发现指针，不是信任根。指针被篡改时，客户端最多读取不到更新或指向一个仍通过签名校验的旧版本，不能安装未签名的新字节。
 
@@ -65,10 +66,10 @@ https://<更新域名>/desktop/
 
 | 产物 | 用途 | 要求 |
 | --- | --- | --- |
-| macOS arm64/x64 DMG | 官网人工安装、故障兜底 | Developer ID 签名、公证、staple；产品页只展示适配架构的 DMG。 |
+| macOS arm64/x64 DMG | 人工安装、故障兜底 | Developer ID 签名、公证、staple；客户端只选择适配当前架构的 DMG。 |
 | macOS arm64/x64 ZIP | macOS 自动更新 | `electron-updater` 必需，不作为普通下载入口展示。 |
 | macOS ZIP blockmap | 差分下载 | 与 ZIP 同目录；生成或验证失败时阻止发布。 |
-| Windows x64 NSIS EXE | 官网人工安装、自动更新 | 当前允许未签名，但必须经过产品 Manifest 验证。 |
+| Windows x64 NSIS EXE | 人工安装、自动更新 | 当前允许未签名，但必须经过产品 Manifest 验证。 |
 | Windows EXE blockmap | 差分下载 | 与安装器同目录。 |
 | `latest-mac.yml` / `latest.yml` | Generic Provider 元数据 | 存放在版本目录，引用同目录内带版本号的确切制品。 |
 | `insight-update.json` | 产品发布策略与制品摘要 | 使用规范化 UTF-8 JSON。 |
@@ -124,6 +125,7 @@ desktop/
 
 - 版本目录：`Cache-Control: public,max-age=31536000,immutable`。
 - `current.json`：`Cache-Control: public,max-age=60,must-revalidate`。
+- JSON/YAML 使用明确的 UTF-8 Content-Type；DMG、ZIP、EXE、blockmap 和签名使用对应二进制 Content-Type。DMG/EXE 设置 `Content-Disposition: attachment` 和原始安全文件名，保证系统浏览器执行下载而不是页面导航。
 - 更新域名支持 HTTPS、HEAD、Range、正确的 `Content-Length` 和断点续传。
 - “手动检查更新”绕过客户端本地结果缓存并要求网络重新验证；无需为此维护多份渠道元数据。
 - 发布正确性只依赖 `current.json` 的 60 秒 TTL，不依赖 CDN 刷新 API。若基础设施已有刷新能力，可把它作为加速步骤；版本对象不能刷新为不同字节。
@@ -134,9 +136,10 @@ desktop/
 ```text
 build once
    -> verify/sign
+   -> create GitHub Draft with identical bytes
+   -> local publisher downloads and verifies Draft assets
    -> upload immutable OSS version directory
    -> verify through final CDN domain
-   -> create GitHub Draft with identical bytes
    -> pre-promotion install/update smoke
    -> publish GitHub Release
    -> update channel/current.json last
@@ -148,30 +151,31 @@ build once
 1. 预检 tag、渠道、版本、发布策略、Core Runtime 锁、工作流和脚本语法。
 2. 三个平台构建一次并完成当前 Runbook 要求的签名、公证、格式、blockmap 和 YAML 验证。
 3. 汇总制品，生成并签名产品 Manifest，再执行完整资产验证。
-4. 检查 OSS 版本前缀。不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
-5. 上传完整不可变版本目录，并从最终 CDN 域名验证大小、摘要和 Range。
-6. 创建 GitHub Draft Release，上传相同字节并核对摘要；重跑时只允许复用资产完整且摘要完全一致的 Draft。
-7. 在渠道推广审批前完成真实验收：Candidate 做 N→N+1 更新，Stable 对确切制品做干净安装与覆盖安装。
-8. 审批通过后公开 GitHub Release。
-9. 直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本；每个渠道使用独立并发锁，且生产角色只允许受保护工作流写渠道指针。
-10. 最后一次性上传新的 `stable/current.json` 或 `candidate/current.json`，这是唯一生效点。
-11. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；可选缓存刷新失败不回写版本对象。
+4. 创建 GitHub Draft Release，上传相同字节并核对摘要；重跑时只允许复用资产完整且摘要完全一致的 Draft。
+5. 本地发布器使用已登录的 `gh` 下载 Draft 全部资产，重新执行产品签名、文件集、版本和摘要验证；不得同步 Git tag 自动生成的源码压缩包。
+6. 本地发布器使用仅保存在发布者电脑上的 RAM AccessKey 检查 OSS 版本前缀。不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
+7. 上传完整不可变版本目录，并从 `https://updates.insight-aigc.com` 验证大小、摘要、缓存和 Range。
+8. 在渠道推广前完成真实验收：Candidate 做 N→N+1 更新，Stable 对确切制品做干净安装与覆盖安装。
+9. 人工确认后公开 GitHub Release。
+10. 本地发布器直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本。
+11. 最后一次性上传新的 `stable/current.json` 或 `candidate/current.json`，这是唯一生效点。
+12. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；可选缓存刷新失败不回写版本对象。
 
 任何推广前失败都不修改 `current.json`。推广后 canary 失败时暂停下一次发布并保留诊断入口，不覆盖版本对象，也不自动把指针改回低版本；回退行为必须经过明确决策，避免与客户端禁止降级规则冲突。
 
 ## 身份与权限
 
-GitHub Actions 使用 OIDC 换取阿里云 STS 临时凭证，不保存长期 AccessKey。发布角色仅允许读取验证和写入 `desktop/` 发布前缀，不允许删除 Bucket、修改 ACL 或写入其他业务前缀。
+首版 OSS 写入由本地发布器执行，长期 AccessKey 不进入 GitHub Actions、仓库、客户端、构建产物或日志。AccessKey 必须属于专用 RAM 身份而非阿里云主账号，只允许读写 `insight-desktop-updates` Bucket 的 `desktop/` 前缀，不允许删除 Bucket、修改 ACL 或访问其他业务 Bucket。
 
-OIDC 信任限制到当前仓库、受保护的发布工作流和 GitHub Environment。签名私钥与 OSS 生产写入都只能在受保护环境中使用。每次 STS Session 名包含 workflow run ID，便于审计。
+本地发布器从受限权限的本机凭证配置读取身份；脚本参数和 `.env` 不接收 AccessKey Secret。后续具备 GitHub OIDC + STS 条件时，只替换发布执行方，不改变对象布局、客户端协议或验收门禁。
 
 ## 客户端故障兜底
 
-更新窗口在检查、元数据验证或下载失败时，除“重试”外显示“下载完整安装包”。该操作只打开应用构建时固定的产品官网 URL，不使用渠道指针或 Manifest 返回的任意网页地址，也不尝试在应用内自行替换安装目录。
+更新窗口在可信 Manifest 已解析后保存当前平台的人工安装包定位信息。自动下载失败时，除“重试”外显示“下载完整安装包”，由主进程在固定 Origin 和已验证版本目录下确定性生成 DMG 或 NSIS URL，再交给系统浏览器下载。IPC 不接收 URL，Manifest 的文件名必须是安全 basename。
 
-官方下载页负责按平台和架构展示 DMG 或 NSIS，并与更新 CDN 独立部署。即使 `current.json` 或 OSS/CDN 更新路径不可用，只要产品官网仍可访问，用户就能下载整包并覆盖安装。页面 URL 长期稳定；页面背后的实际安装包链接可以由运营切换到 GitHub 同字节镜像，无需发布新客户端。
+若 `current.json`、Manifest 或签名尚未成功取得，客户端没有足够的可信信息判断“最新安装包”地址，只显示重试；不能为了始终展示按钮而信任未验签指针。若整个更新 Origin 不可用，同源整包也不可用，这是只依赖一个域名的明确可用性边界。
 
-GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放到官方下载页，或指导用户访问 Release。客户端不实现自动 OSS/GitHub 双源回退，以免形成两套发现、缓存和信任状态机。
+GitHub Release 仍保留相同字节供人工运维灾备，但客户端不实现自动 OSS/GitHub 双源回退，也不把 GitHub URL 暴露为产品内协议。
 
 ## 首发验收顺序
 
@@ -181,7 +185,7 @@ GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放�
 2. 使用当前仓库版本发布 `0.1.2-rc.1` Candidate，并在三种目标平台/架构做干净安装。
 3. 发布 `0.1.2-rc.2` Candidate，从 rc.1 真实完成检查、下载、安装和重启，验证数据保留。
 4. 使用最终 `0.1.2` Stable 的确切制品完成干净安装和覆盖安装。
-5. 只有上述结果和官方下载兜底都通过，才更新 `stable/current.json` 并把首个 Stable 对外开放。
+5. 只有上述结果和同源整包下载兜底都通过，才更新 `stable/current.json` 并把首个 Stable 对外开放。
 
 ## 验收条件
 
@@ -190,7 +194,7 @@ GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放�
 - 产品 Manifest、平台 YAML 和实际文件的版本、大小、SHA-512 一致。
 - 差分失败可回退整包；签名、摘要、渠道、版本或 Origin 不一致时失败关闭。
 - 断网、403/404/5xx、旧缓存、重定向、截断下载不会破坏当前可用版本。
-- 更新失败时可以打开固定官方下载页，下载 DMG/EXE 并完成覆盖安装。
+- 可信 Manifest 已解析后，自动下载失败时可以从同一不可变版本目录下载 DMG/EXE 并完成覆盖安装。
 - 更新后账号、会话、设置、工作区、用户资产和用户安装插件保持不变。
 - OSS 与 GitHub 对应制品摘要完全一致；GitHub 不参与客户端自动更新决策。
 - 发布中途失败时旧 `current.json` 保持有效；同版本重跑不能覆盖已有版本目录。
@@ -205,10 +209,11 @@ GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放�
 - 独立 Core Runtime 或必需插件在线更新；继续随完整客户端更新。
 - Linux 包与 Windows Authenticode；Windows 签名前保留产品 Manifest 信任链。
 - 基于遥测自动删除 Intel 构建；在有真实安装数据前继续输出 x64。
+- GitHub OIDC + STS 自动写 OSS；首版先用本地 RAM 身份人工发布，协议保持不变。
 
 ## 实施前外部前置
 
-首个生产 Candidate 构建前，必须确定并配置自有更新域名、与更新 CDN 独立部署的固定产品官网下载页、OSS Region/Bucket、CDN、HTTPS、备案状态、OIDC Provider、发布角色 ARN 和 GitHub 受保护 Environment。代码可以先用本地 Fixture 完成，但缺少任一生产域名或身份配置时，工作流必须失败，不得退回临时 Bucket URL 或 GitHub 自动更新源。
+客户端编码使用已确定的 `https://updates.insight-aigc.com`，不依赖 Bucket Region、写入身份或外部下载页。首个生产 Candidate 推广前，必须确认私有 Bucket `insight-desktop-updates`、CDN HTTPS/Range/缓存规则、本地专用 RAM 身份和 GitHub `desktop-release` Environment 均可用。缺少生产分发条件时不得写 `current.json`，也不得退回临时 Bucket URL 或 GitHub 自动更新源。
 
 最低操作系统版本在首发时作为固定发布策略记录。只有未来 Electron 升级确实抬高最低系统要求时，才新增兼容分流设计；本期不提前构建多代更新服务。
 
@@ -216,7 +221,8 @@ GitHub 镜像作为人工灾备：运营人员可以把相同安装包链接放�
 
 - [electron-builder Auto Update](https://www.electron.build/docs/features/auto-update/)
 - [electron-builder macOS targets](https://www.electron.build/mac/)
-- [Alibaba Cloud credentials for GitHub Actions](https://github.com/aliyun/configure-aliyun-credentials-action)
+- [ossutil 2.0 配置与 Profile](https://www.alibabacloud.com/help/en/oss/developer-reference/config-create-configuration-file)
+- [ossutil PutObject 与禁止覆盖](https://www.alibabacloud.com/help/en/oss/developer-reference/put-object)
 - [OSS 基于 RAM Policy 的目录级访问控制](https://help.aliyun.com/en/oss/user-guide/access-control-base-on-ram-policy)
 - [CDN 回源私有 OSS Bucket](https://help.aliyun.com/en/cdn/user-guide/grant-alibaba-cloud-cdn-access-permissions-on-private-oss-buckets)
 - [OSS CDN 加速](https://help.aliyun.com/en/oss/user-guide/cdn-acceleration)
