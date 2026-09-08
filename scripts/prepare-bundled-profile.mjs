@@ -11,9 +11,9 @@ const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
 const SIDEBAR_VERSION = '0.16.1'
 const MARKET_PACKAGE = 'dshmarket'
-const MARKET_VERSION = '1.41.0'
+const MARKET_VERSION = '1.44.0'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 3
+const DEFAULT_PROFILE_VERSION = 4
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(
@@ -160,9 +160,17 @@ async function readCommunityPlugins() {
 async function templateIsReady(communityPlugins) {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
   if (!manifest || !hasPinnedDefaultPlugins(manifest, communityPlugins)) return false
+  const [sidebarManifest, marketManifest] = await Promise.all([
+    readManifest(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')),
+    readManifest(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json'))
+  ])
+  if (
+    sidebarManifest?.name !== SIDEBAR_PACKAGE ||
+    sidebarManifest.version !== SIDEBAR_VERSION ||
+    marketManifest?.name !== MARKET_PACKAGE ||
+    marketManifest.version !== MARKET_VERSION
+  ) return false
   const requiredFilesExist = existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
-    existsSync(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')) &&
-    existsSync(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
   if (!requiredFilesExist) return false

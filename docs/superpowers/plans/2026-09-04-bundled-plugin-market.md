@@ -1,5 +1,7 @@
 # Bundled Plugin Market Implementation Plan
 
+> Historical implementation baseline: this plan introduced `dshmarket@1.41.0`. The current factory pin is maintained in `docs/plans/2026-09-04-bundled-plugin-market-design.md` and was upgraded to `1.44.0` on 2026-09-08.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship `dshmarket@1.41.0` in the initial Insight Desktop Profile while keeping it user-removable and retaining Sidebar and desktop-integration as required capabilities.

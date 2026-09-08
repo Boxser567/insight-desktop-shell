@@ -8,9 +8,13 @@ import { clearProfileInstallMarker, markProfileInstallComplete } from './profile
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 3
+const DEFAULT_PROFILE_VERSION = 4
+const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
+const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
+const SIDEBAR_VERSION = '0.16.1'
 const MARKET_PACKAGE = 'dshmarket'
+const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
 const MARKET_POLICY_FILES = [
   {
     path: join('lib', 'patch.js'),
@@ -22,7 +26,16 @@ const MARKET_POLICY_FILES = [
       '// Insight Desktop hides required capabilities from market installed.',
       '// Insight Desktop hides required capabilities from market updates.',
       '// Insight Desktop protects required capabilities from market update.',
-      '// Insight Desktop protects required capabilities from market uninstall.'
+      '// Insight Desktop protects required capabilities from market uninstall.',
+      '// Insight Desktop reports every market mutation as restart-blocking.',
+      '// Insight Desktop records an explicit market uninstall.'
+    ]
+  },
+  {
+    path: join('client', 'client.js'),
+    markers: [
+      '// Insight Desktop exposes the shell restart capability.',
+      '// Insight Desktop delegates Harness restarts to the desktop shell (v2).'
     ]
   }
 ] as const
@@ -58,6 +71,43 @@ function isLegacyDefaultProfile(manifest: ProfileManifest): boolean {
   return Object.keys(manifest.dependencies ?? {}).length === 0 &&
     bundles.length === CORE_BUNDLES.length &&
     CORE_BUNDLES.every(bundle => bundles.includes(bundle))
+}
+
+async function isUncustomizedPreMarketProfile(
+  manifest: ProfileManifest,
+  profileDirectory: string
+): Promise<boolean> {
+  if (manifest.insightDesktop?.defaultProfileVersion !== PRE_MARKET_PROFILE_VERSION) return false
+  if (
+    existsSync(join(profileDirectory, '.dsh-market')) ||
+    existsSync(join(profileDirectory, '.insight-bundled-plugins')) ||
+    existsSync(join(profileDirectory, MARKET_UNINSTALLED_MARKER))
+  ) return false
+
+  const dependencies = manifest.dependencies ?? {}
+  const expectedDependencies: Record<string, string> = {
+    [SIDEBAR_PACKAGE]: SIDEBAR_VERSION,
+    [DESKTOP_INTEGRATION_PACKAGE]: 'workspace:*'
+  }
+  const dependencyNames = Object.keys(dependencies)
+  if (
+    dependencyNames.length !== Object.keys(expectedDependencies).length ||
+    dependencyNames.some(name => dependencies[name] !== expectedDependencies[name])
+  ) return false
+
+  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const expectedBundles = [...CORE_BUNDLES, SIDEBAR_PACKAGE, DESKTOP_INTEGRATION_PACKAGE]
+  if (
+    bundles.length !== expectedBundles.length ||
+    expectedBundles.some(bundle => !bundles.includes(bundle))
+  ) return false
+
+  try {
+    const patch = parse(await readFile(join(profileDirectory, 'cordis.patch.yml'), 'utf8'))
+    return Array.isArray(patch) && patch.length === 0
+  } catch {
+    return false
+  }
 }
 
 async function copyProfile(source: string, destination: string): Promise<void> {
@@ -158,12 +208,26 @@ export async function initializeBundledProfile(
     return true
   }
 
+  if (await isUncustomizedPreMarketProfile(current, destination)) {
+    await copyProfile(source, destination)
+    await markProfileInstallComplete(dshHome)
+    return true
+  }
+
   if (current.insightDesktop?.defaultProfileVersion === 2) {
     await copyDesktopIntegration(source, destination)
     await refreshBundledMarketPolicy(source, destination)
     await addDesktopIntegrationToManifest(destination)
     await ensureWorkspacePackagePattern(destination)
     await clearProfileInstallMarker(dshHome)
+    return true
+  }
+
+  if (current.insightDesktop?.defaultProfileVersion === PRE_MARKET_PROFILE_VERSION) {
+    await copyDesktopIntegration(source, destination)
+    await refreshBundledMarketPolicy(source, destination)
+    await addDesktopIntegrationToManifest(destination)
+    await ensureWorkspacePackagePattern(destination)
     return true
   }
 

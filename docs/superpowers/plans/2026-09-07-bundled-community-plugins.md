@@ -15,7 +15,7 @@
 - Add `@changfenhuang/dsh-genui@0.9.8` from stable tag `v0.9.8`, commit `680693eda677926942c11a499c476c55587d97c1`.
 - Add `dsh-prompt-enhance@0.1.9` from tag `v0.1.9`, commit `ed535fbdf0a10d777e43a1f3130d5ffb4b94a5c2`.
 - Do not add `dsh-at-file@0.7.0`; locked Core commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434` already provides file references.
-- Keep `dshmarket@1.41.0` removable.
+- Keep the currently locked `dshmarket@1.44.0` removable.
 - Keep `dsh-better-sidebar@0.16.1` and `@insight-ai/desktop-integration@0.1.0` non-removable and non-updatable from Market.
 - dsh-market operations continue to affect only the active account Profile during this phase.
 - New account Profiles receive all factory plugins enabled by default. Existing Profiles retain their current plugin selection.
@@ -181,7 +181,7 @@ Reject descriptor mismatch with a package-specific build error. Do not add a run
 
 Call the existing `runDsh` once per archive with a Profile-relative `file:.insight-bundled-plugins/<archive>.tgz` specifier, then perform the existing final Profile install and dshmarket patch. Preserve `.insight-bundled-plugins` when copying the template so later Profile repair does not depend on the Shell checkout.
 
-Keep `DEFAULT_PROFILE_VERSION = 3`: new Profiles get the new factory set, while existing Profiles retain user choices and are not rewritten.
+Bump `DEFAULT_PROFILE_VERSION` to `4`. Replace only an exact, untouched version-three Profile created before dsh-market was bundled; a market state directory, retained plugin archive directory or explicit market-uninstall marker makes the Profile user-owned and prevents replacement. Migrate every other version-three Profile without adding removed plugins or changing the user's plugin selection. Version-four Profiles keep that selection on every later launch.
 
 - [ ] **Step 5: Extend readiness checks**
 

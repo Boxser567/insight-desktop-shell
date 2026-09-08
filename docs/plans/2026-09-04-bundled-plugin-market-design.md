@@ -8,7 +8,7 @@
 
 ## 决策
 
-采用“构建期锁定并随包提供”方案。Shell 的 `bundled-profile` 固定加入 `dshmarket@1.41.0`；该版本的 peer dependencies 已覆盖锁定 Core Runtime 中的 `@deepseek-ai/dsh-settings@0.1.1-rc.2`、`@deepseek-ai/cordis@4.0.1` 与 `@deepseek-ai/schemastery@3.18.1`。
+采用“构建期锁定并随包提供”方案。Shell 的 `bundled-profile` 固定加入 `dshmarket@1.44.0`；该版本的 peer dependencies 已覆盖锁定 Core Runtime 中的 `@deepseek-ai/dsh-settings@0.1.1-rc.2`、`@deepseek-ai/cordis@4.0.1` 与 `@deepseek-ai/schemastery@3.18.1`。
 
 不采用首次启动在线安装，因为安装是否成功会取决于网络、npm 和 GitHub 可达性；不 Fork `dshmarket`，避免把社区市场的目录、更新和安全维护变成 Shell 的长期职责。
 
@@ -22,7 +22,7 @@
 | --- | --- | --- | --- | --- |
 | 必需第一方 | `@insight-ai/desktop-integration` | 随包 | 不可卸载、不可独立更新 | Shell 发布 |
 | 必需内置能力 | `dsh-better-sidebar@0.16.1` | 随包 | 不可卸载、不可独立更新 | Shell 发布 |
-| 出厂可选市场 | `dshmarket@1.41.0` | 随包 | 可卸载、可由用户手动更新 | 用户 |
+| 出厂可选市场 | `dshmarket@1.44.0` | 随包 | 可卸载、可由用户手动更新 | 用户 |
 | 出厂可选记忆 | `dsh-memory-evolve@0.1.0`，tag `v26082401` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
 | 出厂可选生成式 UI | `@changfenhuang/dsh-genui@0.9.8`，tag `v0.9.8` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
 | 出厂可选提示词增强 | `dsh-prompt-enhance@0.1.9`，tag `v0.1.9` | 随包、默认启用 | 可禁用、卸载；市场匹配发布源时可更新 | 用户；默认版本随 Shell 发布 |
@@ -30,7 +30,7 @@
 
 `dshmarket` 不得获得更新 Shell、`core-runtime.lock.json` 指向的 Runtime、`dsh-better-sidebar` 或 `@insight-ai/desktop-integration` 的能力。市场内发生的网络访问仅限用户主动打开市场后的社区目录读取、插件详情和用户确认的安装/更新操作；首次安装和客户端启动不依赖网络。
 
-`dshmarket@1.41.0` 自带的宿主保护列表不认识因赛AI拥有的 Sidebar 与桌面集成，因此 Shell 在生成 bundled Profile 后对该锁定版本执行一项受测试的宿主策略适配：把两个包加入保护列表，并在 Market 的更新与卸载路由拒绝修改。适配依赖的代码位置不匹配时必须让构建失败，禁止静默产出失去保护的安装包。此适配不 Fork 市场，也不改变普通插件和 Market 自身可卸载、可更新的产品规则；升级 `dshmarket` 时必须重新验证或删除适配。
+`dshmarket@1.44.0` 自带的宿主保护列表不认识因赛AI拥有的 Sidebar 与桌面集成，独立 DSH 的自重启也不适用于 Electron 管理的 Harness 子进程。因此 Shell 在生成 bundled Profile 后对该锁定版本执行一项受测试的宿主适配：把两个包加入保护列表，在 Market 的更新与卸载路由拒绝修改，并让桌面环境中的“立即重启”通过受限 IPC 交给 Shell；普通 Web 环境仍使用市场原有重启实现。适配依赖的代码位置不匹配时必须让构建失败，禁止静默产出失去保护或绕过 Shell 生命周期的安装包。此适配不 Fork 市场，也不改变普通插件和 Market 自身可卸载、可更新的产品规则；升级 `dshmarket` 时必须重新验证或删除适配。
 
 ## Profile 生命周期
 
@@ -46,7 +46,9 @@ flowchart LR
 
 默认 Profile 只在新的 Harness Home 完整复制。用户卸载 `dshmarket` 后，重启或 Shell 升级不得将其自动装回。Shell 继续只修复安装所有权插件的完整本地副本；市场和社区插件不得通过该路径重新安装或升级。
 
-市场宿主策略是例外的安装安全适配，不是市场版本管理。对于现有账号，只有已安装市场的物理版本与 bundled Profile 完全一致时，Shell 才在 Harness 启动前刷新 `dshmarket/lib/patch.js` 与 `dshmarket/lib/routes.js`，使同一 Shell 版本新增的必需插件隐藏和变更守卫能进入旧 Profile。市场已卸载时不创建任何文件；用户已升级为其他版本时不覆盖其代码。采用新市场版本前必须重新验证宿主策略，不能假设旧补丁继续适用。
+插件市场加入前生成的版本 3 Profile 需要一次性迁移到版本 4。只有依赖、bundle 和空补丁仍与旧版出厂 Profile 完全一致，且不存在 dsh-market 状态目录、社区插件制品目录或市场显式卸载标记时，Shell 才用当前出厂模板替换该 Profile。受 Shell 适配的市场在自卸载成功后、清理市场状态前写入 `.insight-market-uninstalled`，迁移不得把这种用户选择误判为旧模板。其余版本 3 Profile 只刷新安装所有权代码并升级版本标记，不补装市场或社区插件。版本 4 之后用户卸载市场或任一可选插件时保持缺失，后续启动不得回填。
+
+市场宿主策略是例外的宿主安全与生命周期适配，不是市场版本管理。对于现有账号，只有已安装市场的物理版本与 bundled Profile 完全一致时，Shell 才在 Harness 启动前刷新 `dshmarket/lib/patch.js`、`dshmarket/lib/routes.js` 与 `dshmarket/client/client.js`，使同一 Shell 版本新增的必需插件隐藏、变更守卫和 Shell 重启委托进入旧 Profile。市场已卸载时不创建任何文件；用户已升级为其他版本时不覆盖其代码。采用新市场版本前必须重新验证宿主适配，不能假设旧补丁继续适用。
 
 当前 Profile 的恢复分类将 `dshmarket` 当作核心包，必须在本变更中删除该特殊待遇。这样它既能在设置市场中自我卸载，也能在启动故障恢复或安全模式中作为可移除插件处理。安全模式仍不得允许移除 Sidebar 或桌面集成。
 
@@ -77,7 +79,7 @@ flowchart LR
 2. 针对 Profile 模板、插件分类和卸载命令的单元测试，覆盖所有新增插件可卸载、Sidebar/桌面集成不可卸载。
 3. `npm run typecheck`、相关 Vitest 测试、`npm run build` 与 `npm run prepare:bundled-profile`；检查生成模板的 `package.json`、lockfile 和五个可选插件的物理目录。
 4. 新 DEV 账号人工验收：市场和三个新增插件默认启用；Memory Evolve、GenUI、Prompt Enhance 的核心入口可用；Sidebar 仍能打开 Markdown/HTML。
-5. DEV 中逐个禁用、卸载、重启，确认当前账号不恢复该插件，其他基本能力正常；再用第二账号确认配置、记忆和会话数据不串用，并确认两账号看到同一个设备级技能库。
+5. DEV 中逐个禁用、卸载并点击市场的“立即重启”，确认由 Shell 重启 Harness、没有孤儿进程或恢复页、当前账号不恢复该插件且其他基本能力正常；再用第二账号确认配置、记忆和会话数据不串用，并确认两账号看到同一个设备级技能库。
 6. DEV 验收通过后执行本地目录应用，再执行本地 DMG；人工确认后才触发 GitHub Actions 的 macOS 与 Windows 构建。
 
 若此变更新增构建、Profile 或市场依赖故障，必须在同一变更中更新 `docs/client-build-runbook.md`；单次故障时间线写入 `docs/incidents/`。

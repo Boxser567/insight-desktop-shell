@@ -159,7 +159,7 @@ Core Runtime 的 `@deepseek-ai/*` 技术包名和历史技术夹具不属于产�
 | 登录后单侧栏 | passed-by-user | 不再出现 Shell 与 Harness 两条并列侧栏。 |
 | 账号摘要、菜单和设置 | passed-by-user | 左下角用户信息、菜单、完整设置中心可用，重复设置入口已隐藏。 |
 | Better Sidebar | passed-by-user | 会话内 Markdown 与 HTML 继续在内置 Sidebar 打开。 |
-| 出厂 Plugin Market | not-yet-verified | `dshmarket@1.41.0` 已进入默认 Profile 构建；等待新 Profile、卸载持久性及 Sidebar 回归的 DEV 人工验收。 |
+| 出厂 Plugin Market | not-yet-verified | `dshmarket@1.44.0` 为当前出厂锁定版本；此前市场、新账号默认插件、卸载持久性及 Sidebar 回归已完成人工验收，本次版本升级需重新执行相同回归。 |
 | 因赛AI主要品牌界面 | passed-by-user | 新应用图标、登录页、侧栏和主题显示完成手工验收。 |
 | 离线、过期、账号禁用和运行中权限变化 | not-yet-verified | 自动状态覆盖存在，但尚缺本轮服务端真实场景人工验收。 |
 | 品牌变更后的目录应用和 DMG | not-yet-verified | DEV 验收已通过，尚未执行本轮安装包品牌回归。 |
