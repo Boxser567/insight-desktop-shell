@@ -91,17 +91,14 @@ git status --short --branch
 
 在 GitHub Actions 页面确认 `Release desktop installers` 与 `Publish desktop updates` 均可从 `main` 选择。`Publish desktop updates` 只能手动触发，并只提供 `stage`/`promote`、tag 和确认版本输入。
 
-在 GitHub `desktop-release` Environment 中确认以下 secret 已配置且名称完全一致：
+确认 Secret 的作用域与 workflow 完全一致：`desktop-release` Environment 保存更新 Manifest 私钥，仓库级 Actions Secrets 保存三平台构建需要的 Apple 凭据。
 
-- `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`
-- `DESKTOP_CSC_LINK`
-- `DESKTOP_CSC_KEY_PASSWORD`
-- `DESKTOP_APPLE_API_KEY`
-- `DESKTOP_APPLE_API_KEY_ID`
-- `DESKTOP_APPLE_API_ISSUER`
-- `DESKTOP_APPLE_TEAM_ID`
+- Environment：`DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`
+- 仓库级：`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER`、`DESKTOP_APPLE_TEAM_ID`
 
 通过条件：Apple 凭据对应 `Developer ID Application`；更新私钥与仓库 `build/update-signing-public.pem` 配对；Environment 有必要的人工审批人。不得打印任何 secret，也不得配置 OSS 长期 AccessKey Secret。
+
+检查记录（2026-09-09）：两个 workflow 均存在且启用；仓库级六个 Apple Secret 名称齐全，`desktop-release` Environment 中存在 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。Secret 值和公私钥配对仍只能由受保护 workflow 验证；当前 Environment 没有保护规则，`main` 也没有分支保护，因此本 Step 保持未完成，触发 RC1 前需配置或明确接受该治理风险。
 
 - [ ] **Step 2：确认 OSS Bucket 安全属性**
 
@@ -147,6 +144,8 @@ curl -sS -i https://updates.insight-aigc.com/desktop/stable/current.json
 ```
 
 通过条件：首发前两个指针应为不存在；若任一返回有效版本，停止发布并先核对 OSS 权威对象，不得直接覆盖。
+
+检查记录（2026-09-09）：Candidate 与 Stable 指针均返回 HTTP 404，响应包含 `x-oss-cdn-auth: success`，确认私有 OSS 回源鉴权生效且首发指针尚不存在。版本资产的 HEAD、Range、Content-Type、immutable 缓存和摘要规则必须等 RC1 `stage` 后继续验证，因此本 Step 保持未完成。
 
 ---
 
