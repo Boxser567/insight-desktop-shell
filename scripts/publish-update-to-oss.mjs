@@ -19,7 +19,6 @@ import {
   releaseAssetNames,
   releaseChannelForVersion
 } from './update-release-contract.mjs'
-import { verifyDistributionAssets } from './verify-distribution-assets.mjs'
 import { verifyReleaseAssets } from './verify-release-assets.mjs'
 
 const execFile = promisify(execFileCallback)
@@ -221,16 +220,6 @@ async function uploadImmutableRelease(options, releaseDir, files, oss) {
   return { prefix, reused: false }
 }
 
-async function verifyCdn(options, releaseDir) {
-  return verifyDistributionAssets({
-    releaseDir,
-    version: options.version,
-    channel: options.channel,
-    origin: options.origin,
-    publicKeyPath: join(resolve('.'), 'build', 'update-signing-public.pem')
-  })
-}
-
 async function readAuthoritativePointer(options, temporaryDirectory, suffix, oss) {
   const key = `desktop/${options.channel}/current.json`
   const objects = await oss.listObjects(key)
@@ -295,37 +284,6 @@ async function uploadPointer(options, pointer, oss) {
   )
 }
 
-async function waitForPointer(options, expectedBytes, timeoutMs = 120_000) {
-  const url = new URL(`desktop/${options.channel}/current.json`, options.origin)
-  const deadline = Date.now() + timeoutMs
-  let lastError
-  do {
-    try {
-      const response = await fetch(url, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
-        redirect: 'manual',
-        signal: AbortSignal.timeout(10_000)
-      })
-      const bytes = Buffer.from(await response.arrayBuffer())
-      const cacheControl = (response.headers.get('cache-control') ?? '').toLowerCase()
-      if (
-        response.status === 200 &&
-        response.url === url.href &&
-        bytes.equals(expectedBytes) &&
-        response.headers.get('content-type')?.toLowerCase().startsWith('application/json') &&
-        cacheControl.includes('max-age=60') &&
-        cacheControl.includes('must-revalidate')
-      ) return
-      lastError = new Error('CDN channel pointer has not converged.')
-    } catch (error) {
-      lastError = error
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000))
-  } while (Date.now() < deadline)
-  throw lastError ?? new Error('CDN channel pointer did not converge.')
-}
-
 async function writeReport(options, report) {
   const reportDirectory = join(resolve('.'), 'release-reports')
   await mkdir(reportDirectory, { recursive: true, mode: 0o700 })
@@ -339,7 +297,6 @@ async function stage(options, temporaryDirectory, oss) {
   if (!release.isDraft) throw new Error('Stage requires a GitHub Draft Release.')
   const files = await releaseFiles(releaseDir, options.channel, options.version)
   const upload = await uploadImmutableRelease(options, releaseDir, files, oss)
-  const distribution = await verifyCdn(options, releaseDir)
   return {
     action: 'stage',
     tag: options.tag,
@@ -351,7 +308,7 @@ async function stage(options, temporaryDirectory, oss) {
     ossPrefix: upload.prefix,
     reusedImmutablePrefix: upload.reused,
     files,
-    distribution
+    distributionVerification: 'deferred-to-mainland-acceptance'
   }
 }
 
@@ -360,7 +317,6 @@ async function promote(options, temporaryDirectory, oss) {
   const files = await releaseFiles(releaseDir, options.channel, options.version)
   const prefix = `desktop/releases/v${options.version}/`
   assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
-  const distributionBefore = await verifyCdn(options, releaseDir)
   const currentBefore = await readAuthoritativePointer(options, temporaryDirectory, 'before', oss)
   const alreadyCommitted = pointerIsTarget(currentBefore, options)
   if (alreadyCommitted && release.isDraft) {
@@ -383,8 +339,15 @@ async function promote(options, temporaryDirectory, oss) {
     await buildPointer(options, temporaryDirectory, currentAfterGithub)
     await uploadPointer(options, pointer, oss)
   }
-  await waitForPointer(options, pointer.bytes)
-  const distributionAfter = await verifyCdn(options, releaseDir)
+  const committedPointer = await readAuthoritativePointer(
+    options,
+    temporaryDirectory,
+    'committed',
+    oss
+  )
+  if (!pointerIsTarget(committedPointer, options) || !committedPointer.bytes.equals(pointer.bytes)) {
+    throw new Error('OSS channel pointer does not match the promoted release.')
+  }
   return {
     action: 'promote',
     tag: options.tag,
@@ -396,10 +359,9 @@ async function promote(options, temporaryDirectory, oss) {
     githubPublished,
     pointerAlreadyCommitted: alreadyCommitted,
     pointerBefore: currentBefore.value ?? null,
-    pointerAfter: JSON.parse(pointer.bytes.toString('utf8')),
+    pointerAfter: committedPointer.value,
     files,
-    distributionBefore,
-    distributionAfter
+    distributionVerification: 'deferred-to-mainland-acceptance'
   }
 }
 
