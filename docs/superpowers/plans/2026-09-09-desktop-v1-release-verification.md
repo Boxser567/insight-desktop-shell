@@ -25,6 +25,8 @@
 
 ## 当前基线
 
+以下是原整合基线的历史检查状态。2026-09-09 后续另有 `codex/enterprise-gateway-analysis` 完成免 API Key 会话接入，尚未合入；本计划不能替代该分支的 [真实账号验收门禁](../../model-gateway-integration.md)。合并时应依据实际最新 `main` 重新核对提交、版本和测试记录，不复用旧 Candidate 的会话验收。
+
 - [x] Desktop Shell 研发分支已合并到本地 `main`，核心整合提交为 `60d9590`。
 - [x] 本地全量测试通过：84 个测试文件、536 个测试。
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。

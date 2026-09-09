@@ -1,6 +1,6 @@
 import type { AuthEnvironment } from '../../shared/auth-contracts'
 
-/** API and cookie partition fixed by the desktop build channel. */
+/** API and cookie partition fixed by the product's release environment. */
 export interface AuthEnvironmentConfig {
   name: AuthEnvironment
   baseUrl: string
@@ -12,17 +12,12 @@ export function resolveAuthEnvironment(input: {
   packaged: boolean
   channel?: unknown
 }): AuthEnvironmentConfig {
-  if (!input.packaged || input.channel === 'development') {
-    return {
-      name: 'test',
-      baseUrl: 'https://gapi-test.insight-aigc.com',
-      partition: 'persist:insight-auth-test'
-    }
-  }
-
+  // v1 uses the test user center together with the test model Gateway.
+  // Keep the build inputs for a coordinated future production cutover.
+  void input
   return {
-    name: 'production',
-    baseUrl: 'https://gapi.insight-aigc.com',
-    partition: 'persist:insight-auth-production'
+    name: 'test',
+    baseUrl: 'https://gapi-test.insight-aigc.com',
+    partition: 'persist:insight-auth-test'
   }
 }

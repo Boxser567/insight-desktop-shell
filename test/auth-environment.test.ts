@@ -17,11 +17,11 @@ describe('desktop auth environment', () => {
     })
   })
 
-  it('uses production for a packaged release build', () => {
+  it('keeps packaged v1 login in the same test environment as the model Gateway', () => {
     expect(resolveAuthEnvironment({ packaged: true })).toEqual({
-      name: 'production',
-      baseUrl: 'https://gapi.insight-aigc.com',
-      partition: 'persist:insight-auth-production'
+      name: 'test',
+      baseUrl: 'https://gapi-test.insight-aigc.com',
+      partition: 'persist:insight-auth-test'
     })
   })
 })

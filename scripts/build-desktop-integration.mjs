@@ -18,6 +18,7 @@ await build({
   format: 'esm',
   platform: 'node',
   target: 'es2022',
+  external: ['@deepseek-ai/*'],
   legalComments: 'none'
 })
 

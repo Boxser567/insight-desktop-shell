@@ -6,6 +6,9 @@
     "lib": ["ES2022", "DOM"],
     "noEmit": true,
     "paths": {
+      "@deepseek-ai/dsh-llm": ["build/core-runtime/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm-deepseek": ["build/core-runtime/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-anonymous-user-id": ["build/core-runtime/node_modules/@deepseek-ai/dsh-anonymous-user-id/lib/types/index.d.ts"],
       "@deepseek-ai/cordis": ["build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-runtime/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-runtime/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-locale/client": ["build/core-runtime/node_modules/@deepseek-ai/dsh-client-locale/lib/types/client/index.d.ts"],
