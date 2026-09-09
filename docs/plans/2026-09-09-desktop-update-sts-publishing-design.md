@@ -15,7 +15,7 @@
 1. `upload_oss_test` 的 Run #5 已使用旧的文件级请求体取得 STS，并向目标桶完成真实 `PutObject`，OSS 返回 HTTP 200。这证明当前 RAM 角色已经具备 `oss:PutObject` 能力。
 2. `upload_oss_test` 最新主分支的 Run #6 已通过 GitHub OIDC 校验，但测试 Gateway 对请求体 `{}` 返回 HTTP 400、`INVALID_FILE_NAME`、`fileName 不能为空`。
 3. 当前阻塞点是测试 Gateway 尚未部署目录级 STS 契约，不是 OSS 上传权限不足。
-4. 本仓库现有发布器使用本地 `ossutil` 与长期 AccessKey 配置，需替换为 GitHub OIDC + STS；客户端更新读取链路和签名校验链路无需改写。
+4. 改造前的发布器使用本地 `ossutil` 与长期 AccessKey 配置；现已替换为 GitHub OIDC + STS，客户端更新读取链路和签名校验链路未改写。
 
 ## 总体决策
 
