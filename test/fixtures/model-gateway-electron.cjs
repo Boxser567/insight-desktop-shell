@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { app, utilityProcess } = require('electron')
@@ -18,7 +19,12 @@ app.whenReady().then(async () => {
   peer.stderr.on('data', chunk => process.stderr.write(chunk))
   peer.once('exit', code => {
     dispose()
-    try { assert.equal(code, 0); assert.equal(requests, 2); app.exit(0) }
+    try {
+      assert.equal(code, 0)
+      assert.equal(requests, 2)
+      writeFileSync(join(__dirname, 'electron-utility-success'), '')
+      app.exit(0)
+    }
     catch (error) { console.error(error); app.exit(1) }
   })
   peer.once('error', () => app.exit(1))

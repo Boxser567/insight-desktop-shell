@@ -46,7 +46,7 @@ describe.skipIf(!hasPreparedCore)('locked Core adapter with real Node parent/chi
         child.once('error', reject)
       })
       expect(code, output).toBe(0)
-      expect(output).toContain('runtime assertions passed')
+      expect(existsSync(join(fixture, 'electron-utility-success')), output).toBe(true)
       expect(output).not.toContain('test-user-center-token')
     } finally { if (child.exitCode === null) child.kill() }
   }, 20000)
