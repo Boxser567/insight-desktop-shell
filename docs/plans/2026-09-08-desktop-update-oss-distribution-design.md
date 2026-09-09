@@ -4,7 +4,7 @@
 
 本文记录 2026-09-08 已批准并已完成代码实现的首发更新方案。当前尚未向用户发布任何桌面客户端，因此不设计 GitHub 旧客户端迁移、桥接版本或历史协议兼容。
 
-首个公开版本发布前，仍必须完成真实 GitHub Draft、OSS/CDN 上传和三平台安装验收。GitHub workflow 只创建 Draft，客户端更新的唯一生效点是本地发布器最后提交的渠道指针。
+首个公开版本发布前，仍必须完成真实 GitHub Draft、OSS/CDN 上传和三平台安装验收。安装包 workflow 只创建 Draft；独立发布 workflow 通过 GitHub OIDC 与测试 Gateway 获取目录级 STS，客户端更新的唯一生效点仍是发布器最后提交的渠道指针。发布身份的后续决策以[桌面更新 STS 发布设计](2026-09-09-desktop-update-sts-publishing-design.md)为准。
 
 目标不是构建复杂的更新平台，而是建立一条足够小且不会把已安装用户困住的更新链：
 
@@ -13,7 +13,7 @@
 - 可信 Manifest 已解析但自动下载失败时，客户端提供“下载完整安装包”入口，直接打开同一不可变版本目录内的 DMG 或 NSIS；
 - `updates.insight-aigc.com` 保持不变时，其背后的 OSS Bucket 或 CDN 供应商可以迁移而不要求已安装用户重新下载客户端。
 
-本文扩展[桌面客户端更新与上游管理方案](2026-09-03-desktop-update-and-upstream-policy-design.md)。签名、公证、应用数据保留与构建门禁继续遵守[客户端构建运行手册](../client-build-runbook.md)。具体工程步骤尚未固化；实施前必须另行评审并形成可执行计划。
+本文扩展[桌面客户端更新与上游管理方案](2026-09-03-desktop-update-and-upstream-policy-design.md)。签名、公证、应用数据保留与构建门禁继续遵守[客户端构建运行手册](../client-build-runbook.md)。发布身份与 STS 接入已在 2026-09-09 的补充设计和执行计划中固化。
 
 ## 决策摘要
 
@@ -137,7 +137,7 @@ desktop/
 build once
    -> verify/sign
    -> create GitHub Draft with identical bytes
-   -> local publisher downloads and verifies Draft assets
+   -> OIDC/STS publisher downloads and verifies Draft assets
    -> upload immutable OSS version directory
    -> verify through final CDN domain
    -> pre-promotion exact-installer smoke
@@ -152,12 +152,12 @@ build once
 2. 三个平台构建一次并完成当前 Runbook 要求的签名、公证、格式、blockmap 和 YAML 验证。
 3. 汇总制品，生成并签名产品 Manifest，再执行完整资产验证。
 4. 创建 GitHub Draft Release，上传相同字节并核对摘要；重跑时只允许复用资产完整且摘要完全一致的 Draft。
-5. 本地发布器使用已登录的 `gh` 下载 Draft 全部资产，重新执行产品签名、文件集、版本和摘要验证；不得同步 Git tag 自动生成的源码压缩包。
-6. 本地发布器使用仅保存在发布者电脑上的 RAM AccessKey 检查 OSS 版本前缀。不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
+5. 独立 `Publish desktop updates` workflow 使用 GitHub Token 下载 Draft 全部资产，重新执行产品签名、文件集、版本和摘要验证；不得同步 Git tag 自动生成的源码压缩包。
+6. 发布 workflow 使用 GitHub OIDC 向固定测试 Gateway 以 `{}` 换取目录级 OSS STS。版本前缀不存在则上传；已存在时只有完整文件集与本次摘要完全一致才幂等复用，任何缺失或差异都失败且不覆盖。
 7. 上传完整不可变版本目录，并从 `https://updates.insight-aigc.com` 验证大小、摘要、缓存和 Range。
 8. 在渠道推广前完成确切安装包验收；Stable 还必须已有 Candidate N→N+1 和同源整包兜底证据。
 9. 人工确认后公开 GitHub Release。
-10. 本地发布器直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本。
+10. STS 发布器直接从 OSS 读取权威渠道指针，确认当前版本严格小于新版本。
 11. 最后一次性上传新的 `stable/current.json` 或 `candidate/current.json`，这是唯一生效点。
 12. 等待或确认指针在约定 TTL 内收敛，从外部网络做检查、下载、校验、安装 canary，并保存证据；Candidate 在此时完成 N→N+1，失败后发布更高 RC，不自动降级。可选缓存刷新失败不回写版本对象。
 
@@ -165,9 +165,9 @@ build once
 
 ## 身份与权限
 
-首版 OSS 写入由本地发布器执行，长期 AccessKey 不进入 GitHub Actions、仓库、客户端、构建产物或日志。AccessKey 必须属于专用 RAM 身份而非阿里云主账号，只允许读写 `insight-desktop-updates` Bucket 的 `desktop/` 前缀，不允许删除 Bucket、修改 ACL 或访问其他业务 Bucket。
+首版 OSS 写入由独立 GitHub Actions 发布 workflow 执行。它使用 GitHub OIDC 向 Insight Gateway 换取短期、目录级 STS；长期 AccessKey 不进入 GitHub Secrets、仓库、客户端、构建产物、命令参数或日志。Gateway 临时策略只允许读写 `insight-desktop-updates` Bucket 的 `desktop/` 前缀，不允许删除 Bucket、修改 ACL 或访问其他业务 Bucket。
 
-本地发布器从受限权限的本机凭证配置读取身份；脚本参数和 `.env` 不接收 AccessKey Secret。后续具备 GitHub OIDC + STS 条件时，只替换发布执行方，不改变对象布局、客户端协议或验收门禁。
+发布 workflow 只从 `main` 手动运行，固定校验仓库 ID、workflow event、ref、Bucket、Region、endpoint 和更新 Origin。200～600 MB 资产使用普通 `PutObject`；每个文件前刷新临期 STS，令牌失效时整文件重试一次。详细契约见[桌面更新 STS 发布设计](2026-09-09-desktop-update-sts-publishing-design.md)。
 
 ## 客户端故障兜底
 
@@ -209,11 +209,11 @@ GitHub Release 仍保留相同字节供人工运维灾备，但客户端不实�
 - 独立 Core Runtime 或必需插件在线更新；继续随完整客户端更新。
 - Linux 包与 Windows Authenticode；Windows 签名前保留产品 Manifest 信任链。
 - 基于遥测自动删除 Intel 构建；在有真实安装数据前继续输出 x64。
-- GitHub OIDC + STS 自动写 OSS；首版先用本地 RAM 身份人工发布，协议保持不变。
+- multipart/checkpoint、断点续传与跨 workflow run 恢复；只有真实 RC 证明普通 `PutObject` 不可靠时再增加。
 
 ## 实施前外部前置
 
-客户端编码使用已确定的 `https://updates.insight-aigc.com`，不依赖 Bucket Region、写入身份或外部下载页。首个生产 Candidate 推广前，必须确认私有 Bucket `insight-desktop-updates`、CDN HTTPS/Range/缓存规则、本地专用 RAM 身份和 GitHub `desktop-release` Environment 均可用。缺少生产分发条件时不得写 `current.json`，也不得退回临时 Bucket URL 或 GitHub 自动更新源。
+客户端编码使用已确定的 `https://updates.insight-aigc.com`，不依赖 Bucket Region、写入身份或外部下载页。首个生产 Candidate 推广前，必须确认私有 Bucket `insight-desktop-updates`、CDN HTTPS/Range/缓存规则、测试 Gateway 的目录级 STS 契约和 GitHub `desktop-release` Environment 均可用。缺少生产分发条件时不得写 `current.json`，也不得退回临时 Bucket URL 或 GitHub 自动更新源。
 
 最低操作系统版本在首发时作为固定发布策略记录。只有未来 Electron 升级确实抬高最低系统要求时，才新增兼容分流设计；本期不提前构建多代更新服务。
 
@@ -221,8 +221,7 @@ GitHub Release 仍保留相同字节供人工运维灾备，但客户端不实�
 
 - [electron-builder Auto Update](https://www.electron.build/docs/features/auto-update/)
 - [electron-builder macOS targets](https://www.electron.build/mac/)
-- [ossutil 2.0 配置与 Profile](https://www.alibabacloud.com/help/en/oss/developer-reference/config-create-configuration-file)
-- [ossutil PutObject 与禁止覆盖](https://www.alibabacloud.com/help/en/oss/developer-reference/put-object)
+- [OSS SDK PutObject](https://help.aliyun.com/zh/oss/developer-reference/simple-upload-12)
 - [OSS 基于 RAM Policy 的目录级访问控制](https://help.aliyun.com/en/oss/user-guide/access-control-base-on-ram-policy)
 - [CDN 回源私有 OSS Bucket](https://help.aliyun.com/en/cdn/user-guide/grant-alibaba-cloud-cdn-access-permissions-on-private-oss-buckets)
 - [OSS CDN 加速](https://help.aliyun.com/en/oss/user-guide/cdn-acceleration)

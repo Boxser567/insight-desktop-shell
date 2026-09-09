@@ -4,9 +4,9 @@
 
 **Goal:** 从已整合的 `main` 产出可安装、可验证、可在客户端内升级且具备同源整包兜底的 `v1.0.0` 正式版本。
 
-**Architecture:** `main` 是唯一长期基线。Candidate 由 GitHub Actions 构建并生成 Draft，人工发布器先把相同字节 `stage` 到 OSS 不可变版本目录；安装验收通过后才 `promote` Candidate 指针。至少完成一次 `v1.0.0-rc.1 → v1.0.0-rc.2` 客户端内升级，再以同样流程暂存和推广 `v1.0.0` Stable。
+**Architecture:** `main` 是唯一长期基线。Candidate 由安装包 workflow 构建并生成 Draft，独立发布 workflow 通过 GitHub OIDC 和测试 Gateway 获取目录级 OSS STS，再把相同字节 `stage` 到不可变版本目录；安装验收通过后才 `promote` Candidate 指针。至少完成一次 `v1.0.0-rc.1 → v1.0.0-rc.2` 客户端内升级，再以同样流程暂存和推广 `v1.0.0` Stable。
 
-**Tech Stack:** Electron 43、electron-updater 6、GitHub Actions/Releases、Ed25519 签名 Manifest、Alibaba Cloud OSS/CDN、ossutil 2.3.0、`https://updates.insight-aigc.com`。
+**Tech Stack:** Electron 43、electron-updater 6、GitHub Actions OIDC/Releases、Insight 测试 Gateway、Ed25519 签名 Manifest、`ali-oss@6.23.0`、Alibaba Cloud OSS/CDN、`https://updates.insight-aigc.com`。
 
 ## Global Constraints
 
@@ -15,7 +15,7 @@
 - Stable 固定使用 `v1.0.0`；正式 tag 只能指向已经完成本计划 Stable 构建前门禁的提交。
 - Candidate 与 Stable 都使用正式产品身份 `因赛AI`、App ID `com.insight.desktop` 和用户数据目录 `insight-desktop`；本地未签名 Candidate 禁止启动。
 - 安装资产统一使用 `insight-1.0.0-rc.1-...`、`insight-1.0.0-rc.2-...` 和 `insight-1.0.0-...`；Candidate 不增加额外 `candidate-` 文件名前缀。
-- GitHub Actions 不接触 OSS AccessKey；OSS AccessKey 只存在于本机加密的 `desktop-updates-publisher` Profile。
+- GitHub Actions 不保存 OSS 长期 AccessKey；只有独立发布 workflow 可以使用 OIDC 换取限定目录和时长的 STS。
 - `stage` 不公开 GitHub Release、不写 `current.json`；`promote` 才公开 Release，并在最后写入渠道指针。
 - `desktop/releases/v1.0.0-rc.1/`、`desktop/releases/v1.0.0-rc.2/` 和 `desktop/releases/v1.0.0/` 永不覆盖；`current.json` 不允许回退到旧版本。
 - Windows 1.0 当前为未签名安装器。产品负责人必须明确接受 SmartScreen/未知发布者提示，否则阻断 Stable 发布。
@@ -30,9 +30,11 @@
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
+- [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
 - [ ] 本地 `main` 尚未推送到 `origin/main`。
 - [ ] 仓库版本仍为 `0.1.2-rc.3`，尚未准备 `1.0.0-rc.1`。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
+- [ ] 测试 Gateway 尚需部署接受 `{}` 的目录级 STS 契约，并由 `upload_oss_test` 回传真实成功证据。
 
 ---
 
@@ -70,18 +72,17 @@ git status --short --branch
 
 **Files:**
 - Verify: `.github/workflows/release.yml`
+- Verify: `.github/workflows/publish-update.yml`
 - Verify: `build/update-signing-public.pem`
 - Verify: `build/update-distribution.json`
+- Reference: `docs/plans/2026-09-09-desktop-update-sts-publishing-design.md`
 - Reference: `docs/release-runbook.md`
 
-**Produces:** GitHub 能生成签名 Candidate Draft，本机能以最小权限将已验证资产写入 OSS。
+**Produces:** GitHub 能生成签名 Candidate Draft，独立发布 workflow 能以短期最小权限将已验证资产写入 OSS。
 
-- [ ] **Step 1：确认 GitHub CLI 与发布 Environment**
+- [ ] **Step 1：确认 GitHub workflows 与发布 Environment**
 
-```bash
-gh auth status
-gh workflow view release.yml --repo Boxser567/insight-desktop-shell
-```
+在 GitHub Actions 页面确认 `Release desktop installers` 与 `Publish desktop updates` 均可从 `main` 选择。`Publish desktop updates` 只能手动触发，并只提供 `stage`/`promote`、tag 和确认版本输入。
 
 在 GitHub `desktop-release` Environment 中确认以下 secret 已配置且名称完全一致：
 
@@ -93,7 +94,7 @@ gh workflow view release.yml --repo Boxser567/insight-desktop-shell
 - `DESKTOP_APPLE_API_ISSUER`
 - `DESKTOP_APPLE_TEAM_ID`
 
-通过条件：CLI 有仓库 Release 读写权限；Apple 凭据对应 `Developer ID Application`；更新私钥与仓库 `build/update-signing-public.pem` 配对。不得打印任何 secret。
+通过条件：Apple 凭据对应 `Developer ID Application`；更新私钥与仓库 `build/update-signing-public.pem` 配对；Environment 有必要的人工审批人。不得打印任何 secret，也不得配置 OSS 长期 AccessKey Secret。
 
 - [ ] **Step 2：确认 OSS Bucket 安全属性**
 
@@ -107,30 +108,23 @@ gh workflow view release.yml --repo Boxser567/insight-desktop-shell
 
 通过条件：版本目录能够用 `forbid-overwrite` 保证不可变，而 `current.json` 仍允许受控覆盖。
 
-- [ ] **Step 3：确认专用 RAM 用户最小权限**
+- [ ] **Step 3：确认 Gateway AssumeRole 与临时策略**
 
-RAM 身份只保留：
+确认测试 Gateway 实际使用的 RAM 角色已绑定更新策略，签发的临时策略只保留：
 
-- Bucket 级：`oss:GetBucketVersioning`、`oss:ListObjects`；
+- Bucket 级：`oss:ListObjects`；
 - `insight-desktop-updates/desktop/*`：`oss:GetObject`、`oss:PutObject`；
 - 不授予删除对象、修改 Bucket、ACL、CDN 或其他 Bucket 的权限。
 
-通过条件：使用专用 RAM 用户，不使用阿里云主账号 AccessKey；AccessKey 不进入仓库、GitHub、客户端、命令参数或 `.env`。
+通过条件：Gateway 请求方不能覆盖 Bucket、Region、endpoint、目录、RAM role、权限或有效期；长期 AccessKey 不进入仓库、GitHub、客户端、命令参数或 `.env`。
 
-- [ ] **Step 4：配置本机 ossutil Profile**
+- [ ] **Step 4：部署并验收目录级 STS 契约**
 
-安装并确认精确版本 `ossutil 2.3.0`。通过 `ossutil config credential` 交互配置加密 Profile `desktop-updates-publisher`，认证模式为 `AK`，Region 使用控制台显示的 Bucket 实际 Region。
+测试 Gateway 的 `POST /v1/upload/sts/token` 必须在 GitHub OIDC 鉴权后接受 `{}` 或 `{"fileType":"file"}`，不再要求 `fileName` 或登录用户。allowlist 至少包含桌面仓库 ID `1344679131` 和测试仓库 ID `1362006344`，audience 为 `insight-harness-oss-upload`。若校验 `sub`，桌面 workflow 使用 `repo:Boxser567/insight-desktop-shell:environment:desktop-release`。
 
-```bash
-ossutil version
-ossutil api get-bucket-versioning \
-  --bucket insight-desktop-updates \
-  --output-format json \
-  --profile desktop-updates-publisher \
-  --ignore-env-var
-```
+从 `BreezeWind889988/upload_oss_test` 最新 `main` 手动运行 `Test GitHub OIDC STS`，不要选择 `verify_only`。
 
-通过条件：版本输出包含 `2.3.0`；Versioning JSON 不含有效 `Status`。运行发布器前确认 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_SESSION_TOKEN`、`OSSUTIL_CONFIG_FILE`、`OSSUTIL_PROFILE` 均未设置。
+通过条件：OIDC 验证成功；请求体 `{}` 获取 STS 成功；脚本自行生成 object key；真实 `PutObject` 返回 HTTP 200；日志已脱敏。记录 run URL、object key、OSS request ID 和不含 `fileName`/`userId` 的响应结构。
 
 - [ ] **Step 5：确认 CDN 规则**
 
@@ -245,9 +239,9 @@ git ls-remote --tags origin refs/tags/v1.0.0-rc.1
 
 **Files:**
 - Execute: `.github/workflows/release.yml`
-- Execute: `scripts/publish-update-to-oss.mjs`
-- Output: `release-reports/v1.0.0-rc.1-stage.json`
-- Output: `release-reports/v1.0.0-rc.1-promote.json`
+- Execute: `.github/workflows/publish-update.yml`
+- Output artifact: `desktop-update-v1.0.0-rc.1-stage`
+- Output artifact: `desktop-update-v1.0.0-rc.1-promote`
 
 **Produces:** 三平台 RC1、不可变 OSS 版本目录和 Candidate 基线指针。
 
@@ -272,13 +266,11 @@ gh run list --repo Boxser567/insight-desktop-shell --workflow release.yml --limi
 
 - [ ] **Step 3：暂存 RC1 到 OSS**  **【写入不可变 OSS 版本目录】**
 
-```bash
-node scripts/publish-update-to-oss.mjs stage \
-  --tag v1.0.0-rc.1 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher
-```
+从 GitHub Actions 在 `main` 手动运行 `Publish desktop updates`：
+
+- `command=stage`
+- `tag=v1.0.0-rc.1`
+- `confirm_version` 留空
 
 通过条件：生成 `release-reports/v1.0.0-rc.1-stage.json`；OSS 只新增 `desktop/releases/v1.0.0-rc.1/`；CDN 的 HEAD、Range、缓存、Content-Type、大小和摘要复验全部通过；Candidate `current.json` 仍不存在。
 
@@ -293,14 +285,11 @@ node scripts/publish-update-to-oss.mjs stage \
 
 - [ ] **Step 5：推广 RC1 Candidate**  **【公开 RC1 Release 并写 Candidate 指针】**
 
-```bash
-node scripts/publish-update-to-oss.mjs promote \
-  --tag v1.0.0-rc.1 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher \
-  --confirm-version 1.0.0-rc.1
-```
+从 GitHub Actions 在 `main` 再次手动运行 `Publish desktop updates`：
+
+- `command=promote`
+- `tag=v1.0.0-rc.1`
+- `confirm_version=1.0.0-rc.1`
 
 通过条件：GitHub Release 成为公开 Pre-release；`candidate/current.json` 在 120 秒内收敛为 `{"schemaVersion":1,"channel":"candidate","version":"1.0.0-rc.1"}`；已安装 RC1 检查更新时显示“已是最新”，不显示下载按钮。
 
@@ -312,8 +301,8 @@ node scripts/publish-update-to-oss.mjs promote \
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `build/update-release-policy.json`
-- Output: `release-reports/v1.0.0-rc.2-stage.json`
-- Output: `release-reports/v1.0.0-rc.2-promote.json`
+- Output artifact: `desktop-update-v1.0.0-rc.2-stage`
+- Output artifact: `desktop-update-v1.0.0-rc.2-promote`
 
 **Produces:** 已安装客户端能够从 RC1 发现、下载、安装并重启到 RC2 的证据。
 
@@ -370,12 +359,9 @@ gh workflow run release.yml \
   --ref main \
   -f candidate_tag=v1.0.0-rc.2 \
   -f target=all
-node scripts/publish-update-to-oss.mjs stage \
-  --tag v1.0.0-rc.2 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher
 ```
+
+安装包 workflow 成功并生成 Draft 后，在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`，输入 `command=stage`、`tag=v1.0.0-rc.2`，`confirm_version` 留空。
 
 通过条件：先确认 workflow 全部成功并产生 Draft，再运行 `stage`；RC2 版本目录完整，RC1 目录未改变，Candidate 指针仍为 RC1。
 
@@ -390,14 +376,7 @@ node scripts/publish-update-to-oss.mjs stage \
 
 - [ ] **Step 4：推广 RC2**  **【公开 RC2 Release 并更新 Candidate 指针】**
 
-```bash
-node scripts/publish-update-to-oss.mjs promote \
-  --tag v1.0.0-rc.2 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher \
-  --confirm-version 1.0.0-rc.2
-```
+在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`，输入 `command=promote`、`tag=v1.0.0-rc.2`、`confirm_version=1.0.0-rc.2`。
 
 通过条件：Candidate 指针严格从 RC1 升到 RC2，RC1 版本目录保持不变。
 
@@ -504,15 +483,11 @@ git push origin v1.0.0
 
 - [ ] **Step 5：核对 Stable Draft 并暂存 OSS**
 
-确认全部 workflow job 成功且 GitHub Release 仍为 Draft，然后执行：
+确认全部安装包 workflow job 成功且 GitHub Release 仍为 Draft，然后在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`：
 
-```bash
-node scripts/publish-update-to-oss.mjs stage \
-  --tag v1.0.0 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher
-```
+- `command=stage`
+- `tag=v1.0.0`
+- `confirm_version` 留空
 
 通过条件：`desktop/releases/v1.0.0/` 完整且通过最终 CDN 复验；`stable/current.json` 仍不存在；Candidate 指针仍为 RC2。
 
@@ -531,8 +506,8 @@ node scripts/publish-update-to-oss.mjs stage \
 
 **Files:**
 - Update externally: `https://insight-aigc.com`
-- Execute: `scripts/publish-update-to-oss.mjs`
-- Output: `release-reports/v1.0.0-promote.json`
+- Execute: `.github/workflows/publish-update.yml`
+- Output artifact: `desktop-update-v1.0.0-promote`
 
 **Produces:** 新用户可下载安装，已安装 Stable 客户端可读取正式更新指针。
 
@@ -548,14 +523,11 @@ node scripts/publish-update-to-oss.mjs stage \
 
 - [ ] **Step 2：最终推广 Stable**  **【正式公开 Release 并首次写 Stable 指针】**
 
-```bash
-node scripts/publish-update-to-oss.mjs promote \
-  --tag v1.0.0 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher \
-  --confirm-version 1.0.0
-```
+在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`：
+
+- `command=promote`
+- `tag=v1.0.0`
+- `confirm_version=1.0.0`
 
 通过条件：GitHub Release 公开且不是 Pre-release；`stable/current.json` 在 120 秒内收敛为 `{"schemaVersion":1,"channel":"stable","version":"1.0.0"}`；报告文件生成且无敏感凭据。
 

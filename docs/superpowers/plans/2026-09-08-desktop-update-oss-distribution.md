@@ -1,5 +1,7 @@
 # Desktop OSS Update Distribution Implementation Plan
 
+> **时序说明（2026-09-09）：** 本文保留 2026-09-08 的客户端协议与首版 ossutil 实施历史。发布执行方已被后续决策替换为 GitHub OIDC → 测试 Gateway → 目录级 STS；当前操作必须遵循 `2026-09-09-desktop-update-sts-publishing.md` 和 `../../release-runbook.md`，不得执行本文 Task 6 的本地 AccessKey/ossutil 命令。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在首个公开版本前，把 Candidate/Stable 的客户端自动更新源从 GitHub Releases 改为固定自有域名后的 OSS/CDN，并保留经过签名的整包更新、不可变发布、人工下载兜底和可验证的推广门禁。
@@ -366,6 +368,8 @@ Commit: `git commit -m "feat: version desktop release assets"`
 
 ## Task 6：实现本地 OSS 暂存与推广工具（客户端完成后执行）
 
+> 历史说明：本 Task 记录 2026-09-08 已完成的首版 ossutil 实现。2026-09-09 已决定放弃本地长期 AccessKey/ossutil 执行方式，当前实现和操作入口改为 GitHub OIDC → 测试 Gateway → 目录级 STS。不得再执行本 Task 中的本地命令；现行步骤见 `2026-09-09-desktop-update-sts-publishing.md`。
+
 **Files:**
 
 - Modify: `.github/workflows/release.yml`
@@ -535,5 +539,5 @@ Commit: `git commit -m "docs: record first OSS desktop release"`
 - [x] GitHub 公开早于渠道指针，`current.json` 是唯一最后提交点。
 - [x] 客户端没有 GitHub API 自动发现、双源回退或任意 URL IPC。
 - [x] 客户端只内置 `https://updates.insight-aigc.com`，已验签后才能生成同源 DMG/NSIS 地址。
-- [x] GitHub Actions 不保存 OSS AccessKey，本地发布器只读取指定 ossutil Profile。
+- [x] GitHub Actions 不保存 OSS 长期 AccessKey；独立发布 workflow 只使用 GitHub OIDC 换取目录级短期 STS。
 - [ ] Candidate rc.1→rc.2 与 Stable 干净/覆盖安装均有真实记录。

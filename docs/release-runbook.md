@@ -11,10 +11,10 @@
 - 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
 - 推送 `v*` tag 走 Stable；
 - 三个平台构建后，`publish` job 在 `desktop-release` Environment 中生成签名 Manifest，只创建 GitHub Draft，不读取 OSS 凭证、不公开 Release；
-- 本地发布器从 Draft 下载并复验同一批字节，`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
+- 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
+截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。真实 OSS `PutObject` 已验证成功；测试 Gateway 仍需部署接受 `{}` 的目录级 STS 契约。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
 
 ## 必读资料
 
@@ -22,6 +22,7 @@
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 - [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
+- [桌面更新 STS 发布设计](plans/2026-09-09-desktop-update-sts-publishing-design.md) 是发布身份、后台契约、STS 刷新和大文件失败语义的权威说明。
 - [因赛AI Desktop 1.0 正式发布前验证计划](superpowers/plans/2026-09-09-desktop-v1-release-verification.md) 是本次首发逐项执行、停止判断与证据收集清单。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
@@ -59,14 +60,15 @@
 
 ## 一次性发布准备
 
-1. 确认 `insight-desktop-updates` 保持私有且从未启用 Bucket Versioning。OSS 的 `forbid-overwrite` 在已启用或已暂停 Versioning 的 Bucket 中无效；发布器会主动拒绝这种配置。不要给该 Bucket 开 WORM，因为 `current.json` 是唯一需要覆盖的对象。
-2. 使用专用 RAM 用户的 AccessKey，不使用阿里云主账号 AccessKey。若现有密钥属于主账号，先创建专用 RAM 身份并轮换，不把现有密钥复制到仓库、GitHub、客户端、命令参数或 `.env`。
-3. RAM 策略只授予 Bucket 级 `oss:GetBucketVersioning`、`oss:ListObjects`，以及 `insight-desktop-updates/desktop/*` 的 `oss:GetObject`、`oss:PutObject`；不授予删除对象、修改 Bucket、ACL、CDN 或其他 Bucket 的权限。
-4. 安装精确版本 `ossutil 2.3.0`，运行 `ossutil config credential`，在交互向导中使用 profile `desktop-updates-publisher`、认证模式 `AK` 并选择加密凭证；然后为该 profile 设置 Bucket 所在的实际 Region。不要在 shell 配置中导出 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_SESSION_TOKEN`、`OSSUTIL_CONFIG_FILE` 或 `OSSUTIL_PROFILE`。
-5. 使用 `gh auth status` 确认本机 GitHub CLI 已登录且能读取/编辑 `Boxser567/insight-desktop-shell` Release。GitHub 的 `desktop-release` Environment 只保存与仓库 `build/update-signing-public.pem` 匹配的 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`；密钥不匹配会在 Draft 创建前被签名校验阻止。
-6. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`/desktop/releases/*` 不压缩、不改写、不重定向并支持 HEAD/Range；缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
+1. 确认 `insight-desktop-updates` 保持私有且从未启用 Bucket Versioning。OSS 的禁止覆盖语义在已启用或已暂停 Versioning 的 Bucket 中无效。不要给该 Bucket 开 WORM，因为 `current.json` 是唯一需要覆盖的对象。该项通过控制台一次性验收，不在每次发布时调用控制面 API。
+2. 测试 Gateway 固定为 `https://gapi-test.insight-aigc.com/insight-harness-llm-gateway`。后台必须部署目录级 STS 契约：`POST /v1/upload/sts/token` 在 GitHub OIDC Bearer Token 鉴权后接受 `{}`，不得要求 `fileName` 或登录用户。
+3. Gateway 的 GitHub OIDC allowlist 至少包含桌面仓库 ID `1344679131`，audience 固定为 `insight-harness-oss-upload`；若限制 workflow/ref/event，还要允许 `publish-update.yml@refs/heads/main`、`refs/heads/main` 和 `workflow_dispatch`。桌面 job 使用 `desktop-release` Environment，若校验 `sub`，允许值应为 `repo:Boxser567/insight-desktop-shell:environment:desktop-release`。
+4. Gateway 实际 AssumeRole 的 RAM 角色需要 Bucket 级 `oss:ListObjects`，以及 `insight-desktop-updates/desktop/*` 的 `oss:GetObject`、`oss:PutObject`。发布 workflow 不需要删除对象、列举全部 Bucket 或修改 Bucket/ACL/CDN。
+5. 在 `upload_oss_test` 最新 `main` 上重新运行 `Test GitHub OIDC STS`。只有 `{}` 获取 STS 成功、上传者自行生成 object key、真实 `PutObject` 返回 HTTP 200 且日志脱敏后，才允许桌面仓库首次真实 `stage`。
+6. GitHub 的 `desktop-release` Environment 保存构建所需签名凭据，并作为 `Release desktop installers` 和 `Publish desktop updates` 的人工保护门禁；不配置任何 OSS 长期 AccessKey Secret。
+7. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`/desktop/releases/*` 不压缩、不改写、不重定向并支持 HEAD/Range；缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
 
-建议使用以下最小 RAM Policy；`Resource` 中不要扩大到其他 Bucket：
+Gateway 临时会话的最小 OSS Policy 如下；`Resource` 不得扩大到其他 Bucket：
 
 ```json
 {
@@ -74,7 +76,7 @@
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["oss:GetBucketVersioning", "oss:ListObjects"],
+      "Action": ["oss:ListObjects"],
       "Resource": ["acs:oss:*:*:insight-desktop-updates"]
     },
     {
@@ -86,62 +88,47 @@
 }
 ```
 
-准备完成后先执行只读检查：
+后台完成后保留以下验收证据：
 
-```bash
-ossutil config set region cn-hangzhou \
-  --profile desktop-updates-publisher
-ossutil version
-ossutil api get-bucket-versioning \
-  --bucket insight-desktop-updates \
-  --output-format json \
-  --profile desktop-updates-publisher \
-  --ignore-env-var
-gh auth status
-```
-
-示例中的 `cn-hangzhou` 必须替换成控制台显示的 Bucket 实际 Region。Bucket Versioning 的 JSON 响应必须没有 `Status`；`Enabled` 和 `Suspended` 都不通过。
+- 成功的 `upload_oss_test` workflow run URL；
+- object key、OSS request ID 和 HTTP 200；
+- 不含 `fileName`/`userId` 的脱敏 STS 响应结构；
+- Bucket Versioning/WORM 的控制台人工确认；
+- `https://updates.insight-aigc.com` 的 CDN 规则截图或配置记录。
 
 ## 生产发布流程
 
-实现完成后，GitHub 工作流与本地发布器共同执行：
+实现完成后，由两个职责分离的 GitHub workflow 执行：
 
 1. 校验 tag、渠道、版本、发布策略、Runtime 锁和发布配置。
 2. 在 macOS arm64、macOS x64 和 Windows x64 各构建一次，完成签名、公证、YAML、blockmap 和安装器结构验证。
 3. 汇总相同制品，生成并签名 `insight-update.json`，执行完整资产校验。
-4. 创建 GitHub Draft Release 并上传同一批字节；GitHub Actions 不读取 OSS AccessKey。
-5. 本地发布器从 Draft 下载全部 Assets，重新验证签名、文件集、版本和摘要。
-6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后上传完整不可变版本目录。
+4. `Release desktop installers` 创建 GitHub Draft Release 并上传同一批字节；该 workflow 没有 OIDC 或 OSS 权限。
+5. 操作者从 `main` 手动运行 `Publish desktop updates`，选择 `stage`；workflow 通过 GitHub OIDC 与测试 Gateway 获取目录级 STS，从 Draft 下载全部 Assets 并重新验证签名、文件集、版本和摘要。
+6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后使用普通 `PutObject` 上传完整不可变版本目录；每个文件前检查 STS，临期则刷新，令牌失效时整文件重试一次。
 7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成该版本确切安装包的推广前验收。
-8. 人工确认后公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
+8. 人工确认后从同一 workflow 选择 `promote` 并填写精确确认版本；发布器先公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
 9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary；Candidate 的 N→N+1 必须在 Candidate 指针生效后立即完成，Stable 则必须在推广前已有完整 Candidate 升级证据。
 
 单平台 target 只上传对应 Actions artifact，不创建 tag 或 GitHub Release，也不运行 Publish。它用于关闭一个平台的候选门禁，不能替代完整 Candidate/Stable 发布。人工通过单平台包后，使用同一 `candidate_tag` 和 `target: all` 执行完整 Candidate；Stable 只由已存在的 `vX.Y.Z` tag push 触发，并始终等同于 `all`。
 
 macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。下载后的签名 macOS 候选必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
 
-GitHub workflow 成功并生成 Draft 后，在仓库根目录执行暂存；下面以 Candidate 为例：
+安装包 workflow 成功并生成 Draft 后，从 GitHub Actions 手动运行 `Publish desktop updates`：
 
-```bash
-node scripts/publish-update-to-oss.mjs stage \
-  --tag v1.0.0-rc.1 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher
-```
+- Ref：`main`
+- `command`：`stage`
+- `tag`：`v1.0.0-rc.1`
+- `confirm_version`：留空
 
-`stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。`ossutil put-object` 按安全 basename 的扩展名推导 Content-Type；最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。无凭证的摘要报告保存在被 Git 忽略的 `release-reports/`。
+`stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
 
 Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
 
-```bash
-node scripts/publish-update-to-oss.mjs promote \
-  --tag v1.0.0-rc.1 \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher \
-  --confirm-version 1.0.0-rc.1
-```
+- Ref：`main`
+- `command`：`promote`
+- `tag`：`v1.0.0-rc.1`
+- `confirm_version`：`1.0.0-rc.1`
 
 Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 

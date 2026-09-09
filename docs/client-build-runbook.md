@@ -217,9 +217,9 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 9：GitHub Desktop 安装包构建
 
-> 实现状态：截至 2026-09-09，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、本地 OSS 发布器和 CDN 复验门禁均已实现。尚缺完整 Candidate/Stable 制品和三平台安装证据；未完成阶段 10 前不得执行 Stable `promote`。
+> 实现状态：截至 2026-09-09，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。测试 Gateway 仍需部署接受 `{}` 的目录级 STS 契约；尚缺完整 Candidate/Stable 制品和三平台安装证据。未完成阶段 10 前不得执行 Stable `promote`。
 
-**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、本机 ossutil RAM Profile 和 GitHub `desktop-release` Environment。
+**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、成功的 `upload_oss_test` 目录级 STS 证据和 GitHub `desktop-release` Environment。
 
 **执行：**
 
@@ -230,22 +230,19 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
 - `publish` job 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在受保护的 `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
-- 本地发布器通过已登录的 `gh` 下载 Draft 全部 Assets，重新验证签名、文件集、版本和摘要；再通过指定 ossutil Profile 上传不可变 `desktop/releases/v<version>/`。AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
-- 本地发布机必须安装 `ossutil 2.3.0`，使用固定 `desktop-updates-publisher` Profile，且不得存在 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` 或 `OSS_SESSION_TOKEN` 环境变量。Bucket 必须从未启用 Versioning；发布器会在写入前调用 `get-bucket-versioning` 并失败关闭。
+- 独立 `Publish desktop updates` workflow 通过 GitHub OIDC 向固定测试 Gateway 以 `{}` 换取目录级 STS，下载 Draft 全部 Assets 并重新验证签名、文件集、版本和摘要，再上传不可变 `desktop/releases/v<version>/`。长期 AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
+- 200～600 MB 资产使用普通 `PutObject`；每个文件上传前检查 STS，剩余不足 180 秒就刷新。`SecurityTokenExpired` 或 `InvalidSecurityToken` 会刷新凭据并整文件重试一次，第二次失败立即终止且不修改 `current.json`。
+- Bucket 必须从未启用 Versioning，该项通过阿里云控制台一次性人工确认；发布 workflow 不请求 Bucket 控制面权限。
 - 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、缓存、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
 - 禁止 `--clobber` 或覆盖 OSS/GitHub 资产。重跑只允许幂等复用文件集完整且摘要与本次完全一致的 OSS 版本目录或 GitHub Draft；任何缺失、差异或已公开同 tag Release 都必须失败，制品内容变化必须创建新的 Candidate 或 Stable 版本。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
 - 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、GitHub Draft upload、本地 OSS upload 还是 CDN verify；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
-Draft 创建后执行版本目录暂存：
+Draft 创建后，在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`：
 
-```bash
-node scripts/publish-update-to-oss.mjs stage \
-  --tag <vX.Y.Z 或 vX.Y.Z-rc.N> \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher
-```
+- `command=stage`
+- `tag=<vX.Y.Z 或 vX.Y.Z-rc.N>`
+- `confirm_version` 留空
 
 **通过条件：** preflight、三个原生 job、Sonoma 兼容 job、GitHub Draft 与本地暂存全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling、Sonoma 分发检查与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
 
@@ -264,16 +261,11 @@ node scripts/publish-update-to-oss.mjs stage \
 - Candidate 的确切安装包完成干净安装和静态验证后，允许执行 Candidate `promote` 使其指针生效；随后立即从已安装的前一个 Candidate 完成 N→N+1 客户端内更新。在可信 Manifest 已解析后人为让自动下载失败，确认“下载完整安装包”能打开同一不可变版本目录内适配架构的 DMG/NSIS 并完成覆盖安装。完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
-- Candidate 在确切安装包验收后执行本地 `promote`，再完成 N→N+1 canary；失败时不得回写低版本，只能停止并修复到更高 RC。Stable 只有在 Candidate 升级、同源整包兜底和 Stable 确切安装包全部通过后才执行 `promote`。发布器先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`，并在约定 TTL 内确认收敛。
+- Candidate 在确切安装包验收后从 `main` 手动运行 `Publish desktop updates` 的 `promote`，再完成 N→N+1 canary；失败时不得回写低版本，只能停止并修复到更高 RC。Stable 只有在 Candidate 升级、同源整包兜底和 Stable 确切安装包全部通过后才执行 `promote`。发布器先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`，并在约定 TTL 内确认收敛。
 
-```bash
-node scripts/publish-update-to-oss.mjs promote \
-  --tag <vX.Y.Z 或 vX.Y.Z-rc.N> \
-  --bucket insight-desktop-updates \
-  --origin https://updates.insight-aigc.com \
-  --profile desktop-updates-publisher \
-  --confirm-version <X.Y.Z 或 X.Y.Z-rc.N>
-```
+- `command=promote`
+- `tag=<vX.Y.Z 或 vX.Y.Z-rc.N>`
+- `confirm_version=<X.Y.Z 或 X.Y.Z-rc.N>`
 
 正式 macOS 本地打包命令为：
 

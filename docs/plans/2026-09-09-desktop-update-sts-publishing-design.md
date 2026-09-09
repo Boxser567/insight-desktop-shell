@@ -106,6 +106,8 @@
 - `event_name=workflow_dispatch`
 - `audience=insight-harness-oss-upload`
 
+桌面发布 job 使用受保护的 GitHub Environment `desktop-release`。若后台校验 OIDC `sub`，必须允许 `repo:Boxser567/insight-desktop-shell:environment:desktop-release`；测试仓库没有 Environment 时，其 `sub` 仍是 `repo:BreezeWind889988/upload_oss_test:ref:refs/heads/main`。不要把两种 subject 形态误当作仓库身份不一致。
+
 ### 5. RAM 与 OSS 权限核对
 
 - 确认 Gateway 实际 AssumeRole 的角色已绑定管理员配置的 `insight-desktop-update-oss` 策略，而不只是控制台中存在同名策略。
