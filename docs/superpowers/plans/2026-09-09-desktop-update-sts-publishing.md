@@ -10,7 +10,7 @@
 
 **Design:** `docs/plans/2026-09-09-desktop-update-sts-publishing-design.md`
 
-**执行状态（2026-09-09）：** Task 1–4 已完成编码与文档同步；Task 5 的本地静态/测试门禁已执行，真实 `stage` 等待测试 Gateway 部署目录级 STS 契约并由 `upload_oss_test` 验收后执行。
+**执行状态（2026-09-09）：** Task 1–4 已完成编码与文档同步；Task 5 的本地静态/测试门禁已执行。`upload_oss_test` Run #7 已通过 `{}` 目录级 STS 与真实 OSS `PutObject` 验收；首个真实 `stage` 现等待 Candidate Draft。
 
 ## Constraints
 
@@ -20,7 +20,7 @@
 - 普通 `PutObject` 支持当前 200～600 MB 安装资产；不实现 multipart/checkpoint。
 - 每个文件上传前检查 STS；剩余不足 180 秒就刷新。令牌过期时刷新并整文件重试一次。
 - `release.yml` 不获得 OIDC 权限；只有独立发布 workflow 获得 `id-token: write`。
-- 后台目录级 STS 尚未部署前，前端可完成单测和静态门禁，但真实 `stage` 必须等待后台验收通过。
+- 后台目录级 STS 已由 `upload_oss_test` Run #7 验收通过；真实 `stage` 仍必须基于完整且已验证的 Candidate Draft 执行。
 
 ## Task 1：新增 GitHub OIDC/STS OSS 客户端
 

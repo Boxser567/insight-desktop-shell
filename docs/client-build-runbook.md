@@ -217,7 +217,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 9：GitHub Desktop 安装包构建
 
-> 实现状态：截至 2026-09-09，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。测试 Gateway 仍需部署接受 `{}` 的目录级 STS 契约；尚缺完整 Candidate/Stable 制品和三平台安装证据。未完成阶段 10 前不得执行 Stable `promote`。
+> 实现状态：截至 2026-09-09，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。`upload_oss_test` Run #7 已通过 `{}` 目录级 STS 与真实 OSS `PutObject` 验收；尚缺完整 Candidate/Stable 制品和三平台安装证据。未完成阶段 10 前不得执行 Stable `promote`。
 
 **输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、成功的 `upload_oss_test` 目录级 STS 证据和 GitHub `desktop-release` Environment。
 

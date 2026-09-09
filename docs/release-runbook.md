@@ -14,7 +14,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。真实 OSS `PutObject` 已验证成功；测试 Gateway 仍需部署接受 `{}` 的目录级 STS 契约。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
+截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。[`upload_oss_test` Run #7](https://github.com/BreezeWind889988/upload_oss_test/actions/runs/34319570470) 已证明测试 Gateway 接受 `{}`、签发目录级 STS，并完成真实 OSS `PutObject`。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
 
 ## 必读资料
 
@@ -90,9 +90,9 @@ Gateway 临时会话的最小 OSS Policy 如下；`Resource` 不得扩大到其�
 
 后台完成后保留以下验收证据：
 
-- 成功的 `upload_oss_test` workflow run URL；
-- object key、OSS request ID 和 HTTP 200；
-- 不含 `fileName`/`userId` 的脱敏 STS 响应结构；
+- [x] `upload_oss_test` [Run #7](https://github.com/BreezeWind889988/upload_oss_test/actions/runs/34319570470) 成功；
+- [x] object key `1788935604227.txt`，OSS request ID `6AA0FDB567B311333387BD1EB`，`PutObject` HTTP 200；
+- [x] STS 请求体为 `{}`；脱敏响应为 `SUCCESS`，包含 900 秒凭证、固定 Bucket/Region/endpoint、`dir: ""`、`fileType: "file"`、repository/run claims，不含 `fileName`/`userId`；
 - Bucket Versioning/WORM 的控制台人工确认；
 - `https://updates.insight-aigc.com` 的 CDN 规则截图或配置记录。
 

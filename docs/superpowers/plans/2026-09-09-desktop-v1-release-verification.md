@@ -34,7 +34,7 @@
 - [ ] 本地 `main` 尚未推送到 `origin/main`。
 - [ ] 仓库版本仍为 `0.1.2-rc.3`，尚未准备 `1.0.0-rc.1`。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
-- [ ] 测试 Gateway 尚需部署接受 `{}` 的目录级 STS 契约，并由 `upload_oss_test` 回传真实成功证据。
+- [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
 
 ---
 
@@ -118,13 +118,15 @@ git status --short --branch
 
 通过条件：Gateway 请求方不能覆盖 Bucket、Region、endpoint、目录、RAM role、权限或有效期；长期 AccessKey 不进入仓库、GitHub、客户端、命令参数或 `.env`。
 
-- [ ] **Step 4：部署并验收目录级 STS 契约**
+- [x] **Step 4：部署并验收目录级 STS 契约**
 
 测试 Gateway 的 `POST /v1/upload/sts/token` 必须在 GitHub OIDC 鉴权后接受 `{}` 或 `{"fileType":"file"}`，不再要求 `fileName` 或登录用户。allowlist 至少包含桌面仓库 ID `1344679131` 和测试仓库 ID `1362006344`，audience 为 `insight-harness-oss-upload`。若校验 `sub`，桌面 workflow 使用 `repo:Boxser567/insight-desktop-shell:environment:desktop-release`。
 
 从 `BreezeWind889988/upload_oss_test` 最新 `main` 手动运行 `Test GitHub OIDC STS`，不要选择 `verify_only`。
 
 通过条件：OIDC 验证成功；请求体 `{}` 获取 STS 成功；脚本自行生成 object key；真实 `PutObject` 返回 HTTP 200；日志已脱敏。记录 run URL、object key、OSS request ID 和不含 `fileName`/`userId` 的响应结构。
+
+验收记录（2026-09-09）：[`upload_oss_test` Run #7](https://github.com/BreezeWind889988/upload_oss_test/actions/runs/34319570470) 成功；OIDC 与 STS 均为 HTTP 200；STS 请求体 `{}`，响应 `dir: ""`、`durationSeconds: 900` 且无 `fileName`/`userId`；对象 `1788935604227.txt` 的 `PutObject` 为 HTTP 200，OSS request ID `6AA0FDB567B311333387BD1EB`。
 
 - [ ] **Step 5：确认 CDN 规则**
 
