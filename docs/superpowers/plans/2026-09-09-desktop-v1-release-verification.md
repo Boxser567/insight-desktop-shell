@@ -31,8 +31,8 @@
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
 - [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
-- [ ] 本地 `main` 尚未推送到 `origin/main`。
-- [ ] 仓库版本仍为 `0.1.2-rc.3`，尚未准备 `1.0.0-rc.1`。
+- [x] 已将 STS 发布实现与验收记录推送到 `origin/main`，远端基线为 `77571d4`。
+- [x] 本地已将 package、lockfile 和发布策略一致更新为 `1.0.0-rc.1`，等待人工 DEV 回归后提交并推送。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
 - [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
 
@@ -56,7 +56,7 @@ git worktree list
 
 通过条件：当前分支为 `main`，无未提交文件，只有主工作树，无待合并本地研发分支。
 
-- [ ] **Step 2：记录并推送当前基线**  **【改变远端状态】**
+- [x] **Step 2：记录并推送当前基线**  **【改变远端状态】**
 
 ```bash
 git rev-parse HEAD
@@ -65,6 +65,8 @@ git status --short --branch
 ```
 
 通过条件：最后一条状态为 `main...origin/main`，没有 ahead/behind；记录实际 HEAD SHA。此后进入发布冻结，只接收 1.0 阻断修复。
+
+执行记录（2026-09-09）：确认远端没有并发提交后，将 STS 发布实现与验收记录推送到 `origin/main`，基线 SHA 为 `77571d4`。
 
 ---
 
@@ -153,7 +155,7 @@ curl -sS -i https://updates.insight-aigc.com/desktop/stable/current.json
 
 **Produces:** 可从 `main` 复现的 `1.0.0-rc.1` Candidate 提交。
 
-- [ ] **Step 1：确认 Core Runtime 与内置插件基线**
+- [x] **Step 1：确认 Core Runtime 与内置插件基线**
 
 除非 Core 代码发生变化，不为版本名称重新发布 Runtime。确认锁仍指向：
 
@@ -165,7 +167,7 @@ curl -sS -i https://updates.insight-aigc.com/desktop/stable/current.json
 
 通过条件：三个 Runtime target 使用同一个 Core commit；vendor 清单和 SHA-256 未漂移。
 
-- [ ] **Step 2：更新 Candidate 版本**
+- [x] **Step 2：更新 Candidate 版本**
 
 ```bash
 npm version 1.0.0-rc.1 --no-git-tag-version
@@ -185,7 +187,7 @@ npm version 1.0.0-rc.1 --no-git-tag-version
 
 通过条件：`package.json`、`package-lock.json` 根版本和 policy 版本均为 `1.0.0-rc.1`。
 
-- [ ] **Step 3：运行零安装发布预检**
+- [x] **Step 3：运行零安装发布预检**
 
 ```bash
 node scripts/verify-release-preflight.mjs \
@@ -199,7 +201,7 @@ node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.j
 
 通过条件：两条命令退出码均为 0，输出版本、渠道、Runtime tag/commit 和三个目标平台正确。
 
-- [ ] **Step 4：运行本地完整门禁**
+- [x] **Step 4：运行本地完整门禁**
 
 ```bash
 npm test
@@ -210,6 +212,8 @@ git diff --check
 ```
 
 通过条件：测试、类型检查和构建全绿；目录包包含 Runtime、签名公钥、`update-distribution.json`、Sidebar、Market 和三个可选插件。只检查本地未签名 Candidate 包内容，不启动它；功能验证使用隔离身份的 `因赛AI Dev`。
+
+执行记录（2026-09-09）：86 个测试文件、543 个测试通过；TypeScript、release/publish workflow 契约、生产构建和 Candidate 目录打包通过。包内版本为 `1.0.0-rc.1`，App ID 为 `com.insight.desktop`，Runtime 为 `insight-runtime-v0.1.1-rc.10` / `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，更新 Origin、公钥、Sidebar `0.16.1`、Market `1.44.0` 和三个固定版本可选插件齐全。本机 Developer ID 深度严格签名校验通过；目录包未公证，不能替代 GitHub Candidate 的 notarize/staple 与安装验收。
 
 - [ ] **Step 5：完成本地 DEV 人工回归**
 
