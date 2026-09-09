@@ -455,6 +455,8 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('--runtime-lock core-runtime.lock.json')
     expect(preflight).toContain('Run dependency-free release checks')
     expect(preflight).toContain('verify-release-workflow.mjs')
+    expect(preflight).toContain('verify-publish-workflow.mjs')
+    expect(preflight).toContain('node --check scripts/github-oss-client.mjs')
     expect(preflight).not.toMatch(/npm ci|vitest|prepare:core-runtime/)
     expect(appleSilicon).toContain('needs: release-preflight')
     expect(appleSilicon).toContain("inputs.target == 'macos-arm64'")

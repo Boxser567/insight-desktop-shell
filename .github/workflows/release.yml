@@ -86,16 +86,21 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.json
+          node scripts/verify-publish-workflow.mjs \
+            .github/workflows/publish-update.yml \
+            scripts/github-oss-client.mjs
           node --check scripts/build-update-release.mjs
           node --check scripts/build-update-pointer.mjs
           node --check scripts/finalize-mac-release.mjs
           node --check scripts/finalize-windows-release.mjs
+          node --check scripts/github-oss-client.mjs
           node --check scripts/macos-signing-identity.mjs
           node --check scripts/merge-mac-update-metadata.mjs
           node --check scripts/prepare-macos-signing-keychain.mjs
           node --check scripts/publish-update-to-oss.mjs
           node --check scripts/update-release-contract.mjs
           node --check scripts/verify-distribution-assets.mjs
+          node --check scripts/verify-publish-workflow.mjs
           node --check scripts/verify-release-assets.mjs
 
   macos-apple-silicon:

@@ -1,0 +1,103 @@
+name: Publish desktop updates
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: Stage immutable assets or promote the verified version
+        required: true
+        type: choice
+        options:
+          - stage
+          - promote
+      tag:
+        description: Existing GitHub Draft tag, for example v1.0.0-rc.1
+        required: true
+        type: string
+      confirm_version:
+        description: Required for promote; enter the exact version without v
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: desktop-update-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ inputs.command }} ${{ inputs.tag }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment: desktop-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate trusted invocation
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          TAG: ${{ inputs.tag }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || {
+            echo '::error::Desktop update publishing is restricted to refs/heads/main.'
+            exit 1
+          }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || {
+            echo '::error::Release tag is invalid.'
+            exit 1
+          }
+          if [ "$COMMAND" = 'stage' ]; then
+            test -z "$CONFIRM_VERSION" || {
+              echo '::error::confirm_version must be empty for stage.'
+              exit 1
+            }
+          else
+            test -n "$CONFIRM_VERSION" || {
+              echo '::error::confirm_version is required for promote.'
+              exit 1
+            }
+          fi
+      - run: npm ci --ignore-scripts
+      - name: Verify publisher contracts
+        run: |
+          set -euo pipefail
+          node scripts/verify-publish-workflow.mjs \
+            .github/workflows/publish-update.yml \
+            scripts/github-oss-client.mjs
+          node --check scripts/github-oss-client.mjs
+          node --check scripts/publish-update-to-oss.mjs
+      - name: Publish verified update assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMAND: ${{ inputs.command }}
+          TAG: ${{ inputs.tag }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+        run: |
+          set -euo pipefail
+          args=(node scripts/publish-update-to-oss.mjs "$COMMAND" --tag "$TAG")
+          if [ "$COMMAND" = 'promote' ]; then
+            args+=(--confirm-version "$CONFIRM_VERSION")
+          fi
+          "${args[@]}"
+      - name: Upload publisher report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-update-${{ inputs.tag }}-${{ inputs.command }}
+          path: release-reports/
+          if-no-files-found: warn
+          retention-days: 90

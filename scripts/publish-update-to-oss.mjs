@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { createGithubOssClient } from './github-oss-client.mjs'
 import {
   releaseAssetNames,
   releaseChannelForVersion
@@ -25,8 +26,6 @@ const execFile = promisify(execFileCallback)
 const repository = 'Boxser567/insight-desktop-shell'
 const expectedBucket = 'insight-desktop-updates'
 const expectedOrigin = 'https://updates.insight-aigc.com'
-const expectedProfile = 'desktop-updates-publisher'
-const requiredOssutilVersion = '2.3.0'
 const immutableCache = 'public,max-age=31536000,immutable'
 const pointerCache = 'public,max-age=60,must-revalidate'
 const lockPath = join(tmpdir(), 'insight-desktop-update-publisher.lock')
@@ -41,8 +40,8 @@ const sensitiveEnvironmentNames = new Set([
 function usage() {
   return [
     'Usage:',
-    '  publish-update-to-oss.mjs stage --tag <v-semver> --bucket insight-desktop-updates --origin https://updates.insight-aigc.com --profile desktop-updates-publisher',
-    '  publish-update-to-oss.mjs promote --tag <v-semver> --bucket insight-desktop-updates --origin https://updates.insight-aigc.com --profile desktop-updates-publisher --confirm-version <semver>'
+    '  publish-update-to-oss.mjs stage --tag <v-semver>',
+    '  publish-update-to-oss.mjs promote --tag <v-semver> --confirm-version <semver>'
   ].join('\n')
 }
 
@@ -51,9 +50,6 @@ export function parsePublisherArguments(argv) {
   if (command !== 'stage' && command !== 'promote') throw new Error(usage())
   const allowed = new Set([
     '--tag',
-    '--bucket',
-    '--origin',
-    '--profile',
     ...(command === 'promote' ? ['--confirm-version'] : [])
   ])
   const values = new Map()
@@ -68,9 +64,6 @@ export function parsePublisherArguments(argv) {
   if (!/^v\d+\.\d+\.\d+(?:-rc\.\d+)?$/u.test(tag)) throw new Error('Release tag is invalid.')
   const version = tag.slice(1)
   const channel = releaseChannelForVersion(version)
-  if (values.get('--bucket') !== expectedBucket) throw new Error('OSS bucket is not approved.')
-  if (values.get('--origin') !== expectedOrigin) throw new Error('Update origin is not approved.')
-  if (values.get('--profile') !== expectedProfile) throw new Error('ossutil profile is not approved.')
   const confirmedVersion = values.get('--confirm-version')
   if (command === 'promote' && confirmedVersion !== version) {
     throw new Error('Promotion confirmation does not match the release version.')
@@ -81,8 +74,7 @@ export function parsePublisherArguments(argv) {
     version,
     channel,
     bucket: expectedBucket,
-    origin: expectedOrigin,
-    profile: expectedProfile
+    origin: expectedOrigin
   }
 }
 
@@ -97,10 +89,6 @@ function childEnvironment(environment) {
   return Object.fromEntries(
     Object.entries(environment).filter(([name]) => !sensitiveEnvironmentNames.has(name))
   )
-}
-
-export function ossArguments(args, profile) {
-  return [...args, '--profile', profile, '--ignore-env-var', '--loglevel', 'off']
 }
 
 async function run(file, args, environment = process.env) {
@@ -119,10 +107,6 @@ async function run(file, args, environment = process.env) {
       : ''
     throw new Error(`${file} failed${stderr ? `: ${stderr}` : '.'}`)
   }
-}
-
-async function runOss(args, profile) {
-  return run('ossutil', ossArguments(args, profile))
 }
 
 export async function acquirePublisherLock() {
@@ -149,43 +133,6 @@ export async function acquirePublisherLock() {
     }
     throw error
   }
-}
-
-export function parseObjectList(stdout) {
-  const value = JSON.parse(stdout)
-  if (value?.IsTruncated === true || value?.isTruncated === true) {
-    throw new Error('OSS release prefix contains more objects than the publisher permits.')
-  }
-  const contents = value?.Contents ?? value?.contents ?? value?.ListBucketResult?.Contents ?? []
-  const entries = contents === null ? [] : Array.isArray(contents) ? contents : [contents]
-  return entries.map((entry) => {
-    const key = entry?.Key ?? entry?.key
-    const size = Number(entry?.Size ?? entry?.size)
-    if (typeof key !== 'string' || !Number.isSafeInteger(size) || size < 0) {
-      throw new Error('OSS object listing is invalid.')
-    }
-    return { key, size }
-  })
-}
-
-export function assertBucketVersioningDisabled(stdout) {
-  const value = JSON.parse(stdout)
-  const status = value?.Status ?? value?.status
-  if (status !== undefined && status !== null && status !== '') {
-    throw new Error('OSS bucket versioning must remain unconfigured so forbid-overwrite is enforceable.')
-  }
-}
-
-async function listObjects(prefix, options) {
-  const result = await runOss([
-    'api',
-    'list-objects-v2',
-    '--bucket', options.bucket,
-    '--prefix', prefix,
-    '--max-keys', '1000',
-    '--output-format', 'json'
-  ], options.profile)
-  return parseObjectList(result.stdout)
 }
 
 async function releaseFiles(releaseDir, channel, version) {
@@ -253,44 +200,24 @@ async function downloadAndVerifyRelease(options, temporaryDirectory) {
   return { release, releaseDir, manifest }
 }
 
-async function assertOssutilVersion(options) {
-  const result = await runOss(['version'], options.profile)
-  if (!new RegExp(`(?:^|\\D)${requiredOssutilVersion.replaceAll('.', '\\.')}(?:\\D|$)`, 'u').test(result.stdout)) {
-    throw new Error(`ossutil ${requiredOssutilVersion} is required.`)
-  }
-}
-
-async function verifyBucketConfiguration(options) {
-  const result = await runOss([
-    'api', 'get-bucket-versioning',
-    '--bucket', options.bucket,
-    '--output-format', 'json'
-  ], options.profile)
-  assertBucketVersioningDisabled(result.stdout)
-}
-
-async function uploadImmutableRelease(options, releaseDir, files) {
+async function uploadImmutableRelease(options, releaseDir, files, oss) {
   const prefix = `desktop/releases/v${options.version}/`
-  const existing = await listObjects(prefix, options)
+  const existing = await oss.listObjects(prefix)
   if (existing.length > 0) {
     assertExactRemoteFiles(existing, files, prefix)
     return { prefix, reused: true }
   }
   for (const file of files) {
-    const args = [
-      'api', 'put-object',
-      '--bucket', options.bucket,
-      '--key', `${prefix}${file.name}`,
-      '--body', pathToFileURL(join(releaseDir, file.name)).href,
-      '--forbid-overwrite', 'true',
-      '--cache-control', immutableCache
-    ]
-    if (file.name.endsWith('.dmg') || file.name.endsWith('.exe')) {
-      args.push('--content-disposition', `attachment; filename="${basename(file.name)}"`)
+    const headers = {
+      'x-oss-forbid-overwrite': 'true',
+      'cache-control': immutableCache
     }
-    await runOss(args, options.profile)
+    if (file.name.endsWith('.dmg') || file.name.endsWith('.exe')) {
+      headers['content-disposition'] = `attachment; filename="${basename(file.name)}"`
+    }
+    await oss.putObject(`${prefix}${file.name}`, join(releaseDir, file.name), headers)
   }
-  assertExactRemoteFiles(await listObjects(prefix, options), files, prefix)
+  assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
   return { prefix, reused: false }
 }
 
@@ -304,20 +231,15 @@ async function verifyCdn(options, releaseDir) {
   })
 }
 
-async function readAuthoritativePointer(options, temporaryDirectory, suffix) {
+async function readAuthoritativePointer(options, temporaryDirectory, suffix, oss) {
   const key = `desktop/${options.channel}/current.json`
-  const objects = await listObjects(key, options)
+  const objects = await oss.listObjects(key)
   if (objects.length === 0) return { key, path: undefined, bytes: undefined, value: undefined }
   if (objects.length !== 1 || objects[0].key !== key) {
     throw new Error('OSS channel pointer prefix contains unexpected objects.')
   }
   const output = join(temporaryDirectory, `current-${suffix}.json`)
-  await runOss([
-    'cp',
-    `oss://${options.bucket}/${key}`,
-    output,
-    '--force'
-  ], options.profile)
+  await oss.getObject(key, output)
   const bytes = await readFile(output)
   let value
   try {
@@ -365,14 +287,12 @@ async function publishGithubRelease(options, release) {
   return true
 }
 
-async function uploadPointer(options, pointer) {
-  await runOss([
-    'api', 'put-object',
-    '--bucket', options.bucket,
-    '--key', `desktop/${options.channel}/current.json`,
-    '--body', pathToFileURL(pointer.path).href,
-    '--cache-control', pointerCache
-  ], options.profile)
+async function uploadPointer(options, pointer, oss) {
+  await oss.putObject(
+    `desktop/${options.channel}/current.json`,
+    pointer.path,
+    { 'cache-control': pointerCache }
+  )
 }
 
 async function waitForPointer(options, expectedBytes, timeoutMs = 120_000) {
@@ -414,11 +334,11 @@ async function writeReport(options, report) {
   return path
 }
 
-async function stage(options, temporaryDirectory) {
+async function stage(options, temporaryDirectory, oss) {
   const { release, releaseDir, manifest } = await downloadAndVerifyRelease(options, temporaryDirectory)
   if (!release.isDraft) throw new Error('Stage requires a GitHub Draft Release.')
   const files = await releaseFiles(releaseDir, options.channel, options.version)
-  const upload = await uploadImmutableRelease(options, releaseDir, files)
+  const upload = await uploadImmutableRelease(options, releaseDir, files, oss)
   const distribution = await verifyCdn(options, releaseDir)
   return {
     action: 'stage',
@@ -435,13 +355,13 @@ async function stage(options, temporaryDirectory) {
   }
 }
 
-async function promote(options, temporaryDirectory) {
+async function promote(options, temporaryDirectory, oss) {
   const { release, releaseDir, manifest } = await downloadAndVerifyRelease(options, temporaryDirectory)
   const files = await releaseFiles(releaseDir, options.channel, options.version)
   const prefix = `desktop/releases/v${options.version}/`
-  assertExactRemoteFiles(await listObjects(prefix, options), files, prefix)
+  assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
   const distributionBefore = await verifyCdn(options, releaseDir)
-  const currentBefore = await readAuthoritativePointer(options, temporaryDirectory, 'before')
+  const currentBefore = await readAuthoritativePointer(options, temporaryDirectory, 'before', oss)
   const alreadyCommitted = pointerIsTarget(currentBefore, options)
   if (alreadyCommitted && release.isDraft) {
     throw new Error('OSS pointer already targets a GitHub Draft; manual investigation is required.')
@@ -451,12 +371,17 @@ async function promote(options, temporaryDirectory) {
     : await buildPointer(options, temporaryDirectory, currentBefore)
   const githubPublished = await publishGithubRelease(options, release)
   if (!alreadyCommitted) {
-    const currentAfterGithub = await readAuthoritativePointer(options, temporaryDirectory, 'after-github')
+    const currentAfterGithub = await readAuthoritativePointer(
+      options,
+      temporaryDirectory,
+      'after-github',
+      oss
+    )
     if (!pointersEqual(currentBefore, currentAfterGithub)) {
       throw new Error('OSS channel pointer changed during promotion.')
     }
     await buildPointer(options, temporaryDirectory, currentAfterGithub)
-    await uploadPointer(options, pointer)
+    await uploadPointer(options, pointer, oss)
   }
   await waitForPointer(options, pointer.bytes)
   const distributionAfter = await verifyCdn(options, releaseDir)
@@ -486,16 +411,26 @@ async function main() {
   try {
     temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-desktop-publish-'))
     await chmod(temporaryDirectory, 0o700)
-    await assertOssutilVersion(options)
-    await verifyBucketConfiguration(options)
+    const oss = createGithubOssClient()
     const report = options.command === 'stage'
-      ? await stage(options, temporaryDirectory)
-      : await promote(options, temporaryDirectory)
+      ? await stage(options, temporaryDirectory, oss)
+      : await promote(options, temporaryDirectory, oss)
     const reportPath = await writeReport(options, {
       ...report,
       completedAt: new Date().toISOString()
     })
     console.log(JSON.stringify({ ok: true, reportPath, ...report }, null, 2))
+  } catch (error) {
+    await writeReport(options, {
+      ok: false,
+      action: options.command,
+      tag: options.tag,
+      channel: options.channel,
+      version: options.version,
+      error: 'Publisher failed; see the redacted workflow error for diagnostics.',
+      completedAt: new Date().toISOString()
+    }).catch(() => undefined)
+    throw error
   } finally {
     if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true })
     await releaseLock()
