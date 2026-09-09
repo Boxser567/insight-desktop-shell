@@ -240,6 +240,12 @@ function applicationChannel(): 'development' | 'candidate' | 'stable' {
 const desktopChannel = applicationChannel()
 const developmentBuild = desktopChannel === 'development'
 
+if (developmentBuild && process.platform === 'darwin') {
+  // Local builds do not have a stable code signature. Chromium's mock keychain
+  // prevents macOS from blocking DEV startup with a Safe Storage password dialog.
+  app.commandLine.appendSwitch('use-mock-keychain')
+}
+
 if (developmentBuild) {
   // Electron does not exit on terminal signals by default. Let Ctrl+C and
   // process supervisors use the same graceful shutdown path as app.quit().
@@ -1717,11 +1723,16 @@ async function bootstrap(): Promise<void> {
     environment: authEnvironment,
     insightRoot: insightRoot(),
     fetch: (input, init) => authSession.fetch(input.toString(), init),
-    cipher: {
-      available: () => safeStorage.isEncryptionAvailable(),
-      encrypt: (value) => safeStorage.encryptString(value),
-      decrypt: (value) => safeStorage.decryptString(value)
-    }
+    ...(developmentBuild
+      ? { persistCredentials: false }
+      : {
+          persistCredentials: true,
+          cipher: {
+            available: () => safeStorage.isEncryptionAvailable(),
+            encrypt: (value: string) => safeStorage.encryptString(value),
+            decrypt: (value: Buffer) => safeStorage.decryptString(value)
+          }
+        })
   })
   registerAuthIpc({
     ipcMain,

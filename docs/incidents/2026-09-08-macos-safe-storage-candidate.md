@@ -12,6 +12,22 @@
 
 本结论只关闭 macOS Apple Silicon 签名候选的钥匙串授权回归，不代表三平台发布完成。
 
+## 2026-09-09 本地 DEV 回归与处理
+
+`1.0.0-rc.1` 本地 `因赛AI Dev` 目录包再次出现 `因赛AI Dev Safe Storage` 密码框。DEV 虽然已经隔离产品名、App ID 和用户数据目录，但本地重建没有稳定代码签名；只在 `safeStorage` 失败后捕获异常无法阻止 macOS 先显示系统授权框。
+
+Electron 官方说明 macOS `safeStorage` 依赖钥匙串且需要稳定代码签名，Cookie encryption 也复用同一系统能力；Chromium 则明确把 `--use-mock-keychain` 作为避免开发构建阻塞式钥匙串弹窗的测试开关：[Electron code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing)、[Chromium macOS build instructions](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/mac_build_instructions.md#avoiding-system-permissions-dialogs-after-each-build)。
+
+DEV 通道现按以下边界运行：
+
+- macOS 在 Chromium 初始化前启用 `use-mock-keychain`，阻止未稳定签名的开发构建访问真实钥匙串；
+- 认证 Session 使用非持久分区，测试环境 Cookie 不跨进程保存；
+- 访问令牌只保留在 Main 进程内，不读取、不改写既有 `auth/test.json`，也不调用 `safeStorage`；
+- 不保存明文 token，不自动删除钥匙串条目、Cookie、Profile、会话、工作区或插件数据；
+- 退出 DEV 后需要重新登录属于预期行为。Candidate/Stable 的正式安全持久化不变，仍必须使用 Developer ID 签名、公证包验证连续启动。
+
+自动回归覆盖了“存在旧密文时 DEV 启动不恢复、不改写，当前进程登录仍成功，重建会话后回到未登录”。本地目录包已完成三次进程级冷启动，启动命令均包含 `--use-mock-keychain`，对应系统安全日志未出现 `因赛AI Dev`/`Safe Storage` 访问记录。2026-09-09 已人工打开最终 `final4` 目录包，确认不再出现钥匙串密码框；本地 macOS DEV 回归通过。
+
 ## 现象
 
 使用云端 `Developer ID Application` 签名、公证并 staple 的 DMG 安装后，应用启动会请求访问 `因赛AI Safe Storage`。未选择“始终允许”时，一次启动可能连续请求两次；退出后再次启动仍会重复请求。拒绝授权后登录界面可进入，但登录操作会把本地安全存储失败显示为“认证服务暂时不可用”。
@@ -49,7 +65,7 @@ security delete-generic-password -s '因赛AI Safe Storage' "$HOME/Library/Keych
 
 ## 后续构建规则
 
-1. 日常快速功能验证只运行隔离身份的 `因赛AI Dev`，禁止运行使用正式产品名、App ID/channel 或正式用户数据目录的本地未签名 Candidate。
+1. 日常快速功能验证只运行隔离身份的 `因赛AI Dev`，禁止运行使用正式产品名、App ID/channel 或正式用户数据目录的本地未签名 Candidate。DEV 不访问真实钥匙串，退出后需要重新登录。
 2. Safe Storage 行为只能用云端 Developer ID 签名并完成公证的 DMG 验证；本地 DEV 无法证明该路径。
 3. 单平台 Actions artifact 可以关闭对应平台候选门禁，但不得写成完整 Candidate/Stable 发布通过。
 4. 发生钥匙串提示时，先比较精确条目的创建时间、签名身份、应用路径和用户数据目录，不先删除用户 Profile，也不通过明文持久化绕过安全存储。

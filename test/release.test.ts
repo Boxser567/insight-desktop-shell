@@ -373,6 +373,9 @@ describe('GitHub release contract', () => {
     expect(developmentConfig).toContain("output: 'dist-dev'")
     expect(developmentConfig).toContain("insightDesktopAppId: 'com.insight.desktop.dev'")
     expect(developmentConfig).toContain("insightDesktopChannel: 'development'")
+    expect(developmentConfig).toContain('identity: null')
+    expect(developmentConfig).toContain('--use-mock-keychain')
+    expect(developmentConfig).toContain('afterPack: configureMacosDevelopmentLauncher')
     expect(developmentConfig).toContain(
       "artifactName: 'insight-dev-${os}-${arch}.${ext}'"
     )
@@ -383,6 +386,8 @@ describe('GitHub release contract', () => {
     expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
     expect(main).not.toContain('insight-desktop-candidate')
     expect(main).toContain('const desktopChannel = applicationChannel()')
+    expect(main).toContain("app.commandLine.appendSwitch('use-mock-keychain')")
+    expect(main).toContain('persistCredentials: false')
     expect(candidateConfig).toContain("appId: 'com.insight.desktop'")
     expect(candidateConfig).toContain("productName: '因赛AI'")
     expect(candidateConfig).toContain("output: 'dist-candidate'")

@@ -33,6 +33,7 @@
 - [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
 - [x] 已将 STS 发布实现与验收记录推送到 `origin/main`，远端基线为 `77571d4`。
 - [x] 本地已将 package、lockfile 和发布策略一致更新为 `1.0.0-rc.1`，等待人工 DEV 回归后提交并推送。
+- [x] macOS DEV 已从真实钥匙串隔离：mock keychain、非持久认证 Session、进程内 token；`final4` 目录包已人工确认无钥匙串密码框，退出 DEV 后重新登录是预期行为。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
 - [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
 
@@ -219,7 +220,8 @@ git diff --check
 
 同时验证全新 Profile 与既有 Profile：
 
-- 登录、退出、登录恢复、会话和工作区；
+- 登录、退出、当前进程内会话和工作区；退出 DEV 再启动后应要求重新登录；
+- 启动、登录、退出及连续三次冷启动均不得出现 `因赛AI Dev Safe Storage` 或其他钥匙串授权框；
 - 设置入口与账号隔离；
 - Markdown/HTML 在 Sidebar 内打开；
 - Market 可打开，必需插件不可卸载，可选插件卸载后不被回填；

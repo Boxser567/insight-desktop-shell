@@ -9,7 +9,7 @@ import type { AuthEnvironmentConfig } from '../src/main/auth/auth-environment'
 const environment: AuthEnvironmentConfig = {
   name: 'test',
   baseUrl: 'https://gapi-test.insight-aigc.com',
-  partition: 'persist:insight-auth-test'
+  partition: 'insight-auth-test'
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {

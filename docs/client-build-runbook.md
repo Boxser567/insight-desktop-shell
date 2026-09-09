@@ -169,6 +169,8 @@ npm exec electron-vite -- dev
 npm run package:dev:dir
 ```
 
+macOS DEV 没有稳定代码签名，必须在 Chromium 初始化前启用 `use-mock-keychain`；DEV 认证必须同时使用非持久 Session 且不调用 `safeStorage`。因此登录只在当前 Main 进程内有效，退出后需要重新登录。该限制只属于 `development` 通道，Candidate/Stable 仍使用系统安全存储。不得为恢复 DEV 登录而改回真实钥匙串、保存明文 token，或删除用户钥匙串/Profile。
+
 需要 macOS 安装介质时再运行：
 
 ```bash
@@ -307,7 +309,7 @@ npm run package:mac:arm64
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
-| 云端签名、公证和 stapling 均通过，但 macOS 重复要求访问 `因赛AI Safe Storage` | 先比较该钥匙串条目的创建时间与云端 DMG 下载时间；本地未签名 Candidate 若曾使用正式产品名和 `insight-desktop` 用户目录，会先创建同名条目，其访问控制不接受后续 Developer ID 应用。拒绝授权还会让本地 token 加密失败，不应误报远端认证服务不可用 | 阶段 7 的快速功能验证只运行隔离的 `因赛AI Dev`，禁止打开未签名但使用正式身份的 Candidate；阶段 10 删除已确认由未签名构建创建的精确旧条目后，再用云端签名 DMG 创建新条目并连续启动三次。安全存储拒绝时只保留当次内存登录，不写明文 token；Sonoma job 和最终 quarantine 验收仍不可省略 |
+| 云端签名、公证和 stapling 均通过，但 macOS 重复要求访问 `因赛AI Safe Storage` | 先比较该钥匙串条目的创建时间与云端 DMG 下载时间；本地未签名 Candidate 若曾使用正式产品名和 `insight-desktop` 用户目录，会先创建同名条目，其访问控制不接受后续 Developer ID 应用。拒绝授权还会让本地 token 加密失败，不应误报远端认证服务不可用 | 阶段 7 的快速功能验证只运行隔离的 `因赛AI Dev`；macOS DEV 使用 mock keychain、非持久认证 Session 和进程内 token，禁止访问真实钥匙串或打开未签名正式身份 Candidate。阶段 10 删除已确认由未签名构建创建的精确旧条目后，再用云端签名 DMG 创建新条目并连续启动三次。正式包安全存储拒绝时只保留当次内存登录，不写明文 token；Sonoma job 和最终 quarantine 验收仍不可省略 |
 | codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
 | `iconutil` 对尺寸完整的 iconset 报 `Invalid Iconset` | 先用 `file`/`sips` 核对全部标准尺寸；若 `iconutil` 自己解包的 iconset 也无法重新封装，则属于宿主工具异常 | 阶段 2/7，使用仓库生成器直接写入标准 ICNS PNG entries，并以 `file`、`sips` 和品牌资产测试验证，不进入远程打包调试 |

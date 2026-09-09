@@ -6,14 +6,14 @@ describe('desktop auth environment', () => {
     expect(resolveAuthEnvironment({ packaged: false })).toEqual({
       name: 'test',
       baseUrl: 'https://gapi-test.insight-aigc.com',
-      partition: 'persist:insight-auth-test'
+      partition: 'insight-auth-test'
     })
     expect(
       resolveAuthEnvironment({ packaged: true, channel: 'development' })
     ).toEqual({
       name: 'test',
       baseUrl: 'https://gapi-test.insight-aigc.com',
-      partition: 'persist:insight-auth-test'
+      partition: 'insight-auth-test'
     })
   })
 

@@ -16,7 +16,7 @@ export function resolveAuthEnvironment(input: {
     return {
       name: 'test',
       baseUrl: 'https://gapi-test.insight-aigc.com',
-      partition: 'persist:insight-auth-test'
+      partition: 'insight-auth-test'
     }
   }
 
