@@ -10,6 +10,12 @@ import {
 import { verifyReleaseAssets } from './verify-release-assets.mjs'
 
 const immutableCacheDirectives = ['public', 'max-age=31536000', 'immutable']
+const networkAttempts = 3
+const retryDelayMs = 5_000
+
+function wait(milliseconds) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
+}
 
 function usage() {
   return 'Usage: verify-distribution-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --origin <https-origin> --public-key <path>'
@@ -111,29 +117,61 @@ function assertExactResponse(response, expectedUrl, status, label) {
   }
 }
 
-async function request(fetchImpl, url, init, status, label) {
-  const fullDownload = init.method === 'GET' && !init.headers?.Range
-  const response = await fetchImpl(url, {
-    ...init,
-    redirect: 'manual',
-    signal: AbortSignal.timeout(fullDownload ? 10 * 60_000 : 30_000)
-  })
-  assertExactResponse(response, url, status, label)
-  return response
+function isRetryableNetworkError(error) {
+  return error instanceof TypeError ||
+    (error && typeof error === 'object' && error.name === 'TimeoutError')
 }
 
-async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name) {
+async function request(fetchImpl, url, init, status, label, {
+  readBody = false,
+  delay = wait
+} = {}) {
+  const fullDownload = init.method === 'GET' && !init.headers?.Range
+  for (let attempt = 1; attempt <= networkAttempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(url, {
+        ...init,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(fullDownload ? 10 * 60_000 : 30_000)
+      })
+      assertExactResponse(response, url, status, label)
+      return {
+        response,
+        bytes: readBody ? Buffer.from(await response.arrayBuffer()) : undefined
+      }
+    } catch (error) {
+      if (!isRetryableNetworkError(error) || attempt === networkAttempts) throw error
+      await delay(retryDelayMs)
+    }
+  }
+  throw new Error(`${label} network retry state is invalid.`)
+}
+
+async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
   assertSafeAssetName(name)
   const localPath = join(releaseDir, basename(name))
   const [localBytes, localStat] = await Promise.all([readFile(localPath), stat(localPath)])
   if (localStat.size <= 0) throw new Error(`Distribution asset is empty: ${name}`)
   const url = new URL(name, baseUrl)
 
-  const head = await request(fetchImpl, url, { method: 'HEAD' }, 200, `HEAD ${name}`)
+  const { response: head } = await request(
+    fetchImpl,
+    url,
+    { method: 'HEAD' },
+    200,
+    `HEAD ${name}`,
+    { delay }
+  )
   assertHeaders(head, name, localStat.size)
 
-  const full = await request(fetchImpl, url, { method: 'GET' }, 200, `GET ${name}`)
-  const remoteBytes = Buffer.from(await full.arrayBuffer())
+  const { bytes: remoteBytes } = await request(
+    fetchImpl,
+    url,
+    { method: 'GET' },
+    200,
+    `GET ${name}`,
+    { readBody: true, delay }
+  )
   if (
     remoteBytes.length !== localBytes.length ||
     !createHash('sha512').update(remoteBytes).digest().equals(
@@ -143,11 +181,17 @@ async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name) {
     throw new Error(`Distribution bytes do not match the verified release: ${name}`)
   }
 
-  const range = await request(fetchImpl, url, {
-    method: 'GET',
-    headers: { Range: 'bytes=0-0' }
-  }, 206, `Range ${name}`)
-  const rangeBytes = Buffer.from(await range.arrayBuffer())
+  const { response: range, bytes: rangeBytes } = await request(
+    fetchImpl,
+    url,
+    {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' }
+    },
+    206,
+    `Range ${name}`,
+    { readBody: true, delay }
+  )
   if (
     rangeBytes.length !== 1 ||
     rangeBytes[0] !== localBytes[0] ||
@@ -170,6 +214,7 @@ export async function verifyDistributionAssets({
   origin,
   publicKeyPath,
   fetchImpl = globalThis.fetch,
+  delayImpl = wait,
   allowHttpLoopback = false
 }) {
   assertReleaseIdentity(channel, version)
@@ -184,7 +229,7 @@ export async function verifyDistributionAssets({
   const baseUrl = new URL(`desktop/releases/v${version}/`, parsedOrigin)
   const files = []
   for (const name of releaseAssetNames(channel, version)) {
-    files.push(await verifyRemoteFile(fetchImpl, baseUrl, resolvedDir, name))
+    files.push(await verifyRemoteFile(fetchImpl, baseUrl, resolvedDir, name, delayImpl))
   }
   return {
     channel,

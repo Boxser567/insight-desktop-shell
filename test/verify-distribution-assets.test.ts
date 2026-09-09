@@ -107,7 +107,8 @@ async function origin(
 
 async function verify(
   value: Awaited<ReturnType<typeof fixture>>,
-  updateOrigin: string
+  updateOrigin: string,
+  overrides: Record<string, unknown> = {}
 ) {
   return verifyDistributionAssets({
     releaseDir: value.releaseDir,
@@ -115,7 +116,8 @@ async function verify(
     channel: 'stable',
     origin: updateOrigin,
     publicKeyPath: value.publicKey,
-    allowHttpLoopback: true
+    allowHttpLoopback: true,
+    ...overrides
   })
 }
 
@@ -127,6 +129,24 @@ describe('final distribution verifier', () => {
     expect(result.version).toBe('0.1.2')
     expect(result.files).toHaveLength(value.files.size)
     expect(result.releaseBaseUrl).toContain('/desktop/releases/v0.1.2/')
+  })
+
+  it('retries network failures without relaxing response validation', async () => {
+    const value = await fixture()
+    const updateOrigin = await origin(value.files)
+    let attempts = 0
+    const fetchImpl: typeof fetch = async (...args) => {
+      attempts += 1
+      if (attempts === 1) throw new TypeError('fetch failed')
+      return fetch(...args)
+    }
+
+    const result = await verify(value, updateOrigin, {
+      fetchImpl,
+      delayImpl: async () => undefined
+    })
+    expect(result.version).toBe('0.1.2')
+    expect(attempts).toBeGreaterThan(value.files.size * 3)
   })
 
   it('rejects truncated or digest-mismatched remote bytes', async () => {
