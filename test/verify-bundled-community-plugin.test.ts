@@ -28,7 +28,9 @@ describe('bundled community plugin verifier', () => {
     temporaryDirectories.push(root)
     const artifact = 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz'
     const requiredBuildFiles = [
-      'build/core-runtime/node_modules/node/bin/node',
+      process.platform === 'win32'
+        ? 'build/core-runtime/node_modules/node/bin/node.exe'
+        : 'build/core-runtime/node_modules/node/bin/node',
       'build/core-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js',
       'build/core-runtime/node_modules/pnpm/bin/pnpm.cjs',
       'build/harness-node-entry.mjs',

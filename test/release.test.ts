@@ -46,7 +46,9 @@ describe('GitHub release contract', () => {
         '--public-key', publicKey
       ], { encoding: 'utf8' })
       expect(generated.status, generated.stderr).toBe(0)
-      expect((await stat(privateKey)).mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect((await stat(privateKey)).mode & 0o777).toBe(0o600)
+      }
       expect(await readFile(publicKey, 'utf8')).toContain('BEGIN PUBLIC KEY')
 
       const rejected = spawnSync(process.execPath, [

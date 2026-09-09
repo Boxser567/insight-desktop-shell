@@ -324,6 +324,14 @@ if (await templateIsReady(communityPlugins)) {
     await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
       'plugin', '--profile', PROFILE, 'install', '--no-frozen-lockfile'
     ])
+    const installedManifestPath = join(temporaryProfile, 'package.json')
+    const installedManifest = await readManifest(installedManifestPath)
+    if (!installedManifest) throw new Error('The prepared bundled profile manifest could not be read.')
+    installedManifest.dependencies ??= {}
+    for (const plugin of communityPlugins) {
+      installedManifest.dependencies[plugin.packageName] = plugin.profileSpecifier
+    }
+    await writeFile(installedManifestPath, `${JSON.stringify(installedManifest, null, 2)}\n`, 'utf8')
     await patchBundledMarket(temporaryProfile)
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })

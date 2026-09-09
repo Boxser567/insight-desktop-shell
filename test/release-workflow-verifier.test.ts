@@ -17,6 +17,13 @@ function run(workflow: string, packageJson = path.join(process.cwd(), 'package.j
   return spawnSync(process.execPath, [verifier, workflow, packageJson], { encoding: 'utf8' })
 }
 
+async function readReleaseWorkflow(): Promise<string> {
+  return (await readFile(
+    path.join(process.cwd(), '.github', 'workflows', 'release.yml'),
+    'utf8'
+  )).replaceAll('\r\n', '\n')
+}
+
 describe('release workflow verifier', () => {
   it('accepts the dependency-free complete release workflow', () => {
     const result = run(path.join(process.cwd(), '.github', 'workflows', 'release.yml'))
@@ -27,10 +34,7 @@ describe('release workflow verifier', () => {
   it('rejects native preflight dependencies and inherited release services', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
     temporaryDirectories.push(directory)
-    const source = await readFile(
-      path.join(process.cwd(), '.github', 'workflows', 'release.yml'),
-      'utf8'
-    )
+    const source = await readReleaseWorkflow()
     const workflow = path.join(directory, 'release.yml')
     await writeFile(workflow, source.replace(
       'node scripts/verify-release-workflow.mjs',
@@ -51,10 +55,7 @@ describe('release workflow verifier', () => {
   it('requires every platform job to test the prepared Runtime', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
     temporaryDirectories.push(directory)
-    const source = await readFile(
-      path.join(process.cwd(), '.github', 'workflows', 'release.yml'),
-      'utf8'
-    )
+    const source = await readReleaseWorkflow()
     const workflow = path.join(directory, 'release.yml')
     await writeFile(workflow, source.replace(
       '      - name: Test prepared Runtime\n        run: npm test\n',
@@ -67,10 +68,7 @@ describe('release workflow verifier', () => {
   it('requires final macOS bundles to verify the production Keychain identity', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
     temporaryDirectories.push(directory)
-    const source = await readFile(
-      path.join(process.cwd(), '.github', 'workflows', 'release.yml'),
-      'utf8'
-    )
+    const source = await readReleaseWorkflow()
     const workflow = path.join(directory, 'release.yml')
     await writeFile(workflow, source.replaceAll(
       "          test \"$bundle_id\" = 'com.insight-aigc.desktop' || { echo \"::error::Unexpected macOS Bundle ID: $bundle_id\"; exit 1; }\n",
