@@ -44,6 +44,7 @@ async function main() {
   }
   requireText(preflight, 'verify-release-preflight.mjs', 'Release preflight')
   requireText(preflight, 'verify-release-workflow.mjs', 'Release preflight')
+  requireText(preflight, 'node --check scripts/verify-macos-distribution.mjs', 'Release preflight')
   if (/npm ci|vitest|rollup|esbuild/u.test(preflight)) {
     throw new Error('Release preflight must not install dependencies or load native build tools.')
   }
@@ -87,7 +88,7 @@ async function main() {
       'test "$team_id" = "$APPLE_TEAM_ID"',
       `${name} production macOS signing Team ID`
     )
-    requireText(job, 'syspolicy_check distribution --verbose "$RELEASE_APP"', name)
+    requireText(job, 'node scripts/verify-macos-distribution.mjs "$RELEASE_APP"', name)
     if (job.includes('spctl --assess --type execute')) {
       throw new Error(`${name} must use syspolicy_check for the application bundle.`)
     }
@@ -116,7 +117,7 @@ async function main() {
   )
   requireText(
     sonomaCompatibility,
-    'syspolicy_check distribution --verbose "$app_path"',
+    'node scripts/verify-macos-distribution.mjs "$app_path"',
     'macos-sonoma-compatibility'
   )
   requireText(sonomaCompatibility, 'xcrun stapler validate "$app_path"', 'macos-sonoma-compatibility')

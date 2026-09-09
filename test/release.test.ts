@@ -522,7 +522,7 @@ describe('GitHub release contract', () => {
     expect(workflow.match(/ulimit -n 65536/g)).toHaveLength(2)
     expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(5)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
-    expect(workflow.match(/syspolicy_check distribution --verbose "\$RELEASE_APP"/g)).toHaveLength(2)
+    expect(workflow.match(/node scripts\/verify-macos-distribution\.mjs "\$RELEASE_APP"/g)).toHaveLength(2)
     expect(workflow).not.toContain('spctl --assess --type execute')
     expect(workflow.match(/hdiutil verify/g)).toHaveLength(2)
     expect(workflow.match(/unzip -t/g)).toHaveLength(2)
@@ -543,7 +543,7 @@ describe('GitHub release contract', () => {
       'hdiutil attach "release-assets/insight-$RELEASE_VERSION-mac-arm64.dmg"'
     )
     expect(workflow).toContain('codesign --verify --deep --strict --verbose=4 "$app_path"')
-    expect(workflow).toContain('syspolicy_check distribution --verbose "$app_path"')
+    expect(workflow).toContain('node scripts/verify-macos-distribution.mjs "$app_path"')
     expect(workflow).toContain('mount_path="$RUNNER_TEMP/insight-dmg"')
     expect(workflow).toContain('hdiutil detach "$RUNNER_TEMP/insight-dmg" || true')
     expect(workflow).not.toContain('${{ runner.temp }}')

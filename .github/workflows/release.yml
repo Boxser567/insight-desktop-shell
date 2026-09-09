@@ -100,6 +100,7 @@ jobs:
           node --check scripts/publish-update-to-oss.mjs
           node --check scripts/update-release-contract.mjs
           node --check scripts/verify-distribution-assets.mjs
+          node --check scripts/verify-macos-distribution.mjs
           node --check scripts/verify-publish-workflow.mjs
           node --check scripts/verify-release-assets.mjs
 
@@ -211,7 +212,7 @@ jobs:
           test "$bundle_name" = '因赛AI' || { echo "::error::Unexpected macOS bundle name: $bundle_name"; exit 1; }
           test "$team_id" = "$APPLE_TEAM_ID" || { echo "::error::Unexpected macOS signing Team ID: $team_id"; exit 1; }
           codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
-          syspolicy_check distribution --verbose "$RELEASE_APP"
+          node scripts/verify-macos-distribution.mjs "$RELEASE_APP"
           xcrun stapler validate "$RELEASE_APP"
           codesign --verify --verbose=2 "$dmg_path"
           spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
@@ -360,7 +361,7 @@ jobs:
           test "$bundle_name" = '因赛AI' || { echo "::error::Unexpected macOS bundle name: $bundle_name"; exit 1; }
           test "$team_id" = "$APPLE_TEAM_ID" || { echo "::error::Unexpected macOS signing Team ID: $team_id"; exit 1; }
           codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
-          syspolicy_check distribution --verbose "$RELEASE_APP"
+          node scripts/verify-macos-distribution.mjs "$RELEASE_APP"
           xcrun stapler validate "$RELEASE_APP"
           codesign --verify --verbose=2 "$dmg_path"
           spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
@@ -483,7 +484,7 @@ jobs:
           app_path="$mount_path/因赛AI.app"
           test -d "$app_path"
           codesign --verify --deep --strict --verbose=4 "$app_path"
-          syspolicy_check distribution --verbose "$app_path"
+          node scripts/verify-macos-distribution.mjs "$app_path"
           xcrun stapler validate "$app_path"
       - name: Detach validation DMG
         if: always()
