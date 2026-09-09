@@ -27,16 +27,16 @@
 
 2026-09-09 后续身份决策：用户确认采用 [Bundle ID 首发规范](../../plans/2026-09-09-desktop-bundle-identity-design.md)。下文记录的旧 `com.insight.desktop` 候选包是历史证据；新身份主 App/Helper、签名、登录恢复和安装升级必须重新验收，不因保留旧勾选而视为新身份已通过。
 
-以下是原整合基线的历史检查状态。2026-09-09 后续另有 `codex/enterprise-gateway-analysis` 完成免 API Key 会话接入，尚未合入；本计划不能替代该分支的 [真实账号验收门禁](../../model-gateway-integration.md)。合并时应依据实际最新 `main` 重新核对提交、版本和测试记录，不复用旧 Candidate 的会话验收。
+以下同时保留原整合基线的历史证据和 2026-09-09 最新收口结果。`codex/enterprise-gateway-analysis` 的免 API Key 会话能力已通过 `d7b36d8` 合入，Bundle ID 首发规范已通过 `e18e6bc` 落在本地 `main`；本计划不能替代 [真实账号验收门禁](../../model-gateway-integration.md)，也不能复用旧身份 Candidate 的会话验收。
 
-- [x] Desktop Shell 研发分支已合并到本地 `main`，核心整合提交为 `60d9590`。
-- [x] 本地全量测试通过：84 个测试文件、536 个测试。
+- [x] Desktop Shell、DEV Keychain 修复、模型 Gateway 和 Bundle ID 规范均已合入本地 `main`；身份规范提交为 `e18e6bc`，Gateway 合并提交为 `d7b36d8`，Release workflow 另增加了 Runtime 准备后的测试门禁。
+- [x] 最新本地全量测试通过：89 个测试文件、565 个测试。
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
 - [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
 - [x] 已将 STS 发布实现与验收记录推送到 `origin/main`，远端基线为 `77571d4`。
-- [x] 本地已将 package、lockfile 和发布策略一致更新为 `1.0.0-rc.1`，等待人工 DEV 回归后提交并推送。
+- [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.1`；RC1 准备、DEV Keychain、Gateway 合并、Bundle ID 规范和 Release Runtime 测试门禁均已在本地提交或等待本地提交，尚未推送到 `origin/main`。
 - [x] macOS DEV 已从真实钥匙串隔离：mock keychain、非持久认证 Session、进程内 token；`final4` 目录包已人工确认无钥匙串密码框，退出 DEV 后重新登录是预期行为。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
 - [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
@@ -61,7 +61,7 @@ git worktree list
 
 通过条件：当前分支为 `main`，无未提交文件，只有主工作树，无待合并本地研发分支。
 
-- [x] **Step 2：记录并推送当前基线**  **【改变远端状态】**
+- [ ] **Step 2：记录并推送当前基线**  **【改变远端状态】**
 
 ```bash
 git rev-parse HEAD
@@ -71,7 +71,7 @@ git status --short --branch
 
 通过条件：最后一条状态为 `main...origin/main`，没有 ahead/behind；记录实际 HEAD SHA。此后进入发布冻结，只接收 1.0 阻断修复。
 
-执行记录（2026-09-09）：确认远端没有并发提交后，将 STS 发布实现与验收记录推送到 `origin/main`，基线 SHA 为 `77571d4`。
+执行记录（2026-09-09）：STS 发布实现与验收记录已推送，远端基线 SHA 为 `77571d4`。本地后续已包含 `e18e6bc` 及 Release Runtime 测试门禁，当前仍需在真实账号免 Key 门禁通过并重新确认远端无并发提交后推送；不得把历史 `77571d4` 记录当作最新基线已同步。
 
 ---
 
@@ -218,7 +218,7 @@ git diff --check
 
 通过条件：测试、类型检查和构建全绿；目录包包含 Runtime、签名公钥、`update-distribution.json`、Sidebar、Market 和三个可选插件。只检查本地未签名 Candidate 包内容，不启动它；功能验证使用隔离身份的 `因赛AI Dev`。
 
-执行记录（2026-09-09）：86 个测试文件、543 个测试通过；TypeScript、release/publish workflow 契约、生产构建和 Candidate 目录打包通过。包内版本为 `1.0.0-rc.1`，App ID 为 `com.insight.desktop`，Runtime 为 `insight-runtime-v0.1.1-rc.10` / `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，更新 Origin、公钥、Sidebar `0.16.1`、Market `1.44.0` 和三个固定版本可选插件齐全。本机 Developer ID 深度严格签名校验通过；目录包未公证，不能替代 GitHub Candidate 的 notarize/staple 与安装验收。
+执行记录（2026-09-09）：最新本地 `main` 的 89 个测试文件、565 个测试及 TypeScript 均通过；`build:prepared`、内置 Profile 刷新和 Candidate 目录打包通过。合并 Gateway 后已完成锁定 Runtime 的完整下载与摘要校验，后续 Bundle ID 提交未改变 Runtime 锁。最新目录包版本为 `1.0.0-rc.1`，App ID 为 `com.insight-aigc.desktop`，Runtime 为 `insight-runtime-v0.1.1-rc.10` / `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，更新 Origin、公钥和包内 Gateway 烟测通过。本机 Developer ID 深度严格签名校验通过；目录包未公证、未启动，不能替代 GitHub Candidate 的 notarize/staple、quarantine 启动与真实账号验收。
 
 - [ ] **Step 5：完成本地 DEV 人工回归**
 

@@ -1,6 +1,6 @@
 # Desktop 模型 Gateway 接入与验收
 
-更新日期：2026-09-09。状态：独立分支 `codex/enterprise-gateway-analysis` 已实施并完成本地自动化验证；尚未合入 `main`，未使用真实账号请求模型。
+更新日期：2026-09-09。状态：独立分支 `codex/enterprise-gateway-analysis` 已通过合并提交 `d7b36d8` 进入本地 `main`，身份规范提交为 `e18e6bc`。自动化、DEV 打包和正式身份 Candidate 目录包验证已完成，尚未使用真实账号请求模型，也未推送、打 tag 或发布安装资产。
 
 ## 1.0 最小实现
 
@@ -20,7 +20,7 @@ Shell 用户中心登录（现有安全存储及 Cookie）
 | --- | --- |
 | 用户中心 | `https://gapi-test.insight-aigc.com` |
 | 登录 / 刷新 | `/user-server/loginV3`；GET `/user-server/refresh`，沿用隔离 Electron Session Cookie |
-| Cookie 分区 | `persist:insight-auth-test` |
+| Cookie 分区 | DEV：`insight-auth-test`（非持久）；Candidate / Stable：`persist:insight-auth-test` |
 | 模型接口 | `https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1/chat/completions` |
 | Provider / Model | `yinsai-gateway` / `deepseek-v4-flash-vision-exp` |
 | 用户中心 / 模型鉴权 | `token` header / `Authorization: Bearer <用户中心 access token>` |
@@ -42,13 +42,14 @@ DEV、Candidate、Stable 均固定测试登录环境，与测试模型 Gateway �
 
 ## 自动化证据（2026-09-09，macOS arm64）
 
-- `npm test`：89 个测试文件、559 项通过。包含鉴权刷新、离线、并发、过期退出、旧请求撤销、保存期间退出、IPC 关联及超时。
-- 全新 checkout 先执行 `npm run prepare:core-runtime` 再跑上述完整验证；没有准备 Core 时，真实 Adapter/进程集成测试会明确跳过，不能作为发布验收。macOS UtilityProcess 测试仅在 macOS 执行。
+- 最新本地 `main` 执行 `npm test`：89 个测试文件、565 项通过。包含鉴权刷新、离线、并发、过期退出、旧请求撤销、保存期间退出、IPC 关联及超时，以及新正式/DEV Bundle ID、打包元数据和 Release Runtime 测试门禁契约。
+- 全新 checkout 先执行 `npm run prepare:core-runtime` 再跑上述完整验证；没有准备 Core 时，真实 Adapter/进程集成测试会明确跳过，不能作为发布验收。Release workflow 已在各平台打包准备锁定 Runtime 后执行 `npm test`，并由静态契约阻止该门禁被移除；macOS UtilityProcess 测试仅在 macOS 执行。
 - 真实锁定 Core Adapter 的 `prepareCall().stream()` + 真实 Node IPC：4 种情形通过（成功、用户中心过期、Gateway 401、取消）。HTTP 使用本地响应替身；验证完整 URL、Bearer、默认模型、工具参数、SSE 和下一请求重新取凭证，不代表真实工具执行闭环。
 - 真实 Electron `utilityProcess` + 同一 Core Adapter：macOS 凭证通道成功通过。Windows 的 IPC 代码路径使用 Node 测试覆盖，Windows 安装包仍需实机验收。
-- `npm run typecheck`、`npm run build:prepared`、`npm run prepare:bundled-profile` 通过；Core lock 未修改。
-- 使用当前打包 Runtime 和临时 Profile 执行 `smokePackagedHarness` 通过：Gateway 注册、模型目录、创建工作区/会话、稳定运行 20 秒且无 stderr。该检查已加入现有打包冒烟脚本。资源通过临时目录映射，未把本次验证冒充正式签名安装包验收。
-- 未读取用户真实凭证、未请求真实模型、未产生模型额度消耗；未更改 STS 工作树，也未推送、合并或发布安装包。
+- `npm run typecheck`、`npm run build:prepared`、`npm run prepare:bundled-profile` 通过；Core lock 未修改。合并提交完成后已执行过锁定 Runtime 的完整下载、摘要校验和 DEV 打包；身份规范提交未改变 Runtime 锁，最新 Candidate 复用了同一已验证 Runtime。
+- 使用当前打包 Runtime 和临时 Profile 执行 `smokePackagedHarness` 通过：Gateway 注册、模型目录、创建工作区/会话、稳定运行 20 秒且无 stderr。该检查已加入现有打包冒烟脚本。
+- 最新本地 Candidate 目录包的 Bundle ID 为 `com.insight-aigc.desktop`，版本 `1.0.0-rc.1`，渠道 `candidate`；Developer ID 深度严格签名、必需更新资源和包内 Harness Gateway 烟测均通过。该目录包未公证、未启动，不能替代 GitHub Candidate 的 notarize/staple、quarantine 启动和真实账号验收。
+- 隔离身份 DEV 目录包已由用户人工确认启动时不再弹出钥匙串授权框。未读取用户真实凭证、未请求真实模型、未产生模型额度消耗；STS 实现未改动，本地 `main` 尚未推送，也未打 tag、触发远程 workflow 或发布 OSS 资产。
 
 ## 正式发布前人工门禁
 

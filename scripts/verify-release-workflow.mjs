@@ -53,6 +53,11 @@ async function main() {
     ['windows-x64', windows]
   ]) {
     requireText(job, 'needs: release-preflight', name)
+    requireText(job, '- name: Test prepared Runtime', name)
+    requireText(job, 'run: npm test', name)
+    if (job.indexOf('- name: Test prepared Runtime') < job.lastIndexOf('npm run package:')) {
+      throw new Error(`${name} must test after packaging prepares the locked Runtime.`)
+    }
   }
   requireText(appleSilicon, "inputs.target == 'macos-arm64'", 'macos-apple-silicon')
   requireText(intel, "inputs.target == 'macos-x64'", 'macos-intel')

@@ -47,4 +47,20 @@ describe('release workflow verifier', () => {
     ))
     expect(run(workflow).stderr).toContain('must grant only contents')
   })
+
+  it('requires every platform job to test the prepared Runtime', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
+    temporaryDirectories.push(directory)
+    const source = await readFile(
+      path.join(process.cwd(), '.github', 'workflows', 'release.yml'),
+      'utf8'
+    )
+    const workflow = path.join(directory, 'release.yml')
+    await writeFile(workflow, source.replace(
+      '      - name: Test prepared Runtime\n        run: npm test\n',
+      ''
+    ))
+
+    expect(run(workflow).stderr).toContain('Test prepared Runtime')
+  })
 })
