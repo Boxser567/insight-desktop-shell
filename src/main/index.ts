@@ -232,6 +232,7 @@ function applicationChannel(): 'development' | 'candidate' | 'stable' {
     packaged: true,
     configuredChannel: metadata.insightDesktopChannel,
     appId: metadata.insightDesktopAppId ?? (
+      // Only old internal packages lack this field; do not infer a new bundle identity here.
       metadata.name === 'insight-desktop' ? 'com.insight.desktop' : undefined
     )
   })

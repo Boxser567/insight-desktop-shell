@@ -19,6 +19,7 @@ export function resolveApplicationChannel(input: {
   ) {
     return input.configuredChannel as UpdateChannel
   }
+  // Historical internal-build fallback only; new bundles carry an explicit channel.
   if (input.configuredChannel === undefined && input.appId === 'com.insight.desktop') {
     return 'stable'
   }

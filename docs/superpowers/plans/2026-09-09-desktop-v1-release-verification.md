@@ -13,7 +13,7 @@
 - `main` 是唯一长期集成分支；本次发布期间不再并行合入非阻断功能。
 - Candidate 固定使用 `v1.0.0-rc.1`、`v1.0.0-rc.2`，若失败只递增为更高 RC，禁止复用 tag 或覆盖资产。
 - Stable 固定使用 `v1.0.0`；正式 tag 只能指向已经完成本计划 Stable 构建前门禁的提交。
-- Candidate 与 Stable 都使用正式产品身份 `因赛AI`、App ID `com.insight.desktop` 和用户数据目录 `insight-desktop`；本地未签名 Candidate 禁止启动。
+- Candidate 与 Stable 都使用正式产品身份 `因赛AI`、App ID `com.insight-aigc.desktop` 和用户数据目录 `insight-desktop`；DEV 为 `com.insight-aigc.desktop.dev`。本地未签名 Candidate 禁止启动。
 - 安装资产统一使用 `insight-1.0.0-rc.1-...`、`insight-1.0.0-rc.2-...` 和 `insight-1.0.0-...`；Candidate 不增加额外 `candidate-` 文件名前缀。
 - GitHub Actions 不保存 OSS 长期 AccessKey；只有独立发布 workflow 可以使用 OIDC 换取限定目录和时长的 STS。
 - `stage` 不公开 GitHub Release、不写 `current.json`；`promote` 才公开 Release，并在最后写入渠道指针。
@@ -24,6 +24,8 @@
 ---
 
 ## 当前基线
+
+2026-09-09 后续身份决策：用户确认采用 [Bundle ID 首发规范](../../plans/2026-09-09-desktop-bundle-identity-design.md)。下文记录的旧 `com.insight.desktop` 候选包是历史证据；新身份主 App/Helper、签名、登录恢复和安装升级必须重新验收，不因保留旧勾选而视为新身份已通过。
 
 以下是原整合基线的历史检查状态。2026-09-09 后续另有 `codex/enterprise-gateway-analysis` 完成免 API Key 会话接入，尚未合入；本计划不能替代该分支的 [真实账号验收门禁](../../model-gateway-integration.md)。合并时应依据实际最新 `main` 重新核对提交、版本和测试记录，不复用旧 Candidate 的会话验收。
 

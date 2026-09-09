@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -14,6 +15,25 @@ const releaseAssets = [
 ]
 
 describe('GitHub release contract', () => {
+  it('keeps the approved bundle identities aligned with packaged metadata', () => {
+    const require = createRequire(import.meta.url)
+    const stable = require('../package.json').build
+    const candidate = require('../electron-builder.candidate.cjs')
+    const development = require('../electron-builder.dev.cjs')
+    for (const [config, appId, productName, channel] of [
+      [stable, 'com.insight-aigc.desktop', '因赛AI', 'stable'],
+      [candidate, 'com.insight-aigc.desktop', '因赛AI', 'candidate'],
+      [development, 'com.insight-aigc.desktop.dev', '因赛AI Dev', 'development']
+    ] as const) {
+      expect(config.appId).toBe(appId)
+      expect(config.extraMetadata.insightDesktopAppId).toBe(appId)
+      expect(config.extraMetadata.insightDesktopChannel).toBe(channel)
+      expect(config.productName).toBe(productName)
+    }
+    expect(development.mac.identity).toBeNull()
+    expect(candidate.mac).toEqual(stable.mac)
+  })
+
   it('generates update signing keys outside the repository with a private mode', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'insight-update-keys-'))
     try {
@@ -114,7 +134,7 @@ describe('GitHub release contract', () => {
     }
 
     expect(packageJson.build.artifactName).toBe('insight-${version}-${os}-${arch}.${ext}')
-    expect(packageJson.build.extraMetadata.insightDesktopAppId).toBe('com.insight.desktop')
+    expect(packageJson.build.extraMetadata.insightDesktopAppId).toBe('com.insight-aigc.desktop')
     expect(packageJson.build.extraMetadata.insightDesktopChannel).toBe('stable')
     expect(packageJson.build.extraResources).toContainEqual({
       from: 'build/app-icon.png',
@@ -368,10 +388,10 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
-    expect(developmentConfig).toContain("appId: 'com.insight.desktop.dev'")
+    expect(developmentConfig).toContain("appId: 'com.insight-aigc.desktop.dev'")
     expect(developmentConfig).toContain("productName: '因赛AI Dev'")
     expect(developmentConfig).toContain("output: 'dist-dev'")
-    expect(developmentConfig).toContain("insightDesktopAppId: 'com.insight.desktop.dev'")
+    expect(developmentConfig).toContain("insightDesktopAppId: 'com.insight-aigc.desktop.dev'")
     expect(developmentConfig).toContain("insightDesktopChannel: 'development'")
     expect(developmentConfig).toContain('identity: null')
     expect(developmentConfig).toContain('--use-mock-keychain')
@@ -388,14 +408,15 @@ describe('GitHub release contract', () => {
     expect(main).toContain('const desktopChannel = applicationChannel()')
     expect(main).toContain("app.commandLine.appendSwitch('use-mock-keychain')")
     expect(main).toContain('persistCredentials: false')
-    expect(candidateConfig).toContain("appId: 'com.insight.desktop'")
+    expect(candidateConfig).toContain("appId: 'com.insight-aigc.desktop'")
     expect(candidateConfig).toContain("productName: '因赛AI'")
     expect(candidateConfig).toContain("output: 'dist-candidate'")
     expect(candidateConfig).toContain("name: 'insight-desktop'")
-    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight.desktop'")
+    expect(candidateConfig).toContain("insightDesktopAppId: 'com.insight-aigc.desktop'")
     expect(candidateConfig).toContain("insightDesktopChannel: 'candidate'")
     expect(candidateConfig).not.toContain('因赛AI Candidate')
     expect(candidateConfig).not.toContain('com.insight.desktop.candidate')
+    expect(candidateConfig).not.toContain('com.insight-aigc.desktop.candidate')
     expect(candidateConfig).not.toContain('insight-candidate')
     expect(candidateConfig).toContain('publish: null')
     for (const name of [

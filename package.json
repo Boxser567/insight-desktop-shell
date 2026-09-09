@@ -83,7 +83,7 @@
     "koffi": "3.1.5"
   },
   "build": {
-    "appId": "com.insight.desktop",
+    "appId": "com.insight-aigc.desktop",
     "productName": "因赛AI",
     "asar": false,
     "npmRebuild": false,
@@ -108,7 +108,7 @@
     ],
     "detectUpdateChannel": false,
     "extraMetadata": {
-      "insightDesktopAppId": "com.insight.desktop",
+      "insightDesktopAppId": "com.insight-aigc.desktop",
       "insightDesktopChannel": "stable"
     },
     "files": [

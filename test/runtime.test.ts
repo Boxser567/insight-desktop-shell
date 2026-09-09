@@ -27,6 +27,14 @@ import {
 import { resolveApplicationChannel } from '../src/main/application-channel'
 
 describe('application release channel', () => {
+  it.each([
+    ['com.insight-aigc.desktop', 'stable'],
+    ['com.insight-aigc.desktop', 'candidate'],
+    ['com.insight-aigc.desktop.dev', 'development']
+  ])('uses explicit channel metadata for %s / %s', (appId, configuredChannel) => {
+    expect(resolveApplicationChannel({ packaged: true, appId, configuredChannel })).toBe(configuredChannel)
+  })
+
   it('forces unpackaged Electron onto the development channel', () => {
     expect(resolveApplicationChannel({
       packaged: false,

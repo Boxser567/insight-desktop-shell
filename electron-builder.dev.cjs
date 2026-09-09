@@ -24,7 +24,7 @@ async function configureMacosDevelopmentLauncher(context) {
 
 module.exports = {
   ...packageJson.build,
-  appId: 'com.insight.desktop.dev',
+  appId: 'com.insight-aigc.desktop.dev',
   productName: '因赛AI Dev',
   directories: {
     ...packageJson.build.directories,
@@ -33,7 +33,7 @@ module.exports = {
   extraMetadata: {
     name: 'insight-desktop-dev',
     productName: '因赛AI Dev',
-    insightDesktopAppId: 'com.insight.desktop.dev',
+    insightDesktopAppId: 'com.insight-aigc.desktop.dev',
     insightDesktopChannel: 'development'
   },
   mac: {

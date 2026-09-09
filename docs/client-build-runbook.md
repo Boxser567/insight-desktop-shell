@@ -48,6 +48,7 @@ Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行
 **执行：**
 
 - 查看 `git status --short --branch`、目标提交范围和相关 diff。
+- 新构建固定身份：Candidate/Stable 使用 `com.insight-aigc.desktop`，DEV 使用 `com.insight-aigc.desktop.dev`；同时核对包内 `insightDesktopAppId`，不按服务域名或更新渠道临时生成 ID。产品名和数据目录保持原值，详见 [Bundle ID 首发规范](plans/2026-09-09-desktop-bundle-identity-design.md)。
 - 记录 Shell commit、`core-runtime.lock.json` 的 tag/commit/平台哈希、Node/pnpm 版本和构建目标。
 - 区分用户修改、构建输出、缓存和本轮允许修改的文件；不得为获得“干净工作树”清理不属于本轮的内容。
 - upstream 变更按 [上游接收规范](upstream-intake.md) 审计，并核对单侧栏设计中的升级决策矩阵。
@@ -193,6 +194,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.44.0`；
 - `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
+- macOS 包内主 App 的 `CFBundleIdentifier` 与上述固定身份一致，所有 Helper 使用相同主 ID 派生的 `.helper*` 前缀，且与包内 `insightDesktopAppId` 一致；旧 ID 包的签名/安装证据不得作为新身份的验收结果。
 
 **通过条件：** 独立目录应用资源完整，未覆盖当前已安装/运行应用，具备进入真实启动验证的身份记录。
 

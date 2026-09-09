@@ -1,5 +1,7 @@
 # Insight Identity and Data Isolation Implementation Plan
 
+> 2026-09-09 后续规范：本文保留旧身份实施记录；新构建的 Bundle ID 已统一为 `com.insight-aigc.desktop` / `com.insight-aigc.desktop.dev`，见 [首发身份规范](../../plans/2026-09-09-desktop-bundle-identity-design.md)。产品名和数据隔离规则不变，以下旧 ID 不再作为新配置执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver an Insight-branded desktop host named 因赛AI whose data is isolated from DSH Desktop.

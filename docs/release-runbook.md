@@ -30,6 +30,19 @@
 
 ## 分支与版本规则
 
+### 固定应用身份（2026-09-09 首发前确认）
+
+| 用途 | Bundle ID / appId | 产品名 | userData 目录名 |
+| --- | --- | --- | --- |
+| Candidate / Stable | `com.insight-aigc.desktop` | `因赛AI` | `insight-desktop` |
+| DEV | `com.insight-aigc.desktop.dev` | `因赛AI Dev` | `insight-desktop-dev` |
+
+Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.candidate` 身份。服务域名、OSS 路径和签名配置不随此次命名变更。旧 `com.insight.desktop` / `.dev` 仅保留为历史记录及既有旧包渠道识别，不再用于新构建。详细边界见 [Bundle ID 首发规范](plans/2026-09-09-desktop-bundle-identity-design.md)。
+
+旧身份 Candidate 的签名、钥匙串及安装/升级验收不能直接复用：必须重新构建新身份 Candidate，并从新身份开始 N→N+1 演练。不得修改旧 `.app` 的 Info.plist、覆盖已有 tag/资产或通过清除用户数据完成“迁移”。此次代码变更不表示本地签名流程已经改造，也不自动修复旧钥匙串条目。
+
+### 分支管理
+
 - `main` 是唯一长期集成基线；功能、修复和发布基础设施分支通过审核后合入 `main`，不得维护第二条长期发版主线。
 - Candidate 与 Stable 必须从 `main` 上可追溯的提交构建。进入版本冻结后如仍需并行开发，可从 `main` 创建短生命周期 `release/vX.Y.Z`，只接收该版本的阻断修复；发布或取消后合回 `main` 并删除。
 - Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。禁止移动 tag、覆盖 GitHub/OSS 资产或回写低版本渠道指针。

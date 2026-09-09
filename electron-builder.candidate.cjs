@@ -2,7 +2,7 @@ const packageJson = require('./package.json')
 
 module.exports = {
   ...packageJson.build,
-  appId: 'com.insight.desktop',
+  appId: 'com.insight-aigc.desktop',
   productName: '因赛AI',
   directories: {
     ...packageJson.build.directories,
@@ -11,7 +11,7 @@ module.exports = {
   extraMetadata: {
     name: 'insight-desktop',
     productName: '因赛AI',
-    insightDesktopAppId: 'com.insight.desktop',
+    insightDesktopAppId: 'com.insight-aigc.desktop',
     insightDesktopChannel: 'candidate'
   },
   publish: null

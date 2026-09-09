@@ -1,5 +1,7 @@
 # 桌面客户端更新与上游管理实施计划
 
+> 2026-09-09 身份补充：本文旧 App ID 和独立 Candidate 身份仅为历史方案。当前 Candidate/Stable 共用 `com.insight-aigc.desktop`，DEV 为 `com.insight-aigc.desktop.dev`，见 [首发身份规范](../../plans/2026-09-09-desktop-bundle-identity-design.md)；不要按下文示例重新引入旧 ID。
+
 > **状态（2026-09-08）：** 本文保留为已完成的更新状态机与签名 Manifest 实施记录。其中 GitHub Release 客户端发现和 GitHub-only 发布步骤已被[Desktop OSS Update Distribution Implementation Plan](2026-09-08-desktop-update-oss-distribution.md)取代，不得作为首个公开版本的分发方案继续执行。
 
 > 本计划按任务顺序执行。每个阶段都有停止点；未达到当前停止点时，不得触发下一阶段的 GitHub 安装包构建。

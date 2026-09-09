@@ -1,5 +1,7 @@
 # 因赛AI Candidate 身份与启动可靠性 Implementation Plan
 
+> 2026-09-09 后续 Bundle ID 确认：共用身份原则不变，但新构建使用 `com.insight-aigc.desktop`，DEV 使用 `com.insight-aigc.desktop.dev`。下文 `com.insight.desktop` 代码与验收为历史记录；当前执行以 [首发身份规范](../../plans/2026-09-09-desktop-bundle-identity-design.md) 为准。
+
 > 2026-09-09 整合说明：本计划关于 Candidate 与 Stable 共用产品身份、App ID 和用户数据目录的结论继续有效；其中无版本号的制品名示例已被后续 OSS 不可变资产契约取代。当前统一使用 `insight-<version>-...`，Candidate 由 SemVer 的 `-rc.N` 与签名 Manifest channel 区分。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
