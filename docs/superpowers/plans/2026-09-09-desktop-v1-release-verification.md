@@ -30,17 +30,33 @@
 以下同时保留原整合基线的历史证据和 2026-09-09 最新收口结果。`codex/enterprise-gateway-analysis` 的免 API Key 会话能力已通过 `d7b36d8` 合入，Bundle ID 首发规范已通过 `e18e6bc` 落在本地 `main`；本计划不能替代 [真实账号验收门禁](../../model-gateway-integration.md)，也不能复用旧身份 Candidate 的会话验收。
 
 - [x] Desktop Shell、DEV Keychain 修复、模型 Gateway 和 Bundle ID 规范均已合入本地 `main`；身份规范提交为 `e18e6bc`，Gateway 合并提交为 `d7b36d8`，Release workflow 另增加了 Runtime 准备后的测试门禁。
-- [x] 最新本地全量测试通过：89 个测试文件、566 个测试。
+- [x] 最新本地全量测试通过：90 个测试文件、571 个测试。
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
 - [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
-- [x] 已将 STS 发布实现与验收记录推送到 `origin/main`，远端基线为 `77571d4`。
-- [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.1`；RC1 准备、DEV Keychain、Gateway 合并、Bundle ID 规范和 Release Runtime 测试门禁均已在本地提交或等待本地提交，尚未推送到 `origin/main`。
+- [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.1`；DEV Keychain、Gateway、Bundle ID、Release Runtime 测试门禁、Windows 可移植性、macOS XProtect runner 稳定性和 Sonoma 校验接线均已推送。
+- [x] 当前最新非文档代码基线为 `8b7aa7e`；RC1 确切 Draft 由 `2f28472` 构建，后续 `8b7aa7e` 只增加 CDN 网络重试，不改变该 Draft 的客户端字节。
 - [x] macOS DEV 已从真实钥匙串隔离：mock keychain、非持久认证 Session、进程内 token；`final4` 目录包已人工确认无钥匙串密码框，退出 DEV 后重新登录是预期行为。
 - [x] 新正式身份 Apple Silicon 本地 Candidate 已完成干净状态预验收：清理历史 `insight-desktop*` 数据及旧 Safe Storage 后，首次打开不恢复旧账号/对话，登录及反复完全退出重启均无钥匙串弹窗；新条目 ACL 为 `/Applications/因赛AI.app (OK)`，designated requirement 为 `com.insight-aigc.desktop` + Team `8P39WV82RX`。该结果不替代云端公证制品门禁。
-- [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
+- [x] 新发布契约下的 RC1 三平台 GitHub Draft 已完成，12 项资产齐全且仍未公开。
+- [ ] RC1 的 12 项资产已通过 OIDC/STS 上传到 OSS 不可变目录，但 GitHub Hosted Runner 无法连接国内 CDN，完整 `stage` 尚未通过；三平台安装和 N→N+1 仍未完成。
 - [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
+
+## 1.0 核心验收看板（2026-09-09）
+
+- [x] **源码与版本身份：** RC1 版本、Candidate 渠道、正式 Bundle ID `com.insight-aigc.desktop`、产品名 `因赛AI`、Team ID 和锁定 Runtime 一致；Draft 的 `shellCommit` 固定为 `2f28472`。
+- [x] **三平台可复现构建：** [Release Run 34352464075](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34352464075) 的 preflight、macOS arm64、macOS x64、Windows x64、Sonoma 和 Draft 六个 Job 全部成功；两个 macOS 架构均签名、公证、staple 并通过 prepared Runtime 测试。
+- [x] **发布资产与信任链：** Draft 保持未公开 Pre-release，两个 DMG、两个 ZIP、两个 ZIP blockmap、Windows EXE、EXE blockmap、两个 YAML、签名 Manifest 和签名文件共 12 项，文件名、大小、SHA-512 与 Ed25519 签名均通过 workflow 门禁。
+- [x] **GitHub OIDC / 目录级 STS / OSS：** [Stage Run 34355471725](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34355471725) 已用 `id-token: write`、固定 audience 和 `POST {}` 取得目录级短期 STS，并把 1,426,108,930 字节资产上传到 `desktop/releases/v1.0.0-rc.1/`；[幂等重跑 34358006321](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34358006321) 在进入 CDN 校验前再次证明对象集合和大小与 Draft 完全一致。GitHub 未配置 OSS 长期 AccessKey。
+- [ ] **CDN 全量分发门禁：** 国内网络直连已确认 Manifest 为 200，arm64 DMG Range 为 206、大小 256,072,156、私有桶回源鉴权、immutable 缓存和 Content-Disposition 正确，Candidate/Stable 指针均为 404；但 GitHub 美国 runner 对国内 CDN 节点连续连接超时，尚未完成 12 项资产的 HEAD、完整字节摘要和 Range 自动复验。
+- [ ] **确切安装包验收：** 必须从本次 Draft/OSS 下载确切 macOS arm64、macOS x64、Windows x64 资产，完成干净安装、覆盖安装、启动/卸载、签名/公证/Gatekeeper 和版本核对；不得使用本地重建包替代。
+- [ ] **钥匙串与数据连续性：** 两个 macOS 架构均需在 quarantine 下首次登录并连续冷启动三次，确认不出现 Safe Storage 授权框、不串用旧身份数据，登录、会话、工作区和插件数据保持符合预期。
+- [ ] **真实更新体验：** RC1 无更新时不显示下载按钮；RC1→RC2 只有检测到签名可信新版本才显示真实版本、发行信息和下载入口，并验证进度、取消、失败重试、安装重启与同源完整安装包兜底。
+- [ ] **推广事务：** `promote` 必须在人工安装通过后运行，先公开 GitHub Pre-release、最后写 `candidate/current.json`；指针必须单调前进且 120 秒内收敛，禁止覆盖版本目录、回滚指针或复用 Tag。
+- [ ] **Stable 与官网：** 以相同流程构建、stage、安装和 promote `v1.0.0`，再把官网按钮指向 Stable 不可变 OSS 资产；Windows 未签名提示、`main` 无分支保护、`desktop-release` 无审批保护均需在 Stable 前明确接受或修复。
+
+当前唯一基础设施阻断：GitHub Hosted Runner 位于海外，而 `updates.insight-aigc.com` 当前只返回中国内地 CDN 节点；两次 stage 分别对 `218.244.8.21-28` 和 `222.192.186.75-94` 建连超时。不得把该失败降级为成功。优先依据[阿里云 CDN 加速区域说明](https://www.alibabacloud.com/help/en/cdn/user-guide/change-the-accelerated-region)将加速区域调整为同时覆盖中国内地和海外的 `Global` 并复测；若不能调整，则为 `Publish desktop updates` 配置受控的国内自托管 runner，仅让该 runner 执行 OSS/CDN 发布验收。
 
 ---
 
@@ -62,7 +78,7 @@ git worktree list
 
 通过条件：当前分支为 `main`，无未提交文件，只有主工作树，无待合并本地研发分支。
 
-- [ ] **Step 2：记录并推送当前基线**  **【改变远端状态】**
+- [x] **Step 2：记录并推送当前基线**  **【改变远端状态】**
 
 ```bash
 git rev-parse HEAD
@@ -72,7 +88,7 @@ git status --short --branch
 
 通过条件：最后一条状态为 `main...origin/main`，没有 ahead/behind；记录实际 HEAD SHA。此后进入发布冻结，只接收 1.0 阻断修复。
 
-执行记录（2026-09-09）：STS 发布实现与验收记录已推送，远端基线 SHA 为 `77571d4`。本地后续已包含 `e18e6bc` 及 Release Runtime 测试门禁，当前仍需在真实账号免 Key 门禁通过并重新确认远端无并发提交后推送；不得把历史 `77571d4` 记录当作最新基线已同步。
+执行记录（2026-09-09）：进入 Actions 发布操作时 `origin/main` 与本地一致，最新非文档代码基线为 `8b7aa7e`。RC1 Draft 的客户端资产固定来自 `2f28472`；`8b7aa7e` 只补充发布器 CDN 网络重试；此后的发布记录文档提交不改变客户端字节。工作区另有用户未跟踪的 `docs/analysis/`，未纳入、未修改，不把它作为发布提交内容。
 
 ---
 
@@ -146,7 +162,7 @@ curl -sS -i https://updates.insight-aigc.com/desktop/stable/current.json
 
 通过条件：首发前两个指针应为不存在；若任一返回有效版本，停止发布并先核对 OSS 权威对象，不得直接覆盖。
 
-检查记录（2026-09-09）：Candidate 与 Stable 指针均返回 HTTP 404，响应包含 `x-oss-cdn-auth: success`，确认私有 OSS 回源鉴权生效且首发指针尚不存在。版本资产的 HEAD、Range、Content-Type、immutable 缓存和摘要规则必须等 RC1 `stage` 后继续验证，因此本 Step 保持未完成。
+检查记录（2026-09-09）：Candidate 与 Stable 指针均返回 HTTP 404，响应包含 `x-oss-cdn-auth: success`，确认私有 OSS 回源鉴权生效且首发指针尚不存在。RC1 上传后，本机直连 CDN 的 Manifest HEAD 返回 200；arm64 DMG `Range: bytes=0-0` 返回 206、`Content-Range: bytes 0-0/256072156`、`Accept-Ranges: bytes`、`public,max-age=31536000,immutable` 和正确附件名。GitHub Hosted Runner 仍无法连接当前国内 CDN 节点，12 项完整摘要自动复验未完成，因此本 Step 保持未完成。
 
 ---
 
@@ -257,7 +273,7 @@ git ls-remote --tags origin refs/tags/v1.0.0-rc.1
 
 **Produces:** 三平台 RC1、不可变 OSS 版本目录和 Candidate 基线指针。
 
-- [ ] **Step 1：触发完整 Candidate workflow**
+- [x] **Step 1：触发完整 Candidate workflow**
 
 ```bash
 gh workflow run release.yml \
@@ -270,11 +286,15 @@ gh run list --repo Boxser567/insight-desktop-shell --workflow release.yml --limi
 
 通过条件：preflight、macOS arm64、macOS x64、Windows x64、Sonoma compatibility、publish 全部成功；GitHub 产生 Draft，尚未公开 Release。
 
-- [ ] **Step 2：核对 GitHub Draft 资产**
+执行记录（2026-09-09）：[Release Run 34352464075](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34352464075) 在提交 `2f28472` 上六个 Job 全部成功并创建未公开 Draft。此前三个失败 Run 均在 Draft 前安全停止：Run 34345939175 暴露 Windows 测试可移植性问题，Run 34346857022 暴露 Intel runner 的 `Internal Xprotect Error`，Run 34349849248 暴露 Sonoma Job 缺少验证脚本 checkout；修复后均由最终 Run 覆盖验证。
+
+- [x] **Step 2：核对 GitHub Draft 资产**
 
 必须包含两个 DMG、两个 ZIP、两个 ZIP blockmap、一个 Windows installer、一个 installer blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json`、`insight-update.json.sig`。所有安装资产文件名包含 `1.0.0-rc.1`，且不包含额外 `candidate-` 前缀。
 
 通过条件：Manifest 签名有效，Manifest 中 Shell commit 等于该 workflow checkout 的提交，Core Runtime 身份等于锁定值，文件大小和 SHA-512 与实际资产一致。
+
+执行记录（2026-09-09）：Draft 为 `isDraft=true`、`isPrerelease=true`，目标提交 `2f28472`，12 项资产全部为 `uploaded`；安装资产为 256–323 MB，总计 1,426,108,930 字节。Tag ref 会在 Draft 正式公开时创建，当前 `git ls-remote` 无同名远端 Tag 是预期状态。
 
 - [ ] **Step 3：暂存 RC1 到 OSS**  **【写入不可变 OSS 版本目录】**
 
@@ -285,6 +305,8 @@ gh run list --repo Boxser567/insight-desktop-shell --workflow release.yml --limi
 - `confirm_version` 留空
 
 通过条件：生成 `release-reports/v1.0.0-rc.1-stage.json`；OSS 只新增 `desktop/releases/v1.0.0-rc.1/`；CDN 的 HEAD、Range、缓存、Content-Type、大小和摘要复验全部通过；Candidate `current.json` 仍不存在。
+
+部分执行记录（2026-09-09）：Stage Run 34355471725 已完成 OIDC、`POST {}` STS、OSS 上传和精确对象清单/大小比对，随后在 CDN HEAD 建连超时；加入三次仅网络错误重试后，Run 34358006321 复用了完全一致的不可变目录，但仍无法从 GitHub 美国 runner 连接国内 CDN 节点。两次 Run 均生成脱敏失败报告，未写 `current.json`；本 Step 必须在 CDN 全球可达或切换到受控国内 runner 后重跑成功，当前不得 promote。
 
 - [ ] **Step 4：三平台安装 RC1 确切资产**
 
