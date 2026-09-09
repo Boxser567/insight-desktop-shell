@@ -11,6 +11,7 @@ import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { RuntimePhase, RuntimeSnapshot } from '../../shared/contracts'
 import { isInstallationOwnedBundle } from '../state/installation-owned-bundles'
+import { bindModelCredentialBridge } from './model-credential-bridge'
 
 export interface HarnessRuntimeOptions {
   dshEntryPath: string
@@ -25,6 +26,7 @@ export interface HarnessRuntimeOptions {
     options: SpawnOptionsWithoutStdio
   ): HarnessChildProcess
   startupTimeoutMs?: number
+  resolveModelAccessToken?(dshHome: string): Promise<string>
   onChanged(snapshot: RuntimeSnapshot): void
 }
 
@@ -33,6 +35,8 @@ export interface HarnessChildProcess extends EventEmitter {
   readonly stderr: NodeJS.ReadableStream
   readonly exitCode: number | null
   kill(signal?: NodeJS.Signals): boolean
+  postMessage?(message: Record<string, unknown>): void
+  send?(message: Record<string, unknown>, callback: (error: Error | null) => void): boolean
 }
 
 /**
@@ -252,6 +256,7 @@ export function updateReadyStability(
 
 export class HarnessRuntime {
   private child?: HarnessChildProcess
+  private modelCredentialRevision = 0
   private logStream?: WriteStream
   private dshHome: string
   private phase: RuntimePhase = 'idle'
@@ -266,6 +271,11 @@ export class HarnessRuntime {
 
   constructor(private readonly options: HarnessRuntimeOptions) {
     this.dshHome = options.dshHome
+  }
+
+  /** Revoke the old Host's credential channel immediately when login state changes. */
+  revokeModelCredentials(): void {
+    ++this.modelCredentialRevision
   }
 
   /** Select the account-owned Harness directory while the runtime is stopped. */
@@ -355,6 +365,17 @@ export class HarnessRuntime {
       return
     }
     this.child = child
+    if (this.options.resolveModelAccessToken) {
+      const dshHome = this.dshHome
+      const credentialRevision = this.modelCredentialRevision
+      const unbind = bindModelCredentialBridge(
+        child,
+        () => this.options.resolveModelAccessToken!(dshHome),
+        () => this.child === child && credentialRevision === this.modelCredentialRevision
+      )
+      child.once('exit', unbind)
+      child.once('error', unbind)
+    }
 
     child.stdout.on('data', (chunk: Buffer) => this.writeChunk('stdout', chunk))
     child.stderr.on('data', (chunk: Buffer) => {

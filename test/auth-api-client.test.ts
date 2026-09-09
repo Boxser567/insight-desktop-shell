@@ -20,6 +20,17 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe('desktop auth API client', () => {
+  it('bounds authentication requests and treats a timeout as offline', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    try {
+      const fetch = vi.fn().mockRejectedValue(new DOMException('Timed out', 'TimeoutError'))
+      const client = new AuthApiClient(fetch, environment, () => 'stored-token')
+      await expect(client.currentUser()).rejects.toMatchObject({ kind: 'offline' })
+      expect(timeout).toHaveBeenCalledWith(10_000)
+      expect(fetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+    } finally { timeout.mockRestore() }
+  })
+
   it('builds the existing SMS and password login payloads', async () => {
     const fetch = vi
       .fn()

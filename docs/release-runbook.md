@@ -24,6 +24,7 @@
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
 - [桌面更新 STS 发布设计](plans/2026-09-09-desktop-update-sts-publishing-design.md) 是发布身份、后台契约、STS 刷新和大文件失败语义的权威说明。
 - [因赛AI Desktop 1.0 正式发布前验证计划](superpowers/plans/2026-09-09-desktop-v1-release-verification.md) 是本次首发逐项执行、停止判断与证据收集清单。
+- [模型 Gateway 接入与验收](model-gateway-integration.md) 记录 1.0 测试用户中心/模型同环境决策、无需用户填写 API Key 的实现及真实账号发布门禁；当前在独立功能分支完成，合入后必须纳入 Candidate 重验。
 
 重大 Core、Shell、默认插件、工具链或 upstream 更新前必须阅读 Runbook 和相关复盘。历史复盘中的临时做法不得覆盖当前脚本和 Runbook。
 

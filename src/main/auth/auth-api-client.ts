@@ -225,12 +225,13 @@ export class AuthApiClient {
         method: options.method,
         headers,
         credentials: 'include',
+        signal: AbortSignal.timeout(10_000),
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) })
       })
     } catch (error) {
       if (
         error instanceof TypeError ||
-        (error instanceof Error && error.name === 'AbortError')
+        (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))
       ) {
         throw new AuthApiError('offline', '网络不可用，请检查网络连接。')
       }

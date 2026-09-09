@@ -82,6 +82,7 @@ class UtilityProcessAdapter extends EventEmitter implements HarnessChildProcess 
     }
     this.stdout = child.stdout
     this.stderr = child.stderr
+    child.on('message', (message) => this.emit('message', message))
 
     child.once('spawn', () => this.emit('spawn'))
     child.once('error', (type, location, report) => {
@@ -104,5 +105,9 @@ class UtilityProcessAdapter extends EventEmitter implements HarnessChildProcess 
       }
     }
     return this.child.kill()
+  }
+
+  postMessage(message: Record<string, unknown>): void {
+    this.child.postMessage(message)
   }
 }

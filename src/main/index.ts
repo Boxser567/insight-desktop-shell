@@ -1689,12 +1689,27 @@ async function bootstrap(): Promise<void> {
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
     dshHome: join(insightRoot(), 'runtime-unconfigured'),
     logPath: join(app.getPath('logs'), 'harness.log'),
-    launchProcess: (executablePath, args, options) =>
-      process.platform === 'darwin'
-        ? launchDisclaimedUtilityProcess(utilityProcess, args, options, {
-            disclaim: !developmentBuild
-          })
-        : spawn(executablePath, args, options),
+    resolveModelAccessToken: async (dshHome) => {
+      const account = authManager?.activeAccount()
+      if (!authManager || !authEnvironment || !account ||
+        accountPaths(insightRoot(), accountScopeKey(authEnvironment.name, account.id)).harness !== dshHome) {
+        throw new Error('No matching authenticated Harness account.')
+      }
+      return authManager.getModelAccessToken(account.id)
+    },
+    launchProcess: (executablePath, args, options) => {
+      if (process.platform === 'darwin') {
+        return launchDisclaimedUtilityProcess(utilityProcess, args, options, {
+          disclaim: !developmentBuild
+        })
+      }
+      const child = spawn(executablePath, args, { ...options, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] })
+      if (!child.stdout || !child.stderr) {
+        child.kill()
+        throw new Error('Harness did not expose its piped output.')
+      }
+      return Object.assign(child, { stdout: child.stdout, stderr: child.stderr })
+    },
     onChanged: (snapshot) => {
       if (snapshot.phase === 'ready' && snapshot.url) {
         void openStartingHarness(snapshot.url).catch(showUnexpectedError)
@@ -1760,6 +1775,7 @@ async function bootstrap(): Promise<void> {
     }
   })
   authManager.subscribe(() => {
+    runtime.revokeModelCredentials()
     applyWorkspaceForCurrentSession()
     installMenu()
   })
