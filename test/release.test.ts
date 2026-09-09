@@ -539,6 +539,9 @@ describe('GitHub release contract', () => {
     expect(workflow).toMatch(
       /macos-sonoma-compatibility:\r?\n\s+name: macOS Sonoma distribution compatibility\r?\n(?:[\s\S]*?)runs-on: macos-14\r?\n(?:[\s\S]*?)\s+steps:/
     )
+    expect(workflow).toMatch(
+      /macos-sonoma-compatibility:[\s\S]*?actions\/checkout@v4\r?\n\s+with:\r?\n\s+persist-credentials: false/
+    )
     expect(workflow).toContain(
       'hdiutil attach "release-assets/insight-$RELEASE_VERSION-mac-arm64.dmg"'
     )

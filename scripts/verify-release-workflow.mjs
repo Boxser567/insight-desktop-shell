@@ -104,6 +104,8 @@ async function main() {
   requireText(sonomaCompatibility, '- macos-apple-silicon', 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, "inputs.target == 'macos-arm64'", 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, 'runs-on: macos-14', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'actions/checkout@v4', 'macos-sonoma-compatibility')
+  requireText(sonomaCompatibility, 'persist-credentials: false', 'macos-sonoma-compatibility')
   requireText(sonomaCompatibility, 'name: macos-apple-silicon', 'macos-sonoma-compatibility')
   requireText(
     sonomaCompatibility,
