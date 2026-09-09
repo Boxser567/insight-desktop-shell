@@ -73,6 +73,20 @@ async function main() {
     requireText(job, 'sw_vers', name)
     requireText(job, 'xcodebuild -version', name)
     requireText(job, 'xcrun --find codesign_allocate', name)
+    requireText(job, "Print :CFBundleIdentifier", `${name} production macOS Bundle ID`)
+    requireText(
+      job,
+      "test \"$bundle_id\" = 'com.insight-aigc.desktop'",
+      `${name} production macOS Bundle ID`
+    )
+    requireText(job, "Print :CFBundleName", `${name} production macOS bundle name`)
+    requireText(job, "test \"$bundle_name\" = '因赛AI'", `${name} production macOS bundle name`)
+    requireText(job, 'TeamIdentifier=', `${name} production macOS signing Team ID`)
+    requireText(
+      job,
+      'test "$team_id" = "$APPLE_TEAM_ID"',
+      `${name} production macOS signing Team ID`
+    )
     requireText(job, 'syspolicy_check distribution --verbose "$RELEASE_APP"', name)
     if (job.includes('spctl --assess --type execute')) {
       throw new Error(`${name} must use syspolicy_check for the application bundle.`)

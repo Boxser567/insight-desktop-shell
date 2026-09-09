@@ -28,21 +28,39 @@ DEV 通道现按以下边界运行：
 
 自动回归覆盖了“存在旧密文时 DEV 启动不恢复、不改写，当前进程登录仍成功，重建会话后回到未登录”。本地目录包已完成三次进程级冷启动，启动命令均包含 `--use-mock-keychain`，对应系统安全日志未出现 `因赛AI Dev`/`Safe Storage` 访问记录。2026-09-09 已人工打开最终 `final4` 目录包，确认不再出现钥匙串密码框；本地 macOS DEV 回归通过。
 
+## 2026-09-09 `1.0.0-rc.1` 首发身份复现与定论
+
+安装本地构建的 `insight-1.0.0-rc.1-mac-arm64.dmg` 后，正式产品名的 `因赛AI` 在登录流程中再次弹出一次 `因赛AI Safe Storage` 授权框。这不是 DEV 行为，也不是当前应用签名损坏：安装后的 App 使用 `Developer ID Application` 签名并通过严格 codesign 校验，当前 Bundle ID 为 `com.insight-aigc.desktop`，Team ID 为 `8P39WV82RX`。
+
+对同名钥匙串条目进行不读取机密内容的 ACL 检查后确认：该条目创建于当前构建之前，解密权限仍绑定旧 Bundle ID `com.insight.desktop`，代码签名要求中的 Team ID 同为 `8P39WV82RX`。产品名没有变化，因此新旧应用都会访问 `因赛AI Safe Storage`；但当前 `com.insight-aigc.desktop` 不满足旧条目的 designated requirement，macOS 按安全模型要求用户授权。当前 App 的 Cookie Encryption fuse 为关闭状态，本次访问来自登录成功后使用 Electron `safeStorage` 加密保存 access token；拒绝授权后不会生成认证密文文件。
+
+这项证据把原因收敛为“首发前 Bundle ID 变更遗留的同名钥匙串 ACL 冲突”。对于从未安装内部包的新用户，首次正式包会直接创建绑定 `com.insight-aigc.desktop` 与当前 Team ID 的条目；后续版本只要保持产品名、Bundle ID 和 Team ID 稳定，系统无需再次询问。正式发布不能用 `use-mock-keychain` 或明文 token 绕过该安全边界。
+
+发布流水线现对最终 macOS `.app` 增加三项阻断检查：`CFBundleIdentifier` 必须为 `com.insight-aigc.desktop`，`CFBundleName` 必须为 `因赛AI`，签名 `TeamIdentifier` 必须等于发布环境配置的 Apple Team ID。首发前只清理测试机上已确认绑定旧 ID 的精确 `因赛AI Safe Storage` 条目，再以云端签名、公证并 staple 的新身份 DMG 完成登录和三次冷启动；未通过前不得发布 Stable。
+
+### 干净状态人工回归结论
+
+2026-09-09 清理测试机上全部 `insight-desktop*` 用户数据、旧保存状态以及正式/DEV Safe Storage 条目后，重新安装同一 `1.0.0-rc.1` Apple Silicon 本地 Candidate：首次打开进入全新登录流程，没有恢复旧账号或对话；完成登录并反复完全退出、重新启动后，未再出现钥匙串授权框。
+
+登录时新建的 `因赛AI Safe Storage` 条目与认证密文创建时间一致。只读 ACL 复核显示 `/Applications/因赛AI.app (OK)`，designated requirement 为 `com.insight-aigc.desktop`，Team ID 为 `8P39WV82RX`；安装 App 的 Developer ID 签名身份与之相同。由此确认当前身份在干净状态下能够创建并持续访问正确的钥匙串条目，先前弹框来自历史 `com.insight.desktop` ACL 与残留 Profile，而非当前应用每次启动的固有行为。
+
+该结论完成本地 Apple Silicon Safe Storage 预验收，但本地 DMG 未经过 Apple 公证，不能替代 GitHub Actions 最终签名、公证、staple、quarantine 和三次冷启动门禁。
+
 ## 现象
 
 使用云端 `Developer ID Application` 签名、公证并 staple 的 DMG 安装后，应用启动会请求访问 `因赛AI Safe Storage`。未选择“始终允许”时，一次启动可能连续请求两次；退出后再次启动仍会重复请求。拒绝授权后登录界面可进入，但登录操作会把本地安全存储失败显示为“认证服务暂时不可用”。
 
 ## 根因证据
 
-登录钥匙串中的旧 `因赛AI Safe Storage` 条目早于云端签名 DMG 创建。此前曾运行使用正式产品名和正式 `insight-desktop` 用户数据身份的本地未签名 Candidate；该进程首先创建了同名 Safe Storage 条目。后续 Developer ID 签名应用访问这个条目时不满足原访问控制，从而触发系统授权框。
+登录钥匙串中的旧 `因赛AI Safe Storage` 条目早于待验收 DMG 创建。旧条目可能由复用正式产品名和正式 `insight-desktop` 用户数据身份的本地构建创建，也可能仍绑定历史 Bundle ID；必须读取条目 ACL 与当前 App 的 designated requirement 后再归因。后续应用不满足旧访问控制时，macOS 会触发系统授权框。
 
-因此，云端签名、公证本身并不是重复弹框的失败点。问题是本地快速验证错误复用了生产身份和生产钥匙串条目。
+因此，云端签名、公证本身并不是重复弹框的失败点。已确认的两类首发前污染是本地快速验证复用生产身份，以及正式 Bundle ID 调整后同名条目仍绑定旧 ID。
 
 ## 修复与安全处理
 
 代码侧将安全存储拒绝与远端认证失败分离：当 `safeStorage` 不可用或用户拒绝授权时，当前登录只保留在内存，不写入明文 token，也不把成功的远端登录改写为“认证服务暂时不可用”。该会话退出应用后不会恢复，属于失败关闭而不是降低凭据保护。
 
-验证前只删除已确认由本地未签名 Candidate 创建的精确条目：
+验证前只删除已确认由内部构建创建或绑定历史 Bundle ID 的精确条目：
 
 ```bash
 security delete-generic-password -s '因赛AI Safe Storage' "$HOME/Library/Keychains/login.keychain-db"
@@ -66,7 +84,7 @@ security delete-generic-password -s '因赛AI Safe Storage' "$HOME/Library/Keych
 ## 后续构建规则
 
 1. 日常快速功能验证只运行隔离身份的 `因赛AI Dev`，禁止运行使用正式产品名、App ID/channel 或正式用户数据目录的本地未签名 Candidate。DEV 不访问真实钥匙串，退出后需要重新登录。
-2. Safe Storage 行为只能用云端 Developer ID 签名并完成公证的 DMG 验证；本地 DEV 无法证明该路径。
+2. Safe Storage 行为只能用云端 Developer ID 签名并完成公证的 DMG 验证；本地 DEV 无法证明该路径。Candidate / Stable 的 `com.insight-aigc.desktop`、`因赛AI` 与 Apple Team ID 自首发起视为持久身份，变更前必须单独设计钥匙串迁移。
 3. 单平台 Actions artifact 可以关闭对应平台候选门禁，但不得写成完整 Candidate/Stable 发布通过。
 4. 发生钥匙串提示时，先比较精确条目的创建时间、签名身份、应用路径和用户数据目录，不先删除用户 Profile，也不通过明文持久化绕过安全存储。
 5. 安全存储拒绝、远端认证失败和业务接口失败必须保持不同错误语义。

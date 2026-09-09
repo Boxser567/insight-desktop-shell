@@ -30,7 +30,7 @@
 以下同时保留原整合基线的历史证据和 2026-09-09 最新收口结果。`codex/enterprise-gateway-analysis` 的免 API Key 会话能力已通过 `d7b36d8` 合入，Bundle ID 首发规范已通过 `e18e6bc` 落在本地 `main`；本计划不能替代 [真实账号验收门禁](../../model-gateway-integration.md)，也不能复用旧身份 Candidate 的会话验收。
 
 - [x] Desktop Shell、DEV Keychain 修复、模型 Gateway 和 Bundle ID 规范均已合入本地 `main`；身份规范提交为 `e18e6bc`，Gateway 合并提交为 `d7b36d8`，Release workflow 另增加了 Runtime 准备后的测试门禁。
-- [x] 最新本地全量测试通过：89 个测试文件、565 个测试。
+- [x] 最新本地全量测试通过：89 个测试文件、566 个测试。
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
@@ -38,6 +38,7 @@
 - [x] 已将 STS 发布实现与验收记录推送到 `origin/main`，远端基线为 `77571d4`。
 - [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.1`；RC1 准备、DEV Keychain、Gateway 合并、Bundle ID 规范和 Release Runtime 测试门禁均已在本地提交或等待本地提交，尚未推送到 `origin/main`。
 - [x] macOS DEV 已从真实钥匙串隔离：mock keychain、非持久认证 Session、进程内 token；`final4` 目录包已人工确认无钥匙串密码框，退出 DEV 后重新登录是预期行为。
+- [x] 新正式身份 Apple Silicon 本地 Candidate 已完成干净状态预验收：清理历史 `insight-desktop*` 数据及旧 Safe Storage 后，首次打开不恢复旧账号/对话，登录及反复完全退出重启均无钥匙串弹窗；新条目 ACL 为 `/Applications/因赛AI.app (OK)`，designated requirement 为 `com.insight-aigc.desktop` + Team `8P39WV82RX`。该结果不替代云端公证制品门禁。
 - [ ] 新发布契约下的 GitHub Draft、OSS 暂存、三平台安装和 N→N+1 尚未完成。
 - [x] 测试 Gateway 已由 `upload_oss_test` Run #7 验证接受 `{}`、签发目录级 STS 并完成真实 OSS `PutObject`。
 
@@ -287,12 +288,13 @@ gh run list --repo Boxser567/insight-desktop-shell --workflow release.yml --limi
 
 - [ ] **Step 4：三平台安装 RC1 确切资产**
 
-- macOS arm64：验证 DMG、codesign、Gatekeeper、公证、staple，保留 quarantine 完成干净安装并连续启动三次；
-- macOS x64：验证 DMG、codesign、Gatekeeper、公证、staple，保留 quarantine 完成干净安装并连续启动三次；
+- macOS 内部测试机先只读检查 `因赛AI Safe Storage` ACL；若 designated requirement 仍绑定历史 `com.insight.desktop`，只删除该精确旧条目，不删除整个钥匙串、Profile、工作区或插件数据；
+- macOS arm64：确认最终 App 的 Bundle ID 为 `com.insight-aigc.desktop`、产品名为 `因赛AI`、Team ID 等于发布 Team；验证 DMG、codesign、Gatekeeper、公证、staple，保留 quarantine 完成首次登录并连续启动三次；
+- macOS x64：确认最终 App 的 Bundle ID 为 `com.insight-aigc.desktop`、产品名为 `因赛AI`、Team ID 等于发布 Team；验证 DMG、codesign、Gatekeeper、公证、staple，保留 quarantine 完成首次登录并连续启动三次；
 - Windows x64：核对 Manifest 摘要和 NSIS 结构，完成干净安装、启动和卸载；
 - 记录三个确切安装包的 URL、大小和 SHA-256；不得用本地重建包替代。
 
-通过条件：无“应用已损坏”、重复 Safe Storage 授权、空白窗口、恢复页或无限启动；Windows 的未知发布者提示可继续安装，并已有负责人明确接受。
+通过条件：macOS 首次登录写入安全凭据及后续三次冷启动均不出现 Safe Storage 授权框；无“应用已损坏”、空白窗口、恢复页或无限启动；Windows 的未知发布者提示可继续安装，并已有负责人明确接受。
 
 - [ ] **Step 5：推广 RC1 Candidate**  **【公开 RC1 Release 并写 Candidate 指针】**
 

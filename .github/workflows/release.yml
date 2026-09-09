@@ -204,6 +204,12 @@ jobs:
           set -euo pipefail
           dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
           zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$RELEASE_APP/Contents/Info.plist")"
+          bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$RELEASE_APP/Contents/Info.plist")"
+          team_id="$(codesign -dv --verbose=4 "$RELEASE_APP" 2>&1 | awk -F= '/^TeamIdentifier=/{ print $2; exit }')"
+          test "$bundle_id" = 'com.insight-aigc.desktop' || { echo "::error::Unexpected macOS Bundle ID: $bundle_id"; exit 1; }
+          test "$bundle_name" = '因赛AI' || { echo "::error::Unexpected macOS bundle name: $bundle_name"; exit 1; }
+          test "$team_id" = "$APPLE_TEAM_ID" || { echo "::error::Unexpected macOS signing Team ID: $team_id"; exit 1; }
           codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
           syspolicy_check distribution --verbose "$RELEASE_APP"
           xcrun stapler validate "$RELEASE_APP"
@@ -347,6 +353,12 @@ jobs:
           set -euo pipefail
           dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
           zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$RELEASE_APP/Contents/Info.plist")"
+          bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$RELEASE_APP/Contents/Info.plist")"
+          team_id="$(codesign -dv --verbose=4 "$RELEASE_APP" 2>&1 | awk -F= '/^TeamIdentifier=/{ print $2; exit }')"
+          test "$bundle_id" = 'com.insight-aigc.desktop' || { echo "::error::Unexpected macOS Bundle ID: $bundle_id"; exit 1; }
+          test "$bundle_name" = '因赛AI' || { echo "::error::Unexpected macOS bundle name: $bundle_name"; exit 1; }
+          test "$team_id" = "$APPLE_TEAM_ID" || { echo "::error::Unexpected macOS signing Team ID: $team_id"; exit 1; }
           codesign --verify --deep --strict --verbose=2 "$RELEASE_APP"
           syspolicy_check distribution --verbose "$RELEASE_APP"
           xcrun stapler validate "$RELEASE_APP"
