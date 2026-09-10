@@ -2,7 +2,7 @@
 
 ## 当前发布状态
 
-截至 2026-09-10，`v1.0.0-rc.1` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 正指向 `1.0.0-rc.1`；`stable/current.json` 尚不存在。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-10，`v1.0.0-rc.2` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经 CDN 返回 `1.0.0-rc.2`；`stable/current.json` 尚不存在。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
@@ -14,7 +14,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-`v1.0.0-rc.2` 是当前待发布 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装；权威验收必须使用已安装的云端 RC1，经 RC2 Draft、OIDC/STS `stage`、`promote` 后完成 RC1→RC2。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
+`v1.0.0-rc.2` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装；最后的权威验收必须使用已安装的云端 RC1 完成 RC1→RC2 检测、下载、安装和重启。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
 
 ## 必读资料
 
@@ -139,7 +139,7 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 `stage` 成功表示签名 Draft 与 OSS 不可变版本目录的文件集、大小和摘要一致，不会公开 GitHub Release，也不会改变客户端看到的版本。GitHub Hosted Runner 不承担中国大陆 CDN 可达性门禁；必须另从中国大陆网络检查 HTTPS、MIME、缓存、Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
 
-`current.json` 必须在 CDN 配置中使用独立的 60 秒边缘缓存规则并遵守源站 `Cache-Control`。每次 `promote` 后都要刷新精确 URL `https://updates.insight-aigc.com/desktop/<channel>/current.json`，再确认响应内容、`Age` 和 `X-Swift-CacheTime` 已收敛；不能把 OSS 权威回读成功等同于客户端已经可见。2026-09-10 的 RC2 首次 promote 已暴露 CDN 全局约 29 天缓存覆盖源站 TTL，修正规则并刷新 Candidate 指针是 RC1→RC2 验收的前置条件。
+`current.json` 必须在 CDN 配置中使用独立的 60 秒边缘缓存规则并遵守源站 `Cache-Control`。每次 `promote` 后都要刷新精确 URL `https://updates.insight-aigc.com/desktop/<channel>/current.json`，再确认响应内容、`Age` 和 `X-Swift-CacheTime` 已收敛；不能把 OSS 权威回读成功等同于客户端已经可见。2026-09-10 的 RC2 首次 promote 暴露 CDN 全局约 29 天缓存覆盖源站 TTL；当日已把 `/desktop/candidate/current.json` 与 `/desktop/stable/current.json` 配置为 1 分钟、权重 99，把 `/desktop/releases/` 配置为 365 天、权重 99，并把兜底 `/` 降为权重 1，随后刷新 Candidate 精确 URL。公网复验 Candidate 返回 RC2、`Cache-Control: public,max-age=60,must-revalidate`、`X-Swift-CacheTime: 60`，版本 Manifest、签名和 `latest-mac.yml` 可访问，arm64 DMG Range 返回 `206` 与 `Content-Range: bytes 0-0/256126350`，版本资产节点缓存为 31536000 秒；Stable 指针仍为 404。
 
 Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
 

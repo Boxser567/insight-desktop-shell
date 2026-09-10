@@ -61,7 +61,7 @@
 
 2026-09-10 RC2 发布准备检查点：`e5400ca` 将认证与模型 Gateway 收口到同一受控配置并增加 Stable/production 门禁；`a60d93d` 统一第一方主色为 `#315dfb`；`6d390cc` 增加安全单实例 About 窗口；`adb1c31` 让跨平台菜单直接触发真实检查；`7f6f79f` 固定受管插件版本、恢复必需插件并让 Market 重启继续经过 Shell，避免卸载后进入恢复页或 Safe Mode 回退到 API Key。产品负责人于 2026-09-10 明确授权将本地 DEV 验收按通过处理并进入 RC2 Actions；这是发布授权记录，不替代云端签名制品的 RC1→RC2 验收。RC2 预检、发布/上传 workflow 契约、94 个测试文件共 597 项测试、TypeScript、Electron 构建及 Candidate 目录包均通过；静态目录包为 `1.0.0-rc.2`、`com.insight-aigc.desktop`、测试业务环境和 `https://updates.insight-aigc.com` 更新 Origin。待完成项仍是 RC2 Draft、OIDC/STS stage、promote，以及已安装云端 RC1 的真实检测、下载、安装、数据连续性和钥匙串验收。
 
-2026-09-10 RC2 发布执行证据：[Release Run 34438511126](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34438511126) 的 preflight、macOS arm64、macOS x64、Windows x64、Sonoma 和 Draft 六个 Job 全部成功；[v1.0.0-rc.2 Pre-release](https://github.com/Boxser567/insight-desktop-shell/releases/tag/v1.0.0-rc.2) 已公开，tag 精确指向 `64899b2cf852e24059a2a49e0f4298c3cdac5fd1`，12 项资产完整。[Stage Run 34440398909](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440398909) 通过 OIDC/STS 新建 `desktop/releases/v1.0.0-rc.2/` 并校验全部文件；[Promote Run 34440608226](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440608226) 报告 OSS 权威指针从 `1.0.0-rc.1` 切换为 `1.0.0-rc.2`。但推广后的中国大陆 CDN 抽查仍返回旧 RC1，响应 `Age` 超过 54,000 秒且 `X-Swift-CacheTime` 约 29 天，请求 `Cache-Control: no-cache` 和查询参数均未触发回源；这证明 CDN 缓存规则覆盖了源站的 `max-age=60`。在阿里云刷新 `/desktop/candidate/current.json` 并把该路径的边缘缓存 TTL 修正为 60 秒前，RC1→RC2 真实更新体验仍不得记为通过。
+2026-09-10 RC2 发布执行证据：[Release Run 34438511126](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34438511126) 的 preflight、macOS arm64、macOS x64、Windows x64、Sonoma 和 Draft 六个 Job 全部成功；[v1.0.0-rc.2 Pre-release](https://github.com/Boxser567/insight-desktop-shell/releases/tag/v1.0.0-rc.2) 已公开，tag 精确指向 `64899b2cf852e24059a2a49e0f4298c3cdac5fd1`，12 项资产完整。[Stage Run 34440398909](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440398909) 通过 OIDC/STS 新建 `desktop/releases/v1.0.0-rc.2/` 并校验全部文件；[Promote Run 34440608226](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440608226) 报告 OSS 权威指针从 `1.0.0-rc.1` 切换为 `1.0.0-rc.2`。推广后曾因 CDN 兜底 `/` 规则以高权重缓存 1 个月而继续返回 RC1；当日已增加 Candidate/Stable 精确指针 1 分钟规则、版本目录 365 天规则，把兜底规则降为权重 1，并刷新 Candidate URL。公网复验 Candidate 返回 RC2、`X-Swift-CacheTime: 60`；Stable 仍为 404；Ed25519 Manifest 签名有效，`latest-mac.yml` 正确列出两个架构，arm64 DMG Range 返回 `206` 和总大小 256,126,350。CDN/OSS 更新发现与下载前置链路通过，RC1→RC2 的客户端内检测、下载、安装、重启和数据连续性仍待人工验收。
 
 ---
 
@@ -154,7 +154,7 @@ git status --short --branch
 
 验收记录（2026-09-09）：[`upload_oss_test` Run #7](https://github.com/BreezeWind889988/upload_oss_test/actions/runs/34319570470) 成功；OIDC 与 STS 均为 HTTP 200；STS 请求体 `{}`，响应 `dir: ""`、`durationSeconds: 900` 且无 `fileName`/`userId`；对象 `1788935604227.txt` 的 `PutObject` 为 HTTP 200，OSS request ID `6AA0FDB567B311333387BD1EB`。
 
-- [ ] **Step 5：确认 CDN 规则**
+- [x] **Step 5：确认 CDN 规则**
 
 - `/desktop/releases/*`：不压缩、不改写、不重定向，支持 HEAD 和 `Range: bytes=0-0`，缓存为 `public,max-age=31536000,immutable`；
 - `/desktop/candidate/current.json` 与 `/desktop/stable/current.json`：缓存为 `public,max-age=60,must-revalidate`；
@@ -168,6 +168,8 @@ curl -sS -i https://updates.insight-aigc.com/desktop/stable/current.json
 通过条件：首发前两个指针应为不存在；若任一返回有效版本，停止发布并先核对 OSS 权威对象，不得直接覆盖。
 
 检查记录（2026-09-09）：Promote 后 Candidate 指针返回 HTTP 200 和 `{"schemaVersion":1,"channel":"candidate","version":"1.0.0-rc.1"}`，缓存为 `public,max-age=60,must-revalidate`；Stable 指针仍为 404。Manifest 返回 200；arm64 DMG、x64 DMG 和 Windows EXE 的 `Range: bytes=0-0` 均返回 206、正确总大小、`Accept-Ranges: bytes`、`public,max-age=31536000,immutable`、正确附件名及 `x-oss-cdn-auth: success`。
+
+RC2 复验记录（2026-09-10）：CDN 控制台规则为 `/desktop/candidate/current.json` 1 分钟/权重 99、`/desktop/stable/current.json` 1 分钟/权重 99、`/desktop/releases/` 365 天/权重 99、兜底 `/` 1 个月/权重 1，均显示成功。刷新 Candidate 精确 URL 后，公网返回 `{"schemaVersion":1,"channel":"candidate","version":"1.0.0-rc.2"}`、ETag `076E991C42A74514AE2F911AD983FE38`、`X-Swift-CacheTime: 60`；Stable 为 `NoSuchKey` 404。RC2 Manifest 与签名均为 200，内置公钥验签通过；`latest-mac.yml` 为 200 且节点缓存 31536000 秒；arm64 DMG 的 `bytes=0-0` 返回 206、`Content-Range: bytes 0-0/256126350`、正确附件名和一年 immutable 缓存。
 
 ---
 
