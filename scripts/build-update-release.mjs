@@ -4,7 +4,11 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semver from 'semver'
 import { parseDocument } from 'yaml'
-import { artifactDefinitions, assertReleaseIdentity } from './update-release-contract.mjs'
+import {
+  artifactDefinitions,
+  assertReleaseIdentity,
+  assertReleaseScope
+} from './update-release-contract.mjs'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const commitPattern = /^[0-9a-f]{40}$/u
@@ -18,7 +22,8 @@ function parseArguments(argv) {
     '--runtime-manifest',
     '--compatibility',
     '--policy',
-    '--private-key'
+    '--private-key',
+    '--scope'
   ])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
@@ -27,12 +32,14 @@ function parseArguments(argv) {
     if (!names.has(name) || !value || values.has(name)) throw new Error(usage())
     values.set(name, value)
   }
-  if (values.size !== names.size) throw new Error(usage())
+  if ([...names].filter((name) => name !== '--scope').some((name) => !values.has(name))) {
+    throw new Error(usage())
+  }
   return Object.fromEntries(values)
 }
 
 function usage() {
-  return 'Usage: build-update-release.mjs --dir <path> --version <semver> --channel <candidate|stable> --shell-commit <40-hex> --runtime-manifest <path> --compatibility <path> --policy <path> --private-key <path>'
+  return 'Usage: build-update-release.mjs --dir <path> --version <semver> --channel <candidate|stable> --shell-commit <40-hex> --runtime-manifest <path> --compatibility <path> --policy <path> --private-key <path> [--scope <all|macos-arm64>]'
 }
 
 function assertExactKeys(value, keys, label) {
@@ -146,8 +153,10 @@ async function main() {
   const args = parseArguments(process.argv.slice(2))
   const version = args['--version']
   const channel = args['--channel']
+  const scope = args['--scope'] ?? 'all'
   const shellCommit = args['--shell-commit']
   assertReleaseIdentity(channel, version)
+  assertReleaseScope(scope, channel)
   if (!commitPattern.test(shellCommit)) throw new Error('Shell commit must be a 40-character lowercase SHA.')
 
   const releaseDir = resolve(args['--dir'])
@@ -165,13 +174,16 @@ async function main() {
   const core = validateRuntimeManifest(runtimeManifest)
   const validatedCompatibility = validateCompatibility(compatibility)
   const validatedPolicy = validatePolicy(policy, version, channel)
-  await Promise.all([
-    validateUpdaterVersion(join(releaseDir, 'latest-mac.yml'), version),
-    validateUpdaterVersion(join(releaseDir, 'latest.yml'), version)
-  ])
+  const definitions = artifactDefinitions(channel, version, scope)
+  const updaterMetadata = [...new Set(
+    definitions.filter((entry) => entry[2] === 'updater-metadata').map((entry) => entry[3])
+  )]
+  await Promise.all(updaterMetadata.map((name) =>
+    validateUpdaterVersion(join(releaseDir, name), version)
+  ))
 
   const artifacts = await Promise.all(
-    artifactDefinitions(channel, version).map((definition) => artifact(releaseDir, definition))
+    definitions.map((definition) => artifact(releaseDir, definition))
   )
   artifacts.sort(compareArtifacts)
   const manifest = {

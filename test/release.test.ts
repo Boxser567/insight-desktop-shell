@@ -569,7 +569,7 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain("Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml')")
   })
 
-  it('creates only an authenticated complete Draft through the protected environment', async () => {
+  it('creates only an authenticated complete Draft or Apple Silicon Candidate through the protected environment', async () => {
     const workflow = await readFile(
       path.join(projectRoot, '.github', 'workflows', 'release.yml'),
       'utf8'
@@ -580,6 +580,7 @@ describe('GitHub release contract', () => {
 
     expect(publish).toContain('environment: desktop-release')
     expect(publish).toContain("inputs.target == 'all'")
+    expect(publish).toContain("inputs.target == 'macos-arm64'")
     expect(publish).toContain('- release-preflight')
     expect(publish).toContain('- macos-apple-silicon')
     expect(publish).toContain('- macos-intel')
@@ -593,6 +594,7 @@ describe('GitHub release contract', () => {
     expect(publish).toContain('verify-release-assets.mjs')
     expect(publish).toContain('--compatibility build/update-compatibility.json')
     expect(publish).toContain('--policy build/update-release-policy.json')
+    expect(publish).toContain('--scope "$RELEASE_SCOPE"')
     expect(publish).toContain('gh release create "$RELEASE_TAG"')
     expect(publish).toContain('gh release upload "$RELEASE_TAG" release-assets/*')
     expect(publish.indexOf('gh release create')).toBeLessThan(publish.indexOf('gh release upload'))

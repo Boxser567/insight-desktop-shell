@@ -24,6 +24,8 @@ async function main() {
   requireText(trigger, '- stage', 'Publish workflow command choices')
   requireText(trigger, '- promote', 'Publish workflow command choices')
   requireText(trigger, 'tag:', 'Publish workflow inputs')
+  requireText(trigger, 'scope:', 'Publish workflow inputs')
+  requireText(trigger, '- macos-arm64', 'Publish workflow scope choices')
   requireText(trigger, 'confirm_version:', 'Publish workflow inputs')
 
   const permissions = /^permissions:\r?\n((?:  [^\r\n]+\r?\n?)*)/mu.exec(workflow)?.[1]
@@ -45,6 +47,7 @@ async function main() {
     'npm ci --ignore-scripts',
     'node scripts/verify-publish-workflow.mjs',
     'node scripts/publish-update-to-oss.mjs',
+    '--scope "$SCOPE"',
     'GH_TOKEN: ${{ github.token }}',
     'if: always()',
     'uses: actions/upload-artifact@v4',

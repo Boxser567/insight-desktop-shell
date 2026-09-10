@@ -136,6 +136,7 @@ async function main() {
   }
   requireText(publish, 'environment: desktop-release', 'Publish job')
   requireText(publish, "inputs.target == 'all'", 'Publish job')
+  requireText(publish, "inputs.target == 'macos-arm64'", 'Publish job')
   for (const dependency of [
     '- release-preflight',
     '- macos-apple-silicon',
@@ -151,6 +152,7 @@ async function main() {
     'Publish job'
   )
   requireText(publish, 'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY', 'Publish job')
+  requireText(publish, '--scope "$RELEASE_SCOPE"', 'Publish job')
   if (workflow.slice(0, workflow.indexOf('\n  publish:')).includes('DESKTOP_UPDATE_SIGNING_PRIVATE_KEY')) {
     throw new Error('The update signing private key may only be used by the publish job.')
   }

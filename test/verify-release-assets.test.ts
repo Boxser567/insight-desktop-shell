@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { parse, stringify } from 'yaml'
 import { writeReleaseFixture } from './release-script-fixtures'
 
 const temporaryDirectories: string[] = []
@@ -15,11 +16,30 @@ afterEach(async () => {
 
 async function builtFixture(
   version = '0.1.2',
-  channel: 'candidate' | 'stable' = 'stable'
+  channel: 'candidate' | 'stable' = 'stable',
+  scope = 'all'
 ) {
   const root = await mkdtemp(path.join(tmpdir(), 'insight-release-verify-'))
   temporaryDirectories.push(root)
   const paths = await writeReleaseFixture(root, version, channel)
+  if (scope === 'macos-arm64') {
+    const names = await readdir(paths.releaseDir)
+    await Promise.all(names
+      .filter((name) => name === 'latest.yml' || name.includes('mac-x64') || name.includes('windows-x64'))
+      .map((name) => rm(path.join(paths.releaseDir, name))))
+    const metadataPath = path.join(paths.releaseDir, 'latest-mac.yml')
+    const metadata = parse(await readFile(metadataPath, 'utf8')) as {
+      files: Array<{ url: string; sha512: string }>
+      path: string
+      sha512: string
+    }
+    metadata.files = metadata.files.filter(({ url }) => url.includes('mac-arm64'))
+    const primary = metadata.files[0]
+    if (!primary) throw new Error('Apple Silicon updater fixture is incomplete.')
+    metadata.path = primary.url
+    metadata.sha512 = primary.sha512
+    await writeFile(metadataPath, stringify(metadata))
+  }
   const result = spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'build-update-release.mjs'),
     '--dir', paths.releaseDir,
@@ -29,7 +49,8 @@ async function builtFixture(
     '--runtime-manifest', paths.runtimeManifest,
     '--compatibility', paths.compatibility,
     '--policy', paths.policy,
-    '--private-key', paths.privateKey
+    '--private-key', paths.privateKey,
+    '--scope', scope
   ], { encoding: 'utf8' })
   expect(result.status, result.stderr).toBe(0)
   return paths
@@ -38,14 +59,16 @@ async function builtFixture(
 function runVerify(
   paths: Awaited<ReturnType<typeof builtFixture>>,
   version = '0.1.2',
-  channel: 'candidate' | 'stable' = 'stable'
+  channel: 'candidate' | 'stable' = 'stable',
+  scope = 'all'
 ) {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'verify-release-assets.mjs'),
     '--dir', paths.releaseDir,
     '--version', version,
     '--channel', channel,
-    '--public-key', paths.publicKey
+    '--public-key', paths.publicKey,
+    '--scope', scope
   ], { encoding: 'utf8' })
 }
 
@@ -60,6 +83,16 @@ describe('complete release asset verifier', () => {
     const paths = await builtFixture('0.1.2-rc.2', 'candidate')
     const result = runVerify(paths, '0.1.2-rc.2', 'candidate')
     expect(result.status, result.stderr).toBe(0)
+  })
+
+  it('accepts the exact Apple Silicon-only asset set for a Candidate release', async () => {
+    const paths = await builtFixture('0.1.2-rc.4', 'candidate', 'macos-arm64')
+    const result = runVerify(paths, '0.1.2-rc.4', 'candidate', 'macos-arm64')
+    expect(result.status, result.stderr).toBe(0)
+
+    const wrongScope = runVerify(paths, '0.1.2-rc.4', 'candidate')
+    expect(wrongScope.status).not.toBe(0)
+    expect(wrongScope.stderr).toContain('incomplete or unexpected')
   })
 
   it('rejects signature, digest, and requested-version mismatches', async () => {

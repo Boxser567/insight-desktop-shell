@@ -68,12 +68,12 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 
 安装包 workflow 名为 `Release desktop installers`，定义在 `.github/workflows/release.yml`。手动运行必须填写尚不存在的 `candidate_tag`，并从以下 `target` 中选择：
 
-- `macos-arm64`：构建、签名、公证并上传 Apple Silicon 候选包，同时运行 Sonoma 分发兼容检查；
+- `macos-arm64`：构建、签名、公证并上传 Apple Silicon 候选包，同时运行 Sonoma 分发兼容检查；Candidate 还会生成仅含 ARM64 资产的签名 Draft，供单机 N→N+1 下载验证；
 - `macos-x64`：构建、签名、公证并上传 Intel macOS 候选包；
 - `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
-- `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Release。
+- `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Draft。
 
-RC3 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.3`、`target=all`。Candidate 不手工创建或推送 tag，完整 workflow 成功后才由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
+RC4 下载更新 canary 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.4`、`target=macos-arm64`。Candidate 不手工创建或推送 tag，workflow 成功后由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
 
 ## 一次性发布准备
 
@@ -118,16 +118,16 @@ Gateway 临时会话的最小 OSS Policy 如下；`Resource` 不得扩大到其�
 实现完成后，由两个职责分离的 GitHub workflow 执行：
 
 1. 校验 tag、渠道、版本、发布策略、Runtime 锁和发布配置。
-2. 在 macOS arm64、macOS x64 和 Windows x64 各构建一次，完成签名、公证、YAML、blockmap 和安装器结构验证。
-3. 汇总相同制品，生成并签名 `insight-update.json`，执行完整资产校验。
+2. 完整发布在 macOS arm64、macOS x64 和 Windows x64 各构建一次；ARM64 canary 只构建 macOS arm64，但仍完成签名、公证、YAML、blockmap、DMG 和 Sonoma 兼容验证。
+3. 按显式 `scope` 汇总制品，生成并签名 `insight-update.json`，执行精确资产校验；`macos-arm64` 只允许 Candidate，Stable 始终要求 `all`。
 4. `Release desktop installers` 创建 GitHub Draft Release 并上传同一批字节；该 workflow 没有 OIDC 或 OSS 权限。
-5. 操作者从 `main` 手动运行 `Publish desktop updates`，选择 `stage`；workflow 通过 GitHub OIDC 与测试 Gateway 获取目录级 STS，从 Draft 下载全部 Assets 并重新验证签名、文件集、版本和摘要。
+5. 操作者从 `main` 手动运行 `Publish desktop updates`，选择 `stage`，并选择与 Draft 相同的 `scope`；workflow 通过 GitHub OIDC 与测试 Gateway 获取目录级 STS，从 Draft 下载全部 Assets 并重新验证签名、文件集、版本和摘要。
 6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后使用普通 `PutObject` 上传完整不可变版本目录；每个文件前检查 STS，临期则刷新，令牌失效时整文件重试一次。
 7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成该版本确切安装包的推广前验收。
 8. 人工确认后从同一 workflow 选择 `promote` 并填写精确确认版本；发布器先公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
 9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary；Candidate 的 N→N+1 必须在 Candidate 指针生效后立即完成，Stable 则必须在推广前已有完整 Candidate 升级证据。
 
-单平台 target 只上传对应 Actions artifact，不创建 tag 或 GitHub Release，也不运行 Publish。它用于关闭一个平台的候选门禁，不能替代完整 Candidate/Stable 发布。人工通过单平台包后，使用同一 `candidate_tag` 和 `target: all` 执行完整 Candidate；Stable 只由已存在的 `vX.Y.Z` tag push 触发，并始终等同于 `all`。
+`macos-x64` 与 `windows-x64` 单平台 target 仍只上传 Actions artifact。`macos-arm64` 可额外创建 ARM64-only Candidate Draft，并以 `scope=macos-arm64` 完成 OSS stage/promote，用于尚未公开发布阶段的 Apple Silicon 下载更新 canary；它不能作为 Stable 或全平台 Candidate 的发布证据。Stable 只由已存在的 `vX.Y.Z` tag push 触发，并始终等同于 `all`。
 
 macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_APPLE_API_KEY`、`DESKTOP_APPLE_API_KEY_ID`、`DESKTOP_APPLE_API_ISSUER` 和 `DESKTOP_APPLE_TEAM_ID`。证书必须包含匹配 Team ID 的 `Developer ID Application`；本机 `Apple Development` 证书不满足外部分发要求。下载后的签名 macOS 候选必须保留 quarantine 并按阶段 10 验证；需要 `xattr` 才能启动即判定失败。
 
@@ -135,7 +135,8 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 - Ref：`main`
 - `command`：`stage`
-- `tag`：`v1.0.0-rc.3`
+- `tag`：`v1.0.0-rc.4`
+- `scope`：`macos-arm64`（完整 Draft 使用 `all`）
 - `confirm_version`：留空
 
 `stage` 成功表示签名 Draft 与 OSS 不可变版本目录的文件集、大小和摘要一致，不会公开 GitHub Release，也不会改变客户端看到的版本。GitHub Hosted Runner 不承担中国大陆 CDN 可达性门禁；必须另从中国大陆网络检查 HTTPS、MIME、缓存、Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
@@ -146,8 +147,9 @@ Candidate 在完成确切安装包的干净安装和静态验证后执行下述 
 
 - Ref：`main`
 - `command`：`promote`
-- `tag`：`v1.0.0-rc.3`
-- `confirm_version`：`1.0.0-rc.3`
+- `tag`：`v1.0.0-rc.4`
+- `scope`：`macos-arm64`
+- `confirm_version`：`1.0.0-rc.4`
 
 Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 

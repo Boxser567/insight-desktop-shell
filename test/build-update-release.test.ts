@@ -26,7 +26,8 @@ async function fixture(
 function runBuild(
   paths: Awaited<ReturnType<typeof fixture>>,
   version = '0.1.2',
-  channel: 'candidate' | 'stable' = 'stable'
+  channel: 'candidate' | 'stable' = 'stable',
+  scope = 'all'
 ) {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'build-update-release.mjs'),
@@ -37,7 +38,8 @@ function runBuild(
     '--runtime-manifest', paths.runtimeManifest,
     '--compatibility', paths.compatibility,
     '--policy', paths.policy,
-    '--private-key', paths.privateKey
+    '--private-key', paths.privateKey,
+    '--scope', scope
   ], { encoding: 'utf8' })
 }
 
@@ -89,6 +91,25 @@ describe('authenticated update release builder', () => {
     expect(names).toContain('insight-0.1.2-rc.2-mac-arm64.dmg')
     expect(names).toContain('insight-0.1.2-rc.2-windows-x64-setup.exe')
     expect(names.every((name) => !name.includes('candidate'))).toBe(true)
+  })
+
+  it('builds an Apple Silicon-only Candidate manifest but rejects partial stable releases', async () => {
+    const paths = await fixture('0.1.2-rc.4', 'candidate')
+    const result = runBuild(paths, '0.1.2-rc.4', 'candidate', 'macos-arm64')
+    expect(result.status, result.stderr).toBe(0)
+
+    const manifest = JSON.parse(
+      await readFile(path.join(paths.releaseDir, 'insight-update.json'), 'utf8')
+    ) as { artifacts: Array<{ platform: string; arch: string }> }
+    expect(manifest.artifacts).toHaveLength(4)
+    expect(manifest.artifacts.every(({ platform, arch }) =>
+      platform === 'darwin' && arch === 'arm64'
+    )).toBe(true)
+
+    const stablePaths = await fixture()
+    const stable = runBuild(stablePaths, '0.1.2', 'stable', 'macos-arm64')
+    expect(stable.status).not.toBe(0)
+    expect(stable.stderr).toContain('Candidate releases only')
   })
 
   it('requires an exact policy version and channel without defaults', async () => {

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import {
   artifactDefinitions,
   assertReleaseIdentity,
+  assertReleaseScope,
   assertSafeAssetName,
   releaseAssetNames
 } from './update-release-contract.mjs'
@@ -45,7 +46,7 @@ const manifestSchema = z.object({
 }).strict()
 
 function parseArguments(argv) {
-  const names = new Set(['--dir', '--version', '--channel', '--public-key'])
+  const names = new Set(['--dir', '--version', '--channel', '--public-key', '--scope'])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index]
@@ -53,12 +54,14 @@ function parseArguments(argv) {
     if (!names.has(name) || !value || values.has(name)) throw new Error(usage())
     values.set(name, value)
   }
-  if (values.size !== names.size) throw new Error(usage())
+  if ([...names].filter((name) => name !== '--scope').some((name) => !values.has(name))) {
+    throw new Error(usage())
+  }
   return Object.fromEntries(values)
 }
 
 function usage() {
-  return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path>'
+  return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path> [--scope <all|macos-arm64>]'
 }
 
 function identity(values) {
@@ -121,7 +124,10 @@ async function verifyUpdaterMetadata(releaseDir, manifest, expectedDefinitions) 
     const name = definition[3]
     if (!expectedByName.has(name)) expectedByName.set(name, definition)
   }
-  for (const metadataName of ['latest-mac.yml', 'latest.yml']) {
+  const metadataNames = [...new Set(
+    expectedDefinitions.filter((entry) => entry[2] === 'updater-metadata').map((entry) => entry[3])
+  )]
+  for (const metadataName of metadataNames) {
     const metadata = parseUpdaterMetadata(await readFile(join(releaseDir, metadataName)), metadataName)
     if (metadata.version !== manifest.version || metadata.files.length === 0) {
       throw new Error(`Updater metadata version or files are invalid: ${metadataName}`)
@@ -154,9 +160,16 @@ async function verifyUpdaterMetadata(releaseDir, manifest, expectedDefinitions) 
   }
 }
 
-export async function verifyReleaseAssets({ releaseDir, version, channel, publicKeyPath }) {
+export async function verifyReleaseAssets({
+  releaseDir,
+  version,
+  channel,
+  publicKeyPath,
+  scope = 'all'
+}) {
   releaseDir = resolve(releaseDir)
   assertReleaseIdentity(channel, version)
+  assertReleaseScope(scope, channel)
 
   const manifestPath = join(releaseDir, 'insight-update.json')
   const signaturePath = join(releaseDir, 'insight-update.json.sig')
@@ -188,7 +201,7 @@ export async function verifyReleaseAssets({ releaseDir, version, channel, public
     throw new Error('Release manifest version, channel, policy, or compatibility is invalid.')
   }
 
-  const definitions = artifactDefinitions(channel, version)
+  const definitions = artifactDefinitions(channel, version, scope)
   const expectedIdentities = definitions.map(identity).sort()
   const actualIdentities = manifest.artifacts
     .map((entry) => identity([entry.platform, entry.arch, entry.kind, entry.name]))
@@ -212,7 +225,7 @@ export async function verifyReleaseAssets({ releaseDir, version, channel, public
     duplicateFiles.set(artifact.name, artifact)
   }
 
-  const expectedFiles = releaseAssetNames(channel, version)
+  const expectedFiles = releaseAssetNames(channel, version, scope)
   const directoryEntries = await readdir(releaseDir, { withFileTypes: true })
   if (directoryEntries.some((entry) => !entry.isFile())) {
     throw new Error('Release asset directory may contain files only.')
@@ -245,7 +258,8 @@ async function main() {
     releaseDir: args['--dir'],
     version: args['--version'],
     channel: args['--channel'],
-    publicKeyPath: args['--public-key']
+    publicKeyPath: args['--public-key'],
+    scope: args['--scope'] ?? 'all'
   })
 }
 

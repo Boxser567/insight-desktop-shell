@@ -509,12 +509,22 @@ jobs:
       - macos-sonoma-compatibility
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || inputs.target == 'all') &&
       needs.release-preflight.result == 'success' &&
       needs.macos-apple-silicon.result == 'success' &&
-      needs.macos-intel.result == 'success' &&
-      needs.windows-x64.result == 'success' &&
-      needs.macos-sonoma-compatibility.result == 'success'
+      needs.macos-sonoma-compatibility.result == 'success' &&
+      (
+        (
+          (github.event_name != 'workflow_dispatch' || inputs.target == 'all') &&
+          needs.macos-intel.result == 'success' &&
+          needs.windows-x64.result == 'success'
+        ) ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.target == 'macos-arm64' &&
+          needs.macos-intel.result == 'skipped' &&
+          needs.windows-x64.result == 'skipped'
+        )
+      )
     runs-on: ubuntu-24.04
     environment: desktop-release
     steps:
@@ -531,14 +541,17 @@ jobs:
           name: macos-apple-silicon
           path: release-assets
       - uses: actions/download-artifact@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.target == 'all'
         with:
           name: macos-intel
           path: release-assets
       - uses: actions/download-artifact@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.target == 'all'
         with:
           name: windows-x64
           path: release-assets
       - name: Merge macOS update metadata
+        if: github.event_name != 'workflow_dispatch' || inputs.target == 'all'
         run: |
           set -euo pipefail
           node scripts/merge-mac-update-metadata.mjs \
@@ -546,6 +559,9 @@ jobs:
             release-assets/latest-mac-x64.yml \
             release-assets/latest-mac.yml
           rm release-assets/latest-mac-arm64.yml release-assets/latest-mac-x64.yml
+      - name: Prepare Apple Silicon update metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'macos-arm64'
+        run: mv release-assets/latest-mac-arm64.yml release-assets/latest-mac.yml
       - name: Prepare product update signing key
         env:
           DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
@@ -563,6 +579,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.release-preflight.outputs.version }}
           RELEASE_CHANNEL: ${{ needs.release-preflight.outputs.channel }}
+          RELEASE_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'all' }}
         run: |
           set -euo pipefail
           node --input-type=module - "$RUNNER_TEMP/release-runtime-manifest.json" <<'NODE'
@@ -583,12 +600,14 @@ jobs:
             --runtime-manifest "$RUNNER_TEMP/release-runtime-manifest.json" \
             --compatibility build/update-compatibility.json \
             --policy build/update-release-policy.json \
-            --private-key "$UPDATE_SIGNING_PRIVATE_KEY"
+            --private-key "$UPDATE_SIGNING_PRIVATE_KEY" \
+            --scope "$RELEASE_SCOPE"
           node scripts/verify-release-assets.mjs \
             --dir release-assets \
             --version "$RELEASE_VERSION" \
             --channel "$RELEASE_CHANNEL" \
-            --public-key build/update-signing-public.pem
+            --public-key build/update-signing-public.pem \
+            --scope "$RELEASE_SCOPE"
       - name: Create immutable draft Release and upload verified assets
         env:
           GH_TOKEN: ${{ github.token }}

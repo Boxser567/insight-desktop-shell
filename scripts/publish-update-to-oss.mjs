@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { createGithubOssClient } from './github-oss-client.mjs'
 import {
+  assertReleaseScope,
   releaseAssetNames,
   releaseChannelForVersion
 } from './update-release-contract.mjs'
@@ -39,8 +40,8 @@ const sensitiveEnvironmentNames = new Set([
 function usage() {
   return [
     'Usage:',
-    '  publish-update-to-oss.mjs stage --tag <v-semver>',
-    '  publish-update-to-oss.mjs promote --tag <v-semver> --confirm-version <semver>'
+    '  publish-update-to-oss.mjs stage --tag <v-semver> [--scope <all|macos-arm64>]',
+    '  publish-update-to-oss.mjs promote --tag <v-semver> --confirm-version <semver> [--scope <all|macos-arm64>]'
   ].join('\n')
 }
 
@@ -49,6 +50,7 @@ export function parsePublisherArguments(argv) {
   if (command !== 'stage' && command !== 'promote') throw new Error(usage())
   const allowed = new Set([
     '--tag',
+    '--scope',
     ...(command === 'promote' ? ['--confirm-version'] : [])
   ])
   const values = new Map()
@@ -58,11 +60,15 @@ export function parsePublisherArguments(argv) {
     if (!allowed.has(name) || !value || values.has(name)) throw new Error(usage())
     values.set(name, value)
   }
-  if (values.size !== allowed.size) throw new Error(usage())
+  if (!values.has('--tag') || (command === 'promote' && !values.has('--confirm-version'))) {
+    throw new Error(usage())
+  }
   const tag = values.get('--tag')
   if (!/^v\d+\.\d+\.\d+(?:-rc\.\d+)?$/u.test(tag)) throw new Error('Release tag is invalid.')
   const version = tag.slice(1)
   const channel = releaseChannelForVersion(version)
+  const scope = values.get('--scope') ?? 'all'
+  assertReleaseScope(scope, channel)
   const confirmedVersion = values.get('--confirm-version')
   if (command === 'promote' && confirmedVersion !== version) {
     throw new Error('Promotion confirmation does not match the release version.')
@@ -72,6 +78,7 @@ export function parsePublisherArguments(argv) {
     tag,
     version,
     channel,
+    scope,
     bucket: expectedBucket,
     origin: expectedOrigin
   }
@@ -134,8 +141,8 @@ export async function acquirePublisherLock() {
   }
 }
 
-async function releaseFiles(releaseDir, channel, version) {
-  const names = releaseAssetNames(channel, version)
+async function releaseFiles(releaseDir, channel, version, scope) {
+  const names = releaseAssetNames(channel, version, scope)
   const files = []
   for (const name of names) {
     const bytes = await readFile(join(releaseDir, name))
@@ -194,7 +201,8 @@ async function downloadAndVerifyRelease(options, temporaryDirectory) {
     releaseDir,
     version: options.version,
     channel: options.channel,
-    publicKeyPath: join(resolve('.'), 'build', 'update-signing-public.pem')
+    publicKeyPath: join(resolve('.'), 'build', 'update-signing-public.pem'),
+    scope: options.scope
   })
   return { release, releaseDir, manifest }
 }
@@ -295,12 +303,13 @@ async function writeReport(options, report) {
 async function stage(options, temporaryDirectory, oss) {
   const { release, releaseDir, manifest } = await downloadAndVerifyRelease(options, temporaryDirectory)
   if (!release.isDraft) throw new Error('Stage requires a GitHub Draft Release.')
-  const files = await releaseFiles(releaseDir, options.channel, options.version)
+  const files = await releaseFiles(releaseDir, options.channel, options.version, options.scope)
   const upload = await uploadImmutableRelease(options, releaseDir, files, oss)
   return {
     action: 'stage',
     tag: options.tag,
     channel: options.channel,
+    scope: options.scope,
     version: options.version,
     shellCommit: manifest.shellCommit,
     coreRuntime: manifest.coreRuntime,
@@ -314,7 +323,7 @@ async function stage(options, temporaryDirectory, oss) {
 
 async function promote(options, temporaryDirectory, oss) {
   const { release, releaseDir, manifest } = await downloadAndVerifyRelease(options, temporaryDirectory)
-  const files = await releaseFiles(releaseDir, options.channel, options.version)
+  const files = await releaseFiles(releaseDir, options.channel, options.version, options.scope)
   const prefix = `desktop/releases/v${options.version}/`
   assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
   const currentBefore = await readAuthoritativePointer(options, temporaryDirectory, 'before', oss)
@@ -352,6 +361,7 @@ async function promote(options, temporaryDirectory, oss) {
     action: 'promote',
     tag: options.tag,
     channel: options.channel,
+    scope: options.scope,
     version: options.version,
     shellCommit: manifest.shellCommit,
     coreRuntime: manifest.coreRuntime,

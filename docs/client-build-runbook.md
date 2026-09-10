@@ -228,12 +228,12 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 **执行：**
 
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
-- Candidate 在最终三平台发布前可以用 `target: macos-arm64`、`macos-x64` 或 `windows-x64` 只验证一个原生制品。单平台验证只上传 Actions artifact，不创建 tag 或 Release；`macos-arm64` 仍继续运行 Sonoma 分发兼容检查。人工通过后使用同一 `candidate_tag` 和 `target: all` 执行完整发布，Stable tag push 始终等同于 `all`。
+- Candidate 在最终三平台发布前可以用 `target: macos-arm64`、`macos-x64` 或 `windows-x64` 验证一个原生制品。`macos-x64` 与 `windows-x64` 只上传 Actions artifact；`macos-arm64` 还运行 Sonoma 分发兼容检查，并可生成 ARM64-only 签名 Draft，以 `scope=macos-arm64` 完成 OSS 下载更新 canary。该精简范围只允许 Candidate，Stable tag push 始终等同于 `all`。
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
 - Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
-- `publish` job 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在受保护的 `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。它合并两个 macOS 元数据，生成并验证完整制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
+- `publish` job 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在受保护的 `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。完整范围合并两个 macOS 元数据；`macos-arm64` Candidate 只规范化 ARM64 元数据。两者都按显式 scope 生成并验证精确制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
 - 独立 `Publish desktop updates` workflow 通过 GitHub OIDC 向固定测试 Gateway 以 `{}` 换取目录级 STS，下载 Draft 全部 Assets 并重新验证签名、文件集、版本和摘要，再上传不可变 `desktop/releases/v<version>/`。长期 AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
 - 200～600 MB 资产使用普通 `PutObject`；每个文件上传前检查 STS，剩余不足 180 秒就刷新。`SecurityTokenExpired` 或 `InvalidSecurityToken` 会刷新凭据并整文件重试一次，第二次失败立即终止且不修改 `current.json`。
 - Bucket 必须从未启用 Versioning，该项通过阿里云控制台一次性人工确认；发布 workflow 不请求 Bucket 控制面权限。
@@ -246,6 +246,7 @@ Draft 创建后，在 GitHub Actions 从 `main` 手动运行 `Publish desktop up
 
 - `command=stage`
 - `tag=<vX.Y.Z 或 vX.Y.Z-rc.N>`
+- `scope=all`；ARM64-only Candidate Draft 使用 `scope=macos-arm64`
 - `confirm_version` 留空
 
 **通过条件：** preflight、三个原生 job、Sonoma 兼容 job、GitHub Draft 与本地暂存全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling、Sonoma 分发检查与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。

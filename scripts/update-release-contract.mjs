@@ -25,12 +25,22 @@ export function releaseChannelForVersion(version) {
   return channel
 }
 
-export function artifactDefinitions(channel, version) {
+export function assertReleaseScope(scope, channel) {
+  if (scope !== 'all' && scope !== 'macos-arm64') {
+    throw new Error('Release scope is invalid.')
+  }
+  if (scope !== 'all' && channel !== 'candidate') {
+    throw new Error('Partial release scopes are allowed for Candidate releases only.')
+  }
+}
+
+export function artifactDefinitions(channel, version, scope = 'all') {
   assertReleaseIdentity(channel, version)
+  assertReleaseScope(scope, channel)
   const prefix = `insight-${version}`
   const mac = (arch) => `${prefix}-mac-${arch}`
   const windows = `${prefix}-windows-x64-setup.exe`
-  return [
+  const definitions = [
     ['darwin', 'arm64', 'dmg', `${mac('arm64')}.dmg`],
     ['darwin', 'arm64', 'zip', `${mac('arm64')}.zip`],
     ['darwin', 'arm64', 'blockmap', `${mac('arm64')}.zip.blockmap`],
@@ -43,6 +53,9 @@ export function artifactDefinitions(channel, version) {
     ['win32', 'x64', 'blockmap', `${windows}.blockmap`],
     ['win32', 'x64', 'updater-metadata', 'latest.yml']
   ]
+  return scope === 'macos-arm64'
+    ? definitions.filter((entry) => entry[0] === 'darwin' && entry[1] === 'arm64')
+    : definitions
 }
 
 export function macArchiveName(channel, version, arch) {
@@ -56,9 +69,9 @@ export function windowsInstallerName(channel, version) {
   return artifactDefinitions(channel, version).find((entry) => entry[2] === 'nsis')[3]
 }
 
-export function releaseAssetNames(channel, version) {
+export function releaseAssetNames(channel, version, scope = 'all') {
   return [...new Set([
-    ...artifactDefinitions(channel, version).map((entry) => entry[3]),
+    ...artifactDefinitions(channel, version, scope).map((entry) => entry[3]),
     'insight-update.json',
     'insight-update.json.sig'
   ])].sort()

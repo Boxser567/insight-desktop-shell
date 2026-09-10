@@ -23,12 +23,16 @@ describe('GitHub Actions OSS update publisher', () => {
       tag: 'v0.1.2-rc.2',
       channel: 'candidate',
       version: '0.1.2-rc.2',
+      scope: 'all',
       bucket: 'insight-desktop-updates',
       origin: 'https://updates.insight-aigc.com'
     })
     expect(parsePublisherArguments([
       'promote', '--tag', 'v0.1.2', '--confirm-version', '0.1.2'
     ])).toMatchObject({ command: 'promote', channel: 'stable', version: '0.1.2' })
+    expect(parsePublisherArguments([
+      'stage', '--tag', 'v0.1.2-rc.4', '--scope', 'macos-arm64'
+    ])).toMatchObject({ channel: 'candidate', scope: 'macos-arm64' })
 
     for (const invalid of [
       ['stage', '--tag', 'v0.1.2', '--unknown', 'value'],
@@ -36,6 +40,8 @@ describe('GitHub Actions OSS update publisher', () => {
       ['stage', '--tag', 'v0.1.2', '--bucket', 'another-bucket'],
       ['stage', '--tag', 'v0.1.2', '--origin', 'https://attacker.example'],
       ['stage', '--tag', 'v0.1.2', '--profile', 'desktop-updates-publisher'],
+      ['stage', '--tag', 'v0.1.2', '--scope', 'macos-arm64'],
+      ['stage', '--tag', 'v0.1.2-rc.2', '--scope', 'windows-x64'],
       ['stage', '--tag', 'v0.1.2', '--confirm-version', '0.1.2'],
       ['promote', '--tag', 'v0.1.2', '--confirm-version', '0.1.3']
     ]) {

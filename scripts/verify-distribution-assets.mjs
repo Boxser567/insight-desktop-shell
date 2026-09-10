@@ -18,11 +18,11 @@ function wait(milliseconds) {
 }
 
 function usage() {
-  return 'Usage: verify-distribution-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --origin <https-origin> --public-key <path>'
+  return 'Usage: verify-distribution-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --origin <https-origin> --public-key <path> [--scope <all|macos-arm64>]'
 }
 
 function parseArguments(argv) {
-  const allowed = new Set(['--dir', '--version', '--channel', '--origin', '--public-key'])
+  const allowed = new Set(['--dir', '--version', '--channel', '--origin', '--public-key', '--scope'])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index]
@@ -30,7 +30,9 @@ function parseArguments(argv) {
     if (!allowed.has(name) || !value || values.has(name)) throw new Error(usage())
     values.set(name, value)
   }
-  if (values.size !== allowed.size) throw new Error(usage())
+  if ([...allowed].filter((name) => name !== '--scope').some((name) => !values.has(name))) {
+    throw new Error(usage())
+  }
   return Object.fromEntries(values)
 }
 
@@ -213,6 +215,7 @@ export async function verifyDistributionAssets({
   channel,
   origin,
   publicKeyPath,
+  scope = 'all',
   fetchImpl = globalThis.fetch,
   delayImpl = wait,
   allowHttpLoopback = false
@@ -224,11 +227,12 @@ export async function verifyDistributionAssets({
     releaseDir: resolvedDir,
     version,
     channel,
-    publicKeyPath
+    publicKeyPath,
+    scope
   })
   const baseUrl = new URL(`desktop/releases/v${version}/`, parsedOrigin)
   const files = []
-  for (const name of releaseAssetNames(channel, version)) {
+  for (const name of releaseAssetNames(channel, version, scope)) {
     files.push(await verifyRemoteFile(fetchImpl, baseUrl, resolvedDir, name, delayImpl))
   }
   return {
@@ -246,7 +250,8 @@ async function main() {
     version: args['--version'],
     channel: args['--channel'],
     origin: args['--origin'],
-    publicKeyPath: args['--public-key']
+    publicKeyPath: args['--public-key'],
+    scope: args['--scope'] ?? 'all'
   })
   console.log(JSON.stringify(result, null, 2))
 }
