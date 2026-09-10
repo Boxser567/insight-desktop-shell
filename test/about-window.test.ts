@@ -65,9 +65,19 @@ describe('desktop About window', () => {
   })
 
   it('accepts only the packaged or configured development About page', () => {
-    expect(isTrustedAboutUrl('file:///app/out/renderer/about.html?version=1.0.0')).toBe(true)
-    expect(isTrustedAboutUrl('file:///app/out/renderer/update.html')).toBe(false)
-    expect(isTrustedAboutUrl('https://example.com/about.html')).toBe(false)
+    const packagedUrl = 'file:///app/out/renderer/about.html'
+    expect(isTrustedAboutUrl(
+      'file:///app/out/renderer/about.html?version=1.0.0',
+      undefined,
+      packagedUrl
+    )).toBe(true)
+    expect(isTrustedAboutUrl(
+      'file:///tmp/renderer/about.html?version=1.0.0',
+      undefined,
+      packagedUrl
+    )).toBe(false)
+    expect(isTrustedAboutUrl('file:///app/out/renderer/update.html', undefined, packagedUrl)).toBe(false)
+    expect(isTrustedAboutUrl('https://example.com/about.html', undefined, packagedUrl)).toBe(false)
     expect(isTrustedAboutUrl(
       'http://127.0.0.1:5173/about.html?version=1.0.0',
       'http://127.0.0.1:5173'

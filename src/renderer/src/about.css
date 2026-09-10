@@ -23,5 +23,5 @@ body { color: var(--text); background: var(--background); }
 .about h1 { margin: 17px 0 14px; font-size: 18px; font-weight: 670; line-height: 24px; letter-spacing: -.01em; }
 .about p { margin: 0; }
 .about-build { color: var(--muted); font-size: 12px; line-height: 16px; }
-.about-release { margin-top: 17px !important; color: var(--muted); font-size: 12px; line-height: 17px; }
-.about-copyright { margin-top: 18px !important; color: var(--muted); font-size: 12px; line-height: 17px; }
+.about p.about-release { margin-top: 17px; color: var(--muted); font-size: 12px; line-height: 17px; }
+.about p.about-copyright { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 17px; }

@@ -41,14 +41,20 @@ export function aboutWindowOptions(input: {
 
 export function isTrustedAboutUrl(
   rawUrl: string,
-  developmentUrl = process.env.ELECTRON_RENDERER_URL
+  developmentUrl = process.env.ELECTRON_RENDERER_URL,
+  packagedUrl = new URL('../renderer/about.html', import.meta.url).toString()
 ): boolean {
   try {
     const url = new URL(rawUrl)
-    if (developmentUrl) {
-      return url.origin === new URL(developmentUrl).origin && url.pathname.endsWith('/about.html')
-    }
-    return url.protocol === 'file:' && url.pathname.endsWith('/renderer/about.html')
+    const expected = developmentUrl
+      ? new URL('/about.html', developmentUrl)
+      : new URL(packagedUrl)
+    return url.protocol === expected.protocol &&
+      url.origin === expected.origin &&
+      url.pathname === expected.pathname &&
+      url.username === '' &&
+      url.password === '' &&
+      url.hash === ''
   } catch {
     return false
   }
