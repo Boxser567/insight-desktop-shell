@@ -71,8 +71,16 @@ export function UpdateApp(): React.JSX.Element {
         <h1>{model.title}</h1>
         <p>{model.detail}</p>
         {commandError && <p className="update-error">{commandError}</p>}
+        {status.phase === 'checking' && (
+          <progress
+            className="update-progress update-progress--checking"
+            aria-label="正在检查更新"
+          />
+        )}
         {status.phase === 'downloading' && (
-          <progress max="100" value={status.percent}>{status.percent}%</progress>
+          <progress className="update-progress" max="100" value={status.percent}>
+            {status.percent}%
+          </progress>
         )}
       </section>
       <footer className="update-actions">

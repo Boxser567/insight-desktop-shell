@@ -87,6 +87,7 @@ import { parseUpdateDistribution } from './update/update-environment'
 import { UpdateManager } from './update/update-manager'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
+import { openUpdateWindowAndCheck } from './update/open-update-window'
 import { StartupTracker } from './startup/startup-tracker'
 import { registerStartupIpc } from './startup/startup-ipc'
 import {
@@ -385,6 +386,13 @@ function openAboutWindow(): Promise<void> {
     version: app.getVersion(),
     releaseDate: packageJson.insightReleaseDate
   })
+}
+
+function checkForUpdatesFromMenu(): Promise<void> {
+  if (!updateManager || !updateWindowController) {
+    throw new Error('The update manager is unavailable.')
+  }
+  return openUpdateWindowAndCheck(updateManager, updateWindowController)
 }
 
 function createHarnessWebContentsView(window: BrowserWindow, scope: string): WebContentsView {
@@ -1108,7 +1116,7 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<n
       await openAboutWindow()
       break
     case 'check-for-updates':
-      await updateWindowController?.open()
+      await checkForUpdatesFromMenu()
       break
     case 'sign-out':
       await authManager?.signOut()
@@ -1645,7 +1653,7 @@ function installMenu(): void {
               { type: 'separator' as const },
               {
                 label: isChinese ? '检查更新…' : 'Check for Updates…',
-                click: () => void updateWindowController?.open().catch(showUnexpectedError)
+                click: () => void checkForUpdatesFromMenu().catch(showUnexpectedError)
               },
               { type: 'separator' as const },
               {

@@ -36,7 +36,7 @@ button { color: inherit; font: inherit; -webkit-app-region: no-drag; }
 .update-copy h1 { margin: 0 0 10px; font-size: 24px; line-height: 1.25; }
 .update-copy p { margin: 0; color: var(--muted); line-height: 1.6; }
 .update-copy .update-error { margin-top: 8px; color: var(--danger); }
-progress { width: 100%; height: 8px; margin-top: 22px; accent-color: var(--insight-primary); }
+.update-progress { width: 100%; height: 8px; margin-top: 22px; accent-color: var(--insight-primary); }
 .update-actions { display: flex; align-items: center; gap: 10px; }
 .update-actions > span { flex: 1; }
 .update-actions button { min-height: 36px; padding: 0 16px; border-radius: 9px; cursor: pointer; }

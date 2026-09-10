@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
 import {
   UpdateWindowController,
@@ -80,6 +81,21 @@ describe('desktop update window', () => {
     expect(updateViewModel({
       phase: 'unsupported', currentVersion: '1.0.0', reason: 'development build', manual: true
     }).detail).toContain('development build')
+  })
+
+  it('renders checking as indeterminate progress without a fake cancel action', async () => {
+    const source = await readFile('src/renderer/src/UpdateApp.tsx', 'utf8')
+    const checking = updateViewModel({
+      phase: 'checking',
+      currentVersion: '1.0.0',
+      manual: true
+    })
+
+    expect(checking.title).toBe('正在检查更新…')
+    expect(source).toContain("status.phase === 'checking'")
+    expect(source).toContain('className="update-progress update-progress--checking"')
+    expect(source).toContain('aria-label="正在检查更新"')
+    expect(source).not.toMatch(/取消检查|>取消</u)
   })
 
   it('shows update entries only after a real release has been verified', () => {

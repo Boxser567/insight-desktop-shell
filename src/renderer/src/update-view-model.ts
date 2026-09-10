@@ -21,7 +21,7 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
         busy: false
       }
     case 'checking':
-      return { title: '正在检查更新', detail: '正在读取可信发布记录…', busy: true }
+      return { title: '正在检查更新…', detail: '正在读取可信发布记录…', busy: true }
     case 'available':
       return {
         title: status.required ? '需要更新因赛AI' : '新版本的因赛AI已经发布',
