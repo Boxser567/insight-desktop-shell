@@ -61,6 +61,8 @@
 
 2026-09-10 RC2 发布准备检查点：`e5400ca` 将认证与模型 Gateway 收口到同一受控配置并增加 Stable/production 门禁；`a60d93d` 统一第一方主色为 `#315dfb`；`6d390cc` 增加安全单实例 About 窗口；`adb1c31` 让跨平台菜单直接触发真实检查；`7f6f79f` 固定受管插件版本、恢复必需插件并让 Market 重启继续经过 Shell，避免卸载后进入恢复页或 Safe Mode 回退到 API Key。产品负责人于 2026-09-10 明确授权将本地 DEV 验收按通过处理并进入 RC2 Actions；这是发布授权记录，不替代云端签名制品的 RC1→RC2 验收。RC2 预检、发布/上传 workflow 契约、94 个测试文件共 597 项测试、TypeScript、Electron 构建及 Candidate 目录包均通过；静态目录包为 `1.0.0-rc.2`、`com.insight-aigc.desktop`、测试业务环境和 `https://updates.insight-aigc.com` 更新 Origin。待完成项仍是 RC2 Draft、OIDC/STS stage、promote，以及已安装云端 RC1 的真实检测、下载、安装、数据连续性和钥匙串验收。
 
+2026-09-10 RC2 发布执行证据：[Release Run 34438511126](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34438511126) 的 preflight、macOS arm64、macOS x64、Windows x64、Sonoma 和 Draft 六个 Job 全部成功；[v1.0.0-rc.2 Pre-release](https://github.com/Boxser567/insight-desktop-shell/releases/tag/v1.0.0-rc.2) 已公开，tag 精确指向 `64899b2cf852e24059a2a49e0f4298c3cdac5fd1`，12 项资产完整。[Stage Run 34440398909](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440398909) 通过 OIDC/STS 新建 `desktop/releases/v1.0.0-rc.2/` 并校验全部文件；[Promote Run 34440608226](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34440608226) 报告 OSS 权威指针从 `1.0.0-rc.1` 切换为 `1.0.0-rc.2`。但推广后的中国大陆 CDN 抽查仍返回旧 RC1，响应 `Age` 超过 54,000 秒且 `X-Swift-CacheTime` 约 29 天，请求 `Cache-Control: no-cache` 和查询参数均未触发回源；这证明 CDN 缓存规则覆盖了源站的 `max-age=60`。在阿里云刷新 `/desktop/candidate/current.json` 并把该路径的边缘缓存 TTL 修正为 60 秒前，RC1→RC2 真实更新体验仍不得记为通过。
+
 ---
 
 ### Task 1：冻结并同步发布基线

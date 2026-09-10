@@ -137,7 +137,9 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 - `tag`：`v1.0.0-rc.2`
 - `confirm_version`：留空
 
-`stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
+`stage` 成功表示签名 Draft 与 OSS 不可变版本目录的文件集、大小和摘要一致，不会公开 GitHub Release，也不会改变客户端看到的版本。GitHub Hosted Runner 不承担中国大陆 CDN 可达性门禁；必须另从中国大陆网络检查 HTTPS、MIME、缓存、Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
+
+`current.json` 必须在 CDN 配置中使用独立的 60 秒边缘缓存规则并遵守源站 `Cache-Control`。每次 `promote` 后都要刷新精确 URL `https://updates.insight-aigc.com/desktop/<channel>/current.json`，再确认响应内容、`Age` 和 `X-Swift-CacheTime` 已收敛；不能把 OSS 权威回读成功等同于客户端已经可见。2026-09-10 的 RC2 首次 promote 已暴露 CDN 全局约 29 天缓存覆盖源站 TTL，修正规则并刷新 Candidate 指针是 RC1→RC2 验收的前置条件。
 
 Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
 
