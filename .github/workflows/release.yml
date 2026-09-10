@@ -68,6 +68,7 @@ jobs:
             --package package.json \
             --policy build/update-release-policy.json \
             --runtime-lock core-runtime.lock.json \
+            --service-environment build/client-service-environment.json \
             > "$RUNNER_TEMP/release-preflight.json"
           cat "$RUNNER_TEMP/release-preflight.json"
           node --input-type=module - "$RUNNER_TEMP/release-preflight.json" "$GITHUB_OUTPUT" <<'NODE'

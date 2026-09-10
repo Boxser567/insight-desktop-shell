@@ -18,7 +18,8 @@ async function fixture() {
   const paths = {
     packageJson: path.join(root, 'package.json'),
     policy: path.join(root, 'policy.json'),
-    runtimeLock: path.join(root, 'runtime-lock.json')
+    runtimeLock: path.join(root, 'runtime-lock.json'),
+    serviceEnvironment: path.join(root, 'service-environment.json')
   }
   const core = {
     repository: 'Boxser567/insight-harness-core',
@@ -47,6 +48,20 @@ async function fixture() {
           pnpm: { version: '11.7.0' }
         }])
       )
+    })),
+    writeFile(paths.serviceEnvironment, JSON.stringify({
+      schemaVersion: 1,
+      releaseEnvironment: 'test',
+      environments: {
+        test: {
+          authOrigin: 'https://gapi-test.insight-aigc.com',
+          modelBaseUrl: 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1'
+        },
+        production: {
+          authOrigin: 'https://gapi.insight-aigc.com',
+          modelBaseUrl: 'https://gapi.insight-aigc.com/insight-harness-llm-gateway/v1'
+        }
+      }
     }))
   ])
   return paths
@@ -59,7 +74,8 @@ function run(paths: Awaited<ReturnType<typeof fixture>>, tag = 'v0.1.2-rc.1', ch
     '--expected-channel', channel,
     '--package', paths.packageJson,
     '--policy', paths.policy,
-    '--runtime-lock', paths.runtimeLock
+    '--runtime-lock', paths.runtimeLock,
+    '--service-environment', paths.serviceEnvironment
   ], { encoding: 'utf8' })
 }
 
@@ -74,8 +90,58 @@ describe('desktop release preflight', () => {
       channel: 'candidate',
       runtimeTag: 'insight-runtime-v0.1.1-rc.10',
       runtimeCommit: 'a'.repeat(40),
+      serviceEnvironment: 'test',
       targets: ['darwin-arm64', 'darwin-x64', 'win32-x64']
     })
+  })
+
+  it('allows Candidate test services and requires production services for Stable', async () => {
+    const candidate = await fixture()
+    expect(run(candidate).status).toBe(0)
+
+    const blockedStable = await fixture()
+    await writeFile(blockedStable.packageJson, JSON.stringify({ version: '0.1.2' }))
+    await writeFile(blockedStable.policy, JSON.stringify({
+      schema: 1,
+      releaseVersion: '0.1.2',
+      channel: 'stable',
+      mode: 'optional',
+      minimumSupportedVersion: '0.1.1'
+    }))
+    expect(run(blockedStable, 'v0.1.2', 'stable').stderr).toContain(
+      'Stable releases require the production desktop service environment.'
+    )
+
+    const stable = await fixture()
+    await writeFile(stable.packageJson, JSON.stringify({ version: '0.1.2' }))
+    await writeFile(stable.policy, JSON.stringify({
+      schema: 1,
+      releaseVersion: '0.1.2',
+      channel: 'stable',
+      mode: 'optional',
+      minimumSupportedVersion: '0.1.1'
+    }))
+    const services = JSON.parse(await readFile(stable.serviceEnvironment, 'utf8'))
+    services.releaseEnvironment = 'production'
+    await writeFile(stable.serviceEnvironment, JSON.stringify(services))
+    expect(run(stable, 'v0.1.2', 'stable').status).toBe(0)
+  })
+
+  it.each([
+    ['unknown environment', (value: any) => { value.releaseEnvironment = 'staging' }],
+    ['missing endpoint', (value: any) => { delete value.environments.test.authOrigin }],
+    ['HTTP endpoint', (value: any) => { value.environments.test.authOrigin = 'http://gapi-test.insight-aigc.com' }],
+    ['URL credentials', (value: any) => { value.environments.test.authOrigin = 'https://user@gapi-test.insight-aigc.com' }],
+    ['URL query', (value: any) => { value.environments.test.authOrigin = 'https://gapi-test.insight-aigc.com?mode=test' }],
+    ['URL fragment', (value: any) => { value.environments.test.authOrigin = 'https://gapi-test.insight-aigc.com#test' }],
+    ['wrong model path', (value: any) => { value.environments.test.modelBaseUrl = 'https://gapi-test.insight-aigc.com/v1' }]
+  ])('rejects malformed client service configuration: %s', async (_label, mutate) => {
+    const paths = await fixture()
+    const value = JSON.parse(await readFile(paths.serviceEnvironment, 'utf8'))
+    mutate(value)
+    await writeFile(paths.serviceEnvironment, JSON.stringify(value))
+
+    expect(run(paths).stderr).toContain('Desktop service environment')
   })
 
   it('rejects the wrong event channel and package or policy version', async () => {

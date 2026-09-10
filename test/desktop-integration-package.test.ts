@@ -33,4 +33,12 @@ describe('desktop integration package', () => {
       { insert: [{ id: 'insight-desktop-integration', name: '@insight-ai/desktop-integration' }] }
     ])
   })
+
+  it('uses the shared desktop service environment for the model Gateway', async () => {
+    const source = await readFile(new URL('src/model-gateway.ts', packageRoot), 'utf8')
+
+    expect(source).toContain('desktopServiceEnvironment().modelBaseUrl')
+    expect(source).not.toContain('gapi-test.insight-aigc.com')
+    expect(source).not.toContain('gapi.insight-aigc.com')
+  })
 })

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "releaseEnvironment": "test",
+  "environments": {
+    "test": {
+      "authOrigin": "https://gapi-test.insight-aigc.com",
+      "modelBaseUrl": "https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1"
+    },
+    "production": {
+      "authOrigin": "https://gapi.insight-aigc.com",
+      "modelBaseUrl": "https://gapi.insight-aigc.com/insight-harness-llm-gateway/v1"
+    }
+  }
+}

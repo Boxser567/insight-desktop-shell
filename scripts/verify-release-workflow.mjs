@@ -43,6 +43,11 @@ async function main() {
     throw new Error('Release workflow must grant only contents: write.')
   }
   requireText(preflight, 'verify-release-preflight.mjs', 'Release preflight')
+  requireText(
+    preflight,
+    '--service-environment build/client-service-environment.json',
+    'Release preflight client service environment'
+  )
   requireText(preflight, 'verify-release-workflow.mjs', 'Release preflight')
   requireText(preflight, 'node --check scripts/verify-macos-distribution.mjs', 'Release preflight')
   if (/npm ci|vitest|rollup|esbuild/u.test(preflight)) {

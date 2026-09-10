@@ -30,7 +30,8 @@ function parseArguments(argv) {
     '--expected-channel',
     '--package',
     '--policy',
-    '--runtime-lock'
+    '--runtime-lock',
+    '--service-environment'
   ])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
@@ -44,7 +45,7 @@ function parseArguments(argv) {
 }
 
 function usage() {
-  return 'Usage: verify-release-preflight.mjs --tag <v-semver> --expected-channel <candidate|stable> --package <path> --policy <path> --runtime-lock <path>'
+  return 'Usage: verify-release-preflight.mjs --tag <v-semver> --expected-channel <candidate|stable> --package <path> --policy <path> --runtime-lock <path> --service-environment <path>'
 }
 
 async function readJson(path, label) {
@@ -140,6 +141,40 @@ function validateRuntimeLock(value) {
   return { tag: value.releaseTag, commit: [...commits][0] }
 }
 
+const expectedServiceEnvironments = {
+  test: {
+    authOrigin: 'https://gapi-test.insight-aigc.com',
+    modelBaseUrl: 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1'
+  },
+  production: {
+    authOrigin: 'https://gapi.insight-aigc.com',
+    modelBaseUrl: 'https://gapi.insight-aigc.com/insight-harness-llm-gateway/v1'
+  }
+}
+
+function validateServiceEnvironment(value, channel) {
+  assertExactKeys(
+    value,
+    ['schemaVersion', 'releaseEnvironment', 'environments'],
+    'Desktop service environment'
+  )
+  assertExactKeys(value.environments, ['test', 'production'], 'Desktop service environments')
+  if (value.schemaVersion !== 1 || !Object.hasOwn(expectedServiceEnvironments, value.releaseEnvironment)) {
+    throw new Error('Desktop service environment header is invalid.')
+  }
+  for (const [name, expected] of Object.entries(expectedServiceEnvironments)) {
+    const actual = value.environments[name]
+    assertExactKeys(actual, ['authOrigin', 'modelBaseUrl'], `Desktop service environment ${name}`)
+    if (actual.authOrigin !== expected.authOrigin || actual.modelBaseUrl !== expected.modelBaseUrl) {
+      throw new Error(`Desktop service environment ${name} endpoints are invalid.`)
+    }
+  }
+  if (channel === 'stable' && value.releaseEnvironment !== 'production') {
+    throw new Error('Stable releases require the production desktop service environment.')
+  }
+  return value.releaseEnvironment
+}
+
 async function main() {
   const args = parseArguments(process.argv.slice(2))
   const expectedChannel = args['--expected-channel']
@@ -150,20 +185,23 @@ async function main() {
   if (release.channel !== expectedChannel) {
     throw new Error(`Release tag channel must be ${expectedChannel}.`)
   }
-  const [packageJson, policy, runtimeLock] = await Promise.all([
+  const [packageJson, policy, runtimeLock, serviceEnvironment] = await Promise.all([
     readJson(args['--package'], 'package.json'),
     readJson(args['--policy'], 'release policy'),
-    readJson(args['--runtime-lock'], 'Core Runtime lock')
+    readJson(args['--runtime-lock'], 'Core Runtime lock'),
+    readJson(args['--service-environment'], 'desktop service environment')
   ])
   validatePackage(packageJson, release.version)
   validatePolicy(policy, release.version, release.channel)
   const runtime = validateRuntimeLock(runtimeLock)
+  const service = validateServiceEnvironment(serviceEnvironment, release.channel)
   process.stdout.write(`${JSON.stringify({
     tag: args['--tag'],
     version: release.version,
     channel: release.channel,
     runtimeTag: runtime.tag,
     runtimeCommit: runtime.commit,
+    serviceEnvironment: service,
     targets: targetNames
   })}\n`)
 }

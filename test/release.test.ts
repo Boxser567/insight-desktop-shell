@@ -481,6 +481,7 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('--package package.json')
     expect(preflight).toContain('--policy build/update-release-policy.json')
     expect(preflight).toContain('--runtime-lock core-runtime.lock.json')
+    expect(preflight).toContain('--service-environment build/client-service-environment.json')
     expect(preflight).toContain('Run dependency-free release checks')
     expect(preflight).toContain('verify-release-workflow.mjs')
     expect(preflight).toContain('verify-publish-workflow.mjs')

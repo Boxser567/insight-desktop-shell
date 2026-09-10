@@ -2,10 +2,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { getOrCreateAnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { DeepSeekAdapter, resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
+import { desktopServiceEnvironment } from '../../../src/shared/service-environment'
 
 export const MODEL_PROVIDER = 'yinsai-gateway'
 export const MODEL_ID = 'deepseek-v4-flash-vision-exp'
-export const MODEL_BASE_URL = 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1'
+export const MODEL_BASE_URL = desktopServiceEnvironment().modelBaseUrl
 
 /** A fixed service endpoint paired with the signed-in user's short-lived token. */
 export function createModelGatewayAdapter(ctx: Context, resolveAccessToken: () => Promise<string>): DeepSeekAdapter {

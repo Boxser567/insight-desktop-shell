@@ -65,6 +65,19 @@ describe('release workflow verifier', () => {
     expect(run(workflow).stderr).toContain('Test prepared Runtime')
   })
 
+  it('requires the client service environment in release preflight', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
+    temporaryDirectories.push(directory)
+    const source = await readReleaseWorkflow()
+    const workflow = path.join(directory, 'release.yml')
+    await writeFile(workflow, source.replace(
+      '            --service-environment build/client-service-environment.json \\\n',
+      ''
+    ))
+
+    expect(run(workflow).stderr).toContain('client service environment')
+  })
+
   it('requires final macOS bundles to verify the production Keychain identity', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'insight-release-workflow-'))
     temporaryDirectories.push(directory)
