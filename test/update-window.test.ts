@@ -28,9 +28,9 @@ describe('desktop update window', () => {
 
     expect(options).toMatchObject({
       width: 480,
-      height: 280,
+      height: 200,
       minWidth: 480,
-      minHeight: 280,
+      minHeight: 200,
       show: false,
       parent,
       modal: false,

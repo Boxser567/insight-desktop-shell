@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the oversized desktop update window with the approved `480 × 280` compact layout while preserving every existing update action and state transition.
+**Goal:** Replace the oversized desktop update window with the approved `480 × 200` compact layout while preserving every existing update action and state transition.
 
 **Architecture:** Keep `UpdateManager`, `updateViewModel`, preload IPC, and action dispatch unchanged. Adjust the BrowserWindow geometry, reorganize only the React presentation into a logo/content row plus action footer, and restyle the existing elements with the current color tokens.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Window width and height are exactly `480 × 280`.
+- Window width and height are exactly `480 × 200`.
 - The primary color remains `#315dfb`.
 - Keep the two-stage `下载更新 → 安装并重启` flow.
 - Keep every real update state and authorized action; do not change update discovery, signatures, URLs, channels, downloads, or installation behavior.
@@ -26,7 +26,7 @@
 
 **Interfaces:**
 - Consumes: `updateWindowOptions({ parent, preload, icon }): BrowserWindowConstructorOptions`
-- Produces: a non-resizable-below-design window whose width, height, minWidth, and minHeight are all `480`, `280`, `480`, and `280` respectively
+- Produces: a non-resizable-below-design window whose width, height, minWidth, and minHeight are `480`, `200`, `480`, and `200` respectively
 
 - [ ] **Step 1: Write the failing geometry assertions**
 
@@ -35,9 +35,9 @@ Update the existing options assertion to include the approved dimensions:
 ```ts
 expect(options).toMatchObject({
   width: 480,
-  height: 280,
+  height: 200,
   minWidth: 480,
-  minHeight: 280,
+  minHeight: 200,
   show: false,
   parent,
   modal: false
@@ -56,9 +56,9 @@ Change only the four geometry properties in `updateWindowOptions`:
 
 ```ts
 width: 480,
-height: 280,
+height: 200,
 minWidth: 480,
-minHeight: 280,
+minHeight: 200,
 ```
 
 - [ ] **Step 4: Run the focused test**
@@ -199,7 +199,7 @@ Expected: desktop integration checks and Electron renderer build PASS.
 
 Run: `npm run dev`
 
-Open “检查更新…” and confirm the `480 × 280` window displays all current content without clipping in dark mode. Confirm “检查更新” still starts a real manual check, the primary button remains `#315dfb`, and no fake update state is introduced.
+Open “检查更新…” and confirm the `480 × 200` window displays all current content without clipping in dark mode. Confirm “检查更新” still starts a real manual check, the primary button remains `#315dfb`, and no fake update state is introduced.
 
 - [ ] **Step 8: Commit the renderer change**
 
