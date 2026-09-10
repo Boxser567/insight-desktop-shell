@@ -524,6 +524,30 @@ describe('desktop update manager', () => {
     expect(failure.manager.status()).toMatchObject({ phase: 'error', message: 'workspace stop failed' })
   })
 
+  it('publishes a recoverable error when the native updater fails while installing', async () => {
+    const result = await setup()
+    await result.manager.start()
+    await result.manager.check(true)
+    const file = join(result.userData, 'app.zip')
+    await writeFile(file, 'verified installer')
+    result.executor.download.mockImplementation(async () => {
+      result.executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile: file })
+    })
+    await result.manager.download()
+    await result.manager.install()
+
+    result.executor.emit({ type: 'error', message: 'native staging failed' })
+
+    expect(result.manager.status()).toMatchObject({
+      phase: 'error',
+      availableVersion: '1.1.0',
+      required: false,
+      message: 'native staging failed',
+      retryable: true,
+      manualInstallerAvailable: true
+    })
+  })
+
   it('checks on system resume only after six hours have elapsed', async () => {
     let now = 1_000
     const { manager, source, resume } = await setup({ now: () => now })

@@ -343,7 +343,12 @@ export class UpdateManager {
       return
     }
     if (event.type === 'error') {
-      this.downloadCompletion?.reject(new Error(event.message))
+      const error = new Error(event.message)
+      if (this.downloadCompletion) {
+        this.downloadCompletion.reject(error)
+      } else if (status.phase === 'installing') {
+        this.fail(error, status)
+      }
     }
   }
 

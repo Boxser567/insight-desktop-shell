@@ -45,7 +45,11 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
         busy: false
       }
     case 'installing':
-      return { title: '正在准备安装', detail: '因赛AI 将安全停止当前工作区。', busy: true }
+      return {
+        title: '正在准备安装…',
+        detail: '正在安全关闭当前工作区并准备安装文件。完成后因赛AI 将自动退出并重新打开。',
+        busy: true
+      }
     case 'up-to-date':
       return {
         title: '已经是最新版本',

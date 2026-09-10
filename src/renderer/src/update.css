@@ -42,3 +42,15 @@ button { color: inherit; font: inherit; -webkit-app-region: no-drag; }
 .update-actions button { min-height: 34px; padding: 0 15px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .update-actions .secondary { border: 1px solid var(--border); background: var(--surface); }
 .update-actions .primary { min-width: 104px; border: 0; color: #fff; background: var(--accent); font-weight: 650; }
+
+@keyframes update-logo-acknowledge {
+  from { transform: scale(.96); opacity: .84; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.update-logo--busy { animation: update-logo-acknowledge 400ms cubic-bezier(.25, 1, .5, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .update-logo--busy { animation: none; }
+  .update-progress--checking { visibility: hidden; }
+}

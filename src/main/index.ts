@@ -1592,7 +1592,6 @@ function readUpdateDistribution() {
 
 async function prepareForUpdateInstall(): Promise<void> {
   await workspaceLifecycle?.stop()
-  updateWindowController?.close()
   aboutWindowController?.close()
   if (pluginRecoveryWindow && !pluginRecoveryWindow.isDestroyed()) pluginRecoveryWindow.close()
   if (safeModeManagerWindow && !safeModeManagerWindow.isDestroyed()) safeModeManagerWindow.close()

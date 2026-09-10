@@ -167,7 +167,7 @@ git commit -m "fix(update): retain install transition window"
 
 **Interfaces:**
 - Consumes: the existing `UpdateStatus` phase `installing` and `UpdateViewModel.busy`
-- Produces: approved Chinese installation copy, an indeterminate native progress element, and `.update-logo--busy` as the only decorative-motion hook
+- Produces: approved Chinese installation copy, an indeterminate native progress element, and `.update-logo--busy` as a one-time state acknowledgement hook
 
 - [ ] **Step 1: Add failing copy and rendering assertions**
 
@@ -239,15 +239,16 @@ Downloading remains determinate and continues showing `status.percent`.
 Append the following focused CSS without changing layout geometry:
 
 ```css
-@keyframes update-logo-breathe {
-  0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.035); filter: brightness(1.08); }
+@keyframes update-logo-acknowledge {
+  from { transform: scale(.96); opacity: .84; }
+  to { transform: scale(1); opacity: 1; }
 }
 
-.update-logo--busy { animation: update-logo-breathe 1.8s ease-in-out infinite; }
+.update-logo--busy { animation: update-logo-acknowledge 400ms cubic-bezier(.25, 1, .5, 1) both; }
 
 @media (prefers-reduced-motion: reduce) {
   .update-logo--busy { animation: none; }
+  .update-progress--checking { visibility: hidden; }
 }
 ```
 
@@ -269,7 +270,7 @@ Expected: desktop integration checks and Electron renderer build PASS.
 
 Run: `npm run dev`
 
-In the update window, verify that checking uses the existing indeterminate progress, the `480 × 200` frame does not clip the longer installation copy, the Logo motion is subtle, and downloading still uses determinate progress. Development builds remain unsupported for a real install, so installation-state lifecycle verification must use tests and the next signed RC upgrade.
+In the update window, verify that checking uses the existing indeterminate progress, the `480 × 200` frame does not clip the longer installation copy, the one-time Logo acknowledgement is subtle, and downloading still uses determinate progress. Development builds remain unsupported for a real install, so installation-state lifecycle verification must use tests and the next signed RC upgrade.
 
 - [ ] **Step 8: Commit the transition presentation**
 

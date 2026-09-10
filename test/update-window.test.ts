@@ -62,6 +62,17 @@ describe('desktop update window', () => {
     expect(create).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps the update window visible while preparing the platform installer', async () => {
+    const source = await readFile('src/main/index.ts', 'utf8')
+    const preparation = source.match(
+      /async function prepareForUpdateInstall\(\): Promise<void> \{(?<body>[\s\S]*?)\n\}/u
+    )?.groups?.body
+
+    expect(preparation).toContain('await workspaceLifecycle?.stop()')
+    expect(preparation).not.toContain('updateWindowController?.close()')
+    expect(preparation).toContain('aboutWindowController?.close()')
+  })
+
   it('projects every update phase without paths, URLs or credentials', () => {
     expect(updateViewModel({ phase: 'idle', currentVersion: '1.0.0' }).primary).toBe('check')
     expect(updateViewModel({
@@ -78,6 +89,13 @@ describe('desktop update window', () => {
       phase: 'downloaded', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
     }).primary).toBe('install')
     expect(updateViewModel({
+      phase: 'installing', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
+    })).toMatchObject({
+      title: '正在准备安装…',
+      detail: '正在安全关闭当前工作区并准备安装文件。完成后因赛AI 将自动退出并重新打开。',
+      busy: true
+    })
+    expect(updateViewModel({
       phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', required: true, message: 'offline', manual: true, retryable: true, manualInstallerAvailable: true
     })).toMatchObject({ primary: 'retry', secondary: 'quit', recovery: 'download-full-installer' })
     expect(updateViewModel({
@@ -87,6 +105,7 @@ describe('desktop update window', () => {
 
   it('renders checking as indeterminate progress without a fake cancel action', async () => {
     const source = await readFile('src/renderer/src/UpdateApp.tsx', 'utf8')
+    const styles = await readFile('src/renderer/src/update.css', 'utf8')
     const checking = updateViewModel({
       phase: 'checking',
       currentVersion: '1.0.0',
@@ -95,15 +114,18 @@ describe('desktop update window', () => {
 
     expect(checking.title).toBe('正在检查更新…')
     expect(source).toContain('className="update-summary"')
-    expect(source).toContain('className="update-logo"')
     expect(source).toContain('className="update-content"')
     expect(source).toContain('className="update-recovery"')
     expect(source).toContain("download: '下载更新'")
     expect(source).toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
+    expect(source).toContain("status.phase === 'checking' || status.phase === 'installing'")
+    expect(source).toContain("model.busy ? 'update-logo update-logo--busy' : 'update-logo'")
     expect(source).toContain('className="update-progress update-progress--checking"')
-    expect(source).toContain('aria-label="正在检查更新"')
+    expect(source).toContain("'正在准备安装' : '正在检查更新'")
     expect(source).not.toMatch(/取消检查|>取消</u)
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(styles).toContain('.update-progress--checking { visibility: hidden; }')
   })
 
   it('shows update entries only after a real release has been verified', () => {

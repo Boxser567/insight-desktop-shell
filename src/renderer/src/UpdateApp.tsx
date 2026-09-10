@@ -64,7 +64,9 @@ export function UpdateApp(): React.JSX.Element {
   return (
     <main className="update-page">
       <section className="update-summary" aria-live="polite">
-        <span className="update-logo"><img src={brandMark} alt="" /></span>
+        <span className={model.busy ? 'update-logo update-logo--busy' : 'update-logo'}>
+          <img src={brandMark} alt="" />
+        </span>
         <div className="update-content">
           <h1>{model.title}</h1>
           <p>{model.detail}</p>
@@ -74,10 +76,10 @@ export function UpdateApp(): React.JSX.Element {
               {actionLabels[model.recovery]}
             </button>
           )}
-          {status.phase === 'checking' && (
+          {(status.phase === 'checking' || status.phase === 'installing') && (
             <progress
               className="update-progress update-progress--checking"
-              aria-label="正在检查更新"
+              aria-label={status.phase === 'installing' ? '正在准备安装' : '正在检查更新'}
             />
           )}
           {status.phase === 'downloading' && (
