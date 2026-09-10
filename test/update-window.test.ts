@@ -94,6 +94,12 @@ describe('desktop update window', () => {
     })
 
     expect(checking.title).toBe('正在检查更新…')
+    expect(source).toContain('className="update-summary"')
+    expect(source).toContain('className="update-logo"')
+    expect(source).toContain('className="update-content"')
+    expect(source).toContain('className="update-recovery"')
+    expect(source).toContain("download: '下载更新'")
+    expect(source).toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
     expect(source).toContain('className="update-progress update-progress--checking"')
     expect(source).toContain('aria-label="正在检查更新"')

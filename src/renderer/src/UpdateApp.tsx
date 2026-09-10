@@ -63,40 +63,39 @@ export function UpdateApp(): React.JSX.Element {
 
   return (
     <main className="update-page">
-      <header className="update-brand">
-        <span><img src={brandMark} alt="" /></span>
-        <strong>因赛AI</strong>
-      </header>
-      <section className="update-copy" aria-live="polite">
-        <h1>{model.title}</h1>
-        <p>{model.detail}</p>
-        {commandError && <p className="update-error">{commandError}</p>}
-        {status.phase === 'checking' && (
-          <progress
-            className="update-progress update-progress--checking"
-            aria-label="正在检查更新"
-          />
-        )}
-        {status.phase === 'downloading' && (
-          <progress className="update-progress" max="100" value={status.percent}>
-            {status.percent}%
-          </progress>
-        )}
+      <section className="update-summary" aria-live="polite">
+        <span className="update-logo"><img src={brandMark} alt="" /></span>
+        <div className="update-content">
+          <h1>{model.title}</h1>
+          <p>{model.detail}</p>
+          {commandError && <p className="update-error">{commandError}</p>}
+          {model.recovery && (
+            <button type="button" className="update-recovery" onClick={() => execute(model.recovery!)}>
+              {actionLabels[model.recovery]}
+            </button>
+          )}
+          {status.phase === 'checking' && (
+            <progress
+              className="update-progress update-progress--checking"
+              aria-label="正在检查更新"
+            />
+          )}
+          {status.phase === 'downloading' && (
+            <progress className="update-progress" max="100" value={status.percent}>
+              {status.percent}%
+            </progress>
+          )}
+        </div>
       </section>
       <footer className="update-actions">
-        {status.phase === 'available' && !status.required && (
-          <button type="button" className="quiet" onClick={() => window.close()}>稍后提醒我</button>
-        )}
-        <span />
-        {model.recovery && (
-          <button type="button" className="secondary" onClick={() => execute(model.recovery!)}>
-            {actionLabels[model.recovery]}
-          </button>
-        )}
         {model.secondary && (
           <button type="button" className="secondary" onClick={() => execute(model.secondary!)}>
             {actionLabels[model.secondary]}
           </button>
+        )}
+        <span />
+        {status.phase === 'available' && !status.required && (
+          <button type="button" className="secondary" onClick={() => window.close()}>稍后提醒我</button>
         )}
         {model.primary && (
           <button type="button" className="primary" onClick={() => execute(model.primary!)}>

@@ -27,19 +27,18 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 body { color: var(--text); background: var(--background); }
 button { color: inherit; font: inherit; -webkit-app-region: no-drag; }
-.update-page { display: grid; grid-template-rows: auto 1fr auto; width: 100%; height: 100%; padding: 28px; }
-.update-brand { display: flex; align-items: center; gap: 10px; -webkit-app-region: drag; }
-.update-brand span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; background: linear-gradient(145deg, var(--insight-primary), #6481ff); }
-.update-brand img { width: 68%; height: 68%; object-fit: contain; }
-.update-brand strong { font-size: 16px; }
-.update-copy { align-self: center; }
-.update-copy h1 { margin: 0 0 10px; font-size: 24px; line-height: 1.25; }
-.update-copy p { margin: 0; color: var(--muted); line-height: 1.6; }
-.update-copy .update-error { margin-top: 8px; color: var(--danger); }
-.update-progress { width: 100%; height: 8px; margin-top: 22px; accent-color: var(--insight-primary); }
-.update-actions { display: flex; align-items: center; gap: 10px; }
+.update-page { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 18px; width: 100%; height: 100%; padding: 26px 24px 22px; }
+.update-summary { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 18px; align-items: start; min-height: 0; -webkit-app-region: drag; }
+.update-logo { display: grid; width: 64px; height: 64px; place-items: center; border-radius: 15px; background: linear-gradient(145deg, var(--insight-primary), #6481ff); }
+.update-logo img { width: 68%; height: 68%; object-fit: contain; }
+.update-content { min-width: 0; min-height: 0; padding-top: 2px; overflow: auto; }
+.update-content h1 { margin: 0 0 8px; font-size: 19px; line-height: 1.35; }
+.update-content p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.update-content .update-error { margin-top: 6px; color: var(--danger); }
+.update-recovery { margin-top: 8px; padding: 0; border: 0; color: var(--muted); background: transparent; font-size: 13px; text-decoration: underline; cursor: pointer; }
+.update-progress { width: 100%; height: 6px; margin-top: 14px; accent-color: var(--insight-primary); }
+.update-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .update-actions > span { flex: 1; }
-.update-actions button { min-height: 36px; padding: 0 16px; border-radius: 9px; cursor: pointer; }
-.update-actions .quiet { padding: 0; border: 0; color: var(--muted); background: transparent; }
+.update-actions button { min-height: 34px; padding: 0 15px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .update-actions .secondary { border: 1px solid var(--border); background: var(--surface); }
-.update-actions .primary { border: 0; color: #fff; background: var(--accent); font-weight: 650; }
+.update-actions .primary { min-width: 104px; border: 0; color: #fff; background: var(--accent); font-weight: 650; }
