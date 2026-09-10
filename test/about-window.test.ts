@@ -130,6 +130,6 @@ describe('desktop About window', () => {
     expect(main).toContain("window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))")
     expect(vite).toContain("about: resolve('src/renderer/about.html')")
     expect(aboutHtml).toContain("connect-src 'none'")
-    expect(JSON.parse(packageJson).insightReleaseDate).toBe('2026-09-10')
+    expect(JSON.parse(packageJson).insightReleaseDate).toBe('2026-09-11')
   })
 })
