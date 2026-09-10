@@ -10,6 +10,8 @@
 
 **Design:** `docs/plans/2026-09-10-desktop-rc2-polish-design.md`
 
+**Execution status (2026-09-10):** Tasks 1–4 and Task 5 automated/build steps are complete. The isolated Apple Silicon DEV package is ready; execution is paused at Task 5 manual acceptance before the RC2 version bump.
+
 ## Global Constraints
 
 - RC2 客户端继续使用测试用户中心和测试模型 Gateway；更新 Origin 始终为 `https://updates.insight-aigc.com`。
@@ -51,7 +53,7 @@
 - Modify: `test/release.test.ts`
 - Modify: `test/release-workflow-verifier.test.ts`
 
-- [ ] **Step 1: Write failing service-environment tests**
+- [x] **Step 1: Write failing service-environment tests**
 
 Create `test/service-environment.test.ts` with assertions for the exact RC2 contract:
 
@@ -86,7 +88,7 @@ Run: `npm test -- test/service-environment.test.ts test/auth-environment.test.ts
 
 Expected: FAIL because the shared configuration does not exist and the two consumers still own separate test URLs.
 
-- [ ] **Step 2: Add the repository-controlled service configuration**
+- [x] **Step 2: Add the repository-controlled service configuration**
 
 Create `build/client-service-environment.json`:
 
@@ -131,7 +133,7 @@ export function desktopServiceEnvironment(
 
 Keep the accepted names closed to `test | production`; validate exact HTTPS origins in tests so malformed repository changes fail before packaging.
 
-- [ ] **Step 3: Replace the two runtime URL owners**
+- [x] **Step 3: Replace the two runtime URL owners**
 
 In `src/main/auth/auth-environment.ts`, preserve the current development isolation but obtain URLs from the shared configuration:
 
@@ -155,7 +157,7 @@ const MODEL_BASE_URL = desktopServiceEnvironment().modelBaseUrl
 
 Do not introduce a second environment variable or package-local copy of the endpoints.
 
-- [ ] **Step 4: Write the failing Stable release guard tests**
+- [x] **Step 4: Write the failing Stable release guard tests**
 
 Extend `test/release-preflight.test.ts` fixture creation and CLI invocation to include:
 
@@ -174,7 +176,7 @@ Run: `npm test -- test/release-preflight.test.ts`
 
 Expected: FAIL because the preflight parser does not accept or validate the new file.
 
-- [ ] **Step 5: Implement the preflight guard and workflow wiring**
+- [x] **Step 5: Implement the preflight guard and workflow wiring**
 
 Add `--service-environment` to the exact argument set and usage string in `scripts/verify-release-preflight.mjs`. Validate the exact JSON keys and both known environment records. Apply the channel rule:
 
@@ -186,7 +188,7 @@ if (channel === 'stable' && value.releaseEnvironment !== 'production') {
 
 Include `serviceEnvironment` in the preflight JSON output. Pass the new file from `.github/workflows/release.yml`, and extend workflow/source-contract tests so the argument cannot be silently removed.
 
-- [ ] **Step 6: Verify and commit Task 1**
+- [x] **Step 6: Verify and commit Task 1**
 
 Run: `npm test -- test/service-environment.test.ts test/auth-environment.test.ts test/desktop-integration-package.test.ts test/release-preflight.test.ts test/release.test.ts test/release-workflow-verifier.test.ts`
 
@@ -215,7 +217,7 @@ git commit -m "feat(release): centralize desktop service environment"
 - Modify: `build/plugin-recovery.html`
 - Modify: `build/safe-mode.html`
 
-- [ ] **Step 1: Write the failing brand-source audit**
+- [x] **Step 1: Write the failing brand-source audit**
 
 Create `test/brand-theme.test.ts` that reads only the first-party files listed above and asserts:
 
@@ -231,7 +233,7 @@ Run: `npm test -- test/brand-theme.test.ts`
 
 Expected: FAIL and list the current near-blue and purple literals.
 
-- [ ] **Step 2: Define and consume the first-party token**
+- [x] **Step 2: Define and consume the first-party token**
 
 Add the exact token in both renderer style roots:
 
@@ -246,7 +248,7 @@ Keep `--insight-primary` unchanged in dark mode. Use derived opacity or a nearby
 
 Do not global-search-and-replace colors in upstream Harness assets or bundled plugin content.
 
-- [ ] **Step 3: Verify and commit Task 2**
+- [x] **Step 3: Verify and commit Task 2**
 
 Run: `npm test -- test/brand-theme.test.ts`
 
@@ -281,7 +283,7 @@ git commit -m "style(brand): unify first-party primary color"
 - Modify: `src/preload/windows-menu.ts`
 - Modify: `test/windows-titlebar.test.ts`
 
-- [ ] **Step 1: Write failing About view-model and window tests**
+- [x] **Step 1: Write failing About view-model and window tests**
 
 In `test/about-window.test.ts`, specify the presentation contract:
 
@@ -303,7 +305,7 @@ Run: `npm test -- test/about-window.test.ts test/windows-titlebar.test.ts`
 
 Expected: FAIL because the renderer, command and controller do not exist.
 
-- [ ] **Step 2: Implement the pure view model and local renderer**
+- [x] **Step 2: Implement the pure view model and local renderer**
 
 Implement a strict view-model constructor:
 
@@ -342,7 +344,7 @@ The document must contain no remote scripts, links or navigation.
 
 Add `about.html` to `electron.vite.config.ts` renderer inputs. No preload or IPC is needed for this read-only page.
 
-- [ ] **Step 3: Implement the secure single-instance controller**
+- [x] **Step 3: Implement the secure single-instance controller**
 
 Model `src/main/about-window.ts` on the existing update-window controller while keeping the interface small:
 
@@ -381,7 +383,7 @@ Use:
 
 Call the existing `secureWebContents`, deny `setWindowOpenHandler`, reject navigation outside the exact local `about.html` URL, and focus rather than recreate an existing window. Pass only `app.getVersion()` and the release-date metadata supplied by Main.
 
-- [ ] **Step 4: Wire both menus through one whitelisted command**
+- [x] **Step 4: Wire both menus through one whitelisted command**
 
 Add one version-owned metadata field to `package.json` without changing the current package version yet:
 
@@ -391,7 +393,7 @@ Add one version-owned metadata field to `package.json` without changing the curr
 
 Type the imported package metadata in Main. Add `'show-about'` to `DesktopMenuCommand`; in `executeDesktopMenuCommand`, pass `app.getVersion()` and `insightReleaseDate` to the single controller. Put “关于因赛AI” at the top of the macOS app menu and the Windows product section. Both entries must send the same command; do not add renderer-specific About implementations.
 
-- [ ] **Step 5: Verify and commit Task 3**
+- [x] **Step 5: Verify and commit Task 3**
 
 Run: `npm test -- test/about-window.test.ts test/windows-titlebar.test.ts`
 
@@ -422,7 +424,7 @@ git commit -m "feat(shell): add secure about window"
 - Modify: `test/update-window.test.ts`
 - Modify: `test/update-api-contract.test.ts`
 
-- [ ] **Step 1: Write the failing orchestration test**
+- [x] **Step 1: Write the failing orchestration test**
 
 Create a pure dependency test:
 
@@ -444,7 +446,7 @@ Run: `npm test -- test/open-update-window.test.ts test/update-window.test.ts tes
 
 Expected: FAIL because menu commands currently only open the window.
 
-- [ ] **Step 2: Implement the smallest Main helper**
+- [x] **Step 2: Implement the smallest Main helper**
 
 Create narrow interfaces and invoke the check synchronously before awaiting the window:
 
@@ -468,7 +470,7 @@ export async function openUpdateWindowAndCheck(
 
 Use this helper for macOS and Windows menu commands. Leave the sidebar IPC handler calling only `updateWindowController.open()` so clicking a real available-update badge does not reset the state.
 
-- [ ] **Step 3: Render the checking state as immediate indeterminate progress**
+- [x] **Step 3: Render the checking state as immediate indeterminate progress**
 
 In `UpdateApp.tsx`, render a progress element only for `checking` and preserve the current determinate progress for `downloading`:
 
@@ -482,7 +484,7 @@ Style its active segment with `var(--insight-primary)`. Do not add a Cancel butt
 
 Extend `test/update-window.test.ts` to assert the exact checking copy, indeterminate progress markup and absence of a cancel action.
 
-- [ ] **Step 4: Verify and commit Task 4**
+- [x] **Step 4: Verify and commit Task 4**
 
 Run: `npm test -- test/open-update-window.test.ts test/update-window.test.ts test/update-api-contract.test.ts test/update-manager.test.ts`
 
@@ -505,7 +507,7 @@ git commit -m "feat(update): start checks from the app menu"
 
 - Modify only files directly responsible for defects found by these checks.
 
-- [ ] **Step 1: Run focused regression suites**
+- [x] **Step 1: Run focused regression suites**
 
 Run:
 
@@ -515,7 +517,7 @@ npm test -- test/service-environment.test.ts test/auth-environment.test.ts test/
 
 Expected: all new contracts and existing update contracts pass.
 
-- [ ] **Step 2: Run repository-level gates**
+- [x] **Step 2: Run repository-level gates**
 
 Run: `npm test`
 
@@ -525,7 +527,7 @@ Run: `npm run build`
 
 Expected: full test suite, Node/Web TypeScript checks, desktop integration typecheck and production renderer build pass. If the local Homebrew `python3` shim is broken, run the same commands with `/usr/bin` ahead of Homebrew in `PATH`; do not change repository code to accommodate a machine-only shim issue.
 
-- [ ] **Step 3: Build a DEV DMG for visual/manual validation**
+- [x] **Step 3: Build a DEV DMG for visual/manual validation**
 
 Run: `npm run package:dev:mac:arm64`
 

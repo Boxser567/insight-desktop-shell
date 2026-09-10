@@ -53,11 +53,13 @@
 - [x] **中国大陆 CDN 分发门禁：** RC1 公开后，国内网络直连确认 Candidate 指针和 Manifest 为 200；arm64 DMG、x64 DMG、Windows EXE 的 Range 均为 206，大小分别为 256,072,156、261,681,506、267,840,720，并具备私有桶回源鉴权、immutable 缓存和正确 Content-Disposition。Stable 指针仍为 404；GitHub 美国 runner 的可达性不属于产品目标或发布门禁。
 - [ ] **确切安装包验收：** 必须从本次 Draft/OSS 下载确切 macOS arm64、macOS x64、Windows x64 资产，完成干净安装、覆盖安装、启动/卸载、签名/公证/Gatekeeper 和版本核对；不得使用本地重建包替代。
 - [ ] **钥匙串与数据连续性：** 两个 macOS 架构均需在 quarantine 下首次登录并连续冷启动三次，确认不出现 Safe Storage 授权框、不串用旧身份数据，登录、会话、工作区和插件数据保持符合预期。
-- [ ] **真实更新体验：** RC1 无更新时不显示下载按钮；RC1→RC2 只有检测到签名可信新版本才显示真实版本、发行信息和下载入口，并验证进度、取消、失败重试、安装重启与同源完整安装包兜底。
+- [ ] **真实更新体验：** RC1 无更新时不显示下载按钮；RC1→RC2 只有检测到签名可信新版本才显示真实版本、发行信息和下载入口，并验证主动检查、下载进度、失败重试、安装重启与同源完整安装包兜底。
 - [x] **推广事务：** [Promote Run 34361864071](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34361864071) 成功公开 RC1 Pre-release，并通过 OIDC/STS 写入和回读 OSS 权威 `candidate/current.json`；国内 CDN 已返回 `1.0.0-rc.1`，Stable 未改动。后续用该确切云端资产完成人工安装。
 - [ ] **Stable 与官网：** 以相同流程构建、stage、安装和 promote `v1.0.0`，再把官网按钮指向 Stable 不可变 OSS 资产；Windows 未签名提示、`main` 无分支保护、`desktop-release` 无审批保护均需在 Stable 前明确接受或修复。
 
 2026-09-09 发布门禁修订：两次 Stage Run 对国内 CDN 节点的连接超时只反映 GitHub 美国 Hosted Runner 的网络位置，不反映中国大陆用户下载能力。发布器改为以签名 Draft、OSS 精确对象集合/大小和 OSS 权威 `current.json` 回读为事务门禁；中国大陆 CDN 验收独立执行并记录，不要求把 CDN 改为全球加速。
+
+2026-09-10 RC2 本地实现检查点：`e5400ca` 将认证与模型 Gateway 收口到同一受控配置并增加 Stable/production 门禁；`a60d93d` 统一第一方主色为 `#315dfb`；`6d390cc` 增加安全单实例 About 窗口；`adb1c31` 让跨平台菜单直接触发真实检查。全量 94 个测试文件、596 项测试通过，TypeScript 与 Electron 生产构建通过。隔离身份 DEV DMG 已生成于 `dist-dev/insight-dev-mac-arm64.dmg`，Bundle ID 为 `com.insight-aigc.desktop.dev`、当前版本为 `1.0.0-rc.1`、业务环境选择为 `test`、更新 Origin 为 `https://updates.insight-aigc.com`。等待人工验收 About、主题色、主动检查和反复冷启动无钥匙串弹窗；验收前不提升 RC2 版本、不触发 Actions。
 
 ---
 
