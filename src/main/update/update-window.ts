@@ -14,10 +14,10 @@ export function updateWindowOptions(input: {
   icon: string
 }): BrowserWindowConstructorOptions {
   return {
-    width: 560,
-    height: 360,
-    minWidth: 520,
-    minHeight: 340,
+    width: 480,
+    height: 280,
+    minWidth: 480,
+    minHeight: 280,
     show: false,
     parent: input.parent,
     modal: false,

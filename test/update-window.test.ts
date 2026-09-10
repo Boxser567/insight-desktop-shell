@@ -27,8 +27,10 @@ describe('desktop update window', () => {
     const options = updateWindowOptions({ parent, preload: '/app/update.cjs', icon: '/app/icon.png' })
 
     expect(options).toMatchObject({
-      width: 560,
-      height: 360,
+      width: 480,
+      height: 280,
+      minWidth: 480,
+      minHeight: 280,
       show: false,
       parent,
       modal: false,
