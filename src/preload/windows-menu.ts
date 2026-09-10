@@ -213,6 +213,7 @@ const chevronIcon = `<svg viewBox="0 0 20 20" width="17" height="17" fill="none"
 const menuStyles = `
   :root {
     color-scheme: light;
+    --insight-primary: #315dfb;
     --label-primary: #202124; --label-secondary: #61666b; --label-tertiary: #81858c;
     --hover: rgba(32,33,36,.08); --surface: #fff; --border: rgba(32,33,36,.13);
     --separator: rgba(32,33,36,.09); --layer: rgba(32,33,36,.06); --danger: #d93025;
@@ -229,7 +230,7 @@ const menuStyles = `
   .bar { position:relative; width:100%; height:100%; display:flex; justify-content:flex-end; align-items:flex-start; }
   .menuButton { appearance:none; flex:none; width:44px; height:36px; display:grid; place-items:center; padding:0; color:var(--label-secondary); background:transparent; border:0; cursor:pointer; }
   .menuButton:hover, .menuButton.isOpen { color:var(--label-primary); background:var(--hover); }
-  .menuButton:focus-visible { outline:2px solid #4d6bfe; outline-offset:-3px; }
+  .menuButton:focus-visible { outline:2px solid var(--insight-primary); outline-offset:-3px; }
   .menu { position:absolute; top:43px; right:0; width:304px; max-height:calc(100vh - 56px); overflow:auto; padding:7px; color:var(--label-primary); background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 14px 36px rgba(0,0,0,.2); scrollbar-width:thin; }
   .menu[hidden] { display:none; }
   .sectionLabel { padding:7px 10px 4px; color:var(--label-tertiary); font-size:10px; font-weight:600; line-height:14px; letter-spacing:.08em; text-transform:uppercase; }

@@ -1,12 +1,15 @@
 const STYLE_ID = 'insight-desktop-integration-styles'
 
 const stylesheet = `
+:root {
+  --insight-primary: #315dfb;
+}
 [data-insight-desktop-brand-mark] {
   display: grid;
   flex: none;
   place-items: center;
   border-radius: 7px;
-  background: #315efb;
+  background: var(--insight-primary);
 }
 [data-insight-desktop-brand-mark] > img {
   display: block;
@@ -69,7 +72,7 @@ const stylesheet = `
 }
 [data-insight-desktop-update-button][data-active="true"] {
   color: #fff;
-  background: #315efb;
+  background: var(--insight-primary);
 }
 [data-insight-desktop-account-button]:hover,
 [data-insight-desktop-account-button][aria-expanded="true"] {
@@ -91,7 +94,7 @@ const stylesheet = `
   overflow: hidden;
   border-radius: 50%;
   color: #fff;
-  background: #6c63ff;
+  background: var(--insight-primary);
   font-size: 13px;
   font-weight: 600;
 }
