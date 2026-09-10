@@ -100,7 +100,6 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
         <div className="login-card">
           <header>
             <h1>欢迎登录</h1>
-            <p>登录后进入你的专属工作区</p>
           </header>
           <div className="login-tabs" role="tablist" aria-label="登录方式">
             <button type="button" role="tab" aria-selected={method === 'sms'} onClick={() => setMethod('sms')}>验证码登录</button>

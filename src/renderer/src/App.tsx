@@ -5,6 +5,17 @@ import brandMark from '../../../build/brand-mark.svg'
 import { LoginView } from './LoginView'
 import { UpdateBadge } from './UpdateBadge'
 
+function StartupPage(props: { detail: string }): React.JSX.Element {
+  return (
+    <main className="status-page">
+      <div className="startup-content">
+        <div className="brand-mark" aria-hidden="true"><img src={brandMark} alt="" /></div>
+        <p role="status">{props.detail}</p>
+      </div>
+    </main>
+  )
+}
+
 function StatusPage(props: {
   title: string
   detail: string
@@ -51,11 +62,11 @@ export function App(): React.JSX.Element {
 
   let content: React.JSX.Element
   if (session.kind === 'authenticated' && startup.phase !== 'ready') {
-    content = <StatusPage title="正在启动因赛AI" detail={startup.detail} />
+    content = <StartupPage detail={startup.detail} />
   } else if (session.kind === 'authenticated') {
     content = <main className="authenticated-host" aria-hidden="true" />
   } else if (session.kind === 'restoring') {
-    content = <StatusPage title="正在启动因赛AI" detail="正在安全恢复登录状态…" />
+    content = <StartupPage detail="正在安全恢复登录状态…" />
   } else if (session.kind === 'offline') {
     content = (
       <StatusPage
