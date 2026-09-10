@@ -266,14 +266,14 @@ describe('GitHub release contract', () => {
     expect(main).toContain('logs: [...rendererPluginFailureLogs]')
   })
 
-  it('configures GitHub updates without allowing local package commands to publish', async () => {
+  it('packages OSS updater bootstrap metadata without allowing package commands to publish', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as {
       dependencies: Record<string, string>
       scripts: Record<string, string>
       build: {
-        publish?: Array<{ provider: string; owner: string; repo: string }>
+        publish?: Array<{ provider: string; url: string }>
         detectUpdateChannel?: boolean
         extraResources: Array<{ from: string; to: string }>
         win: { verifyUpdateCodeSignature: boolean }
@@ -281,9 +281,8 @@ describe('GitHub release contract', () => {
     }
     expect(packageJson.dependencies['electron-updater']).toBe('^6.8.9')
     expect(packageJson.build.publish).toEqual([{
-      provider: 'github',
-      owner: 'Boxser567',
-      repo: 'insight-desktop-shell'
+      provider: 'generic',
+      url: 'https://updates.insight-aigc.com/desktop/'
     }])
     expect(packageJson.build.detectUpdateChannel).toBe(false)
     expect(packageJson.build.extraResources).toEqual(expect.arrayContaining([
@@ -420,7 +419,7 @@ describe('GitHub release contract', () => {
     expect(candidateConfig).not.toContain('com.insight.desktop.candidate')
     expect(candidateConfig).not.toContain('com.insight-aigc.desktop.candidate')
     expect(candidateConfig).not.toContain('insight-candidate')
-    expect(candidateConfig).toContain('publish: null')
+    expect(candidateConfig).not.toContain('publish: null')
     for (const name of [
       'package:candidate:dir',
       'package:candidate:mac:arm64',
@@ -486,6 +485,7 @@ describe('GitHub release contract', () => {
     expect(preflight).toContain('verify-release-workflow.mjs')
     expect(preflight).toContain('verify-publish-workflow.mjs')
     expect(preflight).toContain('node --check scripts/github-oss-client.mjs')
+    expect(preflight).toContain('node --check scripts/verify-packaged-update-config.mjs')
     expect(preflight).not.toMatch(/npm ci|vitest|prepare:core-runtime/)
     expect(appleSilicon).toContain('needs: release-preflight')
     expect(appleSilicon).toContain("inputs.target == 'macos-arm64'")
@@ -524,6 +524,7 @@ describe('GitHub release contract', () => {
     expect(workflow.match(/xcrun stapler validate/g)).toHaveLength(5)
     expect(workflow.match(/xcrun notarytool submit/g)).toHaveLength(2)
     expect(workflow.match(/node scripts\/verify-macos-distribution\.mjs "\$RELEASE_APP"/g)).toHaveLength(2)
+    expect(workflow.match(/node scripts\/verify-packaged-update-config\.mjs "\$RELEASE_APP\/Contents\/Resources"/g)).toHaveLength(2)
     expect(workflow).not.toContain('spctl --assess --type execute')
     expect(workflow.match(/hdiutil verify/g)).toHaveLength(2)
     expect(workflow.match(/unzip -t/g)).toHaveLength(2)
@@ -562,6 +563,8 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('finalize-windows-release.mjs')
     expect(workflow).toContain('$PSNativeCommandUseErrorActionPreference = $true')
     expect(workflow).toContain('$appExecutable')
+    expect(workflow).toContain("$resourcesDirectory = Join-Path (Split-Path $appExecutable) 'resources'")
+    expect(workflow).toContain('node scripts/verify-packaged-update-config.mjs $resourcesDirectory')
     expect(workflow).toContain('7z t $installerPath')
     expect(workflow).toContain("Copy-Item (Join-Path $env:RELEASE_DIR 'latest.yml')")
   })

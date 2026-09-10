@@ -1,6 +1,6 @@
 {
   "name": "insight-desktop",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "insightReleaseDate": "2026-09-10",
   "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
@@ -102,9 +102,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "Boxser567",
-        "repo": "insight-desktop-shell"
+        "provider": "generic",
+        "url": "https://updates.insight-aigc.com/desktop/"
       }
     ],
     "detectUpdateChannel": false,

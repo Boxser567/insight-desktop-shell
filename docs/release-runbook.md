@@ -2,7 +2,7 @@
 
 ## 当前发布状态
 
-截至 2026-09-10，`v1.0.0-rc.2` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经 CDN 返回 `1.0.0-rc.2`；`stable/current.json` 尚不存在。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-10，`v1.0.0-rc.2` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经 CDN 返回 `1.0.0-rc.2`；`stable/current.json` 尚不存在。RC1 已证明能够发现 RC2，但点击自动下载时暴露 Candidate 包缺少 `app-update.yml` 的阻断问题。该问题不允许覆盖 RC2 资产，修复版本固定递增为 `v1.0.0-rc.3`。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
@@ -14,13 +14,14 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-`v1.0.0-rc.2` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装；最后的权威验收必须使用已安装的云端 RC1 完成 RC1→RC2 检测、下载、安装和重启。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
+`v1.0.0-rc.2` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。RC1/RC2 无法远程补入包内文件，RC3 推广后需要通过更新错误页已有的“下载完整安装包”完成一次同源覆盖安装；RC3 再到下一版本必须完成应用内直接下载、校验、安装和重启，才能关闭自动更新门禁。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
 
 ## 必读资料
 
 - [因赛AI Desktop 客户端构建 Runbook](client-build-runbook.md) 是当前构建步骤、停止条件和人工门禁的权威说明。
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 - [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
+- [2026-09-10 RC2 自动下载缺少 app-update.yml](incidents/2026-09-10-electron-updater-missing-app-update-yml.md) 记录可发现但无法自动下载的根因、RC3 修复和一次性整包桥接边界。
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
 - [桌面更新 STS 发布设计](plans/2026-09-09-desktop-update-sts-publishing-design.md) 是发布身份、后台契约、STS 刷新和大文件失败语义的权威说明。
 - [因赛AI Desktop 1.0 正式发布前验证计划](superpowers/plans/2026-09-09-desktop-v1-release-verification.md) 是本次首发逐项执行、停止判断与证据收集清单。
@@ -72,7 +73,7 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 - `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
 - `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Release。
 
-RC2 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.2`、`target=all`。Candidate 不手工创建或推送 tag，完整 workflow 成功后才由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
+RC3 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.3`、`target=all`。Candidate 不手工创建或推送 tag，完整 workflow 成功后才由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
 
 ## 一次性发布准备
 
@@ -134,7 +135,7 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 - Ref：`main`
 - `command`：`stage`
-- `tag`：`v1.0.0-rc.2`
+- `tag`：`v1.0.0-rc.3`
 - `confirm_version`：留空
 
 `stage` 成功表示签名 Draft 与 OSS 不可变版本目录的文件集、大小和摘要一致，不会公开 GitHub Release，也不会改变客户端看到的版本。GitHub Hosted Runner 不承担中国大陆 CDN 可达性门禁；必须另从中国大陆网络检查 HTTPS、MIME、缓存、Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
@@ -145,8 +146,8 @@ Candidate 在完成确切安装包的干净安装和静态验证后执行下述 
 
 - Ref：`main`
 - `command`：`promote`
-- `tag`：`v1.0.0-rc.2`
-- `confirm_version`：`1.0.0-rc.2`
+- `tag`：`v1.0.0-rc.3`
+- `confirm_version`：`1.0.0-rc.3`
 
 Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 
@@ -161,10 +162,12 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 现有 `v0.1.2-rc.1`、`v0.1.2-rc.2` 已是公开 Pre-release，`v0.1.2-rc.3` 只有单平台 Actions artifact，均不能替代新 Draft-only/OSS 两阶段契约的首发验收。准备 `1.0.0` 时必须使用未占用的连续版本：
 
 1. `v1.0.0-rc.1` 在 macOS arm64、macOS x64 和 Windows x64 完成干净安装并推广 Candidate 指针。
-2. `v1.0.0-rc.2` 从 rc.1 在客户端内完成检查、下载、校验、安装和重启；如 rc.2 仍有阻断修复，继续递增 RC，禁止覆盖旧资产。
-3. `v1.0.0` 的确切 Stable 制品完成干净安装与覆盖安装。
-4. 在可信 Manifest 已解析后人为让自动下载失败，确认更新窗口可以从同一版本目录下载适配架构的 DMG/EXE 并完成覆盖安装；完全禁用更新 Origin 时应安全失败。
-5. 上述证据齐全后，才允许首次写入 `stable/current.json`。
+2. `v1.0.0-rc.2` 从 RC1 完成真实检查，但自动下载因包内缺少 `app-update.yml` 失败；该结论已记录，禁止覆盖旧资产。
+3. `v1.0.0-rc.3` 通过同源“下载完整安装包”从 RC1/RC2 完成一次覆盖安装，并确认版本、数据和钥匙串行为正常。
+4. 从已安装 RC3 再发布一个更高 Candidate，完整完成应用内检查、下载、校验、安装和重启；该步骤通过前不得发布 Stable。
+5. `v1.0.0` 的确切 Stable 制品完成干净安装与覆盖安装。
+6. 在可信 Manifest 已解析后人为让自动下载失败，确认更新窗口可以从同一版本目录下载适配架构的 DMG/EXE 并完成覆盖安装；完全禁用更新 Origin 时应安全失败。
+7. 上述证据齐全后，才允许首次写入 `stable/current.json`。
 
 ## 最终安装验收
 

@@ -13,6 +13,5 @@ module.exports = {
     productName: '因赛AI',
     insightDesktopAppId: 'com.insight-aigc.desktop',
     insightDesktopChannel: 'candidate'
-  },
-  publish: null
+  }
 }
