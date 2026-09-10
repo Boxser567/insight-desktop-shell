@@ -59,7 +59,7 @@
 
 2026-09-09 发布门禁修订：两次 Stage Run 对国内 CDN 节点的连接超时只反映 GitHub 美国 Hosted Runner 的网络位置，不反映中国大陆用户下载能力。发布器改为以签名 Draft、OSS 精确对象集合/大小和 OSS 权威 `current.json` 回读为事务门禁；中国大陆 CDN 验收独立执行并记录，不要求把 CDN 改为全球加速。
 
-2026-09-10 RC2 本地实现检查点：`e5400ca` 将认证与模型 Gateway 收口到同一受控配置并增加 Stable/production 门禁；`a60d93d` 统一第一方主色为 `#315dfb`；`6d390cc` 增加安全单实例 About 窗口；`adb1c31` 让跨平台菜单直接触发真实检查。全量 94 个测试文件、596 项测试通过，TypeScript 与 Electron 生产构建通过。隔离身份 DEV DMG 已生成于 `dist-dev/insight-dev-mac-arm64.dmg`，Bundle ID 为 `com.insight-aigc.desktop.dev`、当前版本为 `1.0.0-rc.1`、业务环境选择为 `test`、更新 Origin 为 `https://updates.insight-aigc.com`。等待人工验收 About、主题色、主动检查和反复冷启动无钥匙串弹窗；验收前不提升 RC2 版本、不触发 Actions。
+2026-09-10 RC2 发布准备检查点：`e5400ca` 将认证与模型 Gateway 收口到同一受控配置并增加 Stable/production 门禁；`a60d93d` 统一第一方主色为 `#315dfb`；`6d390cc` 增加安全单实例 About 窗口；`adb1c31` 让跨平台菜单直接触发真实检查；`7f6f79f` 固定受管插件版本、恢复必需插件并让 Market 重启继续经过 Shell，避免卸载后进入恢复页或 Safe Mode 回退到 API Key。产品负责人于 2026-09-10 明确授权将本地 DEV 验收按通过处理并进入 RC2 Actions；这是发布授权记录，不替代云端签名制品的 RC1→RC2 验收。RC2 预检、发布/上传 workflow 契约、94 个测试文件共 597 项测试、TypeScript、Electron 构建及 Candidate 目录包均通过；静态目录包为 `1.0.0-rc.2`、`com.insight-aigc.desktop`、测试业务环境和 `https://updates.insight-aigc.com` 更新 Origin。待完成项仍是 RC2 Draft、OIDC/STS stage、promote，以及已安装云端 RC1 的真实检测、下载、安装、数据连续性和钥匙串验收。
 
 ---
 
@@ -205,7 +205,7 @@ npm version 1.0.0-rc.1 --no-git-tag-version
   "releaseVersion": "1.0.0-rc.1",
   "channel": "candidate",
   "mode": "optional",
-  "minimumSupportedVersion": "0.1.1"
+  "minimumSupportedVersion": "1.0.0-rc.1"
 }
 ```
 
@@ -219,7 +219,8 @@ node scripts/verify-release-preflight.mjs \
   --expected-channel candidate \
   --package package.json \
   --policy build/update-release-policy.json \
-  --runtime-lock core-runtime.lock.json
+  --runtime-lock core-runtime.lock.json \
+  --service-environment build/client-service-environment.json
 node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.json
 ```
 

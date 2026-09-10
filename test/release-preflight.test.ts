@@ -28,13 +28,13 @@ async function fixture() {
   }
   const runtimeTag = 'insight-runtime-v0.1.1-rc.10'
   await Promise.all([
-    writeFile(paths.packageJson, JSON.stringify({ version: '0.1.2-rc.1' })),
+    writeFile(paths.packageJson, JSON.stringify({ version: '1.0.0-rc.2' })),
     writeFile(paths.policy, JSON.stringify({
       schema: 1,
-      releaseVersion: '0.1.2-rc.1',
+      releaseVersion: '1.0.0-rc.2',
       channel: 'candidate',
       mode: 'optional',
-      minimumSupportedVersion: '0.1.1'
+      minimumSupportedVersion: '1.0.0-rc.1'
     })),
     writeFile(paths.runtimeLock, JSON.stringify({
       schemaVersion: 1,
@@ -67,7 +67,7 @@ async function fixture() {
   return paths
 }
 
-function run(paths: Awaited<ReturnType<typeof fixture>>, tag = 'v0.1.2-rc.1', channel = 'candidate') {
+function run(paths: Awaited<ReturnType<typeof fixture>>, tag = 'v1.0.0-rc.2', channel = 'candidate') {
   return spawnSync(process.execPath, [
     path.join(process.cwd(), 'scripts', 'verify-release-preflight.mjs'),
     '--tag', tag,
@@ -85,8 +85,8 @@ describe('desktop release preflight', () => {
     const result = run(paths)
     expect(result.status, result.stderr).toBe(0)
     expect(JSON.parse(result.stdout)).toEqual({
-      tag: 'v0.1.2-rc.1',
-      version: '0.1.2-rc.1',
+      tag: 'v1.0.0-rc.2',
+      version: '1.0.0-rc.2',
       channel: 'candidate',
       runtimeTag: 'insight-runtime-v0.1.1-rc.10',
       runtimeCommit: 'a'.repeat(40),
@@ -155,7 +155,7 @@ describe('desktop release preflight', () => {
     const policy = await fixture()
     await writeFile(policy.policy, JSON.stringify({
       schema: 1,
-      releaseVersion: '0.1.2-rc.2',
+      releaseVersion: '1.0.0-rc.3',
       channel: 'candidate',
       mode: 'optional',
       minimumSupportedVersion: '0.1.1'
@@ -169,7 +169,7 @@ describe('desktop release preflight', () => {
 
     const policy = await fixture()
     const value = JSON.parse(await readFile(policy.policy, 'utf8'))
-    value.minimumSupportedVersion = '0.1.3'
+    value.minimumSupportedVersion = '1.0.0-rc.3'
     await writeFile(policy.policy, JSON.stringify(value))
     expect(run(policy).stderr).toContain('does not match')
   })

@@ -2,7 +2,7 @@
 
 ## 当前发布状态
 
-截至 2026-09-09，桌面客户端尚未对外发布首个版本。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN；客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-10，`v1.0.0-rc.1` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 正指向 `1.0.0-rc.1`；`stable/current.json` 尚不存在。已批准的生产更新机制是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
@@ -14,7 +14,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-截至 2026-09-09，代码与本地测试已经完成，`v0.1.2-rc.3` 只完成 macOS Apple Silicon 定向候选验收；尚未运行符合新发布契约的完整 GitHub Draft、OSS 暂存、三平台安装和 Candidate N→N+1 演练。[`upload_oss_test` Run #7](https://github.com/BreezeWind889988/upload_oss_test/actions/runs/34319570470) 已证明测试 Gateway 接受 `{}`、签发目录级 STS，并完成真实 OSS `PutObject`。生产 Origin 的 CDN 到私有 OSS 鉴权已响应成功，`stable/current.json` 与 `candidate/current.json` 均尚不存在。完整 Candidate 与 Stable 安装证据齐全前不得执行 Stable `promote`。
+`v1.0.0-rc.2` 是当前待发布 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装；权威验收必须使用已安装的云端 RC1，经 RC2 Draft、OIDC/STS `stage`、`promote` 后完成 RC1→RC2。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
 
 ## 必读资料
 
@@ -71,6 +71,8 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 - `macos-x64`：构建、签名、公证并上传 Intel macOS 候选包；
 - `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
 - `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Release。
+
+RC2 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.2`、`target=all`。Candidate 不手工创建或推送 tag，完整 workflow 成功后才由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
 
 ## 一次性发布准备
 
@@ -132,7 +134,7 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 - Ref：`main`
 - `command`：`stage`
-- `tag`：`v1.0.0-rc.1`
+- `tag`：`v1.0.0-rc.2`
 - `confirm_version`：留空
 
 `stage` 成功只表示版本目录已上传并通过最终 CDN 复验，不会公开 GitHub Release，也不会改变客户端看到的版本。最终 CDN 验证器会按文件类别拒绝缺失或异常 MIME、错误缓存、缺失 Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
@@ -141,8 +143,8 @@ Candidate 在完成确切安装包的干净安装和静态验证后执行下述 
 
 - Ref：`main`
 - `command`：`promote`
-- `tag`：`v1.0.0-rc.1`
-- `confirm_version`：`1.0.0-rc.1`
+- `tag`：`v1.0.0-rc.2`
+- `confirm_version`：`1.0.0-rc.2`
 
 Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 

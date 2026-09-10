@@ -10,7 +10,7 @@
 
 **Design:** `docs/plans/2026-09-10-desktop-rc2-polish-design.md`
 
-**Execution status (2026-09-10):** Tasks 1–4 and Task 5 automated/build steps are complete. The isolated Apple Silicon DEV package is ready; execution is paused at Task 5 manual acceptance before the RC2 version bump.
+**Execution status (2026-09-10):** Tasks 1–5 are accepted, RC2 identity and automated gates are complete, and the product owner has authorized pushing `main` and dispatching the complete RC2 Candidate workflow. Cloud Draft, OIDC/STS stage, promote and installed RC1→RC2 verification remain pending external execution.
 
 ## Global Constraints
 
@@ -540,7 +540,7 @@ find dist-dev -maxdepth 3 -type f \( -name '*.dmg' -o -name '*.zip' \) -print
 find dist-dev -maxdepth 3 -type d -name '因赛AI Dev.app' -print
 ```
 
-- [ ] **Step 4: Manually verify the DEV application**
+- [x] **Step 4: Manually verify the DEV application**
 
 Check all of the following and record pass/fail in the 1.0 verification ledger:
 
@@ -555,9 +555,11 @@ Check all of the following and record pass/fail in the 1.0 verification ledger:
 
 The About version at this stage is expected to match the still-current package version. The purpose of this pass is to prove that the value is dynamic and the UI behavior is correct before claiming the RC2 release identity.
 
-- [ ] **Step 5: Record the local acceptance decision**
+- [x] **Step 5: Record the local acceptance decision**
 
 Update `docs/superpowers/plans/2026-09-09-desktop-v1-release-verification.md` only with checks that have actually been observed. If any visual or behavioral check fails, fix only that defect, rerun the focused test and rebuild the DEV package. Do not advance the version while a local feature check remains unresolved.
+
+Acceptance record (2026-09-10): the product owner explicitly instructed the release process to assume the pending local DEV checks passed and proceed to Actions. This records the decision boundary; signed/notarized Candidate and RC1→RC2 behavior are still verified only from the cloud artifacts.
 
 ---
 
@@ -572,7 +574,7 @@ Update `docs/superpowers/plans/2026-09-09-desktop-v1-release-verification.md` on
 - Modify: `docs/release-runbook.md`
 - Modify: `docs/superpowers/plans/2026-09-09-desktop-v1-release-verification.md`
 
-- [ ] **Step 1: Bump the package and Candidate policy atomically**
+- [x] **Step 1: Bump the package and Candidate policy atomically**
 
 Run: `npm version 1.0.0-rc.2 --no-git-tag-version`
 
@@ -592,7 +594,7 @@ Set `build/update-release-policy.json` to:
 
 Do not change `build/update-distribution.json`, the update signing public key, runtime lock or OSS pointer.
 
-- [ ] **Step 2: Synchronize the release runbook and verification ledger**
+- [x] **Step 2: Synchronize the release runbook and verification ledger**
 
 Document the exact RC2 facts:
 
@@ -604,7 +606,7 @@ Document the exact RC2 facts:
 
 Add dated ledger entries for the completed local checks and unchecked entries for Candidate Draft review, STS stage, promote, RC1 detection/download/install and post-upgrade data/keychain behavior.
 
-- [ ] **Step 3: Verify the final RC2 identity and repository gates**
+- [x] **Step 3: Verify the final RC2 identity and repository gates**
 
 Run:
 
@@ -622,7 +624,7 @@ Run: `npm run build`
 
 Expected: full tests, type checks and final RC2 renderer build pass. About/release tests prove the exact RC2 version and date metadata.
 
-- [ ] **Step 4: Inspect an unpacked RC2 Candidate without installing it**
+- [x] **Step 4: Inspect an unpacked RC2 Candidate without installing it**
 
 Run: `npm run package:candidate:dir`
 
