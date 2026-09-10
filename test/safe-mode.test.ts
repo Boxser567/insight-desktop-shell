@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readlink, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildSafeModeViewModel, shouldStartInSafeMode } from '../src/main/safe-mode'
@@ -99,15 +99,30 @@ describe('Safe Mode', () => {
     })
   })
 
-  it('creates a managed core-only profile and repairs later modifications', async () => {
+  it('creates a managed profile with the desktop Gateway and repairs later modifications', async () => {
     const dshHome = join(__dirname, '.temp-safe-mode-profile')
     try {
+      const integration = join(
+        dshHome,
+        'profiles',
+        'web',
+        'packages',
+        'insight-desktop-integration'
+      )
+      await mkdir(integration, { recursive: true })
+      await writeFile(join(integration, 'package.json'), '{}', 'utf8')
       const directory = await ensureSafeModeProfile(dshHome)
       expect(directory).toBe(join(dshHome, 'profiles', SAFE_MODE_PROFILE))
       const manifestPath = join(directory, 'package.json')
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
       expect(manifest.dependencies).toEqual({})
       expect(manifest.dsh.profile.bundles).toEqual(SAFE_MODE_BUNDLES)
+      expect(await readlink(join(
+        directory,
+        'node_modules',
+        '@insight-ai',
+        'desktop-integration'
+      ))).toBe(integration)
       expect(await readFile(join(directory, 'cordis.patch.yml'), 'utf8')).toContain('[]')
 
       manifest.dependencies['third-party-plugin'] = '1.0.0'

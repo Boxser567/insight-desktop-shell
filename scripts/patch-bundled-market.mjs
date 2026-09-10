@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const REQUIRED_PACKAGE_PATTERNS = [
+  "    /^dshmarket$/u,",
   "    /^dsh-better-sidebar$/u,",
   "    /^@insight-ai\\/desktop-integration$/u,"
 ]
@@ -10,18 +11,37 @@ const DESKTOP_RESTART_MARKER = '// Insight Desktop delegates Harness restarts to
 const DESKTOP_RESTART_CAPABILITY_MARKER = '// Insight Desktop exposes the shell restart capability.'
 const RESTART_BUSY_MARKER = '// Insight Desktop reports every market mutation as restart-blocking.'
 const MARKET_UNINSTALL_MARKER = '// Insight Desktop records an explicit market uninstall.'
+const MANAGED_MARKET_MARKER = '// Insight Desktop owns the bundled market version.'
 
 function addProtectedPackagePatterns(source) {
-  if (source.includes(POLICY_MARKER)) return source
-
   const listStart = source.indexOf('const PROTECTED_MODULE_PATTERNS = [')
   const listEnd = source.indexOf('\n];', listStart)
   if (listStart === -1 || listEnd === -1) {
     throw new Error('dshmarket protected-module list was not found; review the pinned market integration before building.')
   }
 
-  const addition = `\n    ${POLICY_MARKER}\n${REQUIRED_PACKAGE_PATTERNS.join('\n')}`
+  const missingPatterns = REQUIRED_PACKAGE_PATTERNS.filter(pattern => !source.includes(pattern.trim()))
+  if (source.includes(POLICY_MARKER) && missingPatterns.length === 0) return source
+  const addition = [
+    '',
+    ...(source.includes(POLICY_MARKER) ? [] : [`    ${POLICY_MARKER}`]),
+    ...missingPatterns
+  ].join('\n')
   return `${source.slice(0, listEnd)}${addition}${source.slice(listEnd)}`
+}
+
+function hideMarketSelfManagement(source) {
+  if (source.includes(MANAGED_MARKET_MARKER)) return source
+  const anchor = "                    selfManaged: installed.dshmarket !== undefined || installed['dsh-market'] !== undefined,"
+  const anchorStart = source.indexOf(anchor)
+  if (anchorStart === -1) {
+    throw new Error('dshmarket self-management status was not found; review the pinned market integration before building.')
+  }
+  const replacement = [
+    `                    ${MANAGED_MARKET_MARKER}`,
+    '                    selfManaged: false,'
+  ].join('\n')
+  return `${source.slice(0, anchorStart)}${replacement}${source.slice(anchorStart + anchor.length)}`
 }
 
 function protectMutationRoute(source, route) {
@@ -212,6 +232,7 @@ export async function patchBundledMarket(profileDirectory) {
   let routesSource = await readFile(routesPath, 'utf8')
   let clientSource = await readFile(clientPath, 'utf8')
   routesSource = reportAllRestartBlockingMutations(routesSource)
+  routesSource = hideMarketSelfManagement(routesSource)
   routesSource = recordExplicitMarketUninstall(routesSource)
   routesSource = hideProtectedListEntries(routesSource, 'installed')
   routesSource = hideProtectedListEntries(routesSource, 'updates')

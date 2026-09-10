@@ -11,14 +11,15 @@ const communityPlugins = [
 ] as const
 
 const marketPolicy = {
-  patch: '// Insight Desktop required capabilities.\n',
+  patch: '// Insight Desktop required capabilities.\n/^dshmarket$/u\n',
   routes: [
     '// Insight Desktop hides required capabilities from market installed.',
     '// Insight Desktop hides required capabilities from market updates.',
     '// Insight Desktop protects required capabilities from market update.',
     '// Insight Desktop protects required capabilities from market uninstall.',
     '// Insight Desktop reports every market mutation as restart-blocking.',
-    '// Insight Desktop records an explicit market uninstall.'
+    '// Insight Desktop records an explicit market uninstall.',
+    '// Insight Desktop owns the bundled market version.'
   ].join('\n'),
   client: [
     '// Insight Desktop exposes the shell restart capability.',
@@ -67,6 +68,12 @@ describe('bundled profile initialization', () => {
     )
     await mkdir(join(profile, 'node_modules', 'dshmarket', 'lib'), { recursive: true })
     await mkdir(join(profile, 'node_modules', 'dshmarket', 'client'), { recursive: true })
+    await mkdir(join(profile, 'node_modules', 'dsh-better-sidebar'), { recursive: true })
+    await writeFile(
+      join(profile, 'node_modules', 'dsh-better-sidebar', 'package.json'),
+      JSON.stringify({ name: 'dsh-better-sidebar', version: '0.16.1' }),
+      'utf8'
+    )
     await writeFile(
       join(profile, 'node_modules', 'dshmarket', 'package.json'),
       JSON.stringify({ name: 'dshmarket', version: '1.44.0' }),
@@ -233,12 +240,14 @@ describe('bundled profile initialization', () => {
     expect(manifest.dependencies).toEqual({
       'dsh-better-sidebar': '0.16.1',
       'user-plugin': '1.2.3',
+      dshmarket: '1.44.0',
       '@insight-ai/desktop-integration': 'workspace:*'
     })
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
       'dsh-better-sidebar',
+      'dshmarket',
       'user-plugin',
       '@insight-ai/desktop-integration'
     ])
@@ -293,8 +302,8 @@ describe('bundled profile initialization', () => {
     expect(manifest.dependencies['user-plugin']).toBe('1.2.3')
     expect(manifest.dsh.profile.bundles).toContain('user-plugin')
     expect(manifest.insightDesktop.defaultProfileVersion).toBe(4)
-    expect(manifest.dependencies).not.toHaveProperty('dshmarket')
-    expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
+    expect(manifest.dependencies.dshmarket).toBe('1.44.0')
+    expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     for (const plugin of communityPlugins) {
       expect(manifest.dependencies).not.toHaveProperty(plugin.name)
       expect(manifest.dsh.profile.bundles).not.toContain(plugin.name)
@@ -350,8 +359,8 @@ describe('bundled profile initialization', () => {
     await writeFile(join(profile, 'package.json'), JSON.stringify(migrated), 'utf8')
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const restarted = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(restarted.dependencies).not.toHaveProperty('dshmarket')
-    expect(restarted.dsh.profile.bundles).not.toContain('dshmarket')
+    expect(restarted.dependencies.dshmarket).toBe('1.44.0')
+    expect(restarted.dsh.profile.bundles).toContain('dshmarket')
   })
 
   it.each(['.dsh-market', '.insight-bundled-plugins', '.insight-market-uninstalled'])(
@@ -390,8 +399,8 @@ describe('bundled profile initialization', () => {
 
       const migrated = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
       expect(migrated.insightDesktop.defaultProfileVersion).toBe(4)
-      expect(migrated.dependencies).not.toHaveProperty('dshmarket')
-      expect(migrated.dsh.profile.bundles).not.toContain('dshmarket')
+      expect(migrated.dependencies.dshmarket).toBe('1.44.0')
+      expect(migrated.dsh.profile.bundles).toContain('dshmarket')
       for (const plugin of communityPlugins) {
         expect(migrated.dependencies).not.toHaveProperty(plugin.name)
         expect(migrated.dsh.profile.bundles).not.toContain(plugin.name)
@@ -413,8 +422,46 @@ describe('bundled profile initialization', () => {
     expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'client', 'client.js'), 'utf8')).toBe(marketPolicy.client)
   })
 
+  it('repairs a current desktop profile after a required plugin was removed and the market drifted', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeVersionFourTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    delete manifest.dependencies['dsh-better-sidebar']
+    manifest.dependencies.dshmarket = '1.45.1'
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(
+      (bundle: string) => bundle !== 'dsh-better-sidebar'
+    )
+    await writeFile(manifestPath, JSON.stringify(manifest), 'utf8')
+    await rm(join(profile, 'node_modules', 'dsh-better-sidebar'), { recursive: true, force: true })
+    await writeFile(
+      join(profile, 'node_modules', 'dshmarket', 'package.json'),
+      JSON.stringify({ name: 'dshmarket', version: '1.45.1' }),
+      'utf8'
+    )
+    await writeFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'unmanaged\n', 'utf8')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+
+    const repaired = JSON.parse(await readFile(manifestPath, 'utf8'))
+    expect(repaired.dependencies['dsh-better-sidebar']).toBe('0.16.1')
+    expect(repaired.dependencies.dshmarket).toBe('1.44.0')
+    expect(repaired.dsh.profile.bundles).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      'dsh-better-sidebar',
+      'dshmarket',
+      ...communityPlugins.map((plugin) => plugin.name),
+      '@insight-ai/desktop-integration'
+    ])
+    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe(marketPolicy.patch)
+  })
+
   it.each(['1.41.0', '1.45.0'])(
-    'preserves host files for an existing %s market version',
+    'repairs an existing %s market to the managed desktop version',
     async (version) => {
       const template = join(testDir, 'template')
       const dshHome = join(testDir, 'harness')
@@ -429,9 +476,14 @@ describe('bundled profile initialization', () => {
 
       await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
 
-      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe('existing patch\n')
-      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), 'utf8')).toBe('existing routes\n')
-      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'client', 'client.js'), 'utf8')).toBe('existing client\n')
+      const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
+      expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.16.1')
+      expect(manifest.dependencies.dshmarket).toBe('1.44.0')
+      expect(manifest.dsh.profile.bundles).toContain('dsh-better-sidebar')
+      expect(manifest.dsh.profile.bundles).toContain('dshmarket')
+      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe(marketPolicy.patch)
+      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), 'utf8')).toBe(marketPolicy.routes)
+      expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'client', 'client.js'), 'utf8')).toBe(marketPolicy.client)
     }
   )
 

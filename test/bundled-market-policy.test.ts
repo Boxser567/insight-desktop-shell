@@ -17,7 +17,15 @@ describe('bundled market host policy', () => {
     await mkdir(client, { recursive: true })
     await writeFile(
       join(library, 'patch.js'),
-      "const PROTECTED_MODULE_PATTERNS = [\n    /^cordis:/u,\n];\n",
+      [
+        'const PROTECTED_MODULE_PATTERNS = [',
+        '    /^cordis:/u,',
+        '    // Insight Desktop required capabilities.',
+        '    /^dsh-better-sidebar$/u,',
+        '    /^@insight-ai\\/desktop-integration$/u,',
+        '];',
+        ''
+      ].join('\n'),
       'utf8'
     )
     await writeFile(
@@ -31,6 +39,7 @@ describe('bundled market host policy', () => {
         '                });',
         "path: '/dsh-market/status'",
         '                    busy: installing,',
+        "                    selfManaged: installed.dshmarket !== undefined || installed['dsh-market'] !== undefined,",
         "path: '/dsh-market/updates'",
         '                    const updates = await checkUpdates();',
         '                    sendJson(response, 200, { updates });',
@@ -67,6 +76,7 @@ describe('bundled market host policy', () => {
     const patch = await readFile(join(library, 'patch.js'), 'utf8')
     const routes = await readFile(join(library, 'routes.js'), 'utf8')
     const clientSource = await readFile(join(client, 'client.js'), 'utf8')
+    expect(patch.match(/\^dshmarket\$/g)).toHaveLength(1)
     expect(patch.match(/dsh-better-sidebar/g)).toHaveLength(1)
     expect(patch.match(/@insight-ai\\\/desktop-integration/g)).toHaveLength(1)
     expect(routes.match(/Insight Desktop protects required capabilities/g)).toHaveLength(2)
@@ -78,6 +88,8 @@ describe('bundled market host policy', () => {
     expect(routes).toContain('cannot be uninstalled from the plugin market')
     expect(routes).toContain('// Insight Desktop reports every market mutation as restart-blocking.')
     expect(routes).toContain('busy: installing || writing')
+    expect(routes).toContain('// Insight Desktop owns the bundled market version.')
+    expect(routes).toContain('selfManaged: false')
     expect(routes).toContain('// Insight Desktop records an explicit market uninstall.')
     expect(routes).toContain("writeFileSync(join(activeProfileDir, '.insight-market-uninstalled'), '1\\n', 'utf8')")
     expect(clientSource).toContain('// Insight Desktop exposes the shell restart capability.')
@@ -90,7 +102,6 @@ describe('bundled market host policy', () => {
     expect(clientSource).toContain('fetch(api("/dsh-market/restart")')
     expect(clientSource.match(/delegates Harness restarts/g)).toHaveLength(1)
     for (const removablePackage of [
-      'dshmarket',
       'dsh-memory-evolve',
       '@changfenhuang/dsh-genui',
       'dsh-prompt-enhance'

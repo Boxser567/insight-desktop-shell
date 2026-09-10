@@ -931,6 +931,9 @@ function launchHarness(): Promise<void> {
     const pinned = await ensureStoreDirPinned(dshHome).catch(() => undefined)
     if (pinned) runtime.note(`[desktop] pinned the profile's pnpm store: ${pinned}`)
     await repairProfilePackages(dshHome)
+    // pnpm can replace a repaired managed package with the clean registry copy.
+    // Reapply the desktop-owned market policy before Harness loads it.
+    await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
     startupTracker?.transition('auditing-runtime', '正在检查运行环境…')
     await pruneMissingProfileBundles(dshHome).catch(() => false)
     await reportProfileConsistency(dshHome)

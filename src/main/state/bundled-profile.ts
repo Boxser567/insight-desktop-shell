@@ -14,11 +14,15 @@ const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
 const SIDEBAR_VERSION = '0.16.1'
 const MARKET_PACKAGE = 'dshmarket'
+const MARKET_VERSION = '1.44.0'
 const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
 const MARKET_POLICY_FILES = [
   {
     path: join('lib', 'patch.js'),
-    markers: ['// Insight Desktop required capabilities.']
+    markers: [
+      '// Insight Desktop required capabilities.',
+      '/^dshmarket$/u'
+    ]
   },
   {
     path: join('lib', 'routes.js'),
@@ -28,7 +32,8 @@ const MARKET_POLICY_FILES = [
       '// Insight Desktop protects required capabilities from market update.',
       '// Insight Desktop protects required capabilities from market uninstall.',
       '// Insight Desktop reports every market mutation as restart-blocking.',
-      '// Insight Desktop records an explicit market uninstall.'
+      '// Insight Desktop records an explicit market uninstall.',
+      '// Insight Desktop owns the bundled market version.'
     ]
   },
   {
@@ -135,6 +140,27 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
 }
 
+async function restoreBundledPackage(
+  source: string,
+  destination: string,
+  packageName: string,
+  expectedVersion: string
+): Promise<boolean> {
+  const sourcePackage = join(source, 'node_modules', packageName)
+  const destinationPackage = join(destination, 'node_modules', packageName)
+  const sourceManifest = await readPackageManifest(join(sourcePackage, 'package.json'))
+  if (sourceManifest?.version !== expectedVersion) {
+    throw new Error(`The bundled ${packageName} package does not match ${expectedVersion}.`)
+  }
+  const destinationManifest = await readPackageManifest(join(destinationPackage, 'package.json'))
+  if (destinationManifest?.version === expectedVersion) return false
+
+  await mkdir(dirname(destinationPackage), { recursive: true })
+  await rm(destinationPackage, { recursive: true, force: true })
+  await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
+  return true
+}
+
 async function refreshBundledMarketPolicy(source: string, destination: string): Promise<void> {
   const sourcePackage = join(source, 'node_modules', MARKET_PACKAGE)
   const destinationPackage = join(destination, 'node_modules', MARKET_PACKAGE)
@@ -152,7 +178,9 @@ async function refreshBundledMarketPolicy(source: string, destination: string): 
     if (policyFile.markers.some(marker => !content.includes(marker))) {
       throw new Error(`The bundled market policy is incomplete: ${policyFile.path}`)
     }
-    await writeFile(join(destinationPackage, policyFile.path), content, 'utf8')
+    const destinationPath = join(destinationPackage, policyFile.path)
+    await mkdir(dirname(destinationPath), { recursive: true })
+    await writeFile(destinationPath, content, 'utf8')
   }
 }
 
@@ -173,19 +201,75 @@ async function ensureWorkspacePackagePattern(profileDirectory: string): Promise<
   await writeFile(path, stringify(workspace), 'utf8')
 }
 
-async function addDesktopIntegrationToManifest(profileDirectory: string): Promise<void> {
+async function restoreManagedProfileManifest(profileDirectory: string): Promise<boolean> {
   const manifestPath = join(profileDirectory, 'package.json')
   const manifest = await readProfileManifest(manifestPath)
   if (manifest === undefined) throw new Error('The web profile manifest could not be read.')
   manifest.dependencies ??= {}
-  manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'
+  let changed = false
+  for (const [name, version] of [
+    [SIDEBAR_PACKAGE, SIDEBAR_VERSION],
+    [MARKET_PACKAGE, MARKET_VERSION],
+    [DESKTOP_INTEGRATION_PACKAGE, 'workspace:*']
+  ] as const) {
+    if (manifest.dependencies[name] === version) continue
+    manifest.dependencies[name] = version
+    changed = true
+  }
   manifest.dsh ??= {}
   manifest.dsh.profile ??= {}
-  const bundles = manifest.dsh.profile.bundles ?? []
-  if (!bundles.includes(DESKTOP_INTEGRATION_PACKAGE)) bundles.push(DESKTOP_INTEGRATION_PACKAGE)
-  manifest.dsh.profile.bundles = bundles
-  manifest.insightDesktop = { defaultProfileVersion: DEFAULT_PROFILE_VERSION }
+  const managed = new Set([SIDEBAR_PACKAGE, MARKET_PACKAGE, DESKTOP_INTEGRATION_PACKAGE])
+  const remaining = (manifest.dsh.profile.bundles ?? []).filter(bundle => !managed.has(bundle))
+  const coreEnd = remaining.reduce(
+    (end, bundle, index) => CORE_BUNDLES.includes(bundle) ? index + 1 : end,
+    0
+  )
+  const bundles = [
+    ...remaining.slice(0, coreEnd),
+    SIDEBAR_PACKAGE,
+    MARKET_PACKAGE,
+    ...remaining.slice(coreEnd),
+    DESKTOP_INTEGRATION_PACKAGE
+  ]
+  if (JSON.stringify(manifest.dsh.profile.bundles ?? []) !== JSON.stringify(bundles)) {
+    manifest.dsh.profile.bundles = bundles
+    changed = true
+  }
+  if (manifest.insightDesktop?.defaultProfileVersion !== DEFAULT_PROFILE_VERSION) changed = true
+  manifest.insightDesktop = {
+    ...manifest.insightDesktop,
+    defaultProfileVersion: DEFAULT_PROFILE_VERSION
+  }
+  if (!changed) return false
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  return true
+}
+
+async function restoreManagedProfile(
+  source: string,
+  destination: string,
+  dshHome: string,
+  forceInstall: boolean
+): Promise<void> {
+  await copyDesktopIntegration(source, destination)
+  const sidebarRestored = await restoreBundledPackage(
+    source,
+    destination,
+    SIDEBAR_PACKAGE,
+    SIDEBAR_VERSION
+  )
+  const marketRestored = await restoreBundledPackage(
+    source,
+    destination,
+    MARKET_PACKAGE,
+    MARKET_VERSION
+  )
+  const manifestRestored = await restoreManagedProfileManifest(destination)
+  await ensureWorkspacePackagePattern(destination)
+  await refreshBundledMarketPolicy(source, destination)
+  if (forceInstall || sidebarRestored || marketRestored || manifestRestored) {
+    await clearProfileInstallMarker(dshHome)
+  }
 }
 
 /** Copy the packaged default web profile exactly once for a user data directory. */
@@ -215,27 +299,17 @@ export async function initializeBundledProfile(
   }
 
   if (current.insightDesktop?.defaultProfileVersion === 2) {
-    await copyDesktopIntegration(source, destination)
-    await refreshBundledMarketPolicy(source, destination)
-    await addDesktopIntegrationToManifest(destination)
-    await ensureWorkspacePackagePattern(destination)
-    await clearProfileInstallMarker(dshHome)
+    await restoreManagedProfile(source, destination, dshHome, true)
     return true
   }
 
   if (current.insightDesktop?.defaultProfileVersion === PRE_MARKET_PROFILE_VERSION) {
-    await copyDesktopIntegration(source, destination)
-    await refreshBundledMarketPolicy(source, destination)
-    await addDesktopIntegrationToManifest(destination)
-    await ensureWorkspacePackagePattern(destination)
+    await restoreManagedProfile(source, destination, dshHome, false)
     return true
   }
 
   if (current.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION) {
-    await copyDesktopIntegration(source, destination)
-    await refreshBundledMarketPolicy(source, destination)
-    await addDesktopIntegrationToManifest(destination)
-    await ensureWorkspacePackagePattern(destination)
+    await restoreManagedProfile(source, destination, dshHome, false)
     return true
   }
 
