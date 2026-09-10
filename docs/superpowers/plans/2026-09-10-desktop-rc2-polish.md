@@ -630,7 +630,7 @@ Run: `npm run package:candidate:dir`
 
 Expected: `dist-candidate/mac-arm64/因赛AI.app` is built for static inspection only. Verify its package version, Candidate channel, production bundle identity, `updates.insight-aigc.com` update Origin and `test` client service selection. Do not open, install or codesign this local Candidate as the production identity; signed/notarized behavior remains a GitHub Actions responsibility.
 
-- [ ] **Step 5: Commit the RC2 identity after all checks pass**
+- [x] **Step 5: Commit the RC2 identity after all checks pass**
 
 Commit:
 
@@ -639,13 +639,15 @@ git add package.json package-lock.json build/update-release-policy.json test/rel
 git commit -m "chore(release): prepare desktop 1.0.0 rc2"
 ```
 
-- [ ] **Step 6: Stop at the publication gate**
+- [x] **Step 6: Stop at the publication gate**
 
 Run: `git status --short --branch`
 
 Run: `git log --oneline origin/main..HEAD`
 
 Expected: only the planned RC2 commits are ahead of `origin/main`; unrelated working-tree files remain unstaged. Present the automated results, DEV app/DMG paths, manual ledger and commit list to the product owner. Do not push, create a tag, dispatch a workflow, upload to OSS or modify `candidate/current.json` without explicit approval.
+
+Execution record (2026-09-10): RC2 identity was committed as `07a510b`; the unrelated untracked `docs/analysis/` directory remained unstaged. The product owner then explicitly authorized pushing `main` and dispatching GitHub Actions.
 
 ---
 
