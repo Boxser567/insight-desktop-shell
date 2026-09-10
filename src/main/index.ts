@@ -89,6 +89,13 @@ import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 import { StartupTracker } from './startup/startup-tracker'
 import { registerStartupIpc } from './startup/startup-ipc'
+import {
+  AboutWindowController,
+  aboutWindowOptions,
+  isTrustedAboutUrl,
+  type AboutMetadata
+} from './about-window'
+import packageJson from '../../package.json'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
 type SafeModeAction =
@@ -131,6 +138,7 @@ let workspaceController: HarnessWorkspaceController | undefined
 let workspaceLifecycle: WorkspaceLifecycle | undefined
 let updateManager: UpdateManager | undefined
 let updateWindowController: UpdateWindowController<BrowserWindow> | undefined
+let aboutWindowController: AboutWindowController<BrowserWindow> | undefined
 let disposeUpdateIpc: (() => void) | undefined
 let disposeStartupIpc: (() => void) | undefined
 let startupTracker: StartupTracker | undefined
@@ -342,6 +350,40 @@ function createUpdateWindowController(): UpdateWindowController<BrowserWindow> {
         await window.loadFile(join(import.meta.dirname, '../renderer/update.html'))
       }
     }
+  })
+}
+
+function createAboutWindowController(): AboutWindowController<BrowserWindow> {
+  return new AboutWindowController({
+    create: () => {
+      const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+      const window = new BrowserWindow(aboutWindowOptions({ parent, icon: desktopIconPath() }))
+      secureWebContents(window.webContents, isTrustedAboutUrl)
+      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      return window
+    },
+    load: async (window, metadata: AboutMetadata) => {
+      const query = {
+        version: metadata.version,
+        releaseDate: metadata.releaseDate
+      }
+      const developmentUrl = process.env.ELECTRON_RENDERER_URL
+      if (developmentUrl) {
+        const url = new URL('/about.html', developmentUrl)
+        url.search = new URLSearchParams(query).toString()
+        await window.loadURL(url.toString())
+      } else {
+        await window.loadFile(join(import.meta.dirname, '../renderer/about.html'), { query })
+      }
+    }
+  })
+}
+
+function openAboutWindow(): Promise<void> {
+  if (!aboutWindowController) throw new Error('The About window is unavailable.')
+  return aboutWindowController.open({
+    version: app.getVersion(),
+    releaseDate: packageJson.insightReleaseDate
   })
 }
 
@@ -1062,6 +1104,9 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<n
     case 'show-harness-log':
       shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
       break
+    case 'show-about':
+      await openAboutWindow()
+      break
     case 'check-for-updates':
       await updateWindowController?.open()
       break
@@ -1537,6 +1582,7 @@ function readUpdateDistribution() {
 async function prepareForUpdateInstall(): Promise<void> {
   await workspaceLifecycle?.stop()
   updateWindowController?.close()
+  aboutWindowController?.close()
   if (pluginRecoveryWindow && !pluginRecoveryWindow.isDestroyed()) pluginRecoveryWindow.close()
   if (safeModeManagerWindow && !safeModeManagerWindow.isDestroyed()) safeModeManagerWindow.close()
 }
@@ -1592,6 +1638,11 @@ function installMenu(): void {
           {
             label: app.name,
             submenu: [
+              {
+                label: isChinese ? '关于因赛AI' : 'About Insight AI',
+                click: () => void openAboutWindow().catch(showUnexpectedError)
+              },
+              { type: 'separator' as const },
               {
                 label: isChinese ? '检查更新…' : 'Check for Updates…',
                 click: () => void updateWindowController?.open().catch(showUnexpectedError)
@@ -1683,6 +1734,7 @@ async function bootstrap(): Promise<void> {
   launchDirectory = join(insightRoot(), 'runtime-unconfigured')
   nativeTheme.themeSource = harnessThemePreference()
   const window = createWindow()
+  aboutWindowController = createAboutWindowController()
   runtime = new HarnessRuntime({
     dshEntryPath: dshEntryPath(),
     nodeExecutablePath: bundledNodePath(),

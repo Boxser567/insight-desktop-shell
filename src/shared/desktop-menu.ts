@@ -1,6 +1,7 @@
 export const WINDOWS_TITLEBAR_HEIGHT = 36
 
 export const desktopMenuCommands = [
+  'show-about',
   'restart-harness',
   'safe-mode',
   'show-harness-log',

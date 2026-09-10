@@ -7,7 +7,8 @@ const firstPartyFiles = [
   '../packages/insight-desktop-integration/src/client/styles.tsx',
   '../src/preload/windows-menu.ts',
   '../build/plugin-recovery.html',
-  '../build/safe-mode.html'
+  '../build/safe-mode.html',
+  '../src/renderer/src/about.css'
 ]
 
 async function read(relativePath: string): Promise<string> {

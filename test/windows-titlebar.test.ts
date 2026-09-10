@@ -63,6 +63,10 @@ describe('Windows titlebar menu', () => {
     expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
       "command: 'check-for-updates'"
     )
+    expect(desktopMenuCommands).toContain('show-about')
+    expect(await readFile('src/preload/windows-menu.ts', 'utf8')).toContain(
+      "command: 'show-about'"
+    )
     expect(desktopMenuCommands).toContain('toggle-fullscreen')
     expect(isDesktopMenuCommand('copy')).toBe(true)
     expect(isDesktopMenuCommand('run-shell-command')).toBe(false)
@@ -119,12 +123,13 @@ describe('Windows titlebar menu', () => {
     })
   })
 
-  it('keeps removed mobile commands out while exposing the controlled updater command', async () => {
+  it('keeps removed mobile commands out while exposing controlled product commands', async () => {
     const main = await readFile('src/main/index.ts', 'utf8')
 
     expect(desktopMenuCommands).not.toContain('about')
     expect(main).toContain("case 'check-for-updates':")
-    expect(main).not.toContain('showAbout')
+    expect(main).toContain("case 'show-about':")
+    expect(main).toContain("label: isChinese ? '关于因赛AI' : 'About Insight AI'")
   })
 
   it('synchronizes the native controls with Harness light and dark themes', async () => {
