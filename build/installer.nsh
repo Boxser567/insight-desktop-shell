@@ -3,22 +3,43 @@
   ; every installed file before deletion. Large unpacked installations can make
   ; that old uninstaller return code 2 even after the application has exited.
   ; Retry only that failed case with the old uninstaller's regular removal path.
-  ; User data remains outside $installationDir and the package contract keeps
+  ; User data remains outside the old installation directory and the package contract keeps
   ; deleteAppDataOnUninstall disabled.
-  !macro DshRecoverFailedAtomicUninstall INSTALL_SCOPE LABEL_SUFFIX
+  !macro DshResolveLegacyInstallationDir ROOT_KEY
+    !insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation
+    ${If} $R7 == ""
+      !insertmacro readReg $R6 "${ROOT_KEY}" "${UNINSTALL_REGISTRY_KEY}" UninstallString
+      ${If} $R6 == ""
+        !ifdef UNINSTALL_REGISTRY_KEY_2
+          !insertmacro readReg $R6 "${ROOT_KEY}" "${UNINSTALL_REGISTRY_KEY_2}" UninstallString
+        !endif
+      ${EndIf}
+      ${If} $R6 != ""
+        !insertmacro GetInQuotes $R7 "$R6"
+        ${If} $R7 != ""
+          Push $R7
+          Call GetFileParent
+          Pop $R7
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  !macroend
+
+  !macro DshRecoverFailedAtomicUninstall ROOT_KEY LABEL_SUFFIX
     IfErrors DshLegacyUninstallNeeded_${LABEL_SUFFIX} 0
     StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
 
     DshLegacyUninstallNeeded_${LABEL_SUFFIX}:
-      StrCmp $installationDir "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$installationDir\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
-      IfFileExists "$installationDir\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$uninstallerFileNameTemp" DshLegacyUninstallRetry_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
+      !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
+      StrCmp $R7 "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
+      IfFileExists "$R7\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
+      IfFileExists "$R7\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyUninstallFailed_${LABEL_SUFFIX}
+      IfFileExists "$PLUGINSDIR\old-uninstaller.exe" DshLegacyUninstallRetry_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
 
     DshLegacyUninstallRetry_${LABEL_SUFFIX}:
       StrCpy $R8 0
       StrCpy $R9 "/currentuser"
-      StrCmp "${INSTALL_SCOPE}" "shell" 0 DshLegacyUninstallAttempt_${LABEL_SUFFIX}
+      StrCmp "${ROOT_KEY}" "SHELL_CONTEXT" 0 DshLegacyUninstallAttempt_${LABEL_SUFFIX}
       StrCmp $installMode "CurrentUser" DshLegacyUninstallAttempt_${LABEL_SUFFIX}
       StrCpy $R9 "/allusers"
 
@@ -26,10 +47,10 @@
       IntOp $R8 $R8 + 1
       ClearErrors
       DetailPrint "Retrying previous-version cleanup without atomic relocation (attempt $R8 of 3)."
-      ExecWait '"$uninstallerFileNameTemp" /S /KEEP_APP_DATA $R9 _?=$installationDir' $R0
+      ExecWait '"$PLUGINSDIR\old-uninstaller.exe" /S /KEEP_APP_DATA $R9 _?=$R7' $R0
       IfErrors DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} 0
       StrCmp $R0 "0" 0 DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}
-      IfFileExists "$installationDir\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
+      IfFileExists "$R7\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
 
     DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}:
       IntCmp $R8 3 DshLegacyUninstallFailed_${LABEL_SUFFIX} DshLegacyUninstallRetryDelay_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
@@ -41,7 +62,7 @@
     DshLegacyUninstallFailed_${LABEL_SUFFIX}:
       StrCpy $R0 2
       MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
-      DetailPrint "Previous-version cleanup still left files in $installationDir."
+      DetailPrint "Previous-version cleanup still left files in $R7."
       SetErrorLevel 2
       Quit
 
@@ -51,11 +72,11 @@
   !macroend
 
   !macro customUnInstallCheck
-    !insertmacro DshRecoverFailedAtomicUninstall "shell" "Shell"
+    !insertmacro DshRecoverFailedAtomicUninstall "SHELL_CONTEXT" "Shell"
   !macroend
 
   !macro customUnInstallCheckCurrentUser
-    !insertmacro DshRecoverFailedAtomicUninstall "current-user" "CurrentUser"
+    !insertmacro DshRecoverFailedAtomicUninstall "HKEY_CURRENT_USER" "CurrentUser"
   !macroend
 
   !ifndef ONE_CLICK

@@ -217,15 +217,18 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('!macro customUnInstallCheckCurrentUser')
     const fallbackCommand = installer
       .split('\n')
-      .find((line) => line.includes('/S /KEEP_APP_DATA $R9 _?=$installationDir'))
+      .find((line) => line.includes('/S /KEEP_APP_DATA $R9 _?=$R7'))
     expect(fallbackCommand).toBeDefined()
     expect(fallbackCommand).not.toContain('--updated')
     expect(installer).toContain('IntCmp $R8 3')
-    expect(installer).toContain('IfFileExists "$installationDir\\*.*"')
     expect(installer).toContain(
-      'IfFileExists "$installationDir\\${APP_EXECUTABLE_FILENAME}"'
+      '!insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation'
     )
-    expect(installer).toContain('IfFileExists "$uninstallerFileNameTemp"')
+    expect(installer).toContain('IfFileExists "$R7\\*.*"')
+    expect(installer).toContain('IfFileExists "$R7\\${APP_EXECUTABLE_FILENAME}"')
+    expect(installer).toContain('IfFileExists "$PLUGINSDIR\\old-uninstaller.exe"')
+    expect(installer).not.toContain('$installationDir')
+    expect(installer).not.toContain('$uninstallerFileNameTemp')
   })
 
   it('loads the Shell first and isolates the authenticated Harness surface', async () => {
