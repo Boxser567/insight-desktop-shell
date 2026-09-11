@@ -330,6 +330,10 @@ function isTrustedUpdateUrl(rawUrl: string): boolean {
   }
 }
 
+function suppressWindowsSecondaryMenu(window: BrowserWindow): void {
+  if (process.platform === 'win32') window.setMenu(null)
+}
+
 function createUpdateWindowController(): UpdateWindowController<BrowserWindow> {
   return new UpdateWindowController({
     create: () => {
@@ -339,6 +343,7 @@ function createUpdateWindowController(): UpdateWindowController<BrowserWindow> {
         preload: join(import.meta.dirname, '../preload/update.cjs'),
         icon: desktopIconPath()
       }))
+      suppressWindowsSecondaryMenu(window)
       secureWebContents(window.webContents, isTrustedUpdateUrl)
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       return window
@@ -359,6 +364,7 @@ function createAboutWindowController(): AboutWindowController<BrowserWindow> {
     create: () => {
       const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
       const window = new BrowserWindow(aboutWindowOptions({ parent, icon: desktopIconPath() }))
+      suppressWindowsSecondaryMenu(window)
       secureWebContents(window.webContents, isTrustedAboutUrl)
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       return window
@@ -450,7 +456,7 @@ const harnessWorkspaceView = new HarnessWorkspaceView(harnessViewHost)
 
 function windowsTitleBarOverlay(isDark: boolean): Electron.TitleBarOverlayOptions {
   return {
-    color: '#00000000',
+    color: isDark ? '#141416' : '#ffffff',
     symbolColor: isDark ? '#f3f4f6' : '#202124',
     height: WINDOWS_TITLEBAR_HEIGHT
   }
@@ -1189,6 +1195,7 @@ async function waitForPluginRecoveryAction(options: {
           minWidth: 640,
           minHeight: 520,
           show: false,
+          ...(process.platform === 'win32' ? { autoHideMenuBar: true } : {}),
           title: '',
           webPreferences: {
             contextIsolation: true,
@@ -1199,6 +1206,7 @@ async function waitForPluginRecoveryAction(options: {
             webSecurity: true
           }
         })
+        suppressWindowsSecondaryMenu(recovery)
         secureWindow(recovery)
         installPluginRecoveryNavigation(recovery)
         recovery.on('closed', () => {

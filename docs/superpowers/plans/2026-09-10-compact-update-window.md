@@ -1,5 +1,7 @@
 # Compact Update Window Implementation Plan
 
+> Historical plan: the original `480 × 200` geometry was superseded on 2026-09-11 by [Cross-Platform Window Chrome Implementation Plan](2026-09-11-cross-platform-window-chrome.md), which sets the final update-window geometry to `480 × 240` and isolates Windows menu behavior from macOS.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the oversized desktop update window with the approved `480 × 200` compact layout while preserving every existing update action and state transition.

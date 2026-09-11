@@ -16,7 +16,9 @@ interface ManagedAboutWindow {
 export function aboutWindowOptions(input: {
   parent?: BrowserWindow
   icon: string
+  platform?: NodeJS.Platform
 }): BrowserWindowConstructorOptions {
+  const platform = input.platform ?? process.platform
   return {
     width: 380,
     height: 312,
@@ -26,6 +28,7 @@ export function aboutWindowOptions(input: {
     show: false,
     parent: input.parent,
     modal: false,
+    ...(platform === 'win32' ? { autoHideMenuBar: true } : {}),
     title: '关于因赛AI',
     icon: input.icon,
     backgroundColor: '#202024',

@@ -43,7 +43,11 @@ describe('desktop About window', () => {
 
   it('uses a fixed sandboxed local window', () => {
     const parent = {} as never
-    expect(aboutWindowOptions({ parent, icon: '/app/icon.png' })).toMatchObject({
+    expect(aboutWindowOptions({
+      parent,
+      icon: '/app/icon.png',
+      platform: 'win32'
+    })).toMatchObject({
       width: 380,
       height: 312,
       resizable: false,
@@ -54,6 +58,7 @@ describe('desktop About window', () => {
       modal: false,
       title: '关于因赛AI',
       icon: '/app/icon.png',
+      autoHideMenuBar: true,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -62,6 +67,11 @@ describe('desktop About window', () => {
         partition: 'insight-about'
       }
     })
+    expect(aboutWindowOptions({
+      parent,
+      icon: '/app/icon.png',
+      platform: 'darwin'
+    })).not.toHaveProperty('autoHideMenuBar')
   })
 
   it('accepts only the packaged or configured development About page', () => {
@@ -123,8 +133,13 @@ describe('desktop About window', () => {
       readFile('src/renderer/about.html', 'utf8'),
       readFile('package.json', 'utf8')
     ])
+    const creation = main.slice(
+      main.indexOf('function createAboutWindowController'),
+      main.indexOf('function openAboutWindow')
+    )
 
     expect(main).toContain('secureWebContents(window.webContents, isTrustedAboutUrl)')
+    expect(creation).toContain('suppressWindowsSecondaryMenu(window)')
     expect(main).toContain('version: app.getVersion()')
     expect(main).toContain('releaseDate: packageJson.insightReleaseDate')
     expect(main).toContain("window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))")

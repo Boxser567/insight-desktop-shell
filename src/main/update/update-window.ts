@@ -12,15 +12,18 @@ export function updateWindowOptions(input: {
   parent?: BrowserWindow
   preload: string
   icon: string
+  platform?: NodeJS.Platform
 }): BrowserWindowConstructorOptions {
+  const platform = input.platform ?? process.platform
   return {
     width: 480,
-    height: 200,
+    height: 240,
     minWidth: 480,
-    minHeight: 200,
+    minHeight: 240,
     show: false,
     parent: input.parent,
     modal: false,
+    ...(platform === 'win32' ? { autoHideMenuBar: true } : {}),
     title: '因赛AI 更新',
     icon: input.icon,
     backgroundColor: '#202024',

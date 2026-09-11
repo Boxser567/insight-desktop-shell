@@ -31,7 +31,11 @@ describe('Windows titlebar menu', () => {
     const preload = await readFile('src/preload/windows-titlebar.ts', 'utf8')
 
     expect(WINDOWS_TITLEBAR_HEIGHT).toBe(36)
-    expect(main).toContain("color: '#00000000'")
+    expect(main).toContain("color: isDark ? '#141416' : '#ffffff'")
+    expect(main).not.toContain("color: '#00000000'")
+    expect(main).toContain('function suppressWindowsSecondaryMenu(window: BrowserWindow): void')
+    expect(main).toContain("if (process.platform === 'win32') window.setMenu(null)")
+    expect(main).toContain('suppressWindowsSecondaryMenu(recovery)')
     expect(preload).not.toContain(`padding-top: \${WINDOWS_TITLEBAR_HEIGHT}px !important`)
     expect(preload).toContain('padding-top: 0 !important')
     expect(preload).toContain('[data-dsh-sidebar-root][data-dsh-sidebar-wide="true"]')

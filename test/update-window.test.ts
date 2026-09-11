@@ -24,16 +24,22 @@ function fakeWindow() {
 describe('desktop update window', () => {
   it('uses isolated sandboxed web preferences and remains hidden until ready', () => {
     const parent = {} as never
-    const options = updateWindowOptions({ parent, preload: '/app/update.cjs', icon: '/app/icon.png' })
+    const options = updateWindowOptions({
+      parent,
+      preload: '/app/update.cjs',
+      icon: '/app/icon.png',
+      platform: 'win32'
+    })
 
     expect(options).toMatchObject({
       width: 480,
-      height: 200,
+      height: 240,
       minWidth: 480,
-      minHeight: 200,
+      minHeight: 240,
       show: false,
       parent,
       modal: false,
+      autoHideMenuBar: true,
       webPreferences: {
         preload: '/app/update.cjs',
         contextIsolation: true,
@@ -42,6 +48,12 @@ describe('desktop update window', () => {
         webSecurity: true
       }
     })
+    expect(updateWindowOptions({
+      parent,
+      preload: '/app/update.cjs',
+      icon: '/app/icon.png',
+      platform: 'darwin'
+    })).not.toHaveProperty('autoHideMenuBar')
   })
 
   it('focuses one existing window and clears it only after close', async () => {
@@ -64,10 +76,15 @@ describe('desktop update window', () => {
 
   it('keeps the update window visible while preparing the platform installer', async () => {
     const source = await readFile('src/main/index.ts', 'utf8')
+    const creation = source.slice(
+      source.indexOf('function createUpdateWindowController'),
+      source.indexOf('function createAboutWindowController')
+    )
     const preparation = source.match(
       /async function prepareForUpdateInstall\(\): Promise<void> \{(?<body>[\s\S]*?)\n\}/u
     )?.groups?.body
 
+    expect(creation).toContain('suppressWindowsSecondaryMenu(window)')
     expect(preparation).toContain('await workspaceLifecycle?.stop()')
     expect(preparation).not.toContain('updateWindowController?.close()')
     expect(preparation).toContain('aboutWindowController?.close()')
