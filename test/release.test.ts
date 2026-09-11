@@ -231,6 +231,26 @@ describe('GitHub release contract', () => {
     expect(installer).not.toContain('$uninstallerFileNameTemp')
   })
 
+  it('stops legacy Windows processes before invoking an old uninstaller', async () => {
+    const installer = await readFile(
+      path.join(projectRoot, 'build', 'installer.nsh'),
+      'utf8'
+    )
+    const builderPatch = await readFile(
+      path.join(projectRoot, 'patches', 'app-builder-lib+26.15.3.patch'),
+      'utf8'
+    )
+
+    expect(builderPatch).toContain('customBeforeUninstallOldVersion')
+    expect(builderPatch).toContain('!insertmacro uninstallOldVersion SHELL_CONTEXT')
+    expect(installer).toContain('!macro customBeforeUninstallOldVersion ROOT_KEY LABEL_SUFFIX')
+    expect(installer).toContain('INSIGHT_LEGACY_INSTALL_DIR')
+    expect(installer).toContain('Get-CimInstance -ClassName Win32_Process')
+    expect(installer).toContain('Stop-Process -Id $$_.ProcessId -Force')
+    expect(installer).toContain('[System.StringComparison]::OrdinalIgnoreCase')
+    expect(installer).toContain('IntCmp $R8 3')
+  })
+
   it('loads the Shell first and isolates the authenticated Harness surface', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
     const vite = await readFile(path.join(projectRoot, 'electron.vite.config.ts'), 'utf8')

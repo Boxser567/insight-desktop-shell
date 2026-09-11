@@ -15,6 +15,7 @@ import {
   formatExitCode,
   HarnessRuntime,
   resolveShellEnvironment,
+  terminateWindowsProcessTree,
   updateReadyStability
 } from '../src/main/runtime/harness-runtime'
 import { canGrantWindowPermission, isTrustedAppUrl } from '../src/main/security-policy'
@@ -280,6 +281,19 @@ describe('Harness launch contract', () => {
   it('makes native Windows termination codes diagnosable', () => {
     expect(formatExitCode(4294930435)).toContain(
       '0xFFFF7003, Crashpad handler unavailable'
+    )
+  })
+
+  it('force-terminates the complete Windows Harness process tree', () => {
+    const runner = vi.fn(() => ({ error: undefined, status: 0 })) as unknown as Parameters<
+      typeof terminateWindowsProcessTree
+    >[1]
+
+    expect(terminateWindowsProcessTree(43127, runner)).toBe(true)
+    expect(runner).toHaveBeenCalledWith(
+      'taskkill',
+      ['/pid', '43127', '/t', '/f'],
+      { stdio: 'ignore', windowsHide: true }
     )
   })
 })

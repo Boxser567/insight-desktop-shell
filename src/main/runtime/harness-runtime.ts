@@ -31,6 +31,7 @@ export interface HarnessRuntimeOptions {
 }
 
 export interface HarnessChildProcess extends EventEmitter {
+  readonly pid?: number
   readonly stdout: NodeJS.ReadableStream
   readonly stderr: NodeJS.ReadableStream
   readonly exitCode: number | null
@@ -254,6 +255,19 @@ export function updateReadyStability(
   }
 }
 
+export function terminateWindowsProcessTree(
+  pid: number,
+  runner: typeof spawnSync = spawnSync
+): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  const result = runner(
+    'taskkill',
+    ['/pid', String(pid), '/t', '/f'],
+    { stdio: 'ignore', windowsHide: true }
+  )
+  return !result.error && result.status === 0
+}
+
 export class HarnessRuntime {
   private child?: HarnessChildProcess
   private modelCredentialRevision = 0
@@ -464,6 +478,13 @@ ${cause}`
 
   private async stopChild(child: HarnessChildProcess): Promise<void> {
     if (child.exitCode !== null) return
+
+    if (process.platform === 'win32' && child.pid !== undefined) {
+      if (terminateWindowsProcessTree(child.pid)) return
+      child.kill('SIGKILL')
+      return
+    }
+
     const exitPromise = new Promise<boolean>((resolve) =>
       child.once('exit', () => resolve(true))
     )

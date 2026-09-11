@@ -25,6 +25,37 @@
     ${EndIf}
   !macroend
 
+  ; Older releases can leave a bundled Node/Electron descendant alive after the
+  ; main window exits. The stock old uninstaller then blocks forever on its own
+  ; app-running prompt. Stop only executables rooted in the registered legacy
+  ; installation directory, immediately before that old uninstaller is invoked.
+  !macro DshStopLegacyProcesses ROOT_KEY LABEL_SUFFIX
+    !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
+    StrCmp $R7 "" DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
+    IfFileExists "$R7\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
+
+    System::Call 'Kernel32::SetEnvironmentVariable(t, t)i ("INSIGHT_LEGACY_INSTALL_DIR", "$R7").r0'
+    StrCpy $R8 0
+
+    DshLegacyProcessCleanupAttempt_${LABEL_SUFFIX}:
+      IntOp $R8 $R8 + 1
+      DetailPrint "Stopping previous-version processes (attempt $R8 of 3)."
+      nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$$root = $$env:INSIGHT_LEGACY_INSTALL_DIR.TrimEnd([char]92) + [char]92; $$targets = @(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }); $$targets | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 400; if (@(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { exit 0 } else { exit 1 }"`
+      Pop $R9
+      StrCmp $R9 "0" DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
+      IntCmp $R8 3 DshLegacyProcessCleanupDone_${LABEL_SUFFIX} DshLegacyProcessCleanupDelay_${LABEL_SUFFIX} DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
+
+    DshLegacyProcessCleanupDelay_${LABEL_SUFFIX}:
+      Sleep 600
+      Goto DshLegacyProcessCleanupAttempt_${LABEL_SUFFIX}
+
+    DshLegacyProcessCleanupDone_${LABEL_SUFFIX}:
+  !macroend
+
+  !macro customBeforeUninstallOldVersion ROOT_KEY LABEL_SUFFIX
+    !insertmacro DshStopLegacyProcesses "${ROOT_KEY}" "${LABEL_SUFFIX}"
+  !macroend
+
   !macro DshRecoverFailedAtomicUninstall ROOT_KEY LABEL_SUFFIX
     IfErrors DshLegacyUninstallNeeded_${LABEL_SUFFIX} 0
     StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
