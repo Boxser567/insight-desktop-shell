@@ -1,20 +1,16 @@
 diff --git a/node_modules/app-builder-lib/templates/nsis/installSection.nsh b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
 --- a/node_modules/app-builder-lib/templates/nsis/installSection.nsh
 +++ b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
-@@ -49,10 +49,16 @@ ${if} $isTryToKeepShortcuts == "true"
-   ${endIf}
- ${endif}
- 
+@@ -52,2 +52,5 @@
 +!ifmacrodef customBeforeUninstallOldVersion
 +  !insertmacro customBeforeUninstallOldVersion "SHELL_CONTEXT" "Shell"
 +!endif
  !insertmacro uninstallOldVersion SHELL_CONTEXT
  !insertmacro handleUninstallResult SHELL_CONTEXT
- 
+@@ -55,3 +58,6 @@
  ${if} $installMode == "all"
 +  !ifmacrodef customBeforeUninstallOldVersion
 +    !insertmacro customBeforeUninstallOldVersion "HKEY_CURRENT_USER" "CurrentUser"
 +  !endif
    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
    !insertmacro handleUninstallResult HKEY_CURRENT_USER
- ${endIf}
