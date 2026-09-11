@@ -33,8 +33,8 @@ async function main() {
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .sort()
-  if (permissions?.join(',') !== ['actions: read', 'contents: write', 'id-token: write'].sort().join(',')) {
-    throw new Error('Publish workflow permissions must be exactly actions: read, contents: write and id-token: write.')
+  if (permissions?.join(',') !== ['contents: write', 'id-token: write'].sort().join(',')) {
+    throw new Error('Publish workflow permissions must be exactly contents: write and id-token: write.')
   }
 
   for (const required of [

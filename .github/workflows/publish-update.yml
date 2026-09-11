@@ -10,7 +10,6 @@ on:
         options:
           - stage
           - promote
-          - mirror-rc8-windows
       tag:
         description: Existing GitHub Draft tag, for example v1.0.0-rc.1
         required: true
@@ -30,7 +29,6 @@ on:
         type: string
 
 permissions:
-  actions: read
   contents: write
   id-token: write
 
@@ -78,20 +76,7 @@ jobs:
             echo '::error::Partial release scopes are allowed for Candidate releases only.'
             exit 1
           fi
-          if [ "$COMMAND" = 'mirror-rc8-windows' ]; then
-            test "$TAG" = 'v1.0.0-rc.8' || {
-              echo '::error::The temporary mirror action is fixed to v1.0.0-rc.8.'
-              exit 1
-            }
-            test "$SCOPE" = 'all' || {
-              echo '::error::The temporary mirror action requires scope=all.'
-              exit 1
-            }
-            test -z "$CONFIRM_VERSION" || {
-              echo '::error::confirm_version must be empty for the temporary mirror action.'
-              exit 1
-            }
-          elif [ "$COMMAND" = 'stage' ]; then
+          if [ "$COMMAND" = 'stage' ]; then
             test -z "$CONFIRM_VERSION" || {
               echo '::error::confirm_version must be empty for stage.'
               exit 1
@@ -111,16 +96,7 @@ jobs:
             scripts/github-oss-client.mjs
           node --check scripts/github-oss-client.mjs
           node --check scripts/publish-update-to-oss.mjs
-      - name: Download RC8 Windows Candidate artifact
-        if: inputs.command == 'mirror-rc8-windows'
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-x64
-          path: mirrored-artifact
-          github-token: ${{ github.token }}
-          run-id: '34577246247'
       - name: Publish verified update assets
-        if: inputs.command != 'mirror-rc8-windows'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -135,86 +111,6 @@ jobs:
             args+=(--confirm-version "$CONFIRM_VERSION")
           fi
           "${args[@]}"
-      - name: Mirror RC8 Windows Candidate to OSS download prefix
-        if: inputs.command == 'mirror-rc8-windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { createHash } from 'node:crypto'
-          import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-          import { join, resolve } from 'node:path'
-          import { createGithubOssClient } from './scripts/github-oss-client.mjs'
-
-          const directory = resolve('mirrored-artifact')
-          const prefix = 'desktop/downloads/v1.0.0-rc.8/windows-x64/'
-          const expectedNames = [
-            'insight-1.0.0-rc.8-windows-x64-setup.exe',
-            'insight-1.0.0-rc.8-windows-x64-setup.exe.blockmap',
-            'latest.yml'
-          ].sort()
-          const names = (await readdir(directory)).sort()
-          if (JSON.stringify(names) !== JSON.stringify(expectedNames)) {
-            throw new Error('RC8 Windows artifact contains an unexpected file set.')
-          }
-
-          const files = []
-          for (const name of names) {
-            const path = join(directory, name)
-            const metadata = await stat(path)
-            if (!metadata.isFile() || metadata.size <= 0) {
-              throw new Error(`RC8 Windows artifact is invalid: ${name}`)
-            }
-            const sha256 = createHash('sha256').update(await readFile(path)).digest('hex')
-            files.push({ name, path, size: metadata.size, sha256 })
-          }
-
-          const oss = createGithubOssClient()
-          const existing = await oss.listObjects(prefix)
-          if (existing.length === 0) {
-            for (const file of files) {
-              const headers = {
-                'x-oss-forbid-overwrite': 'true',
-                'cache-control': 'public,max-age=31536000,immutable',
-                'content-type': file.name.endsWith('.yml')
-                  ? 'application/yaml; charset=utf-8'
-                  : 'application/octet-stream'
-              }
-              if (file.name.endsWith('.exe')) {
-                headers['content-disposition'] = `attachment; filename="${file.name}"`
-              }
-              await oss.putObject(`${prefix}${file.name}`, file.path, headers)
-            }
-          }
-
-          const uploaded = (await oss.listObjects(prefix))
-            .map(({ key, size }) => ({ name: key.slice(prefix.length), size }))
-            .sort((left, right) => left.name.localeCompare(right.name))
-          const expected = files
-            .map(({ name, size }) => ({ name, size }))
-            .sort((left, right) => left.name.localeCompare(right.name))
-          if (JSON.stringify(uploaded) !== JSON.stringify(expected)) {
-            throw new Error('OSS RC8 mirror does not match the Actions artifact.')
-          }
-
-          await mkdir('release-reports', { recursive: true })
-          const report = {
-            action: 'mirror-actions-artifact',
-            sourceRunId: '34577246247',
-            sourceArtifact: 'windows-x64',
-            version: '1.0.0-rc.8',
-            ossPrefix: prefix,
-            currentJsonModified: false,
-            files: files.map(({ name, size, sha256 }) => ({ name, size, sha256 })),
-            completedAt: new Date().toISOString()
-          }
-          await writeFile(
-            'release-reports/v1.0.0-rc.8-mirror-actions-artifact.json',
-            `${JSON.stringify(report, null, 2)}\n`,
-            { mode: 0o600 }
-          )
-          console.log(JSON.stringify({ ok: true, ...report }, null, 2))
-          NODE
       - name: Upload publisher report
         if: always()
         uses: actions/upload-artifact@v4
