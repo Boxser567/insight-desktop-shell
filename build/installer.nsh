@@ -1,4 +1,63 @@
 !ifndef BUILD_UNINSTALLER
+  ; electron-builder updates normally ask the old uninstaller to atomically move
+  ; every installed file before deletion. Large unpacked installations can make
+  ; that old uninstaller return code 2 even after the application has exited.
+  ; Retry only that failed case with the old uninstaller's regular removal path.
+  ; User data remains outside $installationDir and the package contract keeps
+  ; deleteAppDataOnUninstall disabled.
+  !macro DshRecoverFailedAtomicUninstall INSTALL_SCOPE LABEL_SUFFIX
+    IfErrors DshLegacyUninstallNeeded_${LABEL_SUFFIX} 0
+    StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
+
+    DshLegacyUninstallNeeded_${LABEL_SUFFIX}:
+      StrCmp $installationDir "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
+      IfFileExists "$installationDir\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
+      IfFileExists "$installationDir\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyUninstallFailed_${LABEL_SUFFIX}
+      IfFileExists "$uninstallerFileNameTemp" DshLegacyUninstallRetry_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
+
+    DshLegacyUninstallRetry_${LABEL_SUFFIX}:
+      StrCpy $R8 0
+      StrCpy $R9 "/currentuser"
+      StrCmp "${INSTALL_SCOPE}" "shell" 0 DshLegacyUninstallAttempt_${LABEL_SUFFIX}
+      StrCmp $installMode "CurrentUser" DshLegacyUninstallAttempt_${LABEL_SUFFIX}
+      StrCpy $R9 "/allusers"
+
+    DshLegacyUninstallAttempt_${LABEL_SUFFIX}:
+      IntOp $R8 $R8 + 1
+      ClearErrors
+      DetailPrint "Retrying previous-version cleanup without atomic relocation (attempt $R8 of 3)."
+      ExecWait '"$uninstallerFileNameTemp" /S /KEEP_APP_DATA $R9 _?=$installationDir' $R0
+      IfErrors DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} 0
+      StrCmp $R0 "0" 0 DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}
+      IfFileExists "$installationDir\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
+
+    DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}:
+      IntCmp $R8 3 DshLegacyUninstallFailed_${LABEL_SUFFIX} DshLegacyUninstallRetryDelay_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
+
+    DshLegacyUninstallRetryDelay_${LABEL_SUFFIX}:
+      Sleep 1000
+      Goto DshLegacyUninstallAttempt_${LABEL_SUFFIX}
+
+    DshLegacyUninstallFailed_${LABEL_SUFFIX}:
+      StrCpy $R0 2
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
+      DetailPrint "Previous-version cleanup still left files in $installationDir."
+      SetErrorLevel 2
+      Quit
+
+    DshLegacyUninstallDone_${LABEL_SUFFIX}:
+      ClearErrors
+      StrCpy $R0 0
+  !macroend
+
+  !macro customUnInstallCheck
+    !insertmacro DshRecoverFailedAtomicUninstall "shell" "Shell"
+  !macroend
+
+  !macro customUnInstallCheckCurrentUser
+    !insertmacro DshRecoverFailedAtomicUninstall "current-user" "CurrentUser"
+  !macroend
+
   !ifndef ONE_CLICK
     !include "LogicLib.nsh"
     !include "nsDialogs.nsh"
@@ -75,8 +134,8 @@
     !macro preInit
     !macroend
     Function .onVerifyInstDir
-      ; Always pass — we create the directory in DshEnsureInstDirExists.
+      ; Always pass; we create the directory in DshEnsureInstDirExists.
     FunctionEnd
+
   !endif
 !endif
-

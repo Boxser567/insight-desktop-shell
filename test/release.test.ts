@@ -203,6 +203,31 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('${NSD_SetText} $DshDirectoryEdit $3')
   })
 
+  it('recovers from the legacy Windows atomic-uninstall failure without deleting user data', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as { build: { nsis: { deleteAppDataOnUninstall?: boolean } } }
+    const installer = await readFile(
+      path.join(projectRoot, 'build', 'installer.nsh'),
+      'utf8'
+    )
+
+    expect(packageJson.build.nsis.deleteAppDataOnUninstall).not.toBe(true)
+    expect(installer).toContain('!macro customUnInstallCheck')
+    expect(installer).toContain('!macro customUnInstallCheckCurrentUser')
+    const fallbackCommand = installer
+      .split('\n')
+      .find((line) => line.includes('/S /KEEP_APP_DATA $R9 _?=$installationDir'))
+    expect(fallbackCommand).toBeDefined()
+    expect(fallbackCommand).not.toContain('--updated')
+    expect(installer).toContain('IntCmp $R8 3')
+    expect(installer).toContain('IfFileExists "$installationDir\\*.*"')
+    expect(installer).toContain(
+      'IfFileExists "$installationDir\\${APP_EXECUTABLE_FILENAME}"'
+    )
+    expect(installer).toContain('IfFileExists "$uninstallerFileNameTemp"')
+  })
+
   it('loads the Shell first and isolates the authenticated Harness surface', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
     const vite = await readFile(path.join(projectRoot, 'electron.vite.config.ts'), 'utf8')
