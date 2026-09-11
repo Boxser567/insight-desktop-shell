@@ -44,6 +44,22 @@ describe('desktop update policy', () => {
     expect(resolveUpdateSupport(input).supported).toBe(supported)
   })
 
+  it.each([
+    '/private/var/folders/example/AppTranslocation/ABC/d/因赛AI.app/Contents/MacOS/因赛AI',
+    '/Volumes/因赛AI/因赛AI.app/Contents/MacOS/因赛AI'
+  ])('rejects a macOS client running outside an installed application location: %s', (executablePath) => {
+    expect(resolveUpdateSupport({
+      packaged: true,
+      channel: 'candidate',
+      platform: 'darwin',
+      arch: 'arm64',
+      executablePath
+    })).toMatchObject({
+      supported: false,
+      reason: expect.stringContaining('应用程序')
+    })
+  })
+
   it('only suppresses a matching optional version during automatic checks', () => {
     const input = { availableVersion: '1.2.3', skippedVersion: '1.2.3' }
 

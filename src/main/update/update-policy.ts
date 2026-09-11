@@ -15,6 +15,7 @@ export interface UpdateEnvironment {
   channel: UpdateChannel
   platform: string
   arch: string
+  executablePath?: string
 }
 
 export type UpdateSupport =
@@ -27,6 +28,12 @@ export function resolveUpdateSupport(input: UpdateEnvironment): UpdateSupport {
   }
   if (input.channel === 'development') {
     return { supported: false, reason: '开发渠道不连接候选或正式更新源。' }
+  }
+  if (input.platform === 'darwin' && isTransientMacApplicationPath(input.executablePath)) {
+    return {
+      supported: false,
+      reason: '当前客户端正在从磁盘映像或 macOS 隔离目录运行。请将“因赛AI”拖入“应用程序”文件夹并从那里重新打开。'
+    }
   }
   if (!isSupportedPlatform(input.platform) || !isSupportedArchitecture(input.arch)) {
     return { supported: false, reason: `当前平台不支持更新：${input.platform}-${input.arch}。` }
@@ -76,4 +83,9 @@ function isSupportedPlatform(value: string): value is UpdatePlatform {
 
 function isSupportedArchitecture(value: string): value is UpdateArch {
   return value === 'arm64' || value === 'x64'
+}
+
+function isTransientMacApplicationPath(executablePath: string | undefined): boolean {
+  return executablePath?.includes('/AppTranslocation/') === true ||
+    executablePath?.startsWith('/Volumes/') === true
 }

@@ -281,6 +281,31 @@ describe('desktop update manager', () => {
     })
   })
 
+  it('keeps the installing state when the menu requests another check', async () => {
+    const downloadedBytes = Buffer.from('verified installer')
+    const release = resolvedRelease({ downloadedBytes })
+    const executor = new FakeExecutor(release.manifest.version)
+    const { manager, source, userData } = await setup({ release, executor })
+    const downloadedFile = join(userData, 'app.zip')
+    await writeFile(downloadedFile, downloadedBytes)
+    executor.download.mockImplementation(async () => {
+      executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
+    })
+    await manager.start()
+    await manager.check(true)
+    await manager.download()
+    await manager.install()
+    vi.mocked(source.resolve).mockClear()
+
+    await manager.check(true)
+
+    expect(source.resolve).not.toHaveBeenCalled()
+    expect(manager.status()).toMatchObject({
+      phase: 'installing',
+      availableVersion: '1.1.0'
+    })
+  })
+
   it('does not consult the executor when the authenticated source fails', async () => {
     const source: UpdateSource = {
       ...fakeSource(resolvedRelease()),

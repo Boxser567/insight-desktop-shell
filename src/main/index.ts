@@ -1614,7 +1614,8 @@ async function initializeUpdates(): Promise<void> {
       packaged: app.isPackaged,
       channel: desktopChannel,
       platform: process.platform,
-      arch: process.arch
+      arch: process.arch,
+      executablePath: app.getPath('exe')
     },
     source: new GenericReleaseSource({
       distribution: readUpdateDistribution(),
