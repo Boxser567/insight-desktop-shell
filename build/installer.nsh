@@ -1,3 +1,42 @@
+; Diagnostics are best effort and must preserve registers and the NSIS error flag.
+; TEMP is outside the install tree and is shared with the spawned old uninstaller.
+!macro DshUpdateLog MESSAGE
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $2 0
+  IfErrors 0 +2
+  StrCpy $2 1
+  CreateDirectory "$TEMP\insight-desktop-update-logs"
+  System::Call 'kernel32::GetCurrentProcessId() i.r0'
+  FileOpen $1 "$TEMP\insight-desktop-update-logs\update-$0.log" a
+  System::Call 'kernel32::GetTickCount() i.r0'
+  FileWriteUTF16LE $1 "tick=$0 version=${VERSION} nsisError=$2 ${MESSAGE}$\r$\n"
+  FileClose $1
+  ClearErrors
+  StrCmp $2 0 +2
+  SetErrors
+  Pop $2
+  Pop $1
+  Pop $0
+!macroend
+
+!macro customInit
+  !insertmacro DshUpdateLog "installer-start exe=$EXEPATH temp=$TEMP"
+!macroend
+
+!macro customUnInit
+  !insertmacro DshUpdateLog "uninstaller-start exe=$EXEPATH directory=$INSTDIR"
+!macroend
+
+!macro customInstall
+  !insertmacro DshUpdateLog "install-complete directory=$INSTDIR"
+!macroend
+
+!macro customUnInstall
+  !insertmacro DshUpdateLog "uninstall-remove-start directory=$INSTDIR"
+!macroend
+
 !ifndef BUILD_UNINSTALLER
   ; electron-builder updates normally ask the old uninstaller to atomically move
   ; every installed file before deletion. Large unpacked installations can make
@@ -42,6 +81,7 @@
       DetailPrint "Stopping previous-version processes (attempt $R8 of 3)."
       nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$$root = $$env:INSIGHT_LEGACY_INSTALL_DIR.TrimEnd([char]92) + [char]92; $$targets = @(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }); $$targets | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 400; if (@(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { exit 0 } else { exit 1 }"`
       Pop $R9
+      !insertmacro DshUpdateLog "process-cleanup attempt=$R8 result=$R9 directory=$R7"
       StrCmp $R9 "0" DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
       IntCmp $R8 3 DshLegacyProcessCleanupDone_${LABEL_SUFFIX} DshLegacyProcessCleanupDelay_${LABEL_SUFFIX} DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
 
@@ -53,7 +93,9 @@
   !macroend
 
   !macro customBeforeUninstallOldVersion ROOT_KEY LABEL_SUFFIX
+    !insertmacro DshUpdateLog "legacy-cleanup-start registry=${ROOT_KEY}"
     !insertmacro DshStopLegacyProcesses "${ROOT_KEY}" "${LABEL_SUFFIX}"
+    !insertmacro DshUpdateLog "legacy-cleanup-end directory=$R7"
   !macroend
 
   !macro DshRecoverFailedAtomicUninstall ROOT_KEY LABEL_SUFFIX
@@ -61,6 +103,7 @@
     StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
 
     DshLegacyUninstallNeeded_${LABEL_SUFFIX}:
+      !insertmacro DshUpdateLog "fallback-needed registry=${ROOT_KEY} previous-result=$R0"
       !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
       StrCmp $R7 "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
       IfFileExists "$R7\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
@@ -78,7 +121,9 @@
       IntOp $R8 $R8 + 1
       ClearErrors
       DetailPrint "Retrying previous-version cleanup without atomic relocation (attempt $R8 of 3)."
+      !insertmacro DshUpdateLog "fallback-launch attempt=$R8 directory=$R7 mode=$R9"
       ExecWait '"$PLUGINSDIR\old-uninstaller.exe" /S /KEEP_APP_DATA $R9 _?=$R7' $R0
+      !insertmacro DshUpdateLog "fallback-return result=$R0"
       IfErrors DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} 0
       StrCmp $R0 "0" 0 DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}
       IfFileExists "$R7\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
@@ -91,8 +136,9 @@
       Goto DshLegacyUninstallAttempt_${LABEL_SUFFIX}
 
     DshLegacyUninstallFailed_${LABEL_SUFFIX}:
+      !insertmacro DshUpdateLog "upgrade-failed directory=$R7 result=$R0"
       StrCpy $R0 2
-      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0$\r$\nLogs: $TEMP\insight-desktop-update-logs"
       DetailPrint "Previous-version cleanup still left files in $R7."
       SetErrorLevel 2
       Quit

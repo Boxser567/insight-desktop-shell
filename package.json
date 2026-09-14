@@ -120,6 +120,10 @@
     ],
     "extraResources": [
       {
+        "from": "scripts/diagnose-windows-update.ps1",
+        "to": "diagnostics/diagnose-windows-update.ps1"
+      },
+      {
         "from": "build/app-icon.png",
         "to": "icon.png"
       },
