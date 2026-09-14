@@ -25,7 +25,7 @@ describe('desktop integration package', () => {
 
     expect(patch).toEqual([
       { id: 'ui-brand-official', disabled: true },
-      { id: 'agent-default-model', config: { provider: 'yinsai-gateway', model: 'deepseek-v4-flash-vision-exp' } },
+      { id: 'agent-default-model', config: { provider: 'yinsai-gateway', model: 'deepseek-flash' } },
       { id: 'llm-deepseek', disabled: true },
       { id: 'llm-pi-ai', disabled: true },
       { id: 'ui-settings-models', disabled: true },

@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
+export class ModelCredentialError extends Error {
+  constructor(message: string, readonly code: 'AUTH' | 'TRANSPORT' | 'TIMEOUT') {
+    super(message)
+    this.name = 'ModelCredentialError'
+  }
+}
+
 export interface ModelCredentialTransport {
   postMessage(message: Record<string, unknown>): void
   on(event: 'message', listener: (value: unknown) => void): unknown
@@ -23,29 +30,29 @@ export function createModelCredentialClient(transport: ModelCredentialTransport)
     const response = value as Record<string, unknown>
     if (response.type !== 'insight:model-token:response' || response.id !== pending.id) return
     if (typeof response.token === 'string' && response.token.length > 0) finish(undefined, response.token)
-    else finish(new Error(response.error === 'LOGIN_REQUIRED'
+    else finish(new ModelCredentialError(response.error === 'LOGIN_REQUIRED'
       ? '登录已失效，请重新登录后继续会话。'
-      : '暂时无法验证登录，请检查网络后重试。'))
+      : '暂时无法验证登录，请检查网络后重试。', response.error === 'LOGIN_REQUIRED' ? 'AUTH' : 'TRANSPORT'))
   }
   transport.on('message', onMessage)
   return {
     getToken(): Promise<string> {
-      if (disposed) return Promise.reject(new Error('登录通道已关闭，请重新打开客户端。'))
+      if (disposed) return Promise.reject(new ModelCredentialError('登录通道已关闭，请重新打开客户端。', 'AUTH'))
       if (pending) return pending.promise
       let resolve!: (token: string) => void
       let reject!: (error: Error) => void
       const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no })
       const id = randomUUID()
-      const timer = setTimeout(() => finish(new Error('登录校验超时，请检查网络后重试。')), 35_000)
+      const timer = setTimeout(() => finish(new ModelCredentialError('登录校验超时，请检查网络后重试。', 'TIMEOUT')), 35_000)
       pending = { id, promise, resolve, reject, timer }
       try { transport.postMessage({ type: 'insight:model-token:request', id }) }
-      catch { finish(new Error('登录通道不可用，请重新打开客户端。')) }
+      catch { finish(new ModelCredentialError('登录通道不可用，请重新打开客户端。', 'TRANSPORT')) }
       return promise
     },
     dispose(): void {
       disposed = true
       transport.off('message', onMessage)
-      finish(new Error('登录通道已关闭，请重新打开客户端。'))
+      finish(new ModelCredentialError('登录通道已关闭，请重新打开客户端。', 'AUTH'))
     }
   }
 }

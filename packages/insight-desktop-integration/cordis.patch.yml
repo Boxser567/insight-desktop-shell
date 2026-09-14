@@ -4,7 +4,7 @@
 - id: agent-default-model
   config:
     provider: yinsai-gateway
-    model: deepseek-v4-flash-vision-exp
+    model: deepseek-flash
 
 - id: llm-deepseek
   disabled: true
