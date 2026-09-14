@@ -129,7 +129,7 @@ function validateRuntimeTarget(value, name, releaseTag) {
 function validateRuntimeLock(value) {
   assertExactKeys(value, ['schemaVersion', 'releaseTag', 'targets'], 'Core Runtime lock')
   const tagVersion = typeof value.releaseTag === 'string'
-    ? /^insight-runtime-v(.+)$/u.exec(value.releaseTag)?.[1]
+    ? /^insight-runtime-v(.+?)(?:-insight\.[1-9]\d*)?$/u.exec(value.releaseTag)?.[1]
     : undefined
   if (value.schemaVersion !== 1 || !parseVersion(tagVersion)) {
     throw new Error('Core Runtime lock header is invalid.')

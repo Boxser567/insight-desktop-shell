@@ -91,7 +91,6 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
           <div className="brand-mark" aria-hidden="true"><img src={brandMark} alt="" /></div>
           <div>
             <strong>因赛AI</strong>
-            <span>一站搞掂电商生意</span>
           </div>
         </div>
         <p>让智能工作区、安全会话和业务资产在一个桌面客户端中协同。</p>

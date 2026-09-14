@@ -95,6 +95,17 @@ describe('desktop release preflight', () => {
     })
   })
 
+  it('accepts an Insight runtime revision while preserving locked asset URLs', async () => {
+    const paths = await fixture()
+    const lock = await readFile(paths.runtimeLock, 'utf8')
+    await writeFile(paths.runtimeLock, lock.replaceAll(
+      'insight-runtime-v0.1.1-rc.10', 'insight-runtime-v0.1.1-rc.10-insight.1'
+    ))
+    const result = run(paths)
+    expect(result.status, result.stderr).toBe(0)
+    expect(JSON.parse(result.stdout).runtimeTag).toBe('insight-runtime-v0.1.1-rc.10-insight.1')
+  })
+
   it('allows Candidate test services and requires production services for Stable', async () => {
     const candidate = await fixture()
     expect(run(candidate).status).toBe(0)
