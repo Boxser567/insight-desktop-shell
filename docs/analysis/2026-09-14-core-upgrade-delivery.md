@@ -2,7 +2,7 @@
 
 ## Scope and identity
 
-- Shell: `codex/core-upgrade-delivery-20260914`, based on `3c61043`; candidate `1.0.0-rc.10`.
+- Shell: `codex/core-upgrade-delivery-20260914`, based on `3c61043`; candidate `1.0.0-rc.10`, implementation commit `2a5ad1c`; draft PR https://github.com/Boxser567/insight-desktop-shell/pull/2.
 - Core: `5c7450d116d59f972b5df64efa3942220d363809`, integrating upstream `dsh-v0.1.5-rc.2` while retaining Insight additions. Original Core checkout remains untouched.
 - Runtime dependency prerelease: https://github.com/Boxser567/insight-harness-core/releases/tag/insight-runtime-v0.1.5-rc.2
 - Native build: https://github.com/Boxser567/insight-harness-core/actions/runs/34814936667 — all three targets succeeded.
@@ -15,8 +15,8 @@
 | Frozen Profile | Sidebar 0.19.1, Market 1.46.1, generation 5; two clean installs resolved identical 177 package manifests; lock SHA-256 `5604758bb1487ae17aebce998909d12fcc41b5918b9a775df73d496acdafc3f4` |
 | Core peers | No installed `@deepseek-ai` package manifests in the Profile; peers resolve from selected Runtime |
 | Profile migration | Generation 4 retains user plugins, removed optional community plugins and custom patch; managed Sidebar/Market remain installation-owned |
-| Shell regression | 108 files / 689 tests passed before candidate identity bump; identity-related follow-up tests and release preflight passed after lock/version update |
-| Types/build | Shell types, integration types/build, Electron build and native-runtime `build:prepared` passed |
+| Shell regression | 108 files / 689 tests passed on final rc.10 metadata after fixing the stale release-date assertion; release preflight passed |
+| Types/build | Shell types, integration types/build, Electron build, native-runtime `build:prepared`, and standard `npm run build` from the published download passed (one transient GitHub TLS failure succeeded on retry) |
 | Real Renderer | Actual Shell Main/preloads + Core with fixture authentication: one sidebar, account footer, settings, model catalog defaults to `yinsai-gateway` |
 | Market protection | Actual update/uninstall HTTP routes reject Sidebar, Market and first-party integration (6 checks), with the expected managed-package reason |
 | Workspace/editor/terminal | Temporary workspace created via Core RPC and opened through UI; Markdown edited through CodeMirror and verified on disk; terminal command created a verified file |
@@ -52,7 +52,7 @@ Local evidence: `/private/tmp/insight-delivery-editor-patched-20260914`, `/priva
 
 ## Remaining release gates
 
-- Signed/notarized native installer results and packaged Runtime smoke.
+- Native installer CI: https://github.com/Boxser567/insight-desktop-shell/actions/runs/34816593540 (first attempt stopped after Windows exposed a stale release-date test; corrected and rerunning). Local macOS arm64 app packaging, unrestricted `codesign --verify --deep --strict` verification, and packaged Runtime smoke passed; local notarization was skipped and CI notarization is pending.
 - Installed rc.9 → rc.10 download/verification/restart and rollback on available native systems. Updater unit tests passed; they are not installed acceptance.
 - Real test-account login and a model request with actual service credentials; fixture authentication does not establish service availability.
 - Copied real legacy user-session corpus migration; prior Core migration fixtures cover v0→v1→v2→v3, but no production user data was copied or modified here.
