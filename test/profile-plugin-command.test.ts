@@ -1,9 +1,10 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildPnpmShimCommand,
   buildProfilePluginAddArguments,
+  buildProfilePluginCommandEnvironment,
   diagnosticLine,
   removeProfilePluginWithDsh
 } from '../src/main/runtime/profile-plugin-command'
@@ -65,6 +66,24 @@ describe('profile-plugin-command', () => {
 })
 
 describe('profile pnpm shim and failure reporting', () => {
+  it.each(['path', 'pAtH', 'Path', 'PATH'])('preserves and augments every Windows %s spelling', (key) => {
+    const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    try {
+      const environment = { [key]: 'C:\\Windows\\System32', ELECTRON_RUN_AS_NODE: '1' }
+      const result = buildProfilePluginCommandEnvironment(environment, '/shims', '/app/node')
+      expect(result.PATH).toContain('/shims')
+      expect(result.PATH).toContain('/app')
+      expect(result.PATH).toContain(environment[key])
+      for (const [name, value] of Object.entries(result)) {
+        if (/^path$/iu.test(name)) expect(value).toBe(result.PATH)
+      }
+      expect(environment[key]).toBe('C:\\Windows\\System32')
+      expect(result).not.toHaveProperty('ELECTRON_RUN_AS_NODE')
+    } finally {
+      platform.mockRestore()
+    }
+  })
+
   it('passes a local package path to DSH without rewriting it', () => {
     expect(buildProfilePluginAddArguments('/app/dsh/bin.js', '/Users/me/plugin.tgz')).toEqual([
       '/app/dsh/bin.js',

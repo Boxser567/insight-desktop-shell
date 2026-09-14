@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
@@ -31,17 +31,16 @@ async function writeIfChanged(path: string, content: string): Promise<void> {
   await writeFile(path, content, 'utf8')
 }
 
-async function linkDesktopIntegration(dshHome: string, safeModeDirectory: string): Promise<void> {
-  const source = join(
-    dshHome,
-    'profiles',
-    'web',
-    'packages',
-    'insight-desktop-integration'
-  )
+async function linkDesktopIntegration(source: string, safeModeDirectory: string): Promise<void> {
   if (!existsSync(join(source, 'package.json'))) {
     throw new Error('The managed desktop Gateway integration is unavailable in Safe Mode.')
   }
+  // Resolve Core peers through this profile, without depending on a damaged or
+  // not-yet-created normal profile or on the installation template's ancestors.
+  const localPackage = join(safeModeDirectory, 'packages', 'insight-desktop-integration')
+  await mkdir(join(safeModeDirectory, 'packages'), { recursive: true })
+  await rm(localPackage, { recursive: true, force: true })
+  await cp(source, localPackage, { recursive: true, verbatimSymlinks: true })
   const destination = join(
     safeModeDirectory,
     'node_modules',
@@ -50,7 +49,7 @@ async function linkDesktopIntegration(dshHome: string, safeModeDirectory: string
   )
   await mkdir(join(safeModeDirectory, 'node_modules', '@insight-ai'), { recursive: true })
   await rm(destination, { recursive: true, force: true })
-  await symlink(source, destination, process.platform === 'win32' ? 'junction' : 'dir')
+  await symlink(localPackage, destination, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 /**
@@ -59,7 +58,7 @@ async function linkDesktopIntegration(dshHome: string, safeModeDirectory: string
  * sessions, and workspaces with the normal profile, but never reads that
  * profile's bundle list or user patch layer.
  */
-export async function ensureSafeModeProfile(dshHome: string): Promise<string> {
+export async function ensureSafeModeProfile(dshHome: string, bundledIntegration: string): Promise<string> {
   const directory = join(dshHome, 'profiles', SAFE_MODE_PROFILE)
   await mkdir(directory, { recursive: true })
   const manifest = `${JSON.stringify({
@@ -73,6 +72,6 @@ export async function ensureSafeModeProfile(dshHome: string): Promise<string> {
     writeIfChanged(join(directory, 'cordis.patch.yml'), SAFE_MODE_PATCH),
     writeIfChanged(join(directory, 'pnpm-workspace.yaml'), SAFE_MODE_WORKSPACE)
   ])
-  await linkDesktopIntegration(dshHome, directory)
+  await linkDesktopIntegration(bundledIntegration, directory)
   return directory
 }

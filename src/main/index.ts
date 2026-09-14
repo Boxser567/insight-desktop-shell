@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { parse } from 'yaml'
+import { mkdir } from 'node:fs/promises'
+import { clearStaleLoopbackHttpCache } from './cache-maintenance'
+import { installRendererRecovery } from './renderer-recovery'
+import { configureWindowsGpuRecovery } from './windows-gpu-recovery'
 import {
   app,
   BrowserWindow,
@@ -18,16 +22,16 @@ import {
   type IpcMainInvokeEvent
 } from 'electron'
 import { extractFailureCause, HarnessRuntime, resolveShellEnvironment } from './runtime/harness-runtime'
+import { coreRequiresLaunchToken } from './runtime/harness-launch-auth'
 import { launchDisclaimedUtilityProcess } from './runtime/disclaimed-utility-process'
 import {
   addProfilePluginWithDsh,
   installProfileDependenciesWithDsh,
   removeProfilePluginWithDsh
 } from './runtime/profile-plugin-command'
-import { clearDamagedPackageDirectories, hasProfile } from './state/profile-repair'
+import { repairProfilePackages } from './state/profile-startup-repair'
 import {
   clearProfileInstallMarker,
-  isProfileInstallComplete,
   markProfileInstallComplete
 } from './state/profile-install-marker'
 import { inspectProfileConsistency } from './state/profile-consistency'
@@ -47,7 +51,6 @@ import { readRuntimeManifest } from './state/runtime-manifest'
 import { resolveCoreRuntime } from './state/core-runtime'
 import {
   listInstalledProfilePlugins,
-  pruneMissingProfileBundles,
   resetPluginProfile,
   uninstallPluginFromProfile
 } from './state/plugin-recovery'
@@ -421,6 +424,14 @@ function createHarnessWebContentsView(window: BrowserWindow, scope: string): Web
   })
   secureWebContents(view.webContents, isHarnessUrl, true)
   installWebContentsContextMenu(view.webContents, window, harnessLocale)
+  installRendererRecovery(view.webContents, {
+    isActive: () => !quitting && harnessWorkspaceView.webContents() === view.webContents && authManager?.current().kind === 'authenticated',
+    onNativeCrash: (reason, exitCode) => gpuRecovery?.nativeCrash(reason, exitCode) ?? false,
+    note: (line) => runtime?.note(line)
+  })
+  view.webContents.on('did-finish-load', () => {
+    if (harnessWorkspaceView.webContents() === view.webContents) gpuRecovery?.rendered()
+  })
   return view
 }
 
@@ -452,7 +463,18 @@ function harnessViewHost(): HarnessViewHost | undefined {
   }
 }
 
-const harnessWorkspaceView = new HarnessWorkspaceView(harnessViewHost)
+const harnessWorkspaceView = new HarnessWorkspaceView(harnessViewHost, async (contents, scope, url) => {
+  const electronContents = contents as Electron.WebContents
+  electronContents.stop()
+  const cache = accountPaths(insightDataPath(app.getPath('userData')), scope).cache
+  await mkdir(cache, { recursive: true })
+  await clearStaleLoopbackHttpCache(
+    electronContents.session,
+    join(cache, 'loopback-origin'),
+    new URL(url).origin,
+    (line) => runtime.note(line)
+  )
+})
 
 function windowsTitleBarOverlay(isDark: boolean): Electron.TitleBarOverlayOptions {
   return {
@@ -695,6 +717,11 @@ function createWindow(): BrowserWindow {
   })
   secureWebContents(window.webContents, isTrustedShellUrl)
   installContextMenu(window, harnessLocale)
+  installRendererRecovery(window.webContents, {
+    isActive: () => !quitting && mainWindow === window,
+    onNativeCrash: (reason, exitCode) => gpuRecovery?.nativeCrash(reason, exitCode) ?? false,
+    note: (line) => runtime?.note(line)
+  })
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = undefined
     void workspaceLifecycle?.apply({ kind: 'unauthenticated' }).catch(showUnexpectedError)
@@ -728,7 +755,7 @@ async function openHarness(
   focusIntent: WindowFocusIntent = 'automatic'
 ): Promise<void> {
   const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
-  const rendererUrl = desktopHarnessUrl(url, process.platform)
+  const rendererUrl = desktopHarnessUrl(runtime.authenticatedUrl(url), process.platform)
   rendererPluginFailureLogs = []
   if (!workspaceController) throw new Error('The Harness workspace is not initialized.')
   await workspaceController.open(rendererUrl)
@@ -746,54 +773,6 @@ async function showSplash(): Promise<void> {
   const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow()
   if (!window.webContents.getURL()) await loadShell(window)
   raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
-}
-
-/**
- * Clear what an earlier failed package operation left behind, then put the
- * packages back — both while Harness is stopped, the only moment either is
- * safe. A profile damaged by an older build heals on the first launch of this
- * one; an undamaged profile costs a directory scan. Failure here is not fatal:
- * the prune below still keeps the profile bootable, and Harness reports
- * whatever remains.
- */
-async function repairProfilePackages(dshHome: string): Promise<void> {
-  try {
-    if (!hasProfile(dshHome)) return
-    const removed = await clearDamagedPackageDirectories(dshHome)
-    // An install that never finished leaves nothing a damage scan can see: the
-    // directories it did write are real packages, and the ones it never
-    // reached are simply absent. Skipping the install on "nothing damaged" is
-    // what let a half-built profile stay half-built across every later launch.
-    const complete = await isProfileInstallComplete(dshHome)
-    if (removed.length === 0 && complete) return
-
-    runtime.note(
-      removed.length === 0
-        ? '[desktop] repairing profile: the last install did not finish'
-        : `[desktop] repairing profile: cleared ${removed.length} damaged package ${
-            removed.length === 1 ? 'directory' : 'directories'
-          }`
-    )
-    // Withdrawn first: whatever happens to the run below, an interrupted
-    // install must not leave a marker claiming the profile is whole.
-    await clearProfileInstallMarker(dshHome)
-    const result = await installProfileDependenciesWithDsh({
-      dshHome,
-      dshEntryPath: dshEntryPath(),
-      nodeExecutablePath: bundledNodePath(),
-      pnpmEntryPath: bundledPnpmEntryPath()
-    })
-    if (result.ok) await markProfileInstallComplete(dshHome)
-    runtime.note(
-      result.ok
-        ? '[desktop] profile repair completed'
-        : `[desktop] profile repair failed: ${result.detail ?? 'unknown error'}`
-    )
-  } catch (error) {
-    runtime.note(
-      `[desktop] profile repair failed: ${error instanceof Error ? error.message : String(error)}`
-    )
-  }
 }
 
 function showMainMessageBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
@@ -936,12 +915,29 @@ function launchHarness(): Promise<void> {
     // every package operation fail, repairs included.
     const pinned = await ensureStoreDirPinned(dshHome).catch(() => undefined)
     if (pinned) runtime.note(`[desktop] pinned the profile's pnpm store: ${pinned}`)
-    await repairProfilePackages(dshHome)
+    const repair = await repairProfilePackages({
+      dshHome,
+      note: (line) => runtime.note(line),
+      install: () => installProfileDependenciesWithDsh({
+        dshHome,
+        dshEntryPath: dshEntryPath(),
+        nodeExecutablePath: bundledNodePath(),
+        pnpmEntryPath: bundledPnpmEntryPath()
+      })
+    })
+    if (!repair.ok) {
+      // Let the launch operation settle so the recovery dialog can restart it.
+      setImmediate(() => {
+        if (quitting || currentDshHome() !== dshHome) return
+        void showPluginRecovery({ message: repair.detail ?? 'Profile dependency repair failed.' })
+          .catch(showUnexpectedError)
+      })
+      return
+    }
     // pnpm can replace a repaired managed package with the clean registry copy.
     // Reapply the desktop-owned market policy before Harness loads it.
     await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
     startupTracker?.transition('auditing-runtime', '正在检查运行环境…')
-    await pruneMissingProfileBundles(dshHome).catch(() => false)
     await reportProfileConsistency(dshHome)
     await auditInstalledLaunchAgents(dshHome)
     startupTracker?.transition('starting-runtime', '正在启动智能体服务…')
@@ -962,7 +958,8 @@ function launchSafeHarness(): Promise<void> {
     beginStartup()
     await showSplash()
     await runtime.stop()
-    await ensureSafeModeProfile(dshHome)
+    await ensureSafeModeProfile(dshHome,
+      desktopResourcePath('bundled-profile/web/packages/insight-desktop-integration'))
     startupTracker?.transition('auditing-runtime', '正在检查安全模式环境…')
     runtime.note('[desktop] safe mode: third-party web profile bundles are blocked')
     startupTracker?.transition('starting-runtime', '正在启动智能体服务…')
@@ -1109,7 +1106,7 @@ function assertTrustedSafeModeManagerEvent(event: IpcMainInvokeEvent): void {
 async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<number | undefined> {
   const window = mainWindow
   if (!window || window.isDestroyed()) return
-  const contents = window.webContents
+  const contents = (harnessWorkspaceView.webContents() as Electron.WebContents | undefined) ?? window.webContents
 
   switch (command) {
     case 'restart-harness':
@@ -1755,6 +1752,7 @@ async function bootstrap(): Promise<void> {
   const window = createWindow()
   aboutWindowController = createAboutWindowController()
   runtime = new HarnessRuntime({
+    requiresLaunchToken: coreRequiresLaunchToken(readRuntimeManifest(desktopResourcePath('runtime-manifest.json')).core.version),
     dshEntryPath: dshEntryPath(),
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
@@ -1949,6 +1947,8 @@ async function bootstrap(): Promise<void> {
   await authManager.restore()
 }
 
+let gpuRecovery: ReturnType<typeof configureWindowsGpuRecovery> | undefined
+
 if (isDaemonLaunch(process.env, process.platform)) {
   // launchd started this bundle from a LaunchAgent instead of the user
   // opening the app. Requesting the single instance lock here would reach
@@ -1962,6 +1962,12 @@ if (isDaemonLaunch(process.env, process.platform)) {
   if (!singleInstance) {
     app.quit()
   } else {
+    gpuRecovery = configureWindowsGpuRecovery(app, {
+      platform: process.platform,
+      statePath: join(app.getPath('userData'), 'gpu-fallback.json'),
+      isQuitting: () => quitting,
+      note: (line) => runtime?.note(line)
+    })
     app.on('second-instance', (_event, argv) => {
       if (!isUserInitiatedInstance(argv)) return
       if (shouldStartInSafeMode(argv)) {

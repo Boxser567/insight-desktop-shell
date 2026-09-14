@@ -10,11 +10,13 @@ import { AuthApiError } from '../src/main/auth/auth-api-client'
 import { bindModelCredentialBridge } from '../src/main/runtime/model-credential-bridge'
 
 let fixture: string
-const hasPreparedCore = existsSync(resolve('build/core-runtime/runtime.json'))
+const coreRoot = resolve(process.env.INSIGHT_TEST_CORE_RUNTIME ?? 'build/core-runtime')
+const hasPreparedCore = existsSync(join(coreRoot, 'runtime.json'))
+if (process.env.INSIGHT_TEST_CORE_RUNTIME && !hasPreparedCore) throw new Error('The selected test Core Runtime is missing.')
 beforeAll(async () => {
   if (!hasPreparedCore) return
   fixture = await mkdtemp(join(tmpdir(), 'insight-model-gateway-'))
-  await symlink(resolve('build/core-runtime/node_modules'), join(fixture, 'node_modules'), 'dir')
+  await symlink(join(coreRoot, 'node_modules'), join(fixture, 'node_modules'), 'dir')
   await cp('test/fixtures/model-gateway-runtime.mjs', join(fixture, 'run.mjs'))
   await cp('test/fixtures/model-gateway-electron.cjs', join(fixture, 'electron.cjs'))
   await build({
@@ -30,7 +32,7 @@ beforeAll(async () => {
 })
 afterAll(async () => { if (fixture) await rm(fixture, { recursive: true, force: true }) })
 
-describe.skipIf(!hasPreparedCore)('locked Core adapter with real Node parent/child IPC', () => {
+describe.skipIf(!hasPreparedCore)('selected Core adapter with real Node parent/child IPC', () => {
   it.runIf(process.platform === 'darwin')('uses real Electron utilityProcess IPC on macOS', async () => {
     const environment = { ...process.env }
     delete environment.ELECTRON_RUN_AS_NODE

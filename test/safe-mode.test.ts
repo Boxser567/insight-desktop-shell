@@ -78,7 +78,7 @@ describe('Safe Mode', () => {
       readFile('package.json', 'utf8')
     ])
     expect(main).toContain('shouldStartInSafeMode(process.argv)')
-    expect(main).toContain('ensureSafeModeProfile(dshHome)')
+    expect(main).toContain('ensureSafeModeProfile(dshHome,')
     expect(main).toContain('runtime.start(launchDirectory, SAFE_MODE_PROFILE)')
     expect(main).toContain("ipcMain.handle('safe-mode:action'")
     expect(main).toContain("ipcMain.handle('safe-mode:manage'")
@@ -104,14 +104,12 @@ describe('Safe Mode', () => {
     try {
       const integration = join(
         dshHome,
-        'profiles',
-        'web',
-        'packages',
+        'bundled',
         'insight-desktop-integration'
       )
       await mkdir(integration, { recursive: true })
       await writeFile(join(integration, 'package.json'), '{}', 'utf8')
-      const directory = await ensureSafeModeProfile(dshHome)
+      const directory = await ensureSafeModeProfile(dshHome, integration)
       expect(directory).toBe(join(dshHome, 'profiles', SAFE_MODE_PROFILE))
       const manifestPath = join(directory, 'package.json')
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
@@ -122,13 +120,14 @@ describe('Safe Mode', () => {
         'node_modules',
         '@insight-ai',
         'desktop-integration'
-      ))).toBe(integration)
+      ))).toBe(join(directory, 'packages', 'insight-desktop-integration'))
+      await expect(readFile(join(dshHome, 'profiles', 'web', 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
       expect(await readFile(join(directory, 'cordis.patch.yml'), 'utf8')).toContain('[]')
 
       manifest.dependencies['third-party-plugin'] = '1.0.0'
       manifest.dsh.profile.bundles.push('third-party-plugin')
       await writeFile(manifestPath, JSON.stringify(manifest))
-      await ensureSafeModeProfile(dshHome)
+      await ensureSafeModeProfile(dshHome, integration)
       const repaired = JSON.parse(await readFile(manifestPath, 'utf8'))
       expect(repaired.dependencies).toEqual({})
       expect(repaired.dsh.profile.bundles).toEqual(SAFE_MODE_BUNDLES)

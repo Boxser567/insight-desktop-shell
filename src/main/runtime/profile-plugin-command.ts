@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { delimiter, dirname, join } from 'node:path'
+import { resolveEnvironmentPath } from './harness-runtime'
 
 const PROFILE = 'web'
 const OPERATION_TIMEOUT_MS = 15 * 60 * 1000
@@ -155,18 +156,20 @@ export function buildProfilePluginCommandEnvironment(
   const result = { ...environment }
   delete result.ELECTRON_RUN_AS_NODE
 
-  const currentPath =
-    (process.platform === 'win32' ? result.Path : result.PATH) ??
-    result.PATH ??
-    result.Path ??
-    ''
+  const currentPath = resolveEnvironmentPath(result)
   const parts = currentPath.split(delimiter).filter(Boolean)
   const additions = [shimDirectory, dirname(nodeExecutablePath)].filter(
     (directory) => !parts.includes(directory)
   )
   const nextPath = [...additions, currentPath].filter(Boolean).join(delimiter)
   result.PATH = nextPath
-  if (process.platform === 'win32') result.Path = nextPath
+  if (process.platform === 'win32') {
+    result.Path = nextPath
+    // Preserve the shim prefix whichever casing Node selects for the child.
+    for (const name of Object.keys(result)) {
+      if (/^path$/iu.test(name)) result[name] = nextPath
+    }
+  }
   result.DSH_HOME = result.DSH_HOME ?? ''
   result.CI = 'true'
   result.NO_COLOR = '1'

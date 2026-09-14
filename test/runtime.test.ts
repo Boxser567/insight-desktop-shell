@@ -14,6 +14,7 @@ import {
   extractSlotConflictName,
   formatExitCode,
   HarnessRuntime,
+  resolveEnvironmentPath,
   resolveShellEnvironment,
   terminateWindowsProcessTree,
   updateReadyStability
@@ -170,6 +171,28 @@ describe('Harness launch contract', () => {
       }
     })
     expect(options.env).not.toHaveProperty('ELECTRON_RUN_AS_NODE')
+    expect(options.env?.PATH).toBe('windows-path')
+  })
+
+  it.each(['path', 'pAtH', 'Path', 'PATH'])('preserves a captured Windows %s', (key) => {
+    const userPath = 'C:\\Windows\\System32;C:\\Users\\tester\\bin'
+    const options = buildHarnessSpawnOptions('/launch', '/account', 'win32', { [key]: userPath })
+    const paths = Object.entries(options.env ?? {}).filter(([name]) => /^path$/iu.test(name))
+    expect(paths.length).toBeGreaterThan(0)
+    for (const [, value] of paths) expect(value).toBe(userPath)
+  })
+
+  it('keeps POSIX PATH case-sensitive and preserves an explicitly empty Windows PATH', () => {
+    expect(resolveEnvironmentPath({ path: '/wrong', PATH: '/usr/bin' }, 'darwin')).toBe('/usr/bin')
+    expect(resolveEnvironmentPath({ path: '/wrong' }, 'linux')).toBe('')
+    expect(resolveEnvironmentPath({ Path: '', PATH: 'fallback' }, 'win32')).toBe('')
+    expect(resolveEnvironmentPath({}, 'win32')).toBe('')
+  })
+
+  it.each(['win32', 'darwin', 'linux'] as const)('isolates the Harness console only on Windows (%s)', (platform) => {
+    const options = buildHarnessSpawnOptions('/launch', '/account', platform, {})
+    expect(options.detached).toBe(platform === 'win32')
+    expect(options.windowsHide).toBe(true)
   })
 
   it('passes the internal-loader flag directly to bundled Node.js', () => {
@@ -577,14 +600,23 @@ describe('navigation trust boundary', () => {
 describe('Harness window activation', () => {
   it('stamps Windows renderer URLs so plugins can avoid the native titlebar overlay', () => {
     expect(desktopHarnessUrl('http://127.0.0.1:43127', 'win32')).toBe(
-      'http://127.0.0.1:43127/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32'
+      'http://127.0.0.1:43127/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-titlebar-inset=36'
     )
     expect(desktopHarnessUrl('http://127.0.0.1:43127/?workspace=demo', 'win32')).toBe(
-      'http://127.0.0.1:43127/?workspace=demo&dsh-desktop-mode=advanced&dsh-desktop-platform=win32'
+      'http://127.0.0.1:43127/?workspace=demo&dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-titlebar-inset=36'
     )
     expect(desktopHarnessUrl('http://127.0.0.1:43127', 'darwin')).toBe(
       'http://127.0.0.1:43127'
     )
+  })
+
+  it('refreshes an obsolete titlebar inset without losing the workspace or fragment', () => {
+    const url = new URL(desktopHarnessUrl(
+      'http://127.0.0.1:43127/?workspace=demo&dsh-desktop-titlebar-inset=0#chat', 'win32'
+    ))
+    expect(url.searchParams.getAll('dsh-desktop-titlebar-inset')).toEqual(['36'])
+    expect(url.searchParams.get('workspace')).toBe('demo')
+    expect(url.hash).toBe('#chat')
   })
 
   it('preserves the current page when the existing Harness instance is focused again', () => {
@@ -613,5 +645,21 @@ describe('Harness window activation', () => {
     expect(isAbortedNavigationError({ code: 'ERR_CONNECTION_REFUSED', errno: -102 })).toBe(
       false
     )
+  })
+})
+
+
+describe('upstream plugin failure diagnostics', () => {
+  it('extracts pending service owners and Windows duplicate-route stack owners', () => {
+    expect(extractPluginFailureReferences([
+      '[stderr] Failed to load plugins\nplugin-a: pending (waiting for service: accounts)',
+      '[stderr] Error: duplicate prefix route "/market"',
+      String.raw`[stderr] at C:\Users\test\profiles\web\node_modules\@example\plugin-b\lib\index.js:2:1`
+    ])).toEqual(['plugin-a', '@example/plugin-b'])
+  })
+  it('does not attribute arbitrary stack packages without duplicate-route evidence', () => {
+    expect(extractPluginFailureReferences([
+      '[stderr] at /tmp/profiles/web/node_modules/unrelated/index.js:1:1'
+    ])).toEqual([])
   })
 })

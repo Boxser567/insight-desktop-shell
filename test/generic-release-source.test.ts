@@ -120,7 +120,8 @@ describe('Generic release source', () => {
       {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
-        redirect: 'follow'
+        redirect: 'follow',
+        signal: expect.any(AbortSignal)
       }
     )
   })
@@ -167,5 +168,28 @@ describe('Generic release source', () => {
     const { source, fetchMock } = fixture({ pointerStatus: status })
     await expect(source.resolve('stable', stableTarget)).rejects.toThrow(`HTTP ${status}`)
     expect(fetchMock).toHaveBeenCalledOnce()
+  })
+})
+
+describe('update source request deadlines', () => {
+  it.each(['headers', 'body'])('aborts stalled %s so update checks can finish', async (stage) => {
+    vi.useFakeTimers()
+    let signal: AbortSignal | undefined
+    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal ?? undefined
+      const stalled = () => new Promise<never>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
+      if (stage === 'headers') return stalled()
+      const reply = response(distribution.currentPointerUrl('stable').href, '')
+      reply.json = stalled
+      return reply
+    })
+    try {
+      const source = new GenericReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
+      const checking = expect(source.resolve('stable', stableTarget)).rejects.toThrow('请求超时')
+      await vi.advanceTimersByTimeAsync(30_000)
+      await checking
+      expect(signal?.aborted).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
   })
 })
