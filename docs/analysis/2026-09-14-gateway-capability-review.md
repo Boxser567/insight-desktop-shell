@@ -130,13 +130,15 @@ rc.10 锁定 Core 源码检查路径：`/private/tmp/insight-core-upgrade-202609
 
 - Shell全量108文件696测试通过，包含会话、图片inline回退/offload路径、旧别名序列化、四档思考及显式输出预算覆盖。最终使用新组装Core，日志 `/private/tmp/insight-gateway-final-tests.log`。
 - Core会话循环、压缩、聊天UI共6文件286测试通过；客户端构建通过，日志 `/private/tmp/insight-gateway-core-tests.log`。
+- 官方Adapter、SSE、图片预算追加3文件204测试通过，日志 `/private/tmp/insight-gateway-adapter-tests.log`。旧会话预算回归也通过：标记为Adapter默认的8192更新到新默认值，显式16384预算保持不变。
 - Shell与integration类型检查、build:prepared、bundled profile刷新通过。
 - 本地macOS arm64新组装资源 `/private/tmp/insight-gateway-resources-20260914` 冒烟通过，确认新模型目录、工作区/会话创建及稳定运行。日志 `/private/tmp/insight-gateway-smoke.log`。
+- 三平台Runtime CI [34824878484](https://github.com/Boxser567/insight-harness-core/actions/runs/34824878484) 全部成功：darwin-arm64、darwin-x64、win32-x64。publish=false，仅生成验证产物，未创建或更新Release。
 - 模型响应及usage为模拟数据；不能代替真实模型超过8K生成验收。未调用真实模型或核实后端计费。
 
 发布仍阻断：
 
 1. 待企业Gateway仓库/文档或真实服务证据，核实新旧模型路由、容量、计费、Files协议和错误/usage透传。
 2. systemPromptUpdate保持前置system兼容语义，服务端确认in-history后再启用；官方session-log扩展保持关闭。
-3. Shell的core-runtime.lock.json仍锁定rc.10已发布依赖。Core文案修复已在本地新Runtime验证，但尚未制作三个平台新发布资产和更新锁文件；常规安装包尚不包含全部修复。
+3. Shell的core-runtime.lock.json仍锁定rc.10已发布依赖。Core文案修复已在本地新Runtime验证，三平台CI验证产物已生成；仍需正式发布依赖并更新锁文件，常规安装包尚不包含全部修复。
 4. 未升级应用版本、触发OSS或更新Candidate/Stable指针；发布前仍须完成跨平台安装包及真实账号验收。

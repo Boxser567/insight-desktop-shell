@@ -62,6 +62,17 @@ try {
   reply = 'normal'
   assert.equal((await send(agent, 'Continue')).kind, 'completed')
   assert(requests.at(-1).messages.some(message => message.role === 'assistant' && message.content === answer))
+  // A persisted old adapter default must be re-resolved; an explicit user budget must survive.
+  const header = agent.session.requestHeader()
+  for (const [maxTokens, adapterDefault] of [[8192, true], [16384, false]]) {
+    agent.session.append('request/header', {
+      header: { ...header, config: { ...header.config, maxTokens }, adapterDefaults: { ...header.adapterDefaults, maxTokens: adapterDefault } },
+      reason: 'change'
+    })
+    assert.equal((await send(agent, 'Continue with the persisted budget')).kind, 'completed')
+    assert.equal(requests.at(-1).max_tokens, adapterDefault ? resolveAdapterOptions({}).maxTokens : maxTokens)
+  }
+  agent.session.append('request/header', { header, reason: 'change' })
   reply = 'tool-length'
   assert.equal((await send(agent, 'Use a tool')).kind, 'max-tokens')
   assert.equal(agent.session.snapshotEvents().filter(event => event.type === 'tool/call').length, 0)
