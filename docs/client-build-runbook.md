@@ -221,7 +221,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 9：GitHub Desktop 安装包构建
 
-> 实现状态：截至 2026-09-09，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。`upload_oss_test` Run #7 已通过 `{}` 目录级 STS 与真实 OSS `PutObject` 验收；尚缺完整 Candidate/Stable 制品和三平台安装证据。未完成阶段 10 前不得执行 Stable `promote`。
+> 实现状态：截至 2026-09-14，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。RC9 已完成全平台 build、stage 和 Candidate promote；`candidate/current.json` 已返回 `1.0.0-rc.9`。仍缺 Windows 旧版到 RC9、`/Applications` 中 macOS RC7 到 RC9、同源整包兜底和最终 Stable 制品的人工证据。未完成阶段 10 前不得执行 Stable `promote`。
 
 **输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、成功的 `upload_oss_test` 目录级 STS 证据和 GitHub `desktop-release` Environment。
 
@@ -263,9 +263,12 @@ Draft 创建后，在 GitHub Actions 从 `main` 手动运行 `Publish desktop up
 - macOS 先运行 `hdiutil verify <dmg>`，挂载后对其中应用执行 `codesign --verify --deep --strict --verbose=4` 和 `syspolicy_check distribution --verbose`，再用 `xcrun stapler validate` 检查应用与 DMG；DMG 继续使用 `spctl --assess --type open --context context:primary-signature --verbose=4`，任一失败即停止安装验收。
 - 保留下载文件的 quarantine；如果必须运行 `xattr` 才能启动，签名候选包验收失败。
 - 分别完成干净安装与覆盖安装；启动前确认没有旧实例占用单实例锁。
+- macOS 更新验收必须从 `/Applications/因赛AI.app` 启动并推出 DMG；`/Volumes` 或 `/AppTranslocation/` 只能验证拒绝更新提示，不能作为真实更新输入。
 - Candidate 的确切安装包完成干净安装和静态验证后，允许执行 Candidate `promote` 使其指针生效；随后立即从已安装的前一个 Candidate 完成 N→N+1 客户端内更新。在可信 Manifest 已解析后人为让自动下载失败，确认“下载完整安装包”能打开同一不可变版本目录内适配架构的 DMG/NSIS 并完成覆盖安装。完全禁用更新 Origin 时应安全失败且不显示虚假的可下载状态。
+- 安装过渡由正在运行的旧版本执行。验证某版本新增的准备文案、窗口持续显示或进程清理时，必须先安装该版本，再更新到更高版本；不能用“旧版本更新到修复版本”的过程判定修复是否生效。
 - 重复阶段 8 的 Sidebar Markdown/HTML、恢复窗口、启动页、会话、工作区、单侧栏、统一设置入口、账号退出和插件清单检查。
 - macOS 验证首次安装和覆盖安装、签名、公证及 stapling。Windows 接受预期的 SmartScreen/未知发布者提醒，继续后必须能完成首次安装、覆盖安装、启动和卸载；提示本身不算失败，无法继续、安装包损坏或更新后版本/数据错误才算失败。
+- Windows 旧版到新 Candidate 的更新回归不得预先人工结束因赛AI、Harness 或 Node 进程。安装器必须自行关闭旧进程树；出现“因赛AI 无法关闭”、反复重试或 `Failed to uninstall old application files: 2` 即判定失败，并保留安装器、旧安装目录和进程路径证据。
 - Candidate 在确切安装包验收后从 `main` 手动运行 `Publish desktop updates` 的 `promote`，再完成 N→N+1 canary；失败时不得回写低版本，只能停止并修复到更高 RC。Stable 只有在 Candidate 升级、同源整包兜底和 Stable 确切安装包全部通过后才执行 `promote`。发布器先公开 GitHub Release，再直接从 OSS 读取并确认目标渠道版本严格递增，最后上传唯一的 `stable/current.json` 或 `candidate/current.json`，并在约定 TTL 内确认收敛。
 
 - `command=promote`
@@ -310,8 +313,11 @@ npm run package:mac:arm64
 | electron-builder 选择 `Apple Development` 或找不到 `Developer ID Application` | `DESKTOP_CSC_LINK` 实际包含的证书类型、Team ID 和私钥是否匹配 | 阶段 9；导入临时钥匙串后、打包前必须精确找到目标 Team 的 `Developer ID Application` 并以哈希传给 `CSC_NAME`，不允许自动选择其他身份 |
 | Windows NSIS 已生成且 `7z t` 通过，但被判定“不是 x64” | 是否错误地把 NSIS 安装器外壳的 PE machine 当成应用架构 | 阶段 9；只校验安装器是有效 PE/NSIS，在 `win-unpacked` 中校验主程序为 x64，并让 PowerShell 对任何外部命令非零状态立即停止 |
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
+| Windows 客户端更新时反复提示“因赛AI 无法关闭”或旧文件卸载错误码 2 | 主窗口退出后，安装目录内的 Harness/Node/Electron 子孙进程是否仍存活；旧卸载器是否在执行非原子回退前已被进程检测阻塞 | 阶段 10；不得人工杀进程后写成通过。验证 Shell 对 Harness PID 执行完整进程树终止，并验证 NSIS 在旧卸载器前只清理注册安装目录内的进程；详见 RC7 至 RC9 更新复盘 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
+| macOS 检查更新报 `installing` 不能转换到 `check`，且堆栈路径包含 `/AppTranslocation/` 或 `/Volumes/` | 应用并非从持久安装位置运行，同时菜单在更新忙碌阶段重复发起检查 | 阶段 10；先退出并推出 DMG，把应用安装到 `/Applications`。忙碌阶段的手动检查必须复用当前状态，不得重入状态机 |
+| macOS 从旧 Candidate 更新到含过渡修复的新 Candidate 后仍有空白等待 | 安装准备由源版本代码执行；平台更新器接管退出后还要校验、解包和替换完整签名 `.app`，blockmap 只减少下载量 | 阶段 10；先安装含修复的 Candidate，再升级到更高版本验证 Electron 存活阶段。原生退出后的间隔单独计时，1.0 不把它描述为热更新 |
 | 云端签名、公证和 stapling 均通过，但 macOS 要求访问 `因赛AI Safe Storage` | 先比较该条目的创建时间并只读检查 ACL：若其 designated requirement 仍绑定历史 `com.insight.desktop`，当前 `com.insight-aigc.desktop` 即使使用同一 Team ID 也不会自动获得访问权；本地构建复用正式产品名也可能创建不兼容条目。拒绝授权会让本地 token 加密失败，不应误报远端认证服务不可用 | 阶段 7 只运行隔离的 `因赛AI Dev`。阶段 10 仅删除已确认由内部构建创建或绑定历史 ID 的精确旧条目，再用云端签名、公证并 staple 的 DMG 登录并连续冷启动三次。流水线必须阻断最终 App 的 `CFBundleIdentifier`、`CFBundleName` 或 `TeamIdentifier` 漂移；正式包保留真实 `safeStorage`，拒绝时只保留当次内存登录，不写明文 token；Sonoma job 和最终 quarantine 验收仍不可省略 |
 | codesign 或 `xattr -d -r` 报 Runtime `.bin/node: No such file` | 检查锁定 Runtime 的 `.bin/node` 是否指向 Core 构建机绝对路径，并确认 `node_modules/node/bin/node` 存在；Shell 准备 Runtime 时必须移除该无效 shim | 阶段 6；不得携带失效链接进入 builder，真实 Node 缺失则退回 Core Release |
 | codesign 报 `.DS_Store`/resource fork | `Resources` 和默认 Profile 的 Finder 元数据过滤 | 阶段 7 或 9 |
@@ -328,7 +334,7 @@ npm run package:mac:arm64
 | tsx IPC/sandbox 权限失败 | 宿主 sandbox 与 IPC 权限 | 在同一阶段用最小宿主权限重试，不改产品代码 |
 | 新构建似乎没有变化 | 旧 Electron 单实例、实际进程路径和 channel | 阶段 8/10，先退出旧实例 |
 
-更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)；正式签名包的钥匙串访问控制问题见 [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md)。
+更完整的根因和处理经过见 [2026-08-27 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)；正式签名包的钥匙串访问控制问题见 [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md)；RC7 至 RC9 的 Windows 进程占用、macOS 临时安装路径和安装过渡边界见 [2026-09-11 RC7 至 RC9 跨平台更新故障与加固](incidents/2026-09-11-rc7-rc9-updater-hardening.md)。
 
 ## 构建耗时控制
 

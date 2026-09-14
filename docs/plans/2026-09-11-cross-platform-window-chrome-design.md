@@ -32,7 +32,7 @@ Windows 更新窗口继承了应用菜单，固定 `480 × 200` 高度因此被�
 
 ## 安装性能边界
 
-当前 Windows 安装包包含约 5.6 万个文件，Core Runtime、内置 Profile 和 Shell 依赖合计约 1.25GB。安装耗时主要来自解压、大量小文件创建和 Windows Defender 扫描。原子卸载兼容修复解决升级失败，但不能消除首次安装的文件系统成本。
+当前 Windows 安装包包含约 5.6 万个文件，Core Runtime、内置 Profile 和 Shell 依赖合计约 1.25GB。安装耗时主要来自解压、大量小文件创建和 Windows Defender 扫描。RC8 的旧卸载器回退没有解决存活进程导致的覆盖升级失败；RC9 已增加安装前的旧进程清理，但仍需真实旧版本到 RC9 的人工更新验收。该修复即使通过，也不能消除首次安装的文件系统成本。
 
 1.0 阶段不切换 `asar`、不把 Runtime/Profile 改为启动时解压归档，也不降低卸载回滚安全性。安装性能作为后续独立项目处理，先采集首次安装、覆盖安装、卸载和 Defender 开关前后的分段耗时，再决定是否调整资源归档与压缩策略。
 
@@ -44,3 +44,5 @@ Windows 更新窗口继承了应用菜单，固定 `480 × 200` 高度因此被�
 - Windows Shell 下拉菜单按钮仍可使用，且与原生 Caption Controls 不重叠。
 - macOS 更新窗口仍使用系统全局菜单语义和原生交通灯，没有 Windows 专属窗口配置泄漏。
 - 更新窗口、关于窗口、Windows 标题栏测试、完整测试和 TypeScript 检查通过。
+
+窗口装饰修复已进入 RC8 和 RC9；RC8 只生成 Windows Candidate artifact、未推广，RC9 已完成全平台构建和推广。窗口外观验收与安装器能否关闭旧进程属于两项独立证据，后者见 [RC7 至 RC9 跨平台更新故障与加固](../incidents/2026-09-11-rc7-rc9-updater-hardening.md)。

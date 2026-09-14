@@ -4,21 +4,21 @@
 
 **Goal:** 从已整合的 `main` 产出可安装、可验证、可在客户端内升级且具备同源整包兜底的 `v1.0.0` 正式版本。
 
-**Architecture:** `main` 是唯一长期基线。Candidate 由安装包 workflow 构建并生成 Draft，独立发布 workflow 通过 GitHub OIDC 和测试 Gateway 获取目录级 OSS STS，再把相同字节 `stage` 到不可变版本目录；安装验收通过后才 `promote` Candidate 指针。至少完成一次 `v1.0.0-rc.1 → v1.0.0-rc.2` 客户端内升级，再以同样流程暂存和推广 `v1.0.0` Stable。
+**Architecture:** `main` 是唯一长期基线。Candidate 由安装包 workflow 构建并生成 Draft，独立发布 workflow 通过 GitHub OIDC 和测试 Gateway 获取目录级 OSS STS，再把相同字节 `stage` 到不可变版本目录；安装验收通过后才 `promote` Candidate 指针。RC1/RC2 因缺少包内更新启动元数据不能作为自动升级证明；macOS 基本链路已由 RC3 到 RC4 证明，Stable 前还要以 RC7 到 RC9 验证新安装过渡，并以 Windows 真实旧版到 RC9 验证旧进程清理。
 
 **Tech Stack:** Electron 43、electron-updater 6、GitHub Actions OIDC/Releases、Insight 测试 Gateway、Ed25519 签名 Manifest、`ali-oss@6.23.0`、Alibaba Cloud OSS/CDN、`https://updates.insight-aigc.com`。
 
 ## Global Constraints
 
 - `main` 是唯一长期集成分支；本次发布期间不再并行合入非阻断功能。
-- Candidate 固定使用 `v1.0.0-rc.1`、`v1.0.0-rc.2`，若失败只递增为更高 RC，禁止复用 tag 或覆盖资产。
+- Candidate 使用单调递增且不可复用的 `v1.0.0-rc.N`；若失败只递增为更高 RC，禁止复用 tag 或覆盖资产。
 - Stable 固定使用 `v1.0.0`；正式 tag 只能指向已经完成本计划 Stable 构建前门禁的提交。
 - Candidate 与 Stable 都使用正式产品身份 `因赛AI`、App ID `com.insight-aigc.desktop` 和用户数据目录 `insight-desktop`；DEV 为 `com.insight-aigc.desktop.dev`。本地未签名 Candidate 禁止启动。
-- 安装资产统一使用 `insight-1.0.0-rc.1-...`、`insight-1.0.0-rc.2-...` 和 `insight-1.0.0-...`；Candidate 不增加额外 `candidate-` 文件名前缀。
+- 安装资产统一使用 `insight-<version>-...`；Candidate 不增加额外 `candidate-` 文件名前缀。
 - GitHub Actions 不保存 OSS 长期 AccessKey；只有独立发布 workflow 可以使用 OIDC 换取限定目录和时长的 STS。
 - `stage` 不公开 GitHub Release、不写 `current.json`；`promote` 才公开 Release，并在最后写入渠道指针。
 - GitHub Hosted Runner 只校验签名资产与 OSS 权威对象，不以海外网络访问中国大陆 CDN 的结果作为发布门禁；CDN 的 HEAD、Range、缓存和指针收敛由中国大陆网络验收。
-- `desktop/releases/v1.0.0-rc.1/`、`desktop/releases/v1.0.0-rc.2/` 和 `desktop/releases/v1.0.0/` 永不覆盖；`current.json` 不允许回退到旧版本。
+- 所有 `desktop/releases/v<version>/` 永不覆盖；`current.json` 不允许回退到旧版本。
 - Windows 1.0 当前为未签名安装器。产品负责人必须明确接受 SmartScreen/未知发布者提示，否则阻断 Stable 发布。
 - 任何代码、依赖、Runtime 锁或内置插件变化都会使已有安装验收失效，必须从对应 Candidate 构建阶段重新开始。
 
@@ -31,13 +31,13 @@
 以下同时保留原整合基线的历史证据和 2026-09-09 最新收口结果。`codex/enterprise-gateway-analysis` 的免 API Key 会话能力已通过 `d7b36d8` 合入，Bundle ID 首发规范已通过 `e18e6bc` 落在本地 `main`；本计划不能替代 [真实账号验收门禁](../../model-gateway-integration.md)，也不能复用旧身份 Candidate 的会话验收。
 
 - [x] Desktop Shell、DEV Keychain 修复、模型 Gateway 和 Bundle ID 规范均已合入本地 `main`；身份规范提交为 `e18e6bc`，Gateway 合并提交为 `d7b36d8`，Release workflow 另增加了 Runtime 准备后的测试门禁。
-- [x] 最新本地全量测试通过：90 个测试文件、571 个测试。
+- [x] RC9 最新本地全量测试通过：96 个测试文件、612 项测试。
 - [x] TypeScript、发布工作流契约和 Electron 完整构建通过。
 - [x] Core Runtime 锁定到 `insight-runtime-v0.1.1-rc.10` / commit `833f4246abaf3ce5fcf39c3f81a8be2499e7f434`，三个目标资产均有固定 SHA-256。
 - [x] 生产更新 Origin 固定为 `https://updates.insight-aigc.com`。
 - [x] 已完成 GitHub OIDC/目录级 STS 发布器与独立 `Publish desktop updates` workflow 的本地接入和静态门禁。
-- [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.1`；DEV Keychain、Gateway、Bundle ID、Release Runtime 测试门禁、Windows 可移植性、macOS XProtect runner 稳定性和 Sonoma 校验接线均已推送。
-- [x] 当前最新发布器代码基线为 `440f828`；RC1 确切资产由 `2f28472` 构建，后续发布器和文档提交不改变该 RC1 客户端字节。
+- [x] package、lockfile 和发布策略已一致更新为 `1.0.0-rc.9`；DEV Keychain、Gateway、Bundle ID、Release Runtime 测试门禁、Windows 可移植性、macOS XProtect runner 稳定性和 Sonoma 校验接线均已推送。
+- [x] 当前 Candidate 代码与资产基线为 `f08e9e58c7f3e68797835dfe87e31cdafeabd284`；RC9 已按该提交完成全平台 build、stage 和 promote。
 - [x] macOS DEV 已从真实钥匙串隔离：mock keychain、非持久认证 Session、进程内 token；`final4` 目录包已人工确认无钥匙串密码框，退出 DEV 后重新登录是预期行为。
 - [x] 新正式身份 Apple Silicon 本地 Candidate 已完成干净状态预验收：清理历史 `insight-desktop*` 数据及旧 Safe Storage 后，首次打开不恢复旧账号/对话，登录及反复完全退出重启均无钥匙串弹窗；新条目 ACL 为 `/Applications/因赛AI.app (OK)`，designated requirement 为 `com.insight-aigc.desktop` + Team `8P39WV82RX`。该结果不替代云端公证制品门禁。
 - [x] 新发布契约下的 RC1 三平台 GitHub Pre-release 已公开，12 项资产齐全。
@@ -53,7 +53,7 @@
 - [x] **中国大陆 CDN 分发门禁：** RC1 公开后，国内网络直连确认 Candidate 指针和 Manifest 为 200；arm64 DMG、x64 DMG、Windows EXE 的 Range 均为 206，大小分别为 256,072,156、261,681,506、267,840,720，并具备私有桶回源鉴权、immutable 缓存和正确 Content-Disposition。Stable 指针仍为 404；GitHub 美国 runner 的可达性不属于产品目标或发布门禁。
 - [ ] **确切安装包验收：** 必须从本次 Draft/OSS 下载确切 macOS arm64、macOS x64、Windows x64 资产，完成干净安装、覆盖安装、启动/卸载、签名/公证/Gatekeeper 和版本核对；不得使用本地重建包替代。
 - [ ] **钥匙串与数据连续性：** 两个 macOS 架构均需在 quarantine 下首次登录并连续冷启动三次，确认不出现 Safe Storage 授权框、不串用旧身份数据，登录、会话、工作区和插件数据保持符合预期。
-- [ ] **真实更新体验：** RC1 无更新时不显示下载按钮；RC1→RC2 只有检测到签名可信新版本才显示真实版本、发行信息和下载入口，并验证主动检查、下载进度、失败重试、安装重启与同源完整安装包兜底。
+- [ ] **真实更新体验：** RC3→RC4 的 macOS 基本自动更新已通过；仍需用 `/Applications` 中 RC7→RC9 验证新安装过渡，用 Windows 真实旧版→RC9 验证自动关闭旧进程，并补齐下载失败重试、同源完整安装包兜底和数据连续性。
 - [x] **推广事务：** [Promote Run 34361864071](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34361864071) 成功公开 RC1 Pre-release，并通过 OIDC/STS 写入和回读 OSS 权威 `candidate/current.json`；国内 CDN 已返回 `1.0.0-rc.1`，Stable 未改动。后续用该确切云端资产完成人工安装。
 - [ ] **Stable 与官网：** 以相同流程构建、stage、安装和 promote `v1.0.0`，再把官网按钮指向 Stable 不可变 OSS 资产；Windows 未签名提示、`main` 无分支保护、`desktop-release` 无审批保护均需在 Stable 前明确接受或修复。
 
@@ -68,6 +68,24 @@
 2026-09-10～11 RC6 安装过渡 canary 暂存证据：提交 `10f6ab0ae3cff54687e60ef637be741deac64926` 以 `macos-arm64` 范围准备 `1.0.0-rc.6`；[Release Run 34498590733](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34498590733) 的预检、Apple Silicon 签名构建、打包后 606 项测试、公证/stapling、Sonoma 分发兼容和签名 Draft Job 全部成功，Intel 与 Windows Job 按范围跳过。Draft 精确包含 ARM64 DMG 256,121,721 字节、ZIP 316,402,779 字节、ZIP blockmap、`latest-mac.yml`、`insight-update.json` 和签名共 6 项。[Stage Run 34501455709](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34501455709) 通过 GitHub OIDC、测试 Gateway 和目录级 STS 首次写入并回读校验 `desktop/releases/v1.0.0-rc.6/`，报告确认 `reusedImmutablePrefix=false`。中国大陆网络随后确认 Manifest/YAML HTTP 200、版本资产缓存 31,536,000 秒，ARM64 DMG `Range: bytes=0-0` 返回 206 和精确总大小；Candidate `current.json` 仍为 `1.0.0-rc.5`、缓存 60 秒。RC6 尚未 Promote，需在放行后从已安装 RC5 完成客户端内检查、下载、安装过渡、自动退出/重启及数据连续性验收。
 
 2026-09-11 RC7 全平台发布证据：RC6 已形成不可变的 ARM64-only Draft 和 OSS 版本目录，因此未向同版本追加 Intel/Windows 资产，而是以提交 `376198922dd481a8309794c1a98f414d3bf2b3b8` 递增准备 `1.0.0-rc.7` 并使用 `target=all`。本地 96 个测试文件共 606 项测试、TypeScript、Electron 构建及发布契约检查通过；[Release Run 34505540020](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34505540020) 的预检、Apple Silicon、Intel、Windows x64、Sonoma 和签名 Draft 六个 Job 全部成功，两套 macOS DMG 均完成 Developer ID 签名、公证和 stapling，Sonoma 对最终 ARM64 DMG 的分发兼容验证通过。Draft 精确绑定上述提交并包含两个 DMG、两个 ZIP、两个 ZIP blockmap、Windows EXE、EXE blockmap、两个 YAML、签名 Manifest 和签名文件共 12 项。[Stage Run 34508573859](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34508573859) 通过 GitHub OIDC、测试 Gateway 和目录级 STS 首次写入并回读校验 `desktop/releases/v1.0.0-rc.7/` 的 12 项对象，共 1,426,395,868 字节，报告确认 `scope=all`、`reusedImmutablePrefix=false`。Stage 完成后的中国大陆公网首次并发复验曾出现短暂 TLS 连接关闭；有限重试恢复后，RC7 Manifest、签名及两份 YAML 均返回 HTTP 200 和 31,536,000 秒 immutable 缓存，ARM64 DMG、Intel DMG、Windows EXE 的 `Range: bytes=0-0` 均返回 206，精确总大小依次为 256,121,706、261,741,333、267,898,253 字节。[Promote Run 34558227138](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34558227138) 随后成功公开 [v1.0.0-rc.7 Pre-release](https://github.com/Boxser567/insight-desktop-shell/releases/tag/v1.0.0-rc.7)，脱敏报告确认 OSS Candidate 权威指针从 `1.0.0-rc.5` 单调推进到 `1.0.0-rc.7`；中国大陆 CDN 已返回 HTTP 200、版本 `1.0.0-rc.7` 和 60 秒缓存。RC6 继续保持未 Promote；所有低于 RC7 的 Candidate 客户端现在均可发现 RC7。Windows 安装包仍为明确接受的未签名 Candidate，三平台客户端内升级和数据连续性需要继续人工验收。
+
+2026-09-11 RC8 Windows 定向修复证据：`8df5c83`/`ba8071a` 将 Windows 更新、关于和插件恢复窗口从 macOS 的全局菜单语义中隔离，并消除主窗口两套 Caption Controls 重叠；`6a6b072`、`9edbf4d` 为旧卸载器增加原子清理失败后的普通删除回退，`fd5084e` 准备 `1.0.0-rc.8`。RC8 只生成 Windows Candidate artifact，没有创建公开 Release 或推进 `current.json`；为解决 GitHub 下载缓慢而建立的 OSS 临时镜像随后已删除。Windows 人工直接覆盖安装 RC8 仍出现“因赛AI 无法关闭”，证明后置卸载回退没有解决旧进程在安装前占用文件的问题，RC8 不作为可发布基线。
+
+2026-09-11～12 RC9 全平台发布证据：`3edb697` 让 Windows Shell 停止 Harness 时终止完整进程树，并在旧卸载器运行前只清理注册安装目录内的旧版本进程；`ef9b412` 拒绝从 `/AppTranslocation/` 和 `/Volumes/` 执行 macOS 真实更新，同时让安装、下载等忙碌阶段的菜单检查安全复用当前状态；`f08e9e58c7f3e68797835dfe87e31cdafeabd284` 是最终构建提交。本地 96 个测试文件共 612 项测试、TypeScript、Electron build、发布 workflow 契约和 release preflight 通过。9 月 11 日完成的 [Release Run 34594554994](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34594554994) 中，preflight、Apple Silicon、Intel、Windows x64、Sonoma 和签名 Draft 六个 Job 全部成功；北京时间 9 月 12 日凌晨完成的 [Stage Run 34619316086](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34619316086) 通过 OIDC/STS 首次写入 `desktop/releases/v1.0.0-rc.9/`，12 项对象共 `1,426,393,392` 字节，报告为 `scope=all`、`reusedImmutablePrefix=false`；随后 [Promote Run 34619580638](https://github.com/Boxser567/insight-desktop-shell/actions/runs/34619580638) 成功公开 [v1.0.0-rc.9 Pre-release](https://github.com/Boxser567/insight-desktop-shell/releases/tag/v1.0.0-rc.9)，并将 Candidate 指针从 RC7 推进到 RC9。2026-09-14 中国大陆公网复验 `candidate/current.json` 为 HTTP 200、版本 `1.0.0-rc.9`、`Cache-Control: public,max-age=60,must-revalidate` 和 `X-Swift-CacheTime: 60`。
+
+### RC3 至 RC9 版本演进与可用性
+
+| 版本 | 核心变化 | 发布状态 | 可用性结论 |
+| --- | --- | --- | --- |
+| RC3 | 把 OSS Generic Provider 的 `app-update.yml` 写入真实应用包，修复“能发现但不能下载” | 用作后续更新基线 | 可作为自动更新源版本；本身主要承担 RC1/RC2 的完整安装包桥接 |
+| RC4 | 简化启动界面，并支持 ARM64-only Candidate 发布 | Apple Silicon 已推广 | RC3→RC4 已人工通过，是 macOS 基本自动更新首次可用证据 |
+| RC5 | 紧凑更新窗口并恢复全平台 Candidate | 全平台已推广 | 基本更新可用，但尚未包含安装过渡和 Windows 旧进程修复 |
+| RC6 | 保持安装准备窗口可见并补充异步错误恢复 | ARM64 Draft/OSS stage，未推广 | 只作为安装过渡 canary 制品，不作为公开版本 |
+| RC7 | 将 RC6 的安装过渡带入全平台并完成推广 | 全平台已推广 | macOS 基线可用；Windows 更新因旧进程/卸载失败未达标 |
+| RC8 | 隔离 Windows/macOS 窗口装饰并尝试旧卸载回退 | Windows artifact，未推广 | 窗口设计修复成立，但真实覆盖安装仍失败，不是发布基线 |
+| RC9 | 增加 Windows 进程树/安装前清理、macOS 临时路径拦截和忙碌状态防重入 | 全平台已推广 | 首个达到统一工程标准的 Candidate；两平台 N→N+1 人工门禁仍需关闭 |
+
+当前门禁以 [RC7 至 RC9 跨平台更新故障与加固](../../incidents/2026-09-11-rc7-rc9-updater-hardening.md) 为准。RC9 的自动发布证据不能替代 Windows 真实旧版到 RC9、`/Applications` 中 RC7 到 RC9、数据连续性和同源完整安装包兜底的人工结果。
 
 ---
 
@@ -357,6 +375,8 @@ gh run list --repo Boxser567/insight-desktop-shell --workflow release.yml --limi
 
 **Produces:** 已安装客户端能够从 RC1 发现、下载、安装并重启到 RC2 的证据。
 
+> **历史计划说明（2026-09-14）：** 本 Task 保留最初的执行意图和失败证据，不再作为当前可执行门禁。RC1/RC2 缺少 `app-update.yml`，不能补写旧资产；当前替代门禁是 `/Applications` 中 RC7→RC9 的 macOS 安装过渡、Windows 真实旧版→RC9 的进程清理，以及 RC9 的同源完整安装包兜底。
+
 - [ ] **Step 1：准备 RC2 提交**
 
 ```bash
@@ -467,8 +487,8 @@ gh workflow run release.yml \
 
 - [ ] **Step 1：确认 Stable 放行前提**
 
-- RC1 与 RC2 三平台安装证据齐全；
-- RC1→RC2 客户端内升级通过；
+- RC9 三平台确切安装包的干净安装和覆盖安装证据齐全；
+- `/Applications` 中 RC7→RC9 的 macOS 更新与 Windows 真实旧版→RC9 的更新通过；
 - 同源整包兜底和 Origin 完全失败路径通过；
 - Windows 未签名风险已有明确接受结论；
 - 最后一个 RC 之后无未进入新 RC 的产品代码变化。
@@ -540,7 +560,7 @@ git push origin v1.0.0
 - `tag=v1.0.0`
 - `confirm_version` 留空
 
-通过条件：`desktop/releases/v1.0.0/` 完整且通过最终 CDN 复验；`stable/current.json` 仍不存在；Candidate 指针仍为 RC2。
+通过条件：`desktop/releases/v1.0.0/` 完整且通过最终 CDN 复验；`stable/current.json` 仍不存在；Candidate 指针仍为最后一个已验收 RC，当前待验收基线为 RC9。
 
 - [ ] **Step 6：验收 Stable 确切安装包**
 
@@ -603,9 +623,9 @@ git push origin v1.0.0
 只有以下条件全部成立，才能宣布 `v1.0.0` 正式发布：
 
 - [ ] `origin/main`、正式 commit 和 `v1.0.0` tag 对应关系已记录；
-- [ ] RC1、RC2、Stable 三次 GitHub workflow 完整成功；
-- [ ] 三个版本目录在 OSS 中不可变且最终 CDN 校验通过；
-- [ ] RC1→RC2 客户端内更新成功；
+- [ ] 最终 Candidate RC9 与 Stable 的全平台 GitHub workflow 完整成功；
+- [ ] RC9 与 Stable 版本目录在 OSS 中不可变且最终 CDN 校验通过；
+- [ ] `/Applications` 中 RC7→RC9 的 macOS 更新与 Windows 真实旧版→RC9 更新成功；
 - [ ] 自动更新失败后的同源完整安装包兜底成功；
 - [ ] macOS arm64、macOS x64、Windows x64 的 Stable 安装验收成功；
 - [ ] 登录、会话、工作区、设置、账号隔离、Sidebar、Market 和插件数据无丢失；

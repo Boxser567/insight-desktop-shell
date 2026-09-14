@@ -2,7 +2,7 @@
 
 ## 当前发布状态
 
-截至 2026-09-10，`v1.0.0-rc.2` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经 CDN 返回 `1.0.0-rc.2`；`stable/current.json` 尚不存在。RC1 已证明能够发现 RC2，但点击自动下载时暴露 Candidate 包缺少 `app-update.yml` 的阻断问题。该问题不允许覆盖 RC2 资产，修复版本固定递增为 `v1.0.0-rc.3`。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-14，`v1.0.0-rc.9` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经中国大陆 CDN 返回 `1.0.0-rc.9` 和 60 秒缓存策略；`stable/current.json` 尚不存在。RC9 是当前唯一继续验收的全平台 Candidate，包含 Windows 旧进程清理、macOS 临时挂载拦截和更新忙碌状态防重入；它已达到统一工程基线，但 Windows 旧版到 RC9 以及 `/Applications` 中 RC7 到 RC9 的真实更新仍是 Stable 前人工阻断项。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
@@ -14,7 +14,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-`v1.0.0-rc.2` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。RC1/RC2 无法远程补入包内文件，RC3 推广后需要通过更新错误页已有的“下载完整安装包”完成一次同源覆盖安装；RC3 再到下一版本必须完成应用内直接下载、校验、安装和重启，才能关闭自动更新门禁。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
+`v1.0.0-rc.9` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。RC3 到 RC4 已在 macOS Apple Silicon 完成一次应用内直接下载、安装和重启；RC5 到 RC7 也完成更新，但安装过渡体验由旧的 RC5 代码控制。Windows RC7/RC8 暴露的旧应用无法关闭和旧文件卸载错误已在 RC9 加固，尚待真实旧版本升级复验。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
 
 ## 必读资料
 
@@ -22,6 +22,7 @@
 - [2026-08-27 Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md) 记录 Runtime、Profile、Sidebar、平台构建和上传故障的历史原因。
 - [2026-09-08 macOS Safe Storage 候选版故障与验收](incidents/2026-09-08-macos-safe-storage-candidate.md) 记录正式签名包重复请求钥匙串授权的根因、隔离规则和 `v0.1.2-rc.3` 定向候选验收范围。
 - [2026-09-10 RC2 自动下载缺少 app-update.yml](incidents/2026-09-10-electron-updater-missing-app-update-yml.md) 记录可发现但无法自动下载的根因、RC3 修复和一次性整包桥接边界。
+- [2026-09-11 RC7 至 RC9 跨平台更新故障与加固](incidents/2026-09-11-rc7-rc9-updater-hardening.md) 记录 Windows 旧进程占用、macOS 临时安装路径、忙碌状态防重入、安装过渡边界和 RC9 人工验收项。
 - [桌面客户端 OSS 更新分发设计](plans/2026-09-08-desktop-update-oss-distribution-design.md) 是已实现的生产分发契约；当前构建和发布操作以本说明、客户端构建 Runbook 和实际脚本为准。
 - [桌面更新 STS 发布设计](plans/2026-09-09-desktop-update-sts-publishing-design.md) 是发布身份、后台契约、STS 刷新和大文件失败语义的权威说明。
 - [因赛AI Desktop 1.0 正式发布前验证计划](superpowers/plans/2026-09-09-desktop-v1-release-verification.md) 是本次首发逐项执行、停止判断与证据收集清单。
@@ -73,7 +74,7 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 - `windows-x64`：使用 `windows-2022` runner 构建未签名 Windows x64 候选包；
 - `all`：构建全部上述目标并在所有门禁通过后生成完整 Candidate Draft。
 
-RC4 下载更新 canary 从 `main` 手动触发，填写 `candidate_tag=v1.0.0-rc.4`、`target=macos-arm64`。Candidate 不手工创建或推送 tag，workflow 成功后由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
+Candidate 从 `main` 手动触发，填写尚未使用的 `candidate_tag=vX.Y.Z-rc.N` 和所需 `target`。单平台 canary 可以使用 `macos-arm64`，统一发布基线必须使用 `all`。Candidate 不手工创建或推送 tag，workflow 成功后由 Draft Release 创建不可复用的 tag；推送 `v*` 只用于已经切到生产业务环境的 Stable。
 
 ## 一次性发布准备
 
@@ -135,21 +136,21 @@ macOS 候选与 Stable 路径均需要 GitHub 配置 `DESKTOP_CSC_LINK`、`DESKT
 
 - Ref：`main`
 - `command`：`stage`
-- `tag`：`v1.0.0-rc.4`
+- `tag`：`<vX.Y.Z 或 vX.Y.Z-rc.N>`
 - `scope`：`macos-arm64`（完整 Draft 使用 `all`）
 - `confirm_version`：留空
 
 `stage` 成功表示签名 Draft 与 OSS 不可变版本目录的文件集、大小和摘要一致，不会公开 GitHub Release，也不会改变客户端看到的版本。GitHub Hosted Runner 不承担中国大陆 CDN 可达性门禁；必须另从中国大陆网络检查 HTTPS、MIME、缓存、Range、重定向和字节差异。脱敏摘要报告作为 workflow artifact 保留 90 天。
 
-`current.json` 必须在 CDN 配置中使用独立的 60 秒边缘缓存规则并遵守源站 `Cache-Control`。每次 `promote` 后都要刷新精确 URL `https://updates.insight-aigc.com/desktop/<channel>/current.json`，再确认响应内容、`Age` 和 `X-Swift-CacheTime` 已收敛；不能把 OSS 权威回读成功等同于客户端已经可见。2026-09-10 的 RC2 首次 promote 暴露 CDN 全局约 29 天缓存覆盖源站 TTL；当日已把 `/desktop/candidate/current.json` 与 `/desktop/stable/current.json` 配置为 1 分钟、权重 99，把 `/desktop/releases/` 配置为 365 天、权重 99，并把兜底 `/` 降为权重 1，随后刷新 Candidate 精确 URL。公网复验 Candidate 返回 RC2、`Cache-Control: public,max-age=60,must-revalidate`、`X-Swift-CacheTime: 60`，版本 Manifest、签名和 `latest-mac.yml` 可访问，arm64 DMG Range 返回 `206` 与 `Content-Range: bytes 0-0/256126350`，版本资产节点缓存为 31536000 秒；Stable 指针仍为 404。
+`current.json` 必须在 CDN 配置中使用独立的 60 秒边缘缓存规则并遵守源站 `Cache-Control`。每次 `promote` 后都要刷新精确 URL `https://updates.insight-aigc.com/desktop/<channel>/current.json`，再确认响应内容、`Age` 和 `X-Swift-CacheTime` 已收敛；不能把 OSS 权威回读成功等同于客户端已经可见。2026-09-10 的 RC2 首次 promote 暴露 CDN 全局约 29 天缓存覆盖源站 TTL；当日已把 `/desktop/candidate/current.json` 与 `/desktop/stable/current.json` 配置为 1 分钟、权重 99，把 `/desktop/releases/` 配置为 365 天、权重 99，并把兜底 `/` 降为权重 1，随后刷新 Candidate 精确 URL。2026-09-14 公网复验 Candidate 返回 RC9、`Cache-Control: public,max-age=60,must-revalidate`、`X-Swift-CacheTime: 60`；Stable 指针仍未创建。
 
 Candidate 在完成确切安装包的干净安装和静态验证后执行下述 `promote`，让 Candidate 指针生效，再立即从已安装的前一个 Candidate 完成 N→N+1 canary；失败时停止并发布更高的 RC，不降级或覆盖旧版本。Stable 只有在 Candidate N→N+1、同源整包兜底及 Stable 确切安装包验收全部通过后，才执行同一命令：
 
 - Ref：`main`
 - `command`：`promote`
-- `tag`：`v1.0.0-rc.4`
+- `tag`：`<vX.Y.Z 或 vX.Y.Z-rc.N>`
 - `scope`：`macos-arm64`
-- `confirm_version`：`1.0.0-rc.4`
+- `confirm_version`：`<X.Y.Z 或 X.Y.Z-rc.N>`
 
 Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并校验 Draft、复验 CDN、校验权威旧指针严格递增，随后先公开 GitHub Release，再重读指针，最后写入 `current.json` 并等待最多 120 秒收敛。若公开后发生瞬时失败，可用完全相同参数安全重跑；脚本只在远端指针已经精确指向该版本时进入收敛复验，不会降级或覆盖版本目录。
 
@@ -161,15 +162,13 @@ Stable 使用相同命令和 `v1.0.0` / `1.0.0`。`promote` 会再次下载并�
 
 CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明安装后的 Sidebar、用户数据或启动行为正确。
 
-现有 `v0.1.2-rc.1`、`v0.1.2-rc.2` 已是公开 Pre-release，`v0.1.2-rc.3` 只有单平台 Actions artifact，均不能替代新 Draft-only/OSS 两阶段契约的首发验收。准备 `1.0.0` 时必须使用未占用的连续版本：
-
-1. `v1.0.0-rc.1` 在 macOS arm64、macOS x64 和 Windows x64 完成干净安装并推广 Candidate 指针。
-2. `v1.0.0-rc.2` 从 RC1 完成真实检查，但自动下载因包内缺少 `app-update.yml` 失败；该结论已记录，禁止覆盖旧资产。
-3. `v1.0.0-rc.3` 通过同源“下载完整安装包”从 RC1/RC2 完成一次覆盖安装，并确认版本、数据和钥匙串行为正常。
-4. 从已安装 RC3 再发布一个更高 Candidate，完整完成应用内检查、下载、校验、安装和重启；该步骤通过前不得发布 Stable。
-5. `v1.0.0` 的确切 Stable 制品完成干净安装与覆盖安装。
-6. 在可信 Manifest 已解析后人为让自动下载失败，确认更新窗口可以从同一版本目录下载适配架构的 DMG/EXE 并完成覆盖安装；完全禁用更新 Origin 时应安全失败。
-7. 上述证据齐全后，才允许首次写入 `stable/current.json`。
+1. RC1/RC2 暴露包内缺少 `app-update.yml`，只能发现更新，不能完成自动下载；旧资产不得覆盖。
+2. RC3 补齐更新器启动元数据；RC3 到 RC4 已在 macOS Apple Silicon 完成客户端内检查、下载、安装和重启，基本链路通过。
+3. RC5 完成全平台发布；RC6 只作为 ARM64 安装过渡 Draft 暂存，未推广。
+4. RC7 把安装准备过渡推广到全平台。RC5 到 RC7 的 macOS 更新成功，但旧版本控制的安装准备仍出现空白等待；Windows 更新则因旧进程和旧文件占用失败。
+5. RC8 只生成 Windows Candidate artifact，完成窗口装饰隔离并尝试旧卸载回退；实际覆盖安装仍出现“因赛AI 无法关闭”，未推广。
+6. RC9 增加 Windows 进程树与安装前旧进程清理、macOS 临时路径拦截和忙碌状态防重入，完成全平台 build、stage 和 promote。Stable 前必须从真实旧版完成 Windows 到 RC9，并从 `/Applications` 中的 RC7 完成 macOS 到 RC9。
+7. `v1.0.0` 的确切 Stable 制品仍需完成三平台干净安装与覆盖安装；可信 Manifest 下的同源整包兜底、Origin 完全失败的安全关闭和数据连续性也必须通过，之后才允许首次写入 `stable/current.json`。
 
 ## 最终安装验收
 
