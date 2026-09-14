@@ -8,13 +8,13 @@ import { clearProfileInstallMarker, markProfileInstallComplete } from './profile
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 4
+const DEFAULT_PROFILE_VERSION = 5
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const SIDEBAR_VERSION = '0.16.1'
+const SIDEBAR_VERSION = '0.19.1'
 const MARKET_PACKAGE = 'dshmarket'
-const MARKET_VERSION = '1.44.0'
+const MARKET_VERSION = '1.46.1'
 const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
 const MARKET_POLICY_FILES = [
   {
@@ -91,7 +91,7 @@ async function isUncustomizedPreMarketProfile(
 
   const dependencies = manifest.dependencies ?? {}
   const expectedDependencies: Record<string, string> = {
-    [SIDEBAR_PACKAGE]: SIDEBAR_VERSION,
+    [SIDEBAR_PACKAGE]: '0.16.1',
     [DESKTOP_INTEGRATION_PACKAGE]: 'workspace:*'
   }
   const dependencyNames = Object.keys(dependencies)
@@ -184,6 +184,22 @@ async function refreshBundledMarketPolicy(source: string, destination: string): 
   }
 }
 
+export async function refreshPromptEnhanceCompatibility(source: string, destination: string): Promise<void> {
+  const packagePath = join('node_modules', 'dsh-prompt-enhance')
+  const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
+  // Optional plugins stay removed, and user-upgraded versions retain their own client.
+  if (installed?.version !== '0.1.9') return
+  const bundled = await readPackageManifest(join(source, packagePath, 'package.json'))
+  if (bundled?.version !== '0.1.9') throw new Error('The bundled prompt-enhance compatibility version is invalid.')
+  const clientPath = join(packagePath, 'lib', 'client.js')
+  const client = await readFile(join(source, clientPath), 'utf8')
+  if (!client.includes('const imageCount = useInput((state) => state.attachmentIds.length);')) {
+    throw new Error('The bundled prompt-enhance composer compatibility patch is missing.')
+  }
+  await mkdir(dirname(join(destination, clientPath)), { recursive: true })
+  await writeFile(join(destination, clientPath), client, 'utf8')
+}
+
 async function ensureWorkspacePackagePattern(profileDirectory: string): Promise<void> {
   const path = join(profileDirectory, 'pnpm-workspace.yaml')
   let workspace: { packages?: unknown; [key: string]: unknown } = {}
@@ -267,6 +283,7 @@ async function restoreManagedProfile(
   const manifestRestored = await restoreManagedProfileManifest(destination)
   await ensureWorkspacePackagePattern(destination)
   await refreshBundledMarketPolicy(source, destination)
+  await refreshPromptEnhanceCompatibility(source, destination)
   if (forceInstall || sidebarRestored || marketRestored || manifestRestored) {
     await clearProfileInstallMarker(dshHome)
   }
@@ -308,7 +325,7 @@ export async function initializeBundledProfile(
     return true
   }
 
-  if (current.insightDesktop?.defaultProfileVersion === DEFAULT_PROFILE_VERSION) {
+  if ([4, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
     await restoreManagedProfile(source, destination, dshHome, false)
     return true
   }

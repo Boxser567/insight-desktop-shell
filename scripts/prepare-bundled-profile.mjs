@@ -6,14 +6,15 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { patchBundledMarket } from './patch-bundled-market.mjs'
+import { patchBundledPromptEnhance } from './patch-bundled-prompt-enhance.mjs'
 
 const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const SIDEBAR_VERSION = '0.16.1'
+const SIDEBAR_VERSION = '0.19.1'
 const MARKET_PACKAGE = 'dshmarket'
-const MARKET_VERSION = '1.44.0'
+const MARKET_VERSION = '1.46.1'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 4
+const DEFAULT_PROFILE_VERSION = 5
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(
@@ -64,6 +65,7 @@ const desktopIntegrationSource = join(projectRoot, 'packages', 'insight-desktop-
 const bundledProfileRoot = join(projectRoot, 'build', 'bundled-profile')
 const bundledProfileDirectory = join(bundledProfileRoot, PROFILE)
 const coreRuntimeRoot = join(projectRoot, 'build', 'core-runtime')
+const profileLockPath = join(projectRoot, 'build', 'bundled-profile.pnpm-lock.yaml')
 const bundledNode = process.platform === 'win32'
   ? join(coreRuntimeRoot, 'node_modules', 'node', 'bin', 'node.exe')
   : join(coreRuntimeRoot, 'node_modules', 'node', 'bin', 'node')
@@ -174,6 +176,7 @@ async function templateIsReady(communityPlugins) {
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
   if (!requiredFilesExist) return false
+  if (await sha256(join(bundledProfileDirectory, 'pnpm-lock.yaml')) !== await sha256(profileLockPath)) return false
 
   for (const plugin of communityPlugins) {
     const installedManifest = await readManifest(join(
@@ -239,7 +242,7 @@ async function runDsh(home, workingDirectory, shimDirectory, args) {
     npm_config_side_effects_cache: 'false'
   }
   await new Promise((resolve, reject) => {
-    const child = spawn(nodeExecutable, [dshEntry, ...args], {
+    const child = spawn(nodeExecutable, [join(projectRoot, 'build', 'harness-node-entry.mjs'), dshEntry, ...args], {
       cwd: workingDirectory,
       env: environment,
       stdio: 'inherit',
@@ -298,41 +301,49 @@ await removeHarnessHomeResidue()
 if (await templateIsReady(communityPlugins)) {
   await configureDefaultProfile(bundledProfileDirectory)
   await patchBundledMarket(bundledProfileDirectory)
+  await patchBundledPromptEnhance(bundledProfileDirectory)
   console.log(`Refreshed bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
 } else {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-bundled-profile-'))
   try {
     const shimDirectory = join(temporaryDirectory, '.bin')
     await writePnpmShim(shimDirectory)
-    await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
-      'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
-      `${SIDEBAR_PACKAGE}@${SIDEBAR_VERSION}`
-    ])
-    await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
-      'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
-      `${MARKET_PACKAGE}@${MARKET_VERSION}`
-    ])
     const temporaryProfile = join(temporaryDirectory, 'profiles', PROFILE)
+    await mkdir(temporaryProfile, { recursive: true })
     await copyCommunityPluginArchives(temporaryProfile, communityPlugins)
-    for (const plugin of communityPlugins) {
-      await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
-        'plugin', '--profile', PROFILE, 'add', '--save-exact', '--allow-build=node-pty',
-        plugin.profileSpecifier
-      ])
-    }
+    await writeFile(join(temporaryProfile, 'package.json'), `${JSON.stringify({
+      name: 'dsh-profile-web',
+      private: true,
+      dependencies: {
+        [SIDEBAR_PACKAGE]: SIDEBAR_VERSION,
+        [MARKET_PACKAGE]: MARKET_VERSION,
+        ...Object.fromEntries(communityPlugins.map(plugin => [plugin.packageName, plugin.profileSpecifier]))
+      },
+      dsh: { profile: {
+        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', SIDEBAR_PACKAGE, MARKET_PACKAGE,
+          ...communityPlugins.map(plugin => plugin.packageName)],
+        patchReload: 'live'
+      } }
+    }, null, 2)}\n`)
+    await writeFile(join(temporaryProfile, 'cordis.patch.yml'), '[]\n')
+    await writeFile(join(temporaryProfile, 'pnpm-workspace.yaml'), stringify({
+      packages: ['.', 'packages/*'],
+      nodeLinker: 'hoisted',
+      autoInstallPeers: false,
+      allowBuilds: { 'node-pty': true },
+      // The reviewed, explicitly pinned release is younger than pnpm's default age floor.
+      minimumReleaseAgeExclude: [`${MARKET_PACKAGE}@${MARKET_VERSION}`]
+    }))
     await configureDefaultProfile(temporaryProfile)
+    await cp(profileLockPath, join(temporaryProfile, 'pnpm-lock.yaml'))
     await runDsh(temporaryDirectory, projectRoot, shimDirectory, [
-      'plugin', '--profile', PROFILE, 'install', '--no-frozen-lockfile'
+      'plugin', '--profile', PROFILE, 'install', '--frozen-lockfile'
     ])
-    const installedManifestPath = join(temporaryProfile, 'package.json')
-    const installedManifest = await readManifest(installedManifestPath)
-    if (!installedManifest) throw new Error('The prepared bundled profile manifest could not be read.')
-    installedManifest.dependencies ??= {}
-    for (const plugin of communityPlugins) {
-      installedManifest.dependencies[plugin.packageName] = plugin.profileSpecifier
+    if (await sha256(join(temporaryProfile, 'pnpm-lock.yaml')) !== await sha256(profileLockPath)) {
+      throw new Error('Bundled Profile installation changed the frozen dependency lock.')
     }
-    await writeFile(installedManifestPath, `${JSON.stringify(installedManifest, null, 2)}\n`, 'utf8')
     await patchBundledMarket(temporaryProfile)
+    await patchBundledPromptEnhance(temporaryProfile)
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })
     await cp(join(temporaryDirectory, 'profiles', PROFILE), bundledProfileDirectory, {

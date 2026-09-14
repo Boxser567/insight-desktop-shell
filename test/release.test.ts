@@ -287,7 +287,7 @@ describe('GitHub release contract', () => {
     expect(main).toContain('resolveLocalPluginImport(selectedPath)')
     expect(main).toContain('addProfilePluginWithDsh(')
     expect(profile).toContain("const MARKET_PACKAGE = 'dshmarket'")
-    expect(profile).toContain("const MARKET_VERSION = '1.44.0'")
+    expect(profile).toContain("const MARKET_VERSION = '1.46.1'")
     expect(profile).toContain("bundled-community-plugins.json")
     expect(profile).toContain("file:.insight-bundled-plugins/")
     expect(profile).not.toContain("packageName: 'dsh-at-file'")
@@ -685,7 +685,8 @@ describe('GitHub release contract', () => {
       'utf8'
     )
 
-    expect(script).toContain("'--allow-build=node-pty'")
+    expect(script).toContain("allowBuilds: { 'node-pty': true }")
+    expect(script).toContain("'install', '--frozen-lockfile'")
   })
 
   it('documents the locked Core Runtime distribution policy', async () => {

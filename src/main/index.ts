@@ -958,7 +958,8 @@ function launchSafeHarness(): Promise<void> {
     beginStartup()
     await showSplash()
     await runtime.stop()
-    await ensureSafeModeProfile(dshHome)
+    await ensureSafeModeProfile(dshHome,
+      desktopResourcePath('bundled-profile/web/packages/insight-desktop-integration'))
     startupTracker?.transition('auditing-runtime', '正在检查安全模式环境…')
     runtime.note('[desktop] safe mode: third-party web profile bundles are blocked')
     startupTracker?.transition('starting-runtime', '正在启动智能体服务…')
