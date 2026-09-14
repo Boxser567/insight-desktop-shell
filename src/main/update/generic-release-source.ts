@@ -13,6 +13,8 @@ type FetchImplementation = (
   init?: RequestInit
 ) => Promise<Response>
 
+export const UPDATE_SOURCE_REQUEST_TIMEOUT_MS = 30_000
+
 const pointerSchema = z.object({
   schemaVersion: z.literal(1),
   channel: z.enum(['candidate', 'stable']),
@@ -45,13 +47,10 @@ export class GenericReleaseSource implements UpdateSource {
     }
 
     const pointerUrl = this.#distribution.currentPointerUrl(channel)
-    const pointerResponse = await this.#fetch(pointerUrl, {
+    const pointer = pointerSchema.parse(await this.#read(pointerUrl, '渠道指针', response => response.json(), {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
-      redirect: 'follow'
-    })
-    assertTrustedResponse(pointerResponse, pointerUrl, '渠道指针')
-    const pointer = pointerSchema.parse(await pointerResponse.json())
+      headers: { 'Cache-Control': 'no-cache' }
+    }))
     if (pointer.channel !== channel) {
       throw new Error('更新指针渠道与当前客户端不一致。')
     }
@@ -99,9 +98,20 @@ export class GenericReleaseSource implements UpdateSource {
   }
 
   async #download(url: URL, label: string): Promise<Uint8Array> {
-    const response = await this.#fetch(url, { redirect: 'follow' })
-    assertTrustedResponse(response, url, label)
-    return new Uint8Array(await response.arrayBuffer())
+    return this.#read(url, label, async response => new Uint8Array(await response.arrayBuffer()))
+  }
+
+  async #read<T>(url: URL, label: string, consume: (response: Response) => Promise<T>, init?: RequestInit): Promise<T> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(new Error(`${label}请求超时，请稍后重试。`)), UPDATE_SOURCE_REQUEST_TIMEOUT_MS)
+    try {
+      const response = await this.#fetch(url, { ...init, redirect: 'follow', signal: controller.signal })
+      assertTrustedResponse(response, url, label)
+      // Keep the deadline active through body consumption, not just headers.
+      return await consume(response)
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 }
 

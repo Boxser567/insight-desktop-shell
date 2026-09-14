@@ -19,7 +19,7 @@ export function createModelGatewayAdapter(ctx: Context, resolveAccessToken: () =
     models: [{ id: MODEL_ID, name: 'DeepSeek-V4-Flash-Vision-Exp', contextWindow: 128000,
       maxTokens: 8192, inputModalities: ['text', 'image'] }]
   })
-  return new DeepSeekAdapter({
+  const configuration = {
     options: () => options,
     resolveApiKey: async () => {
       try { return await resolveAccessToken() }
@@ -28,6 +28,9 @@ export function createModelGatewayAdapter(ctx: Context, resolveAccessToken: () =
       }
     },
     resolveUserId: () => getOrCreateAnonymousUserId(),
-    resolveAttachments: () => ctx.get('attachments')
-  })
+    resolveAttachments: () => ctx.get('attachments'),
+    // The Insight Gateway uses the standard request fields, without official-API extensions.
+    prepareExtensions: async () => ({ fields: {}, accept: async () => {} })
+  }
+  return new DeepSeekAdapter(configuration)
 }
