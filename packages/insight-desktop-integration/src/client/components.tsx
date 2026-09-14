@@ -67,6 +67,11 @@ export function BrandMark({ size }: PropsRuntime<'sidebar.brand.mark'>) {
   )
 }
 
+/** Product headline for a new conversation. */
+export function HeroTitle() {
+  return <span data-insight-desktop-hero-title>以专业为引擎，让团队与AI共成长</span>
+}
+
 /** Render the product name in the brand name seat. */
 export function BrandName() {
   return <span data-insight-desktop-brand-name>因赛AI</span>

@@ -42,14 +42,14 @@ describe('authenticated single-sidebar integration contract', () => {
     }
   })
 
-  it('prepares a version-five Profile with protected first-party integration', async () => {
+  it('prepares a version-six Profile with protected first-party integration', async () => {
     const prepare = await readFile('scripts/prepare-bundled-profile.mjs', 'utf8')
     const installationOwned = await readFile('src/main/state/installation-owned-bundles.ts', 'utf8')
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
 
-    expect(prepare).toContain("const SIDEBAR_VERSION = '0.19.1'")
+    expect(prepare).not.toContain('const SIDEBAR_VERSION')
     expect(prepare).toContain("const MARKET_VERSION = '1.46.1'")
-    expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 5")
+    expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 6")
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
     expect(prepare).toContain("packages.includes('packages/*')")
@@ -67,12 +67,12 @@ describe('authenticated single-sidebar integration contract', () => {
     const bundledClient = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/lib/client.js`, 'utf8')
     const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
-    expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.19.1')
+    expect(manifest.dependencies['dsh-better-sidebar']).toBeUndefined()
     expect(manifest.dependencies.dshmarket).toBe('1.46.1')
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
     expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(5)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(6)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)

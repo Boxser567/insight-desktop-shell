@@ -30,14 +30,13 @@ const marketPolicy = {
 describe('bundled profile initialization', () => {
   const testDir = join(__dirname, '.temp-bundled-profile-test')
 
-  async function writeVersionFiveTemplate(template: string, clientBundle = 'bundle\n'): Promise<void> {
+  async function writeVersionSixTemplate(template: string, clientBundle = 'bundle\n'): Promise<void> {
     const profile = join(template, 'web')
     await mkdir(join(profile, 'packages', 'insight-desktop-integration', 'lib'), { recursive: true })
     await writeFile(
       join(profile, 'package.json'),
       JSON.stringify({
         dependencies: {
-          'dsh-better-sidebar': '0.19.1',
           dshmarket: '1.46.1',
           ...Object.fromEntries(communityPlugins.map((plugin) => [
             plugin.name,
@@ -50,14 +49,13 @@ describe('bundled profile initialization', () => {
             bundles: [
               '@deepseek-ai/dsh-base',
               '@deepseek-ai/dsh-web-app',
-              'dsh-better-sidebar',
               'dshmarket',
               ...communityPlugins.map((plugin) => plugin.name),
               '@insight-ai/desktop-integration'
             ]
           }
         },
-        insightDesktop: { defaultProfileVersion: 5 }
+        insightDesktop: { defaultProfileVersion: 6 }
       }),
       'utf8'
     )
@@ -68,12 +66,6 @@ describe('bundled profile initialization', () => {
     )
     await mkdir(join(profile, 'node_modules', 'dshmarket', 'lib'), { recursive: true })
     await mkdir(join(profile, 'node_modules', 'dshmarket', 'client'), { recursive: true })
-    await mkdir(join(profile, 'node_modules', 'dsh-better-sidebar'), { recursive: true })
-    await writeFile(
-      join(profile, 'node_modules', 'dsh-better-sidebar', 'package.json'),
-      JSON.stringify({ name: 'dsh-better-sidebar', version: '0.19.1' }),
-      'utf8'
-    )
     await writeFile(
       join(profile, 'node_modules', 'dshmarket', 'package.json'),
       JSON.stringify({ name: 'dshmarket', version: '1.46.1' }),
@@ -150,7 +142,7 @@ describe('bundled profile initialization', () => {
   it('copies the packaged web profile only for a new Harness home', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const initialized = JSON.parse(
@@ -178,7 +170,7 @@ describe('bundled profile initialization', () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     const profile = join(dshHome, 'profiles', 'web')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     await mkdir(profile, { recursive: true })
     await writeFile(
       join(profile, 'package.json'),
@@ -190,7 +182,7 @@ describe('bundled profile initialization', () => {
     )
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
-    expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('dsh-better-sidebar')
+    expect(await readFile(join(profile, 'package.json'), 'utf8')).not.toContain('dsh-better-sidebar')
     expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('dsh-memory-evolve')
 
     await writeFile(
@@ -209,7 +201,7 @@ describe('bundled profile initialization', () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     const profile = join(dshHome, 'profiles', 'web')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     await mkdir(profile, { recursive: true })
     const patch = '- id: user-plugin\n  disabled: true\n'
     await writeFile(
@@ -224,7 +216,6 @@ describe('bundled profile initialization', () => {
             bundles: [
               '@deepseek-ai/dsh-base',
               '@deepseek-ai/dsh-web-app',
-              'dsh-better-sidebar',
               'user-plugin'
             ]
           }
@@ -240,7 +231,6 @@ describe('bundled profile initialization', () => {
 
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
     expect(manifest.dependencies).toEqual({
-      'dsh-better-sidebar': '0.19.1',
       'user-plugin': '1.2.3',
       dshmarket: '1.46.1',
       '@insight-ai/desktop-integration': 'workspace:*'
@@ -248,12 +238,11 @@ describe('bundled profile initialization', () => {
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      'dsh-better-sidebar',
       'dshmarket',
       'user-plugin',
       '@insight-ai/desktop-integration'
     ])
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(5)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(6)
     for (const plugin of communityPlugins) {
       expect(manifest.dependencies).not.toHaveProperty(plugin.name)
       expect(manifest.dsh.profile.bundles).not.toContain(plugin.name)
@@ -267,7 +256,7 @@ describe('bundled profile initialization', () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     const profile = join(dshHome, 'profiles', 'web')
-    await writeVersionFiveTemplate(template, 'new bundle\n')
+    await writeVersionSixTemplate(template, 'new bundle\n')
     await mkdir(join(profile, 'packages', 'insight-desktop-integration', 'lib'), { recursive: true })
     const patch = '- id: user-plugin\n  disabled: true\n'
     await writeFile(
@@ -283,7 +272,6 @@ describe('bundled profile initialization', () => {
             bundles: [
               '@deepseek-ai/dsh-base',
               '@deepseek-ai/dsh-web-app',
-              'dsh-better-sidebar',
               'user-plugin',
               '@insight-ai/desktop-integration'
             ]
@@ -303,7 +291,7 @@ describe('bundled profile initialization', () => {
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
     expect(manifest.dependencies['user-plugin']).toBe('1.2.3')
     expect(manifest.dsh.profile.bundles).toContain('user-plugin')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(5)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(6)
     expect(manifest.dependencies.dshmarket).toBe('1.46.1')
     expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     for (const plugin of communityPlugins) {
@@ -318,7 +306,7 @@ describe('bundled profile initialization', () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     const profile = join(dshHome, 'profiles', 'web')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     await mkdir(profile, { recursive: true })
     await writeFile(
       join(profile, 'package.json'),
@@ -346,7 +334,7 @@ describe('bundled profile initialization', () => {
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
 
     const migrated = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(migrated.insightDesktop.defaultProfileVersion).toBe(5)
+    expect(migrated.insightDesktop.defaultProfileVersion).toBe(6)
     expect(migrated.dependencies.dshmarket).toBe('1.46.1')
     expect(migrated.dsh.profile.bundles).toContain('dshmarket')
     for (const plugin of communityPlugins) {
@@ -371,7 +359,7 @@ describe('bundled profile initialization', () => {
       const template = join(testDir, 'template')
       const dshHome = join(testDir, 'harness')
       const profile = join(dshHome, 'profiles', 'web')
-      await writeVersionFiveTemplate(template)
+      await writeVersionSixTemplate(template)
       await mkdir(profile, { recursive: true })
       await mkdir(join(profile, markerDirectory), { recursive: true })
       await writeFile(
@@ -386,8 +374,8 @@ describe('bundled profile initialization', () => {
               bundles: [
                 '@deepseek-ai/dsh-base',
                 '@deepseek-ai/dsh-web-app',
-                'dsh-better-sidebar',
-                '@insight-ai/desktop-integration'
+              'dsh-better-sidebar',
+                  '@insight-ai/desktop-integration'
               ]
             }
           },
@@ -400,7 +388,7 @@ describe('bundled profile initialization', () => {
       await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
 
       const migrated = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-      expect(migrated.insightDesktop.defaultProfileVersion).toBe(5)
+      expect(migrated.insightDesktop.defaultProfileVersion).toBe(6)
       expect(migrated.dependencies.dshmarket).toBe('1.46.1')
       expect(migrated.dsh.profile.bundles).toContain('dshmarket')
       for (const plugin of communityPlugins) {
@@ -414,7 +402,7 @@ describe('bundled profile initialization', () => {
   it('refreshes host policy files for an installed matching market version', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     const profile = await writeExistingMarketProfile(dshHome, '1.44.0', 'old patch\n', 'old routes\n')
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
@@ -427,7 +415,7 @@ describe('bundled profile initialization', () => {
   it('repairs a current desktop profile after a required plugin was removed and the market drifted', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     await initializeBundledProfile(template, dshHome)
     const profile = join(dshHome, 'profiles', 'web')
     const manifestPath = join(profile, 'package.json')
@@ -449,12 +437,11 @@ describe('bundled profile initialization', () => {
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
 
     const repaired = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(repaired.dependencies['dsh-better-sidebar']).toBe('0.19.1')
+    expect(repaired.dependencies['dsh-better-sidebar']).toBeUndefined()
     expect(repaired.dependencies.dshmarket).toBe('1.46.1')
     expect(repaired.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      'dsh-better-sidebar',
       'dshmarket',
       ...communityPlugins.map((plugin) => plugin.name),
       '@insight-ai/desktop-integration'
@@ -467,7 +454,7 @@ describe('bundled profile initialization', () => {
     async (version) => {
       const template = join(testDir, 'template')
       const dshHome = join(testDir, 'harness')
-      await writeVersionFiveTemplate(template)
+      await writeVersionSixTemplate(template)
       const profile = await writeExistingMarketProfile(
         dshHome,
         version,
@@ -479,9 +466,9 @@ describe('bundled profile initialization', () => {
       await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
 
       const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-      expect(manifest.dependencies['dsh-better-sidebar']).toBe('0.19.1')
+      expect(manifest.dependencies['dsh-better-sidebar']).toBeUndefined()
       expect(manifest.dependencies.dshmarket).toBe('1.46.1')
-      expect(manifest.dsh.profile.bundles).toContain('dsh-better-sidebar')
+      expect(manifest.dsh.profile.bundles).not.toContain('dsh-better-sidebar')
       expect(manifest.dsh.profile.bundles).toContain('dshmarket')
       expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'patch.js'), 'utf8')).toBe(marketPolicy.patch)
       expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'lib', 'routes.js'), 'utf8')).toBe(marketPolicy.routes)
@@ -489,16 +476,19 @@ describe('bundled profile initialization', () => {
     }
   )
 
-  it('upgrades generation four managed packages without restoring removed community plugins or changing user patches', async () => {
+  it.each([4, 5])('migrates generation %s to the native sidebar while preserving customizations', async (version) => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    await writeVersionFiveTemplate(template)
+    await writeVersionSixTemplate(template)
     await initializeBundledProfile(template, dshHome)
     const profile = join(dshHome, 'profiles', 'web')
     const manifestPath = join(profile, 'package.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    manifest.insightDesktop.defaultProfileVersion = 4
+    manifest.insightDesktop.defaultProfileVersion = version
     manifest.dependencies['dsh-better-sidebar'] = '0.16.1'
+    manifest.dsh.profile.bundles.push('dsh-better-sidebar')
+    await mkdir(join(profile, 'node_modules', 'dsh-better-sidebar'), { recursive: true })
+    await writeFile(join(profile, 'node_modules', 'dsh-better-sidebar', 'package.json'), '{}')
     manifest.dependencies.dshmarket = '1.44.0'
     manifest.dependencies['user-plugin'] = '1.2.3'
     delete manifest.dependencies['dsh-memory-evolve']
@@ -509,8 +499,11 @@ describe('bundled profile initialization', () => {
     await writeFile(join(profile, 'cordis.patch.yml'), patch)
     await initializeBundledProfile(template, dshHome)
     const result = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(result.insightDesktop.defaultProfileVersion).toBe(5)
-    expect(result.dependencies).toMatchObject({ 'dsh-better-sidebar': '0.19.1', dshmarket: '1.46.1', 'user-plugin': '1.2.3' })
+    expect(result.insightDesktop.defaultProfileVersion).toBe(6)
+    expect(result.dependencies).toMatchObject({ dshmarket: '1.46.1', 'user-plugin': '1.2.3' })
+    expect(result.dependencies).not.toHaveProperty('dsh-better-sidebar')
+    expect(result.dsh.profile.bundles).not.toContain('dsh-better-sidebar')
+    await expect(readFile(join(profile, 'node_modules', 'dsh-better-sidebar', 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     expect(result.dependencies).not.toHaveProperty('dsh-memory-evolve')
     expect(result.dsh.profile.bundles).toContain('user-plugin')
     expect(result.dsh.profile.bundles).not.toContain('dsh-memory-evolve')

@@ -685,7 +685,7 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 480,
     show: false,
-    title: '',
+    title: isWindows ? '因赛 AI' : '',
     icon: desktopIconPath(),
     frame: process.platform !== 'darwin',
     ...(isWindows
@@ -713,7 +713,7 @@ function createWindow(): BrowserWindow {
   }
   window.on('page-title-updated', (event) => {
     event.preventDefault()
-    window.setTitle('')
+    window.setTitle(isWindows ? '因赛 AI' : '')
   })
   secureWebContents(window.webContents, isTrustedShellUrl)
   installContextMenu(window, harnessLocale)

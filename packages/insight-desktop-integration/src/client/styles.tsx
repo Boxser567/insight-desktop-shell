@@ -17,6 +17,12 @@ const stylesheet = `
   height: 68%;
   object-fit: contain;
 }
+[data-insight-desktop-hero-title] {
+  text-align: center;
+  text-wrap: balance;
+  font-size: clamp(20px, 2.5vw, 26px);
+}
+
 [data-insight-desktop-brand-name] {
   overflow: hidden;
   color: var(--dsw-alias-label-primary);

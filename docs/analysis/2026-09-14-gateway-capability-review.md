@@ -142,3 +142,7 @@ rc.10 锁定 Core 源码检查路径：`/private/tmp/insight-core-upgrade-202609
 2. systemPromptUpdate保持前置system兼容语义，服务端确认in-history后再启用；官方session-log扩展保持关闭。
 3. Shell的core-runtime.lock.json仍锁定rc.10已发布依赖。Core文案修复已在本地新Runtime验证，三平台CI验证产物已生成；仍需正式发布依赖并更新锁文件，常规安装包尚不包含全部修复。
 4. 未升级应用版本、触发OSS或更新Candidate/Stable指针；发布前仍须完成跨平台安装包及真实账号验收。
+
+## 后续 Runtime 交付更新（2026-09-14）
+
+品牌/原生侧栏任务已发布 Runtime 依赖 `insight-runtime-v0.1.5-rc.2-insight.1`（Core `42ddfb640a97d551e458613d11ddb73936d15e11`），三平台构建成功，Shell 的锁文件已同步。因此上文“尚未更新 Runtime 锁”的阶段性阻塞已解除，生成上限与鉴权提示修复将进入下一次标准客户端构建。客户端安装包与真实企业 Gateway 验收仍未完成。相关记录见 [品牌与原生侧栏计划](../superpowers/plans/2026-09-14-desktop-brand-native-sidebar.md)。

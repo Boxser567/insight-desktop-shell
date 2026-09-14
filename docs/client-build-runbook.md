@@ -133,7 +133,7 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 和模板版本要求的 Profile，避免无意义地重新安装。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dshmarket@1.46.1`、第一方集成和模板版本 6 要求（不含 `dsh-better-sidebar`）的 Profile，避免无意义地重新安装。
 
 Profile 准备还会执行锁定版本的 Market 宿主适配，包括必需插件保护、列表隐藏和桌面重启委托。若 `dshmarket` 内部更新导致保护列表、更新/卸载路由或客户端重启动作无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
 
@@ -190,8 +190,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
-- `Resources/bundled-profile/web/node_modules/dsh-better-sidebar/lib/index.js` 存在；
-- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.44.0`；
+- Profile 不含 `dsh-better-sidebar` 的依赖、bundle 或安装目录；Runtime 提供原生 Sidebar、文件浏览和预览；
+- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.46.1`；
 - `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 - macOS 包内主 App 的 `CFBundleIdentifier` 与上述固定身份一致，所有 Helper 使用相同主 ID 派生的 `.helper*` 前缀，且与包内 `insightDesktopAppId` 一致；旧 ID 包的签名/安装证据不得作为新身份的验收结果。
@@ -208,11 +208,12 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的新用户 Profile：`dsh-better-sidebar@0.16.1`、`dshmarket@1.44.0` 的依赖和 bundle 注册以及 `.install-complete` 均存在。
-- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Sidebar 与桌面集成不再出现在 Market 的可操作列表。
+- 检查复制后的新用户 Profile：模板版本 6、`dshmarket@1.46.1`、第一方集成以及 `.install-complete` 均存在；升级旧 Profile 后 better-sidebar 不再注册或恢复。
+- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Core 原生 Sidebar 与桌面集成不出现在 Market 的可操作列表。
 - 打开设置中的 Plugin Market；卸载一个可选出厂插件并点击“立即重启”，确认 Shell 重新启动 Harness、没有插件恢复页或孤儿 Harness 进程、该插件不会恢复，登录、设置、退出和 Sidebar 仍可用。另行卸载 `dshmarket` 并重启同一应用，确认市场不会恢复；再用新账号范围确认首次初始化仍预装市场与可选出厂插件。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
-- 确认没有插件恢复窗口，没有无限启动页，插件列表中能看到 Better Sidebar。
+- 确认没有插件恢复窗口或无限启动页，插件列表中没有内置 Better Sidebar。首页显示因赛 Logo 和“以专业为引擎，让团队与AI共成长”，无预览标签；Windows 任务栏与 Alt+Tab 标题为“因赛 AI”。
+- 原生右侧栏提供文件浏览/预览；better-sidebar 独有的编辑器、终端、Git 和嵌入式浏览器面板不再随客户端预装，不按旧插件按钮验收。
 - 检查 `harness.log` 中 `[desktop] startup phase` 的单调计时。Shell 的 `ready` 只表示 Harness 视图已接管窗口，不代表所有插件完成初始化；Profile 修复耗时从 `repairing-profile` 到 `auditing-runtime` 计算，连续热启动达到 300ms 才进入 Profile 快速路径优化。
 
 **通过条件：** 人工明确回复上述行为通过，并在记录中写明应用路径、Runtime tag、全新/升级 Profile 类型及用户数据目录。

@@ -44,6 +44,9 @@
       ],
       "@deepseek-ai/dsh-client-ui-renderer/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-conversation/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/types/client/index.d.ts"
       ]
     }
   },

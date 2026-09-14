@@ -10,11 +10,10 @@ import { patchBundledPromptEnhance } from './patch-bundled-prompt-enhance.mjs'
 
 const PROFILE = 'web'
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const SIDEBAR_VERSION = '0.19.1'
 const MARKET_PACKAGE = 'dshmarket'
 const MARKET_VERSION = '1.46.1'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 5
+const DEFAULT_PROFILE_VERSION = 6
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(
@@ -82,10 +81,10 @@ async function removeHarnessHomeResidue() {
 }
 
 function hasPinnedDefaultPlugins(manifest, communityPlugins) {
-  return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
+  return !manifest.dependencies?.[SIDEBAR_PACKAGE] &&
     manifest.dependencies?.[MARKET_PACKAGE] === MARKET_VERSION &&
     manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
-    manifest.dsh?.profile?.bundles?.includes(SIDEBAR_PACKAGE) &&
+    !manifest.dsh?.profile?.bundles?.includes(SIDEBAR_PACKAGE) &&
     manifest.dsh?.profile?.bundles?.includes(MARKET_PACKAGE) &&
     manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
     !manifest.dependencies?.['dsh-at-file'] &&
@@ -162,13 +161,8 @@ async function readCommunityPlugins() {
 async function templateIsReady(communityPlugins) {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
   if (!manifest || !hasPinnedDefaultPlugins(manifest, communityPlugins)) return false
-  const [sidebarManifest, marketManifest] = await Promise.all([
-    readManifest(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')),
-    readManifest(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json'))
-  ])
+  const marketManifest = await readManifest(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json'))
   if (
-    sidebarManifest?.name !== SIDEBAR_PACKAGE ||
-    sidebarManifest.version !== SIDEBAR_VERSION ||
     marketManifest?.name !== MARKET_PACKAGE ||
     marketManifest.version !== MARKET_VERSION
   ) return false
@@ -315,12 +309,11 @@ if (await templateIsReady(communityPlugins)) {
       name: 'dsh-profile-web',
       private: true,
       dependencies: {
-        [SIDEBAR_PACKAGE]: SIDEBAR_VERSION,
         [MARKET_PACKAGE]: MARKET_VERSION,
         ...Object.fromEntries(communityPlugins.map(plugin => [plugin.packageName, plugin.profileSpecifier]))
       },
       dsh: { profile: {
-        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', SIDEBAR_PACKAGE, MARKET_PACKAGE,
+        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', MARKET_PACKAGE,
           ...communityPlugins.map(plugin => plugin.packageName)],
         patchReload: 'live'
       } }

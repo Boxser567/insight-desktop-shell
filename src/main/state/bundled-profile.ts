@@ -8,11 +8,10 @@ import { clearProfileInstallMarker, markProfileInstallComplete } from './profile
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 5
+const DEFAULT_PROFILE_VERSION = 6
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const SIDEBAR_VERSION = '0.19.1'
 const MARKET_PACKAGE = 'dshmarket'
 const MARKET_VERSION = '1.46.1'
 const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
@@ -223,8 +222,11 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
   if (manifest === undefined) throw new Error('The web profile manifest could not be read.')
   manifest.dependencies ??= {}
   let changed = false
+  if (SIDEBAR_PACKAGE in manifest.dependencies) {
+    delete manifest.dependencies[SIDEBAR_PACKAGE]
+    changed = true
+  }
   for (const [name, version] of [
-    [SIDEBAR_PACKAGE, SIDEBAR_VERSION],
     [MARKET_PACKAGE, MARKET_VERSION],
     [DESKTOP_INTEGRATION_PACKAGE, 'workspace:*']
   ] as const) {
@@ -242,7 +244,6 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
   )
   const bundles = [
     ...remaining.slice(0, coreEnd),
-    SIDEBAR_PACKAGE,
     MARKET_PACKAGE,
     ...remaining.slice(coreEnd),
     DESKTOP_INTEGRATION_PACKAGE
@@ -268,12 +269,8 @@ async function restoreManagedProfile(
   forceInstall: boolean
 ): Promise<void> {
   await copyDesktopIntegration(source, destination)
-  const sidebarRestored = await restoreBundledPackage(
-    source,
-    destination,
-    SIDEBAR_PACKAGE,
-    SIDEBAR_VERSION
-  )
+  // Retire the installation-owned sidebar; the Core web app supplies the native UI.
+  await rm(join(destination, 'node_modules', SIDEBAR_PACKAGE), { recursive: true, force: true })
   const marketRestored = await restoreBundledPackage(
     source,
     destination,
@@ -284,7 +281,7 @@ async function restoreManagedProfile(
   await ensureWorkspacePackagePattern(destination)
   await refreshBundledMarketPolicy(source, destination)
   await refreshPromptEnhanceCompatibility(source, destination)
-  if (forceInstall || sidebarRestored || marketRestored || manifestRestored) {
+  if (forceInstall || marketRestored || manifestRestored) {
     await clearProfileInstallMarker(dshHome)
   }
 }
@@ -325,7 +322,7 @@ export async function initializeBundledProfile(
     return true
   }
 
-  if ([4, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
+  if ([4, 5, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
     await restoreManagedProfile(source, destination, dshHome, false)
     return true
   }

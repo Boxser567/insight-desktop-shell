@@ -3,7 +3,6 @@ import { join } from 'node:path'
 
 const REQUIRED_PACKAGE_PATTERNS = [
   "    /^dshmarket$/u,",
-  "    /^dsh-better-sidebar$/u,",
   "    /^@insight-ai\\/desktop-integration$/u,"
 ]
 const POLICY_MARKER = '// Insight Desktop required capabilities.'
@@ -14,6 +13,7 @@ const MARKET_UNINSTALL_MARKER = '// Insight Desktop records an explicit market u
 const MANAGED_MARKET_MARKER = '// Insight Desktop owns the bundled market version.'
 
 function addProtectedPackagePatterns(source) {
+  source = source.replace(/^.*\/\^dsh-better-sidebar\$\/u,\r?\n/gm, '')
   const listStart = source.indexOf('const PROTECTED_MODULE_PATTERNS = [')
   const listEnd = source.indexOf('\n];', listStart)
   if (listStart === -1 || listEnd === -1) {
