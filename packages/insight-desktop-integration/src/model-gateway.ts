@@ -11,8 +11,29 @@ export const MODEL_PROVIDER = 'yinsai-gateway'
 export const MODEL_ID = 'deepseek-flash'
 export const MODEL_BASE_URL = desktopServiceEnvironment().modelBaseUrl
 
+// Temporary enterprise wire compatibility, verified against the deployed Gateway:
+// deepseek-flash returns 403 MODEL_NOT_ALLOWED; this retired alias succeeds.
+// Keep the public model and official capabilities canonical. Remove after the
+// enterprise service accepts deepseek-flash (not after a client-only rename).
+const GATEWAY_WIRE_MODEL = 'deepseek-v4-flash-vision-exp'
+function gatewayRequest(options: Parameters<DeepSeekAdapter['stream']>[0]) {
+  return [MODEL_ID, 'deepseek-v4-flash', GATEWAY_WIRE_MODEL].includes(options.model)
+    ? { ...options, model: GATEWAY_WIRE_MODEL }
+    : options
+}
+
 /** Keep historical wire IDs usable without advertising retired models as separate products. */
 class ModelGatewayAdapter extends DeepSeekAdapter {
+  override async prepareCall(...args: Parameters<DeepSeekAdapter['prepareCall']>) {
+    const prepared = await super.prepareCall(...args)
+    return { ...prepared, stream: (options: Parameters<DeepSeekAdapter['stream']>[0]) =>
+      prepared.stream(gatewayRequest(options)) }
+  }
+
+  override stream(options: Parameters<DeepSeekAdapter['stream']>[0]) {
+    return super.stream(gatewayRequest(options))
+  }
+
   override async listModels(provider: string) {
     return (await super.listModels(provider)).filter(model => model.id === MODEL_ID)
   }

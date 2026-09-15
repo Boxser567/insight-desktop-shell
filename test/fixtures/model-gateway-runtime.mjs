@@ -21,7 +21,8 @@ const events = [
 ]
 let fetches = 0
 let mode = process.env.TEST_MODE
-let expectedModel = MODEL_ID
+// Regression: the deployed enterprise Gateway only permits this wire alias.
+const expectedModel = 'deepseek-v4-flash-vision-exp'
 let expectedEffort
 globalThis.fetch = async (url, init) => {
   ++fetches
@@ -81,7 +82,6 @@ try {
       await collect({ ...request, maxTokens: 16384, reasoningEffort: effort })
     }
     for (const model of ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']) {
-      expectedModel = model
       await collect({ ...request, model, maxTokens: 16384, reasoningEffort: 'max' })
     }
   } else if (mode === 'images') {
