@@ -20,7 +20,7 @@ const answer = 'Long answer. '.repeat(4000)
 globalThis.fetch = async (_url, init) => {
   const body = JSON.parse(init.body)
   requests.push(body)
-  assert.equal(body.model, 'deepseek-v4-flash-vision-exp')
+  assert.equal(body.model, MODEL_ID)
   assert.equal(new Headers(init.headers).get('authorization'), 'Bearer fixture-token')
   if (reply === 'overflow') {
     reply = 'normal'
