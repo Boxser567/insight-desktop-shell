@@ -14,7 +14,7 @@
 - `dshmarket` 是新 Profile 中可卸载的出厂插件。构建必须固定版本并包含完整文件；用户卸载后，重启和应用升级不得自动恢复。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
-- 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；不得用局部上传、覆盖同版本资产或单平台发布修补线上版本。
+- 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；候选区允许按平台重建和覆盖，已公开版本的正式资产与渠道指针不得覆盖。
 - GitHub Actions 成功只证明 job 和产物生成完成，不能替代本地行为或最终安装包验收。
 - 每轮验收必须说明 Shell commit、Core Runtime tag/commit、应用绝对路径、目标平台/架构和用户数据目录。Electron 单实例机制不得把旧进程冒充为新构建。
 - 用户数据操作必须精确、可恢复。不得用宽泛删除命令清理会话、工作区、设置或插件；任何测试 Profile 变更前先记录并备份确切目录。
@@ -229,7 +229,9 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 **执行：**
 
 - Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
-- Candidate 在最终三平台发布前可以用 `target: macos-arm64`、`macos-x64` 或 `windows-x64` 验证一个原生制品。`macos-x64` 与 `windows-x64` 只上传 Actions artifact；`macos-arm64` 还运行 Sonoma 分发兼容检查，并可生成 ARM64-only 签名 Draft，以 `scope=macos-arm64` 完成 OSS 下载更新 canary。该精简范围只允许 Candidate，Stable tag push 始终等同于 `all`。
+- 正式构建由 Codex 先询问构建范围，选项为 `all`（默认）、`macos-arm64`、`macos-x64`、`windows-x64` 和 `failed-only`；Codex 根据当前提交、Runtime lock 与上一轮已验证产物给出建议，用户确认后再触发 workflow。GitHub `release-preflight` 必须重复校验该选择，不接受仅由 Codex 判断的复用结论。
+- 只有当待复用产物与当前 Shell commit、Core Runtime lock、版本、策略和打包输入完全一致时，才允许 `failed-only` 或单平台构建；涉及安装包代码、资源、依赖、Runtime lock、版本策略或打包配置的变更，强制选择 `all`。仅测试、Workflow 或文档变更可复用未受影响平台。
+- 每个平台完成最终构建、签名/公证、格式和测试校验后，立即上传候选产物至可覆盖的 `desktop-candidates/<tag>/<commit>/<target>/`，再从 OSS 下载回验 SHA-256、大小、版本、Commit、Runtime 和平台；只有回验通过才生成该平台 `verified manifest`。发布组装只使用 verified manifest。正式 `desktop/releases/v<version>/` 及已公开更新资产仍不可覆盖。
 - 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
 - macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
 - 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
@@ -239,7 +241,7 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - 200～600 MB 资产使用普通 `PutObject`；每个文件上传前检查 STS，剩余不足 180 秒就刷新。`SecurityTokenExpired` 或 `InvalidSecurityToken` 会刷新凭据并整文件重试一次，第二次失败立即终止且不修改 `current.json`。
 - Bucket 必须从未启用 Versioning，该项通过阿里云控制台一次性人工确认；发布 workflow 不请求 Bucket 控制面权限。
 - 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、缓存、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
-- 禁止 `--clobber` 或覆盖 OSS/GitHub 资产。重跑只允许幂等复用文件集完整且摘要与本次完全一致的 OSS 版本目录或 GitHub Draft；任何缺失、差异或已公开同 tag Release 都必须失败，制品内容变化必须创建新的 Candidate 或 Stable 版本。
+- 候选 OSS 前缀允许覆盖，用于同一未公开 Candidate 的失败平台重建；覆盖前必须重新完成上传后下载回验，不得覆盖已公开版本目录。GitHub Draft 和正式 OSS 版本目录仍不得以不同字节覆盖；已公开 Candidate/Stable 发现问题时递增 RC/版本，不回写旧渠道指针。重跑优先复用同一 Commit 下已验证的平台 manifest。
 - Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
 - 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、GitHub Draft upload、本地 OSS upload 还是 CDN verify；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
 
@@ -343,7 +345,7 @@ npm run package:mac:arm64
 - 先跑定向测试，再跑一次完整 `npm test`。相关源码没有变化时，不为提交、推送或重跑上传重复执行已通过的全量检查。
 - 先生成目录应用，目录应用资源和行为通过后才生成 DMG、zip 或 NSIS。
 - 原生 runner 只处理本机不能证明的平台、签名和安装器行为；本地可复现问题先本地解决。
-- 同一次 run 的纯基础设施失败可重跑失败 job；任何源码、依赖、lockfile、策略或制品修复都必须创建新 Candidate 版本并从新提交启动完整 workflow，不能与旧 run 的成功制品混合发布。
+- 同一次 run 的纯基础设施失败可重跑失败 job；若待发布输入未变化，可只重建失败平台并复用同一 Commit 下已验证的平台 manifest。输入发生变化时，按前置校验结果回到全平台构建；不得混用不同 Commit、Runtime lock 或打包输入的产物。
 - 编译成功但单个上传失败时只重跑失败 job；先确认是否需要重新编译。
 - 把 Runtime 下载、Profile 准备、测试、普通 build、目录应用、安装包和上传分别计时，优化重复最高的阶段，不减少校验项。
 - 测试用户数据使用独立 App ID/channel，并保留精确命名的备份。禁止把清理整个应用数据作为常规提速手段。

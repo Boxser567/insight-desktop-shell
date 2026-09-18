@@ -47,7 +47,7 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 
 - `main` 是唯一长期集成基线；功能、修复和发布基础设施分支通过审核后合入 `main`，不得维护第二条长期发版主线。
 - Candidate 与 Stable 必须从 `main` 上可追溯的提交构建。进入版本冻结后如仍需并行开发，可从 `main` 创建短生命周期 `release/vX.Y.Z`，只接收该版本的阻断修复；发布或取消后合回 `main` 并删除。
-- Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。禁止移动 tag、覆盖 GitHub/OSS 资产或回写低版本渠道指针。
+- Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。候选 OSS 前缀在未公开期间允许覆盖；禁止移动 tag、覆盖已公开 GitHub/正式 OSS 资产或回写低版本渠道指针。
 - 发布前的版本号、策略和 Runtime 锁调整使用独立提交；正式 tag 只打在测试、构建和人工门禁均通过的提交上。
 
 ## 进入安装包构建前
@@ -123,7 +123,7 @@ Gateway 临时会话的最小 OSS Policy 如下；`Resource` 不得扩大到其�
 3. 按显式 `scope` 汇总制品，生成并签名 `insight-update.json`，执行精确资产校验；`macos-arm64` 只允许 Candidate，Stable 始终要求 `all`。
 4. `Release desktop installers` 创建 GitHub Draft Release 并上传同一批字节；该 workflow 没有 OIDC 或 OSS 权限。
 5. 操作者从 `main` 手动运行 `Publish desktop updates`，选择 `stage`，并选择与 Draft 相同的 `scope`；workflow 通过 GitHub OIDC 与测试 Gateway 获取目录级 STS，从 Draft 下载全部 Assets 并重新验证签名、文件集、版本和摘要。
-6. 确认 OSS `desktop/releases/v<version>/` 不存在，然后使用普通 `PutObject` 上传完整不可变版本目录；每个文件前检查 STS，临期则刷新，令牌失效时整文件重试一次。
+6. 候选阶段使用可覆盖的 `desktop-candidates/<tag>/<commit>/<target>/`，每个平台上传后从 OSS 下载回验并记录 verified manifest；正式 stage 确认 OSS `desktop/releases/v<version>/` 不存在，然后使用普通 `PutObject` 上传完整不可变版本目录。每个文件前检查 STS，临期则刷新，令牌失效时整文件重试一次。
 7. 从 `https://updates.insight-aigc.com` 验证 HTTPS、HEAD、Range、缓存、大小和摘要，并完成该版本确切安装包的推广前验收。
 8. 人工确认后从同一 workflow 选择 `promote` 并填写精确确认版本；发布器先公开 GitHub Release，再从 OSS 权威指针确认渠道版本单调递增。
 9. 最后更新该渠道唯一的 `current.json`，等待或确认其在约定 TTL 内收敛并执行外部 canary；Candidate 的 N→N+1 必须在 Candidate 指针生效后立即完成，Stable 则必须在推广前已有完整 Candidate 升级证据。
