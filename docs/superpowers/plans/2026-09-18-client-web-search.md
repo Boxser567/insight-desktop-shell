@@ -111,4 +111,3 @@
 - [ ] **Step 5: Inspect the final diff.** Run `git diff origin/main...HEAD --check` and `git diff --stat origin/main...HEAD`; confirm no Runtime lock, renderer credential, unrelated file, or user-data deletion changes are present.
 
 - [ ] **Step 6: Commit verification-only changes if any.** If verification required a source correction, run the focused test first, then `git add` only the corrected files and commit with a message describing the correction; otherwise leave the verification state clean.
-

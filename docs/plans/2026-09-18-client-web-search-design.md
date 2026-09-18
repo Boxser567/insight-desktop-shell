@@ -42,4 +42,3 @@ Endpoint 直接使用当前统一配置中的 `modelBaseUrl`，该值已经包�
 ## 验证范围
 
 定向测试覆盖 Provider 注册、Endpoint、Authorization、原生工具类型、Token 不进入记录、取消、登录失败、上游错误、无结构化结果和默认 Provider 禁用；随后执行桌面集成类型检查、定向 Vitest、完整 Vitest，以及 desktop integration 构建。
-
