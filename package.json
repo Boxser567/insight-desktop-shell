@@ -25,6 +25,7 @@
   "scripts": {
     "postinstall": "install-electron --no && patch-package",
     "dev": "npm run prepare:core-runtime && npm run prepare:runtime-manifest && npm run build:desktop-integration && npm run prepare:bundled-profile && electron-vite dev",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "npm run prepare:core-runtime && npm run build:prepared",
     "build:prepared": "npm run prepare:runtime-manifest && npm run build:desktop-integration && electron-vite build",
     "build:desktop-integration": "npm run typecheck:desktop-integration && node scripts/build-desktop-integration.mjs",

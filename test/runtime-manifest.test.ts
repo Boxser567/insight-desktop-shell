@@ -57,4 +57,16 @@ describe('runtime manifest', () => {
     await writeFile(manifestPath, '{"schemaVersion":1}\n', 'utf8')
     expect(() => readRuntimeManifest(manifestPath)).toThrow('runtime-manifest.json')
   })
+
+  it('reads an explicitly local development identity without claiming a release', async () => {
+    const path = await temporaryManifestPath()
+    await writeFile(path, JSON.stringify({
+      schemaVersion: 1,
+      core: { source: 'local', repository: 'test/core', version: '0.1.5', commit: 'a'.repeat(40), releaseTag: 'local-development' },
+      harness: { entry: 'node_modules/@deepseek-ai/dsh/lib/bin.js' },
+      node: { version: '24.9.0' }, target: { platform: process.platform, arch: process.arch },
+      checksums: { archiveSha256: '' }
+    }))
+    expect(readRuntimeManifest(path).core.source).toBe('local')
+  })
 })

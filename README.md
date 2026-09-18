@@ -17,6 +17,17 @@ npm run dev
 
 Development prepares the locked Core Runtime, its manifest, and the bundled profile before starting Electron.
 
+For the Skill picker feature, use a locally assembled Core containing the selected-skill input API until its release is pinned:
+
+```bash
+# In the Core repository, using Node 24 with development headers:
+pnpm run runtime:assemble --target darwin-arm64 --output /absolute/path/to/local-runtime
+# In this Shell repository:
+npm run dev:local -- /absolute/path/to/local-runtime
+```
+
+Select the current host target (`darwin-arm64`, `darwin-x64`, or `win32-x64`). `dev:local` validates and copies that Runtime into the ignored development cache, checks and builds the integration, refreshes the bundled profile, and starts Electron. The manifest labels it as local development. It does not change `core-runtime.lock.json`; normal builds still download and verify the locked release. Development uses the separate `insight-desktop-dev` data directory and requires its own login. Stop with Ctrl+C.
+
 ## Verification
 
 ```bash
