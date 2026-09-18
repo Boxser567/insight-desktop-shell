@@ -25,7 +25,7 @@ describe('GitHub release contract', () => {
       [stable, 'com.insight-aigc.desktop', '因赛AI', 'stable'],
       [candidate, 'com.insight-aigc.desktop', '因赛AI', 'candidate'],
       [development, 'com.insight-aigc.desktop.dev', '因赛AI Dev', 'development'],
-      [rc12Local, 'com.insight-aigc.desktop.rc12.local', '因赛AI RC12', 'candidate']
+      [rc12Local, 'com.insight-aigc.desktop.rc12.local', '因赛AI RC12', 'development']
     ] as const) {
       expect(config.appId).toBe(appId)
       expect(config.extraMetadata.insightDesktopAppId).toBe(appId)

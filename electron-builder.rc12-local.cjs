@@ -12,7 +12,7 @@ module.exports = {
     name: 'insight-desktop-rc12-local',
     productName: '因赛AI RC12',
     insightDesktopAppId: 'com.insight-aigc.desktop.rc12.local',
-    insightDesktopChannel: 'candidate',
+    insightDesktopChannel: 'development',
     insightDesktopUserDataDirectory: 'insight-desktop-rc12-local'
   },
   mac: {
