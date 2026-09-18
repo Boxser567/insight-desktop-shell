@@ -9,6 +9,12 @@
     ],
     "noEmit": true,
     "paths": {
+      "@deepseek-ai/dsh-web": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-web/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-web-search-deepseek": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-web-search-deepseek/lib/types/index.d.ts"
+      ],
       "@deepseek-ai/dsh-fs": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-fs/lib/types/index.d.ts"
       ],
