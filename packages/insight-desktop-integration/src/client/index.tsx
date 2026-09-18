@@ -10,6 +10,8 @@ import { accountMenuActions } from './account-menu-model'
 import { AccountFooter, BrandMark, BrandName, HeroTitle, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, UpdateButton } from './components'
 import { en, zh } from './locales'
 import { installStyles } from './styles'
+import { SkillPicker } from './SkillPicker'
+import { loadSkillCatalog } from '../skill-catalog'
 
 const NS = 'insightDesktop'
 
@@ -20,6 +22,14 @@ export const inject = ['slots', 'locale', 'settingsDialog']
 export function apply(ctx: ClientContext): void {
   ctx.effect(installStyles, 'insight-desktop: styles')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'insight-desktop: dictionaries')
+  const catalog = loadSkillCatalog()
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left',
+    id: 'insight-skill-picker',
+    order: 0,
+    locale: NS,
+    inject: () => ({ skills: catalog.skills, catalogAvailable: catalog.available })
+  }, SkillPicker))
   const t = ctx.locale.bind(NS)
   const actions = {
     ...accountMenuActions(ctx.settingsDialog, window.insightDesktopAccount),
