@@ -553,18 +553,32 @@ function attachWindowsMenuView(window: BrowserWindow): void {
 }
 
 function configureAppIdentity(): void {
+  const metadata = app.isPackaged
+    ? JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) as {
+        productName?: unknown
+        insightDesktopUserDataDirectory?: unknown
+      }
+    : {}
+  const productName = typeof metadata.productName === 'string' && metadata.productName.trim().length > 0
+    ? metadata.productName
+    : undefined
+  const userDataDirectory = typeof metadata.insightDesktopUserDataDirectory === 'string' &&
+      /^[A-Za-z0-9._-]+$/u.test(metadata.insightDesktopUserDataDirectory)
+    ? metadata.insightDesktopUserDataDirectory
+    : undefined
+
   if (desktopChannel === 'development') {
-    app.setName('因赛AI Dev')
-    app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))
+    app.setName(productName ?? '因赛AI Dev')
+    app.setPath('userData', join(app.getPath('appData'), userDataDirectory ?? 'insight-desktop-dev'))
     return
   }
 
-  app.setName('因赛AI')
+  app.setName(productName ?? '因赛AI')
   // Keep the historical lowercase directory stable across product-name and
   // branding changes. Harness stores workspaces, sessions, credentials, and
   // custom presets below userData, so deriving this path from app.getName()
   // would make an ordinary upgrade look like a fresh installation.
-  app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))
+  app.setPath('userData', join(app.getPath('appData'), userDataDirectory ?? 'insight-desktop'))
 }
 
 function dshEntryPath(): string {
