@@ -20,7 +20,9 @@ class ModelGatewayAdapter extends DeepSeekAdapter {
 
 /** A fixed service endpoint paired with the signed-in user's short-lived token. */
 export function createModelGatewayAdapter(ctx: Context, resolveAccessToken: () => Promise<string>): DeepSeekAdapter {
-  const official = resolveAdapterOptions({ baseURL: MODEL_BASE_URL })
+  // The enterprise Gateway keeps the established Chat Completions contract.
+  // Core alpha.2 defaults to Messages, so this must remain explicit.
+  const official = resolveAdapterOptions({ protocol: 'chat-completions', baseURL: MODEL_BASE_URL })
   const flash = official.models.find(model => model.id === MODEL_ID)
   if (!flash) throw new Error('The Core Runtime must provide the official deepseek-flash model capabilities.')
   // Capacity, generation budget, image policy and retries belong to the locked official adapter.

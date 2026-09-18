@@ -46,6 +46,7 @@ describe('desktop integration package', () => {
     const source = await readFile(new URL('src/model-gateway.ts', packageRoot), 'utf8')
 
     expect(source).toContain('desktopServiceEnvironment().modelBaseUrl')
+    expect(source).toContain("protocol: 'chat-completions'")
     expect(source).not.toContain('gapi-test.insight-aigc.com')
     expect(source).not.toContain('gapi.insight-aigc.com')
   })
