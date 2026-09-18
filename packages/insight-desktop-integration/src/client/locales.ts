@@ -22,7 +22,7 @@ export type InsightDesktopKey =
 
 export const zh: Record<InsightDesktopKey, string> = {
   'skill.placeholder': '请选择 Skill',
-  'skill.title': '因赛 AI 专属技能',
+  'skill.title': 'Skill',
   'skill.selected': '已选技能',
   'skill.search': '搜索技能',
   'skill.empty': '没有匹配的技能',
@@ -44,7 +44,7 @@ export const zh: Record<InsightDesktopKey, string> = {
 
 export const en: Record<InsightDesktopKey, string> = {
   'skill.placeholder': 'Select Skill',
-  'skill.title': 'Insight AI skills',
+  'skill.title': 'Skill',
   'skill.selected': 'Selected skills',
   'skill.search': 'Search skills',
   'skill.empty': 'No matching skills',

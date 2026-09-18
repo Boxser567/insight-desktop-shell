@@ -123,7 +123,9 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
     <button ref={trigger} type="button" data-insight-skill-trigger aria-haspopup="dialog" aria-expanded={open}
       aria-controls={open ? `${id}-panel` : undefined} disabled={disabled}
       title={t('skill.title')} onClick={toggle}>
-      <span aria-hidden="true">✧</span><span>{selectedCount ? `${t('skill.selected')} ${selectedCount}` : t('skill.placeholder')}</span><span aria-hidden="true">⌄</span>
+      <span data-insight-skill-icon aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 9.8 6.2 14.5 8 9.8 9.8 8 14.5 6.2 9.8 1.5 8 6.2 6.2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
+      <span data-insight-skill-label>{selectedCount ? `${t('skill.selected')} ${selectedCount}` : t('skill.placeholder')}</span>
+      <span data-insight-skill-chevron aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.25 7 9.25 11 5.25" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg></span>
     </button>
     {open && createPortal(<div ref={panel} id={`${id}-panel`} role="dialog" aria-label={t('skill.title')}
       data-insight-skill-panel style={position} onKeyDown={event => {
@@ -132,9 +134,6 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
         if (event.key === 'Escape') { event.preventDefault(); close() }
         if (event.key === 'Tab') setOpen(false)
       }}>
-      <div data-insight-skill-header>
-        <span>{t('skill.title')}</span>
-      </div>
       <input ref={search} role="combobox" aria-label={t('skill.search')} placeholder={t('skill.search')}
         aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list"
         aria-activedescendant={items[active] ? `${id}-${items[active].name}` : undefined}
