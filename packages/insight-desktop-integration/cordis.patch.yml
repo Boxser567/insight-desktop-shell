@@ -12,6 +12,9 @@
 - id: llm-pi-ai
   disabled: true
 
+- id: web-search-deepseek
+  disabled: true
+
 - id: ui-settings-models
   disabled: true
 
