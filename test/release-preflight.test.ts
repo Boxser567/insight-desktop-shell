@@ -106,6 +106,22 @@ describe('desktop release preflight', () => {
     expect(JSON.parse(result.stdout).runtimeTag).toBe('insight-runtime-v0.1.1-rc.10-insight.1')
   })
 
+  it('accepts an alpha Core Runtime used by a candidate desktop release', async () => {
+    const paths = await fixture()
+    const lock = JSON.parse(await readFile(paths.runtimeLock, 'utf8'))
+    const runtimeTag = 'insight-runtime-v0.1.6-alpha.2-insight.1'
+    lock.releaseTag = runtimeTag
+    for (const target of Object.keys(lock.targets)) {
+      lock.targets[target].core.version = '0.1.6-alpha.2'
+      lock.targets[target].url = `https://github.com/Boxser567/insight-harness-core/releases/download/${runtimeTag}/insight-harness-runtime-0.1.6-alpha.2-${target}.tar.gz`
+    }
+    await writeFile(paths.runtimeLock, JSON.stringify(lock))
+
+    const result = run(paths)
+    expect(result.status, result.stderr).toBe(0)
+    expect(JSON.parse(result.stdout).runtimeTag).toBe(runtimeTag)
+  })
+
   it('allows Candidate test services and requires production services for Stable', async () => {
     const candidate = await fixture()
     expect(run(candidate).status).toBe(0)

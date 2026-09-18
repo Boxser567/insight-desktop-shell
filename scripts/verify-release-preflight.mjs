@@ -5,6 +5,7 @@ const targetNames = ['darwin-arm64', 'darwin-x64', 'win32-x64']
 const commitPattern = /^[0-9a-f]{40}$/u
 const sha256Pattern = /^[0-9a-f]{64}$/u
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.(0|[1-9]\d*))?$/u
+const runtimeVersionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(alpha|beta|rc)\.(0|[1-9]\d*))?$/u
 
 function parseVersion(value) {
   if (typeof value !== 'string') return undefined
@@ -13,6 +14,15 @@ function parseVersion(value) {
   const numbers = match.slice(1).map((part) => part === undefined ? undefined : Number(part))
   if (numbers.some((part) => part !== undefined && !Number.isSafeInteger(part))) return undefined
   return { major: numbers[0], minor: numbers[1], patch: numbers[2], rc: numbers[3] }
+}
+
+function parseRuntimeVersion(value) {
+  if (typeof value !== 'string') return undefined
+  const match = runtimeVersionPattern.exec(value)
+  if (!match) return undefined
+  const numbers = [match[1], match[2], match[3], match[5]].filter((part) => part !== undefined).map(Number)
+  if (numbers.some((part) => !Number.isSafeInteger(part))) return undefined
+  return { major: numbers[0], minor: numbers[1], patch: numbers[2], prerelease: match[4], prereleaseNumber: numbers[3] }
 }
 
 function compareVersions(left, right) {
@@ -116,7 +126,7 @@ function validateRuntimeTarget(value, name, releaseTag) {
     typeof value.sha256 !== 'string' ||
     !sha256Pattern.test(value.sha256) ||
     value.core.repository !== 'Boxser567/insight-harness-core' ||
-    !parseVersion(value.core.version) ||
+    !parseRuntimeVersion(value.core.version) ||
     typeof value.core.commit !== 'string' ||
     !commitPattern.test(value.core.commit) ||
     !parseVersion(value.node.version) ||
@@ -131,7 +141,7 @@ function validateRuntimeLock(value) {
   const tagVersion = typeof value.releaseTag === 'string'
     ? /^insight-runtime-v(.+?)(?:-insight\.[1-9]\d*)?$/u.exec(value.releaseTag)?.[1]
     : undefined
-  if (value.schemaVersion !== 1 || !parseVersion(tagVersion)) {
+  if (value.schemaVersion !== 1 || !parseRuntimeVersion(tagVersion)) {
     throw new Error('Core Runtime lock header is invalid.')
   }
   assertExactKeys(value.targets, targetNames, 'Core Runtime targets')
