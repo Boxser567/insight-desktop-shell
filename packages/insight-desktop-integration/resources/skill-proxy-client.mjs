@@ -1,6 +1,6 @@
-#!/usr/bin/env node
 /** Canonical client, distributed as skills/scripts/enterprise_proxy.mjs.
  * Node built-ins only; no user tokens/provider keys and no network retries.
+ * Invoke it with the bundled Node executable; the host publishes both paths.
  */
 import { readFile, stat } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
