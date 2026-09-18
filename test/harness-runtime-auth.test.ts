@@ -22,10 +22,12 @@ export async function runCli() {
   const runtime = new HarnessRuntime({
     dshEntryPath: entry, nodeExecutablePath: process.execPath,
     nodeEntryPath: join(process.cwd(), 'build/harness-node-entry.mjs'), dshPatchPath: patch,
+    bundledSkillDir: join(home, 'bundled-skills'),
     dshHome: home, logPath: join(home, 'runtime.log'), startupTimeoutMs: 1800,
     requiresLaunchToken: mode !== 'legacy',
     launchProcess: (executable, args, options) => {
       expect(options.env?.INSIGHT_BUNDLED_NODE_PATH).toBe(process.execPath)
+      expect(options.env?.DSH_BUNDLED_SKILL_DIR).toBe(join(home, 'bundled-skills'))
       const child = spawn(executable, args, options)
       return Object.assign(child, { stdout: child.stdout!, stderr: child.stderr! })
     },

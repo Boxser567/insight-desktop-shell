@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ModelCredentialError } from '../packages/insight-desktop-integration/src/model-credential-client'
 import { createSkillProxyRequest, SkillProxyError } from '../packages/insight-desktop-integration/src/skill-proxy-http'
 
 const base = 'https://gapi-test.insight-aigc.com/insight-harness-service'
@@ -46,6 +47,17 @@ describe('skill proxy authenticated transport', () => {
     const fetcher = vi.fn<typeof fetch>()
     const call = createSkillProxyRequest(base, async () => { throw Object.assign(new Error('secret'), { code }) }, fetcher)
     await expect(call(path, { method: 'POST' })).rejects.toMatchObject({ status: code === 'LOGIN_REQUIRED' ? 401 : 503 })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [new ModelCredentialError('expired', 'AUTH'), 401, 'LOGIN_REQUIRED'],
+    [new ModelCredentialError('transport', 'TRANSPORT'), 503, 'SKILL_PROXY_AUTH_UNAVAILABLE'],
+    [new ModelCredentialError('timeout', 'TIMEOUT'), 503, 'SKILL_PROXY_AUTH_UNAVAILABLE']
+  ])('maps the current credential error %s without sending a request', async (error, status, code) => {
+    const fetcher = vi.fn<typeof fetch>()
+    const call = createSkillProxyRequest(base, async () => { throw error }, fetcher)
+    await expect(call(path, { method: 'POST' })).rejects.toMatchObject({ status, code })
     expect(fetcher).not.toHaveBeenCalled()
   })
 
