@@ -85,8 +85,11 @@ try {
       await collect({ ...request, model, maxTokens: 16384, reasoningEffort: 'max' })
     }
   } else if (mode === 'images') {
+    const imageBlocks = Array.from(
+      { length: resolveAdapterOptions({}).maxImagesPerRequest + 1 },
+      (_, index) => ({ type: 'image', attachment: ref, ...(index === 0 ? { offloaded: true } : {}) }))
     const prices = adapter.imageRequestPricing(MODEL_PROVIDER, MODEL_ID).priceImages(
-      Array(resolveAdapterOptions({}).maxImagesPerRequest + 1).fill(ref))
+      imageBlocks)
     assert(prices.some(price => price.visualTokens === 0 && price.text.includes('/tool/normalized.png')))
     await collect({ ...request, messages: [createUserMessage({ content: [{ type: 'image', attachment: ref }], source: { kind: 'user' } })] })
     assert.equal(fetches, 2, 'Files rejection should fall back to inline once')
