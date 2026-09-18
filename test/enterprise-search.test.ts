@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { desktopServiceEnvironment } from '../src/shared/service-environment'
-import { createEnterpriseWebSearchOptions } from '../packages/insight-desktop-integration/src/web-search-options'
+import { createEnterpriseWebSearchOptions, type WebSearchContext } from '../packages/insight-desktop-integration/src/web-search-options'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -12,7 +11,7 @@ function setup(resolveAccessToken = vi.fn(async () => 'user-token')) {
   const append = vi.fn()
   const ctx = {
     get: () => ({ currentInitiator: () => ({ session: { append } }) })
-  } as unknown as Context
+  } as WebSearchContext
   return {
     options: createEnterpriseWebSearchOptions(ctx, resolveAccessToken),
     resolveAccessToken,

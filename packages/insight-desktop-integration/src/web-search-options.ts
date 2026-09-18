@@ -1,5 +1,10 @@
-import type { Context } from '@deepseek-ai/cordis'
 import { desktopServiceEnvironment } from '../../../src/shared/service-environment'
+
+export interface WebSearchContext {
+  get(key: 'agents'): {
+    currentInitiator(): { session: { append(type: string, request: unknown): void } } | undefined
+  } | undefined
+}
 
 export interface EnterpriseWebSearchOptions {
   baseURL: string
@@ -13,7 +18,7 @@ export interface EnterpriseWebSearchOptions {
 
 /** Keep search configuration on the same authenticated service plane as model calls. */
 export function createEnterpriseWebSearchOptions(
-  ctx: Context,
+  ctx: WebSearchContext,
   resolveAccessToken: () => Promise<string>
 ): EnterpriseWebSearchOptions {
   return {
