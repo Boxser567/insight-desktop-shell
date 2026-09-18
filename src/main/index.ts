@@ -1756,6 +1756,7 @@ async function bootstrap(): Promise<void> {
     dshEntryPath: dshEntryPath(),
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
+    bundledSkillDir: app.isPackaged ? join(process.resourcesPath, 'bundled-skills') : join(app.getAppPath(), 'bundled-skills'),
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
     dshHome: join(insightRoot(), 'runtime-unconfigured'),
     logPath: join(app.getPath('logs'), 'harness.log'),

@@ -2,30 +2,54 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { filterSkills, type InsightSkill } from '../skill-catalog'
+import { filterSkills, selectedSkillNames, type InsightSkill } from '../skill-catalog'
+import type { SkillCatalog } from '@deepseek-ai/dsh-client-ui-skill/client'
 
 type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'insightDesktop'> & {
-  skills: readonly InsightSkill[]
-  catalogAvailable: boolean
+  catalog: SkillCatalog
 }
 
-/** Session input owns selection; remounting the menu never resets it. */
-export function SkillPicker({ sessionId, useInput, inputActions, skills, catalogAvailable, t }: SkillPickerProps) {
-  const selected = useInput(input => input.selectedSkills?.[0])
-  const locked = useInput(input => input.phase === 'adjudicating' || input.phase === 'submitting')
-  return <SkillPickerMenu key={sessionId} skills={skills} catalogAvailable={catalogAvailable} selected={selected}
-    disabled={locked} onSelect={id => inputActions.setSelectedSkills(id ? [id] : [])} t={t} />
+/** Selection is derived from the visible draft, never retained after sending. */
+export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: SkillPickerProps) {
+  const draft = useInput(input => {
+    let text = input.draft
+    // Reference labels can contain slash text; only editable text selects skills.
+    for (const occurrence of [...input.occurrences].reverse()) {
+      text = text.slice(0, occurrence.offset) + ' '.repeat(occurrence.length) + text.slice(occurrence.offset + occurrence.length)
+    }
+    return text
+  })
+  const locked = useInput(input => input.phase !== 'plain')
+  const [state, setState] = useState<{ sessionId: string; skills: readonly InsightSkill[]; available: boolean }>({ sessionId, skills: [], available: false })
+  useEffect(() => {
+    let alive = true
+    let request = 0
+    const refresh = () => {
+      const current = ++request
+      catalog.list(sessionId).then(skills => {
+        if (alive && current === request) setState({ sessionId, skills, available: true })
+      }, () => {
+        if (alive && current === request) setState({ sessionId, skills: [], available: false })
+      })
+    }
+    const off = catalog.subscribe(sessionId, refresh)
+    refresh()
+    return () => { alive = false; off() }
+  }, [catalog, sessionId])
+  return <SkillPickerMenu key={sessionId} skills={state.sessionId === sessionId ? state.skills : []}
+    catalogAvailable={state.sessionId === sessionId && state.available} selected={selectedSkillNames(draft)}
+    disabled={locked} onSelect={name => inputActions.toggleSkill(name)} t={t} />
 }
 
 type MenuProps = PropsLocale<'insightDesktop'> & {
   skills: readonly InsightSkill[]
   catalogAvailable: boolean
-  selected: string | undefined
+  selected: readonly string[]
   disabled?: boolean
-  onSelect(id: string | undefined): void
+  onSelect(id: string): void
 }
 
-/** Searchable single-select menu; the selected skill survives each successful send. */
+/** Searchable draft-backed multiselect, using native skill names. */
 export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, onSelect, t }: MenuProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -38,12 +62,17 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
   const scrollActive = useRef(false)
   const id = useId()
   const items = filterSkills(skills, query)
-  const selectedItem = skills.find(skill => skill.id === selected)
+  const selectedCount = filterSkills(skills, '').filter(skill => selected.includes(skill.name)).length
   const close = (restoreFocus = true) => {
     setOpen(false)
     if (restoreFocus) trigger.current?.focus()
   }
-  const choose = (value: string | undefined) => { onSelect(value); close() }
+  const choose = (value: string) => {
+    onSelect(value)
+    // Native editor mutations focus the composer; retain the menu for another pick.
+    setOpen(true)
+    search.current?.focus()
+  }
 
   useLayoutEffect(() => {
     if (!open) return
@@ -70,12 +99,8 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !panel.current?.contains(event.target) && !trigger.current?.contains(event.target)) setOpen(false)
     }
-    const focusOutside = (event: FocusEvent) => {
-      if (event.target instanceof Node && !panel.current?.contains(event.target) && !trigger.current?.contains(event.target)) setOpen(false)
-    }
     document.addEventListener('pointerdown', outside)
-    document.addEventListener('focusin', focusOutside)
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('focusin', focusOutside) }
+    return () => { document.removeEventListener('pointerdown', outside) }
   }, [open])
 
   useEffect(() => {
@@ -83,52 +108,53 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
     scrollActive.current = false
   }, [active, open, query])
   useEffect(() => { if (disabled) setOpen(false) }, [disabled])
+  useLayoutEffect(() => { if (open) search.current?.focus() }, [open, skills])
+  useEffect(() => { setActive(index => Math.min(index, Math.max(0, items.length - 1))) }, [items.length])
 
   const toggle = () => {
     if (open) { close(); return }
     scrollActive.current = true
     setQuery('')
-    setActive(Math.max(0, filterSkills(skills, '').findIndex(skill => skill.id === selected)))
+    setActive(Math.max(0, filterSkills(skills, '').findIndex(skill => selected.includes(skill.name))))
     setOpen(true)
   }
 
   return <>
     <button ref={trigger} type="button" data-insight-skill-trigger aria-haspopup="dialog" aria-expanded={open}
       aria-controls={open ? `${id}-panel` : undefined} disabled={disabled}
-      title={selectedItem?.description ?? t('skill.hint')} onClick={toggle}>
-      <span aria-hidden="true">✧</span><span>{selectedItem?.label ?? selected ?? t('skill.placeholder')}</span><span aria-hidden="true">⌄</span>
+      title={t('skill.title')} onClick={toggle}>
+      <span aria-hidden="true">✧</span><span>{selectedCount ? `${t('skill.selected')} ${selectedCount}` : t('skill.placeholder')}</span><span aria-hidden="true">⌄</span>
     </button>
     {open && createPortal(<div ref={panel} id={`${id}-panel`} role="dialog" aria-label={t('skill.title')}
       data-insight-skill-panel style={position} onKeyDown={event => {
         event.stopPropagation()
         if (event.nativeEvent.isComposing) return
         if (event.key === 'Escape') { event.preventDefault(); close() }
+        if (event.key === 'Tab') setOpen(false)
       }}>
       <div data-insight-skill-header>
         <span>{t('skill.title')}</span>
-        <button type="button" onClick={() => choose(undefined)} disabled={!selected}>{t('skill.clear')}</button>
       </div>
       <input ref={search} role="combobox" aria-label={t('skill.search')} placeholder={t('skill.search')}
         aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list"
-        aria-activedescendant={items[active] ? `${id}-${items[active].id}` : undefined}
+        aria-activedescendant={items[active] ? `${id}-${items[active].name}` : undefined}
         value={query} onChange={event => { scrollActive.current = true; setQuery(event.target.value); setActive(0) }} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
             scrollActive.current = true
             setActive(index => items.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length : 0)
-          } else if (event.key === 'Enter' && items[active]) { event.preventDefault(); choose(items[active].id) }
+          } else if (event.key === 'Enter' && items[active]) { event.preventDefault(); choose(items[active].name) }
         }} />
-      <div ref={list} id={`${id}-list`} role="listbox" aria-label={t('skill.title')} data-insight-skill-list>
-        {catalogAvailable && items.map((skill, index) => <div key={skill.id} id={`${id}-${skill.id}`} role="option"
-          aria-selected={skill.id === selected} aria-labelledby={`${id}-${skill.id}-title`} aria-describedby={`${id}-${skill.id}-description`}
-          data-active={index === active} onMouseMove={() => { scrollActive.current = false; setActive(index) }} onMouseDown={event => event.preventDefault()} onClick={() => choose(skill.id)}>
-          <div data-insight-skill-option-title><span id={`${id}-${skill.id}-title`}>{skill.label}</span><span aria-hidden="true">{skill.id === selected ? '✓' : ''}</span></div>
-          <div id={`${id}-${skill.id}-description`} data-insight-skill-description>{skill.description}</div>
+      <div ref={list} id={`${id}-list`} role="listbox" aria-multiselectable="true" aria-label={t('skill.title')} data-insight-skill-list>
+        {catalogAvailable && items.map((skill, index) => <div key={skill.name} id={`${id}-${skill.name}`} role="option"
+          aria-selected={selected.includes(skill.name)} aria-labelledby={`${id}-${skill.name}-title`} aria-describedby={`${id}-${skill.name}-description`}
+          data-active={index === active} onMouseMove={() => { scrollActive.current = false; setActive(index) }} onMouseDown={event => event.preventDefault()} onClick={() => choose(skill.name)}>
+          <div data-insight-skill-option-title><span id={`${id}-${skill.name}-title`}>{skill.displayName ?? skill.name}</span><span aria-hidden="true">{selected.includes(skill.name) ? '✓' : ''}</span></div>
+          <div id={`${id}-${skill.name}-description`} data-insight-skill-description>{skill.description}</div>
         </div>)}
       </div>
       {(!catalogAvailable || items.length === 0) && <div role="status" data-insight-skill-empty>{t(catalogAvailable ? 'skill.empty' : 'skill.unavailable')}</div>}
-      <div data-insight-skill-hint>{t('skill.hint')}</div>
     </div>, document.body)}
   </>
 }

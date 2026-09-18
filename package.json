@@ -184,6 +184,15 @@
           "!**/.DS_Store",
           "!**/__MACOSX/**"
         ]
+      },
+      {
+        "from": "bundled-skills",
+        "to": "bundled-skills",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store",
+          "!**/__pycache__/**"
+        ]
       }
     ],
     "artifactName": "insight-${version}-${os}-${arch}.${ext}",

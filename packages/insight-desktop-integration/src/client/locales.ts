@@ -2,11 +2,10 @@
 export type InsightDesktopKey =
   | 'skill.placeholder'
   | 'skill.title'
-  | 'skill.clear'
+  | 'skill.selected'
   | 'skill.search'
   | 'skill.empty'
   | 'skill.unavailable'
-  | 'skill.hint'
   | 'account.settings'
   | 'account.signOut'
   | 'account.unavailable'
@@ -24,11 +23,10 @@ export type InsightDesktopKey =
 export const zh: Record<InsightDesktopKey, string> = {
   'skill.placeholder': '请选择 Skill',
   'skill.title': '因赛 AI 专属技能',
-  'skill.clear': '清空',
+  'skill.selected': '已选技能',
   'skill.search': '搜索技能',
   'skill.empty': '没有匹配的技能',
   'skill.unavailable': '技能目录暂不可用',
-  'skill.hint': '作用于当前会话后续消息，直到清空或更换',
   'account.settings': '设置',
   'account.signOut': '退出登录',
   'account.unavailable': '账号信息不可用',
@@ -47,11 +45,10 @@ export const zh: Record<InsightDesktopKey, string> = {
 export const en: Record<InsightDesktopKey, string> = {
   'skill.placeholder': 'Select Skill',
   'skill.title': 'Insight AI skills',
-  'skill.clear': 'Clear',
+  'skill.selected': 'Selected skills',
   'skill.search': 'Search skills',
   'skill.empty': 'No matching skills',
   'skill.unavailable': 'Skill catalog unavailable',
-  'skill.hint': 'Applies to subsequent messages in this conversation until cleared or changed',
   'account.settings': 'Settings',
   'account.signOut': 'Sign Out',
   'account.unavailable': 'Account unavailable',

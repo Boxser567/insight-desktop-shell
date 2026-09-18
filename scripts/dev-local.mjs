@@ -17,7 +17,7 @@ export async function inspectLocalRuntime(directory) {
     throw new Error('Local Runtime metadata is invalid or targets a different platform.')
   }
   const inputTypes = await readFile(join(directory, 'node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/types/client/contract/input.d.ts'), 'utf8')
-  if (!inputTypes.includes('setSelectedSkills(')) throw new Error('Local Runtime lacks setSelectedSkills; rebuild the Skill feature Core first.')
+  if (!inputTypes.includes('toggleSkill(')) throw new Error('Local Runtime lacks toggleSkill; rebuild the Skill feature Core first.')
   await Promise.all([
     metadata.entry,
     `node_modules/node/bin/${process.platform === 'win32' ? 'node.exe' : 'node'}`,
