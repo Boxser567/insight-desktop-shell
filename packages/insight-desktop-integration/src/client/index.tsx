@@ -11,15 +11,18 @@ import { AccountFooter, BrandMark, BrandName, HeroTitle, ClientSettings, HiddenS
 import { en, zh } from './locales'
 import { installStyles } from './styles'
 import { SkillPicker } from './SkillPicker'
+import { createSkillCatalog } from '../skill-catalog'
 import type {} from '@deepseek-ai/dsh-client-ui-skill/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 
 const NS = 'insightDesktop'
 
 /** Services required by the product integration. */
-export const inject = ['slots', 'locale', 'settingsDialog', 'skillCatalog']
+export const inject = ['slots', 'locale', 'settingsDialog', 'remote', 'remote.skills']
 
 /** Register product UI only through the public Harness extension seats. */
 export function apply(ctx: ClientContext): void {
+  const catalog = createSkillCatalog(ctx)
   ctx.effect(installStyles, 'insight-desktop: styles')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'insight-desktop: dictionaries')
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
@@ -27,7 +30,7 @@ export function apply(ctx: ClientContext): void {
     id: 'insight-skill-picker',
     order: 0,
     locale: NS,
-    inject: () => ({ catalog: ctx.skillCatalog })
+    inject: () => ({ catalog })
   }, SkillPicker))
   const t = ctx.locale.bind(NS)
   const actions = {

@@ -19,7 +19,7 @@ async function fixture() {
   const input = 'node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/types/client/contract/input.d.ts'
   for (const file of [input, metadata.entry, 'node_modules/pnpm/bin/pnpm.cjs', `node_modules/node/bin/${process.platform === 'win32' ? 'node.exe' : 'node'}`]) {
     await mkdir(join(root, file, '..'), { recursive: true })
-    await writeFile(join(root, file), file === input ? 'toggleSkill(names: readonly string[]): void;' : '')
+    await writeFile(join(root, file), file === input ? 'setDraft(text: string): void;' : '')
   }
   await writeFile(join(root, 'runtime.json'), JSON.stringify(metadata))
   return { root, metadata, input }
@@ -33,7 +33,7 @@ it('accepts this host Runtime with the required input API', async () => {
 it('rejects an old Runtime before replacing the development cache', async () => {
   const { root, input } = await fixture()
   await writeFile(join(root, input), '')
-  await expect(inspectLocalRuntime(root)).rejects.toThrow('lacks toggleSkill')
+  await expect(inspectLocalRuntime(root)).rejects.toThrow('lacks the alpha.2 public draft API')
 })
 
 it('rejects a Runtime assembled for another platform', async () => {

@@ -1,9 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { filterSkills, selectedSkillNames, type InsightSkill } from '../skill-catalog'
-import type { SkillCatalog } from '@deepseek-ai/dsh-client-ui-skill/client'
+import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { filterSkills, selectedSkillNames, toggleSkillDraft, type InsightSkill, type SkillCatalog } from '../skill-catalog'
 
 type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'insightDesktop'> & {
   catalog: SkillCatalog
@@ -11,7 +10,7 @@ type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'i
 
 /** Selection is derived from the visible draft, never retained after sending. */
 export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: SkillPickerProps) {
-  const draft = useInput(input => {
+  const draft = useInput((input: InputState) => {
     let text = input.draft
     // Reference labels can contain slash text; only editable text selects skills.
     for (const occurrence of [...input.occurrences].reverse()) {
@@ -19,7 +18,7 @@ export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: S
     }
     return text
   })
-  const locked = useInput(input => input.phase !== 'plain')
+  const locked = useInput((input: InputState) => input.phase !== 'plain')
   const [state, setState] = useState<{ sessionId: string; skills: readonly InsightSkill[]; available: boolean }>({ sessionId, skills: [], available: false })
   useEffect(() => {
     let alive = true
@@ -38,7 +37,7 @@ export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: S
   }, [catalog, sessionId])
   return <SkillPickerMenu key={sessionId} skills={state.sessionId === sessionId ? state.skills : []}
     catalogAvailable={state.sessionId === sessionId && state.available} selected={selectedSkillNames(draft)}
-    disabled={locked} onSelect={name => inputActions.toggleSkill(name)} t={t} />
+    disabled={locked} onSelect={name => inputActions.setDraft(toggleSkillDraft(draft, name))} t={t} />
 }
 
 type MenuProps = PropsLocale<'insightDesktop'> & {

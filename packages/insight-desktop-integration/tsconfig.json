@@ -33,6 +33,12 @@
       "@deepseek-ai/cordis": [
         "build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"
       ],
+      "@deepseek-ai/dsh-api-session-controller/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/typert.remote-client.d.ts"
+      ],
+      "@deepseek-ai/dsh-session/types": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts"
+      ],
       "@deepseek-ai/dsh-client-locale/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-client-locale/lib/types/client/index.d.ts"
       ],

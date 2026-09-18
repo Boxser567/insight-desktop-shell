@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterSkills, selectedSkillNames } from '../packages/insight-desktop-integration/src/skill-catalog'
+import { filterSkills, selectedSkillNames, toggleSkillDraft } from '../packages/insight-desktop-integration/src/skill-catalog'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
@@ -37,6 +37,12 @@ describe('directory-backed product skills', () => {
   it('derives selected names from visible exact tokens, including manual input', () => {
     expect(selectedSkillNames('/a /b /a /usr/bin x/a 5/8')).toEqual(['a', 'b'])
     expect(selectedSkillNames('')).toEqual([])
+  })
+  it('toggles slash tokens through the alpha.2 public draft setter', () => {
+    expect(toggleSkillDraft('', 'a')).toBe('/a ')
+    expect(toggleSkillDraft('/a ', 'b')).toBe('/a /b ')
+    expect(toggleSkillDraft('/a /b ', 'a')).toBe('/b ')
+    expect(toggleSkillDraft('keep /a-note', 'a')).toBe('keep /a-note /a ')
   })
   it('ships the entire skill tree as external resources', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
