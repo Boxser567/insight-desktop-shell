@@ -1,16 +1,76 @@
+diff --git a/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh b/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
+index 4736774..7e76f3e 100644
+--- a/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
++++ b/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
+@@ -216,18 +216,23 @@ Function uninstallOldVersion
+     IntOp $R5 $R5 + 1
+
+     ${if} $R5 > 5
++      !insertmacro DshUpdateLog "legacy-retry-prompt attempt=$R5 result=$R0 directory=$installationDir"
+       MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY OneMoreAttempt
+       Return
+     ${endIf}
+
+   OneMoreAttempt:
++    !insertmacro DshUpdateLog "legacy-launch attempt=$R5 directory=$installationDir executable=$uninstallerFileNameTemp"
+     ExecWait '"$uninstallerFileNameTemp" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
++    !insertmacro DshUpdateLog "legacy-return result=$R0"
+     ifErrors TryInPlace CheckResult
+
+     TryInPlace:
++      !insertmacro DshUpdateLog "legacy-launch-error trying-in-place executable=$uninstallerFileName"
+       # the execution failed - might have been caused by some group policy restrictions
+       # we try to execute the uninstaller in place
+       ExecWait '"$uninstallerFileName" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
++      !insertmacro DshUpdateLog "legacy-in-place-return result=$R0"
+       ifErrors DoesNotExist
+
+     CheckResult:
 diff --git a/node_modules/app-builder-lib/templates/nsis/installSection.nsh b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
+index 053772f..7e643d4 100644
 --- a/node_modules/app-builder-lib/templates/nsis/installSection.nsh
 +++ b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
-@@ -52,2 +52,5 @@
+@@ -49,10 +49,16 @@ ${if} $isTryToKeepShortcuts == "true"
+   ${endIf}
+ ${endif}
+
 +!ifmacrodef customBeforeUninstallOldVersion
 +  !insertmacro customBeforeUninstallOldVersion "SHELL_CONTEXT" "Shell"
 +!endif
  !insertmacro uninstallOldVersion SHELL_CONTEXT
  !insertmacro handleUninstallResult SHELL_CONTEXT
-@@ -55,3 +58,6 @@
+
  ${if} $installMode == "all"
 +  !ifmacrodef customBeforeUninstallOldVersion
 +    !insertmacro customBeforeUninstallOldVersion "HKEY_CURRENT_USER" "CurrentUser"
 +  !endif
    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
    !insertmacro handleUninstallResult HKEY_CURRENT_USER
+ ${endIf}
+diff --git a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
+index c3f4f11..ab90795 100644
+--- a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
++++ b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
+@@ -169,12 +169,14 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+       Pop $R0
+
+       ${if} $R0 != 0
++        !insertmacro DshUpdateLog "atomic-relocation-failed path=$R0 destination=$PLUGINSDIR\old-install"
+         DetailPrint "File is busy, aborting: $R0"
+
+         # Attempt to restore previous directory
+         Push ""
+         Call un.restoreFiles
+         Pop $R0
++        !insertmacro DshUpdateLog "atomic-restore-return result=$R0"
+
+         Abort `Can't rename "$INSTDIR" to "$PLUGINSDIR\old-install".`
+       ${endif}
+@@ -185,6 +187,7 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+     SetOutPath $TEMP
+     # Remove all files (or remaining shallow directories from the block above)
+     RMDir /r $INSTDIR
++    !insertmacro DshUpdateLog "uninstall-remove-return directory=$INSTDIR"
+   !endif
+
+   ${ifNot} ${isKeepShortcuts}

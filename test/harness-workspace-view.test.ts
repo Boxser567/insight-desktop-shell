@@ -107,3 +107,35 @@ describe('Harness workspace view', () => {
     expect(desktop.createHarnessView).toHaveBeenCalledWith('b'.repeat(32))
   })
 })
+
+describe('account changes during workspace loading', () => {
+  it('waits for account cache maintenance before loading and abandons a closed view', async () => {
+    let finish!: () => void
+    const beforeLoad = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
+    const view = harnessView()
+    const workspace = new HarnessWorkspaceView(() => host(view), beforeLoad)
+    workspace.setScope('a'.repeat(32))
+    const opening = workspace.open('http://localhost:43127')
+    expect(view.webContents.loadURL).not.toHaveBeenCalled()
+    await workspace.close()
+    finish()
+    await opening
+    expect(view.webContents.loadURL).not.toHaveBeenCalled()
+    expect(view.setVisible).not.toHaveBeenCalledWith(true)
+  })
+  it('does not show old account contents after their navigation completes', async () => {
+    let finish!: () => void
+    const view = harnessView()
+    vi.mocked(view.webContents.loadURL).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const workspace = new HarnessWorkspaceView(() => host(view))
+    workspace.setScope('a'.repeat(32))
+    const opening = workspace.open('http://localhost:43127')
+    await Promise.resolve()
+    await workspace.close()
+    workspace.setScope('b'.repeat(32))
+    finish()
+    await opening
+    expect(view.setVisible).not.toHaveBeenCalledWith(true)
+    expect(workspace.webContents()).toBeUndefined()
+  })
+})

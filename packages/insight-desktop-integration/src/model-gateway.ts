@@ -1,33 +1,51 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { getOrCreateAnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
-import { LlmError } from '@deepseek-ai/dsh-llm'
+import { LlmError, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-fs'
 import { DeepSeekAdapter, resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
+import type { DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
 import { desktopServiceEnvironment } from '../../../src/shared/service-environment'
+import { ModelCredentialError } from './model-credential-client'
 
 export const MODEL_PROVIDER = 'yinsai-gateway'
-export const MODEL_ID = 'deepseek-v4-flash-vision-exp'
+export const MODEL_ID = 'deepseek-flash'
 export const MODEL_BASE_URL = desktopServiceEnvironment().modelBaseUrl
+
+/** Keep historical wire IDs usable without advertising retired models as separate products. */
+class ModelGatewayAdapter extends DeepSeekAdapter {
+  override async listModels(provider: string) {
+    return (await super.listModels(provider)).filter(model => model.id === MODEL_ID)
+  }
+}
 
 /** A fixed service endpoint paired with the signed-in user's short-lived token. */
 export function createModelGatewayAdapter(ctx: Context, resolveAccessToken: () => Promise<string>): DeepSeekAdapter {
-  const options = resolveAdapterOptions({
-    baseURL: MODEL_BASE_URL,
-    thinking: 'enabled',
-    reasoningEffort: 'high',
-    maxTokens: 8192,
-    defaultContextWindow: 128000,
-    models: [{ id: MODEL_ID, name: 'DeepSeek-V4-Flash-Vision-Exp', contextWindow: 128000,
-      maxTokens: 8192, inputModalities: ['text', 'image'] }]
-  })
-  return new DeepSeekAdapter({
+  // The enterprise Gateway keeps the established Chat Completions contract.
+  // Core alpha.2 defaults to Messages, so this must remain explicit.
+  const official = resolveAdapterOptions({ protocol: 'chat-completions', baseURL: MODEL_BASE_URL })
+  const flash = official.models.find(model => model.id === MODEL_ID)
+  if (!flash) throw new Error('The Core Runtime must provide the official deepseek-flash model capabilities.')
+  // Capacity, generation budget, image policy and retries belong to the locked official adapter.
+  // Keep leading-system semantics until the enterprise endpoint confirms in-history updates.
+  const model = { ...flash, name: 'DeepSeek-V4.1-Flash', systemPromptUpdate: undefined }
+  const options = { ...official, models: [MODEL_ID, 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']
+    .map(id => ({ ...model, id })) }
+  const configuration: DeepSeekAdapterOptions = {
     options: () => options,
     resolveApiKey: async () => {
       try { return await resolveAccessToken() }
       catch (error) {
-        throw new LlmError(error instanceof Error ? error.message : '请登录后继续会话。', 'AUTH')
+        if (error instanceof ModelCredentialError) throw new LlmError(error.message, error.code)
+        throw new LlmError('暂时无法验证登录，请检查网络后重试。', 'TRANSPORT')
       }
     },
     resolveUserId: () => getOrCreateAnonymousUserId(),
-    resolveAttachments: () => ctx.get('attachments')
-  })
+    resolveAttachments: () => ctx.get('attachments'),
+    resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
+      attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref
+    ),
+    // The Insight Gateway uses the standard request fields, without official-API extensions.
+    prepareExtensions: async () => ({ fields: {}, accept: async () => {} })
+  }
+  return new ModelGatewayAdapter(configuration)
 }

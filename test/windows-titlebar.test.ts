@@ -22,6 +22,8 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain("titleBarStyle: 'hidden' as const")
     expect(main).toContain('titleBarOverlay: windowsTitleBarOverlay')
     expect(main).toContain('autoHideMenuBar: true')
+    expect(main).toContain("title: isWindows ? '因赛 AI' : ''")
+    expect(main).toContain("window.setTitle(isWindows ? '因赛 AI' : '')")
     expect(main).toContain('window.setMenuBarVisibility(false)')
     expect(main).toContain('Menu.setApplicationMenu(Menu.buildFromTemplate(template))')
   })

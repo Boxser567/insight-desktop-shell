@@ -77,7 +77,7 @@ describe('bundled market host policy', () => {
     const routes = await readFile(join(library, 'routes.js'), 'utf8')
     const clientSource = await readFile(join(client, 'client.js'), 'utf8')
     expect(patch.match(/\^dshmarket\$/g)).toHaveLength(1)
-    expect(patch.match(/dsh-better-sidebar/g)).toHaveLength(1)
+    expect(patch).not.toContain('dsh-better-sidebar')
     expect(patch.match(/@insight-ai\\\/desktop-integration/g)).toHaveLength(1)
     expect(routes.match(/Insight Desktop protects required capabilities/g)).toHaveLength(2)
     expect(routes.match(/Insight Desktop hides required capabilities/g)).toHaveLength(2)

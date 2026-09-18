@@ -48,6 +48,15 @@ describe('plugin-recovery', () => {
     await rm(testDir, { recursive: true, force: true })
   })
 
+  it('returns all directly failed configured plugins without attributing ambiguous dependencies', async () => {
+    await writeFile(profilePackageJsonPath(testDir), JSON.stringify({
+      dependencies: { 'plugin-a': '1', 'plugin-b': '1', '@insight-ai/desktop-integration': '1' },
+      dsh: { profile: { bundles: ['plugin-a', 'plugin-b', '@insight-ai/desktop-integration'] } }
+    }))
+    expect(await resolveProfileRecoveryPlugins(testDir, ['plugin-a', 'plugin-b', '@insight-ai/desktop-integration'])).toEqual(['plugin-a', 'plugin-b'])
+    expect(await resolveProfileRecoveryPlugins(testDir, ['plugin-a', 'plugin-b'], undefined, undefined, ['plugin-a'])).toEqual(['plugin-b'])
+  })
+
   it('lists only configured third-party root bundles for Safe Mode', async () => {
     await writeFile(
       profilePackageJsonPath(testDir),
@@ -239,7 +248,7 @@ describe('plugin-recovery', () => {
 
     expect(isThirdPartyPackageName('@deepseek-ai/dsh-client-ui-directory-picker-native')).toBe(false)
     expect(isThirdPartyPackageName('dshmarket')).toBe(true)
-    expect(isThirdPartyPackageName('dsh-better-sidebar')).toBe(false)
+    expect(isThirdPartyPackageName('dsh-better-sidebar')).toBe(true)
     expect(isThirdPartyPackageName('@insight-ai/desktop-integration')).toBe(false)
     expect(isThirdPartyPackageName('@linxin666/dsh-web-ui-all')).toBe(true)
     await expect(
@@ -277,14 +286,12 @@ describe('plugin-recovery', () => {
     await expect(resetPluginProfile(testDir)).resolves.toBe(true)
     const manifest = JSON.parse(await readFile(pkgPath, 'utf8'))
     expect(manifest.dependencies).toEqual({
-      '@insight-ai/desktop-integration': 'workspace:*',
-      'dsh-better-sidebar': '0.16.1'
+      '@insight-ai/desktop-integration': 'workspace:*'
     })
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      '@insight-ai/desktop-integration',
-      'dsh-better-sidebar'
+      '@insight-ai/desktop-integration'
     ])
   })
 

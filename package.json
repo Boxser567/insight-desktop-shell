@@ -1,7 +1,7 @@
 {
   "name": "insight-desktop",
-  "version": "1.0.0-rc.9",
-  "insightReleaseDate": "2026-09-11",
+  "version": "1.0.0-rc.12",
+  "insightReleaseDate": "2026-09-18",
   "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
   "type": "module",
@@ -25,6 +25,7 @@
   "scripts": {
     "postinstall": "install-electron --no && patch-package",
     "dev": "npm run prepare:core-runtime && npm run prepare:runtime-manifest && npm run build:desktop-integration && npm run prepare:bundled-profile && electron-vite dev",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "npm run prepare:core-runtime && npm run build:prepared",
     "build:prepared": "npm run prepare:runtime-manifest && npm run build:desktop-integration && electron-vite build",
     "build:desktop-integration": "npm run typecheck:desktop-integration && node scripts/build-desktop-integration.mjs",
@@ -66,7 +67,7 @@
     "@types/react-dom": "^18.3.7",
     "@types/semver": "^7.8.0",
     "ali-oss": "6.23.0",
-    "electron": "43.4.0",
+    "electron": "44.0.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "esbuild": "0.25.12",
@@ -119,6 +120,10 @@
       "!**/node_modules/@mistralai/mistralai/src/**"
     ],
     "extraResources": [
+      {
+        "from": "scripts/diagnose-windows-update.ps1",
+        "to": "diagnostics/diagnose-windows-update.ps1"
+      },
       {
         "from": "build/app-icon.png",
         "to": "icon.png"
@@ -178,6 +183,15 @@
           "**/*",
           "!**/.DS_Store",
           "!**/__MACOSX/**"
+        ]
+      },
+      {
+        "from": "bundled-skills",
+        "to": "bundled-skills",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store",
+          "!**/__pycache__/**"
         ]
       }
     ],

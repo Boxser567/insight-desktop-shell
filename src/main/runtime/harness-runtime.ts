@@ -7,7 +7,8 @@ import {
 import type { EventEmitter } from 'node:events'
 import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { createServer } from 'node:net'
+import { reserveHarnessPort } from './harness-port'
+import { extractHarnessLaunchToken, redactHarnessLaunchToken } from './harness-launch-auth'
 import { dirname, join } from 'node:path'
 import type { RuntimePhase, RuntimeSnapshot } from '../../shared/contracts'
 import { isInstallationOwnedBundle } from '../state/installation-owned-bundles'
@@ -18,6 +19,7 @@ export interface HarnessRuntimeOptions {
   nodeExecutablePath: string
   nodeEntryPath: string
   dshPatchPath: string
+  bundledSkillDir?: string
   dshHome: string
   logPath: string
   launchProcess(
@@ -25,6 +27,7 @@ export interface HarnessRuntimeOptions {
     args: string[],
     options: SpawnOptionsWithoutStdio
   ): HarnessChildProcess
+  requiresLaunchToken?: boolean
   startupTimeoutMs?: number
   resolveModelAccessToken?(dshHome: string): Promise<string>
   onChanged(snapshot: RuntimeSnapshot): void
@@ -193,6 +196,20 @@ export function buildHarnessArguments(
   ]
 }
 
+/** Captured Windows environments preserve the registry's PATH key casing. */
+export function resolveEnvironmentPath(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform
+): string {
+  if (platform !== 'win32') return environment.PATH ?? ''
+  const direct = environment.Path ?? environment.PATH
+  if (direct !== undefined) return direct
+  for (const [name, value] of Object.entries(environment)) {
+    if (/^path$/iu.test(name) && value !== undefined) return value
+  }
+  return ''
+}
+
 export function buildHarnessSpawnOptions(
   launchDirectory: string,
   dshHome: string,
@@ -201,6 +218,13 @@ export function buildHarnessSpawnOptions(
 ): SpawnOptionsWithoutStdio {
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...parentEnvironment } = environment
   const pathKey = platform === 'win32' ? 'Path' : 'PATH'
+  const currentPath = resolveEnvironmentPath(environment, platform)
+  if (platform === 'win32') {
+    // Node deduplicates Windows environment keys; every spelling must agree.
+    for (const name of Object.keys(parentEnvironment)) {
+      if (/^path$/iu.test(name)) parentEnvironment[name] = currentPath
+    }
+  }
 
   // ELECTRON_RUN_AS_NODE must not reach the Harness process itself: the macOS
   // utility process is launched with Chromium switches (--type=utility, …)
@@ -219,10 +243,12 @@ export function buildHarnessSpawnOptions(
       PNPM_CONFIG_CHILD_CONCURRENCY: '1',
       PNPM_CONFIG_PACKAGE_IMPORT_METHOD: 'clone-or-copy',
       PNPM_CONFIG_SIDE_EFFECTS_CACHE: 'false',
-      [pathKey]: environment[pathKey] ?? environment.PATH ?? ''
+      [pathKey]: currentPath
     },
     stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true
+    windowsHide: true,
+    // Keep descendant Ctrl+C broadcasts out of the desktop's console group.
+    detached: platform === 'win32'
   }
 }
 
@@ -277,6 +303,8 @@ export class HarnessRuntime {
   private message = 'Harness is not running.'
   private launchDirectory?: string
   private url?: string
+  private launchToken?: string
+  private launchOrigin?: string
   private readonly logLines: string[] = []
   private readonly logRemainders: Record<'stdout' | 'stderr', string> = {
     stdout: '',
@@ -304,6 +332,17 @@ export class HarnessRuntime {
     return this.dshHome
   }
 
+  /** Add the current process token only at the main-process navigation boundary. */
+  authenticatedUrl(url: string): string {
+    if (this.phase !== 'ready' || !this.url || new URL(url).origin !== this.url) {
+      throw new Error('Harness navigation does not belong to the active runtime.')
+    }
+    if (!this.launchToken) return url
+    const destination = new URL(url)
+    destination.searchParams.set('token', this.launchToken)
+    return destination.href
+  }
+
   snapshot(): RuntimeSnapshot {
     return {
       phase: this.phase,
@@ -320,6 +359,8 @@ export class HarnessRuntime {
     this.logRemainders.stderr = ''
     this.launchDirectory = launchDirectory
     this.url = undefined
+    this.launchToken = undefined
+    this.launchOrigin = undefined
 
     if (!existsSync(this.options.dshEntryPath)) {
       this.setState('failed', `Harness entry was not found: ${this.options.dshEntryPath}`)
@@ -342,8 +383,9 @@ export class HarnessRuntime {
     await mkdir(dirname(this.options.logPath), { recursive: true })
     this.logStream ??= createWriteStream(this.options.logPath, { flags: 'a' })
 
-    const port = await reservePort()
+    const port = await reserveHarnessPort()
     const url = `http://127.0.0.1:${port}`
+    this.launchOrigin = url
     const args = buildNodeArguments(
       this.options.nodeEntryPath,
       this.options.dshEntryPath,
@@ -369,7 +411,11 @@ export class HarnessRuntime {
           launchDirectory,
           this.dshHome,
           process.platform,
-          resolveShellEnvironment()
+          {
+            ...resolveShellEnvironment(),
+            INSIGHT_BUNDLED_NODE_PATH: this.options.nodeExecutablePath,
+            ...(this.options.bundledSkillDir ? { DSH_BUNDLED_SKILL_DIR: this.options.bundledSkillDir } : {})
+          }
         )
       )
     } catch (error) {
@@ -391,10 +437,13 @@ export class HarnessRuntime {
       child.once('error', unbind)
     }
 
-    child.stdout.on('data', (chunk: Buffer) => this.writeChunk('stdout', chunk))
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (this.child === child) this.writeChunk('stdout', chunk)
+    })
     child.stderr.on('data', (chunk: Buffer) => {
+      if (this.child !== child) return
       this.writeChunk('stderr', chunk)
-      if (this.child !== child || this.phase !== 'starting') return
+      if (this.phase !== 'starting') return
 
       const cause = extractDshEntryFailureCause(this.logLines)
       if (!cause) return
@@ -443,7 +492,8 @@ ${cause}`
     const ready = await waitUntilReady(
       url,
       () => this.child === child && child.exitCode === null,
-      startupTimeoutMs
+      startupTimeoutMs,
+      () => !this.options.requiresLaunchToken || this.launchToken !== undefined
     ).finally(() => clearInterval(progressTimer))
 
     if (this.child !== child) return
@@ -461,6 +511,8 @@ ${cause}`
   }
 
   async stop(): Promise<void> {
+    this.launchToken = undefined
+    this.launchOrigin = undefined
     const child = this.child
     if (!child) {
       this.closeLog()
@@ -506,6 +558,9 @@ ${cause}`
     const lines = `${this.logRemainders[source]}${chunk.toString('utf8')}`.split(/\r?\n/)
     this.logRemainders[source] = lines.pop() ?? ''
     for (const line of lines) {
+      if (source === 'stdout' && this.launchOrigin) {
+        this.launchToken = extractHarnessLaunchToken(line, this.launchOrigin) ?? this.launchToken
+      }
       if (line.length > 0) this.writeLog(`[${source}] ${line}`)
     }
   }
@@ -536,6 +591,7 @@ ${cause}`
   }
 
   private writeLog(line: string): void {
+    line = redactHarnessLaunchToken(line)
     this.logLines.push(line)
     if (this.logLines.length > 200) this.logLines.splice(0, this.logLines.length - 200)
     this.logStream?.write(`${line}\n`)
@@ -637,7 +693,11 @@ function extractPluginReferences(
 ): string[] {
   const plugins = new Set<string>()
 
-  for (const line of latestHarnessAttemptLogs(logLines)) {
+  const attemptLogs = latestHarnessAttemptLogs(logLines)
+  const hasDuplicatePrefixRoute = attemptLogs.some(
+    (line) => line.startsWith('[stderr] ') && /duplicate prefix route ["'][^"']+["']/i.test(line)
+  )
+  for (const line of attemptLogs) {
     if (!line.startsWith('[stderr] ')) continue
     const text = line.slice(8)
 
@@ -666,6 +726,16 @@ function extractPluginReferences(
     }
 
     const bootFailureLines = text.split(/\r?\n/).map((value) => value.trim())
+    for (const candidate of bootFailureLines) {
+      const pending = candidate.match(/^((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*):\s*pending\s*\(waiting for service:\s*[^)]+\)\s*$/i)
+      if (pending?.[1] && accepts(pending[1])) plugins.add(pending[1])
+    }
+    if (hasDuplicatePrefixRoute) {
+      for (const match of text.matchAll(/[\\/]profiles[\\/][^\\/\s]+[\\/]node_modules[\\/]((?:@[^\\/\s]+[\\/])?[^\\/\s)]+)/gi)) {
+        const name = match[1]?.replaceAll('\\', '/')
+        if (name && accepts(name)) plugins.add(name)
+      }
+    }
     const bootFailureTitle = bootFailureLines.findIndex((value) => value === 'Failed to load plugins')
     if (bootFailureTitle >= 0) {
       for (const candidate of bootFailureLines.slice(bootFailureTitle + 1)) {
@@ -727,28 +797,11 @@ export function formatExitCode(code: number): string {
   return `exit code ${code} (${hexadecimal})`
 }
 
-async function reservePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer()
-    server.unref()
-    server.once('error', reject)
-    server.listen({ host: '127.0.0.1', port: 0 }, () => {
-      const address = server.address()
-      if (!address || typeof address === 'string') {
-        server.close()
-        reject(new Error('Could not reserve a local port.'))
-        return
-      }
-      const { port } = address
-      server.close((error) => (error ? reject(error) : resolve(port)))
-    })
-  })
-}
-
 async function waitUntilReady(
   url: string,
   isAlive: () => boolean,
-  timeoutMs: number
+  timeoutMs: number,
+  authenticationReady: () => boolean
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   const stabilityWindowMs = 500
@@ -758,7 +811,7 @@ async function waitUntilReady(
       const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(1_000) })
       const stability = updateReadyStability(
         readySince,
-        response.status >= 200 && response.status < 500,
+        authenticationReady() && response.status >= 200 && response.status < 500,
         Date.now(),
         stabilityWindowMs
       )

@@ -1,27 +1,51 @@
 {
   "schemaVersion": 1,
-  "releaseTag": "insight-runtime-v0.1.1-rc.10",
+  "releaseTag": "insight-runtime-v0.1.5-rc.2-insight.1",
   "targets": {
     "darwin-arm64": {
-      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.1-rc.10/insight-harness-runtime-0.1.1-rc.2-darwin-arm64.tar.gz",
-      "sha256": "d807fd8fced8ac39d7612cf58bc1de2d4b69a0487fa4164bffc86a58748f2103",
-      "core": { "repository": "Boxser567/insight-harness-core", "version": "0.1.1-rc.2", "commit": "833f4246abaf3ce5fcf39c3f81a8be2499e7f434" },
-      "node": { "version": "24.9.0" },
-      "pnpm": { "version": "11.7.0" }
+      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.5-rc.2-insight.1/insight-harness-runtime-0.1.5-rc.2-darwin-arm64.tar.gz",
+      "sha256": "f14594ddf1c75e07bde7843b8dc6518213b2a074014dd2d18274586efdee910a",
+      "core": {
+        "repository": "Boxser567/insight-harness-core",
+        "version": "0.1.5-rc.2",
+        "commit": "42ddfb640a97d551e458613d11ddb73936d15e11"
+      },
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
     },
     "darwin-x64": {
-      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.1-rc.10/insight-harness-runtime-0.1.1-rc.2-darwin-x64.tar.gz",
-      "sha256": "ec55f17989546887aa50bbd4958f5181b08cd4456079b2f7da1f18fedb2d0b02",
-      "core": { "repository": "Boxser567/insight-harness-core", "version": "0.1.1-rc.2", "commit": "833f4246abaf3ce5fcf39c3f81a8be2499e7f434" },
-      "node": { "version": "24.9.0" },
-      "pnpm": { "version": "11.7.0" }
+      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.5-rc.2-insight.1/insight-harness-runtime-0.1.5-rc.2-darwin-x64.tar.gz",
+      "sha256": "58cf9cbaed760a8403b746d3265c48e115f6703eb169aa5ca7e781bf20903cc5",
+      "core": {
+        "repository": "Boxser567/insight-harness-core",
+        "version": "0.1.5-rc.2",
+        "commit": "42ddfb640a97d551e458613d11ddb73936d15e11"
+      },
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
     },
     "win32-x64": {
-      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.1-rc.10/insight-harness-runtime-0.1.1-rc.2-win32-x64.tar.gz",
-      "sha256": "b6500f26189eb0ca3bc0b6f2c806b3d48c10f7dd32a24d300a413e9ac4df3152",
-      "core": { "repository": "Boxser567/insight-harness-core", "version": "0.1.1-rc.2", "commit": "833f4246abaf3ce5fcf39c3f81a8be2499e7f434" },
-      "node": { "version": "24.9.0" },
-      "pnpm": { "version": "11.7.0" }
+      "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.1.5-rc.2-insight.1/insight-harness-runtime-0.1.5-rc.2-win32-x64.tar.gz",
+      "sha256": "9c251b0e1a7238b224e0e3a3ac07fd8f8e21a4c5a04ea5f4c23a81b6d11e957a",
+      "core": {
+        "repository": "Boxser567/insight-harness-core",
+        "version": "0.1.5-rc.2",
+        "commit": "42ddfb640a97d551e458613d11ddb73936d15e11"
+      },
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
     }
   }
 }

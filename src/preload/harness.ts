@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { findBootFailureText } from './boot-failure'
+import { observeHarnessBoot } from './boot-observer'
 import { isPluginLoadError } from './plugin-error-view'
 import type { AccountSummary } from '../shared/auth-contracts'
 import type { DesktopClientInfo, HarnessAccountApi } from '../shared/harness-account-api'
@@ -123,11 +124,8 @@ async function mountSafeModeBanner(): Promise<void> {
 }
 
 function initializeUi(): void {
-  checkBootFailureInDom()
-  new MutationObserver(checkBootFailureInDom).observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  })
+  const stopObserving = observeHarnessBoot(document, checkBootFailureInDom)
+  window.addEventListener('pagehide', stopObserving, { once: true })
   void mountSafeModeBanner().catch((error: unknown) => console.warn('[safe-mode] unable to mount banner', error))
 }
 

@@ -17,3 +17,8 @@ export function desktopServiceEnvironment(
   if (!value) throw new Error(`Unsupported desktop service environment: ${name}`)
   return Object.freeze({ name, ...value })
 }
+
+/** Skill proxy follows the selected Gateway origin, not the LLM /v1 endpoint. */
+export function skillProxyServiceBaseUrl(name?: DesktopServiceEnvironmentName): string {
+  return desktopServiceEnvironment(name).authOrigin + '/insight-harness-service'
+}

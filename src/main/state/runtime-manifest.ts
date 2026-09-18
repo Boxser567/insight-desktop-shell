@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 export interface RuntimeManifest {
   schemaVersion: 1
   core: {
-    source: 'release'
+    source: 'release' | 'local'
     repository: string
     version: string
     commit: string
@@ -42,7 +42,7 @@ function isRuntimeManifest(value: unknown): value is RuntimeManifest {
 
   return (
     manifest.schemaVersion === 1 &&
-    core?.source === 'release' &&
+    (core?.source === 'release' || core?.source === 'local') &&
     typeof core.repository === 'string' &&
     typeof core.version === 'string' &&
     typeof core.commit === 'string' &&

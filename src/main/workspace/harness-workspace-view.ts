@@ -54,7 +54,10 @@ export class HarnessWorkspaceView {
   private scope?: string
   private url?: string
 
-  constructor(private readonly getHost: () => HarnessViewHost | undefined) {}
+  constructor(
+    private readonly getHost: () => HarnessViewHost | undefined,
+    private readonly beforeLoad?: (contents: HarnessViewWebContents, scope: string, url: string) => Promise<void>
+  ) {}
 
   setScope(scope: string): void {
     if (!ACCOUNT_SCOPE_PATTERN.test(scope)) throw new Error('The workspace scope is invalid.')
@@ -79,11 +82,22 @@ export class HarnessWorkspaceView {
       this.url = undefined
     }
     this.applyBounds()
+    const view = this.view
+    const scope = this.scope
+    const isCurrent = () => this.view === view && this.scope === scope && !view.webContents.isDestroyed()
     if (this.url !== url) {
-      await this.view.webContents.loadURL(url)
+      await this.beforeLoad?.(view.webContents, scope, url)
+      if (!isCurrent()) return
+      try {
+        await view.webContents.loadURL(url)
+      } catch (error) {
+        if (!isCurrent()) return
+        throw error
+      }
+      if (!isCurrent()) return
       this.url = url
     }
-    this.view.setVisible(true)
+    if (isCurrent()) view.setVisible(true)
   }
 
   async close(): Promise<void> {

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { gte } from 'semver'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -70,15 +71,23 @@ async function reservePort() {
   return address.port
 }
 
-async function waitForReady(url, child, output, timeoutMs = 120_000) {
+async function waitForReady(url, child, output, requiresLaunchToken, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`Packaged Harness exited before readiness (code ${child.exitCode}).\n${output()}`)
     }
+    if (output().includes('[harness-node] DSH entry failed:')) {
+      throw new Error(`Packaged Harness rejected startup.\n${output()}`)
+    }
     try {
-      await invokeHarnessRpc(url, 'session.list', {})
-      return
+      const announcement = output().match(/\bdsh web:\s*(\S+)/u)?.[1]
+      const announcedUrl = announcement ? new URL(announcement) : undefined
+      const launchToken = announcedUrl?.origin === url ? announcedUrl.searchParams.get('token') : undefined
+      if (requiresLaunchToken && !launchToken) { await sleep(100); continue }
+      const rpc = createHarnessSmokeRpc(url, launchToken)
+      await rpc.invoke('session.list', {})
+      return rpc
     } catch {
       // The HTTP listener opens before the RPC routes finish registering.
     }
@@ -87,28 +96,43 @@ async function waitForReady(url, child, output, timeoutMs = 120_000) {
   throw new Error(`Packaged Harness did not become ready within ${Math.round(timeoutMs / 1000)} seconds.\n${output()}`)
 }
 
-async function invokeHarnessRpc(url, method, payload) {
-  const rpcId = randomUUID()
-  const response = await fetch(`${url}/api/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
-    signal: AbortSignal.timeout(30_000)
-  })
-  const text = await response.text()
-  let body
-  try {
-    body = JSON.parse(text)
-  } catch {
-    throw new Error(`Harness RPC ${method} returned HTTP ${response.status}: ${text}`)
+/** Exercise either legacy RPC or the authenticated Typert Remote API. */
+export function createHarnessSmokeRpc(url, launchToken) {
+  let cookie
+  return {
+    modern: Boolean(launchToken),
+    async invoke(method, payload) {
+      if (launchToken && cookie === undefined) {
+        const bootstrap = new URL('/', url)
+        bootstrap.searchParams.set('token', launchToken)
+        const response = await fetch(bootstrap, { redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+        cookie = response.headers.getSetCookie().map(value => value.split(';', 1)[0]).join('; ')
+        if (!cookie) throw new Error('Core did not issue a browser session cookie.')
+      }
+      const endpoint = launchToken ? method.replaceAll('.', '/') : method
+      const request = launchToken ? {
+        args: method === 'session.list' ? { _request: payload }
+          : method === 'session.modelCatalog' ? {} : { request: payload }
+      } : payload
+      const rpcId = randomUUID()
+      const response = await fetch(`${url}/api/${endpoint}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json; charset=utf-8', ...(cookie ? { cookie } : {}) },
+        body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: request }),
+        signal: AbortSignal.timeout(30_000)
+      })
+      const text = await response.text()
+      let body
+      try { body = JSON.parse(text) } catch {
+        throw new Error(`Harness RPC ${method} returned HTTP ${response.status}: ${text}`)
+      }
+      if (body.rpcId !== rpcId) throw new Error(`Harness RPC id mismatch for ${method}.`)
+      if (!body.result?.ok) {
+        throw new Error(`Harness RPC ${method} failed: ${body.result?.error?.code ?? 'unknown'}: ${body.result?.error?.message ?? 'unknown error'}`)
+      }
+      return body.result.value
+    }
   }
-  if (body.rpcId !== rpcId) throw new Error(`Harness RPC id mismatch for ${method}.`)
-  if (!body.result?.ok) {
-    throw new Error(
-      `Harness RPC ${method} failed: ${body.result?.error?.code ?? 'unknown'}: ${body.result?.error?.message ?? 'unknown error'}`
-    )
-  }
-  return body.result.value
 }
 
 async function stopProcess(child) {
@@ -122,6 +146,10 @@ async function stopProcess(child) {
   }
 }
 
+function redactLaunchTokens(text) {
+  return text.replace(/([?&]token=)[^\s&#]+/gu, '$1[redacted]')
+}
+
 export async function probePackagedHarness({
   nodeExecutable,
   buildArguments,
@@ -129,7 +157,9 @@ export async function probePackagedHarness({
   environment,
   afterReady,
   stabilityMs = 0,
-  failOnStderr = false
+  failOnStderr = false,
+  requiresLaunchToken = false,
+  startupTimeoutMs = 120_000
 }) {
   const port = await reservePort()
   const url = `http://127.0.0.1:${port}`
@@ -146,8 +176,8 @@ export async function probePackagedHarness({
   const output = () => [stdout, stderr].filter(Boolean).join('\n')
 
   try {
-    await waitForReady(url, child, output)
-    if (afterReady) await afterReady(url)
+    const rpc = await waitForReady(url, child, output, requiresLaunchToken, startupTimeoutMs)
+    if (afterReady) await afterReady(url, rpc)
     if (stabilityMs > 0) await sleep(stabilityMs)
     if (child.exitCode !== null) {
       throw new Error(`Packaged Harness exited after readiness (code ${child.exitCode}).\n${output()}`)
@@ -155,7 +185,9 @@ export async function probePackagedHarness({
     if (failOnStderr && stderr.trim().length > 0) {
       throw new Error(`Packaged Harness reported stderr after readiness.\n${output()}`)
     }
-    return { stdout, stderr }
+    return { stdout: redactLaunchTokens(stdout), stderr: redactLaunchTokens(stderr) }
+  } catch (error) {
+    throw new Error(redactLaunchTokens(error instanceof Error ? error.message : String(error)))
   } finally {
     await stopProcess(child)
   }
@@ -184,6 +216,7 @@ export async function smokePackagedHarness(resourceRoot) {
 
     await probePackagedHarness({
       nodeExecutable: paths.nodeExecutable,
+      requiresLaunchToken: gte(runtimeMetadata.core.version, '0.1.2-alpha.1'),
       buildArguments: (port) => buildPackagedHarnessArguments(paths, port),
       workingDirectory: workspacePath,
       environment: {
@@ -198,23 +231,25 @@ export async function smokePackagedHarness(resourceRoot) {
         PNPM_CONFIG_PACKAGE_IMPORT_METHOD: 'clone-or-copy',
         PNPM_CONFIG_SIDE_EFFECTS_CACHE: 'false'
       },
-      afterReady: async (url) => {
-        const host = await invokeHarnessRpc(url, 'host.describe', {})
-        if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-v4-flash-vision-exp') {
+      afterReady: async (_url, rpc) => {
+        const catalog = await rpc.invoke(rpc.modern ? 'session.modelCatalog' : 'llm.models', {})
+        const host = rpc.modern ? catalog.default : await rpc.invoke('host.describe', {})
+        if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-flash') {
           throw new Error('Packaged Harness did not select the desktop Gateway as its default model route.')
         }
-        const { providers } = await invokeHarnessRpc(url, 'llm.providers', {})
+        const { providers } = rpc.modern
+          ? { providers: catalog.routableProviders.map(provider => ({ provider, active: true })) }
+          : await rpc.invoke('llm.providers', {})
         if (!providers.some(provider => provider.provider === 'yinsai-gateway' && provider.active) ||
           providers.some(provider => provider.active && ['deepseek', 'pi-ai'].includes(provider.provider))) {
           throw new Error('Packaged Harness did not activate the desktop model Gateway exclusively over its factory providers.')
         }
-        const catalog = await invokeHarnessRpc(url, 'llm.models', {})
         if (!catalog.groups.some(group => group.id === 'yinsai-gateway' &&
-          group.models.some(model => model.id === 'deepseek-v4-flash-vision-exp'))) {
+          group.models.some(model => model.id === 'deepseek-flash'))) {
           throw new Error('Packaged Harness did not advertise the desktop model.')
         }
-        const workspace = await invokeHarnessRpc(url, 'workspace.create', { path: workspacePath })
-        const session = await invokeHarnessRpc(url, 'session.create', {
+        const workspace = await rpc.invoke('workspace.create', { path: workspacePath })
+        const session = await rpc.invoke('session.create', {
           workspaceId: workspace.workspace.workspaceId
         })
         if (typeof session.sessionId !== 'string' || session.sessionId.length === 0) {
