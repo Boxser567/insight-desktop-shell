@@ -411,7 +411,11 @@ export class HarnessRuntime {
           launchDirectory,
           this.dshHome,
           process.platform,
-          { ...resolveShellEnvironment(), ...(this.options.bundledSkillDir ? { DSH_BUNDLED_SKILL_DIR: this.options.bundledSkillDir } : {}) }
+          {
+            ...resolveShellEnvironment(),
+            INSIGHT_BUNDLED_NODE_PATH: this.options.nodeExecutablePath,
+            ...(this.options.bundledSkillDir ? { DSH_BUNDLED_SKILL_DIR: this.options.bundledSkillDir } : {})
+          }
         )
       )
     } catch (error) {
