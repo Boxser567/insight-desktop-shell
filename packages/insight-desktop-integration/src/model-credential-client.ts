@@ -23,9 +23,11 @@ export function createModelCredentialClient(transport: ModelCredentialTransport)
     const response = value as Record<string, unknown>
     if (response.type !== 'insight:model-token:response' || response.id !== pending.id) return
     if (typeof response.token === 'string' && response.token.length > 0) finish(undefined, response.token)
-    else finish(new Error(response.error === 'LOGIN_REQUIRED'
+    else finish(Object.assign(new Error(response.error === 'LOGIN_REQUIRED'
       ? '登录已失效，请重新登录后继续会话。'
-      : '暂时无法验证登录，请检查网络后重试。'))
+      : '暂时无法验证登录，请检查网络后重试。'), {
+        code: response.error === 'LOGIN_REQUIRED' ? 'LOGIN_REQUIRED' : 'SERVICE_UNAVAILABLE'
+      }))
   }
   transport.on('message', onMessage)
   return {

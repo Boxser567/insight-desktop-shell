@@ -9,6 +9,9 @@
     ],
     "noEmit": true,
     "paths": {
+      "@deepseek-ai/dsh-shell-env": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-shell-env/lib/types/index.d.ts"
+      ],
       "@deepseek-ai/dsh-llm": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts"
       ],

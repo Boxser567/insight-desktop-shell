@@ -25,6 +25,7 @@ export async function runCli() {
     dshHome: home, logPath: join(home, 'runtime.log'), startupTimeoutMs: 1800,
     requiresLaunchToken: mode !== 'legacy',
     launchProcess: (executable, args, options) => {
+      expect(options.env?.INSIGHT_BUNDLED_NODE_PATH).toBe(process.execPath)
       const child = spawn(executable, args, options)
       return Object.assign(child, { stdout: child.stdout!, stderr: child.stderr! })
     },

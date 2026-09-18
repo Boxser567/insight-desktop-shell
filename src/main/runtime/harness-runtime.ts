@@ -410,7 +410,7 @@ export class HarnessRuntime {
           launchDirectory,
           this.dshHome,
           process.platform,
-          resolveShellEnvironment()
+          { ...resolveShellEnvironment(), INSIGHT_BUNDLED_NODE_PATH: this.options.nodeExecutablePath }
         )
       )
     } catch (error) {
