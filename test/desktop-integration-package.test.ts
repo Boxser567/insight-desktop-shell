@@ -28,9 +28,18 @@ describe('desktop integration package', () => {
       { id: 'agent-default-model', config: { provider: 'yinsai-gateway', model: 'deepseek-flash' } },
       { id: 'llm-deepseek', disabled: true },
       { id: 'llm-pi-ai', disabled: true },
+      { id: 'web-search-deepseek', disabled: true },
       { id: 'ui-settings-models', disabled: true },
       { insert: [{ id: 'insight-desktop-integration', name: '@insight-ai/desktop-integration' }] }
     ])
+  })
+
+  it('injects the web seam and registers the authenticated search lifecycle', async () => {
+    const source = await readFile(new URL('src/index.ts', packageRoot), 'utf8')
+
+    expect(source).toContain("export const inject = ['llm', 'web']")
+    expect(source).toContain('ctx.web.registerSearchProvider')
+    expect(source).toContain('unregisterSearch()')
   })
 
   it('uses the shared desktop service environment for the model Gateway', async () => {
