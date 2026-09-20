@@ -57,7 +57,7 @@ Expected: only the active integration worktree contains product changes; the Win
 - Consumes: the manually accepted working tree on `codex/rc12-client-polish-20260920`.
 - Produces: one immutable integration commit containing the accepted RC15 feature set before release metadata changes.
 
-- [ ] **Step 1: Run static and unit verification**
+- [x] **Step 1: Run static and unit verification**
 
 Run:
 
@@ -70,19 +70,19 @@ git diff --check
 
 Expected: all product tests and type checks pass; any host-only test failure must be isolated, reproduced, and documented before proceeding.
 
-- [ ] **Step 2: Build the prepared application**
+- [x] **Step 2: Build the prepared application**
 
 Run: `npm run build:prepared`
 
 Expected: main, preload, renderer, and desktop integration bundles build successfully; `out/preload/update.cjs` remains self-contained.
 
-- [ ] **Step 3: Review the complete staged change**
+- [x] **Step 3: Review the complete staged change**
 
 Run: `git diff --stat`, `git diff --check`, and focused diffs for service environment, bundled plugins, updater, theme synchronization, and Skill presentation.
 
 Expected: no generated local artifact, secret, test-only endpoint in packaged configuration, or unrelated file is staged.
 
-- [ ] **Step 4: Commit the accepted snapshot**
+- [x] **Step 4: Commit the accepted snapshot**
 
 Run:
 
@@ -102,19 +102,19 @@ Expected: the current branch is clean and the commit contains only the already-d
 - Consumes: clean `origin/main` and the Task 2 integration commit.
 - Produces: `codex/rc15-release-20260920`, rooted in the current main line and containing the full candidate history.
 
-- [ ] **Step 1: Create the release branch from main**
+- [x] **Step 1: Create the release branch from main**
 
 Run: `git switch -c codex/rc15-release-20260920 origin/main`
 
 Expected: `HEAD` starts at the latest fetched `origin/main`.
 
-- [ ] **Step 2: Merge the verified integration snapshot**
+- [x] **Step 2: Merge the verified integration snapshot**
 
 Run: `git merge --no-ff codex/rc12-client-polish-20260920 -m "merge: integrate rc15 desktop capabilities"`
 
 Expected: the patch-equivalent Windows publishing commit does not duplicate behavior; the merged tree contains all accepted features.
 
-- [ ] **Step 3: Re-run targeted merge verification**
+- [x] **Step 3: Re-run targeted merge verification**
 
 Run: `npm run typecheck`, `npm run typecheck:desktop-integration`, and targeted release/theme/Skill/plugin tests.
 
@@ -134,19 +134,19 @@ Expected: no merge regression and no unexpected tree difference from the verifie
 - Consumes: release version `1.0.0-rc.15`, candidate channel, production service configuration, and the existing runtime lock.
 - Produces: metadata accepted by `verify-release-preflight.mjs` and all native workflows.
 
-- [ ] **Step 1: Change the package and policy versions**
+- [x] **Step 1: Change the package and policy versions**
 
 Set the root package, root lockfile package entries, and `releaseVersion` to `1.0.0-rc.15`. Keep `insightReleaseDate` at `2026-09-20`, channel `candidate`, mode `optional`, and minimum supported version `1.0.0-rc.1`.
 
-- [ ] **Step 2: Update version-specific fixture data**
+- [x] **Step 2: Update version-specific fixture data**
 
 Change the Windows candidate fixture from `1.0.0-rc.14`/`v1.0.0-rc.14` to `1.0.0-rc.15`/`v1.0.0-rc.15`. Keep historical RC14 acceptance documents unchanged.
 
-- [ ] **Step 3: Add RC15 release notes**
+- [x] **Step 3: Add RC15 release notes**
 
 Document the included Core upgrade, enterprise Web Search, Skill proxy and presentation, plugin bundle changes, production service split, live theme synchronization, automatic install transition, Windows upgrade hardening, and manual acceptance gates.
 
-- [ ] **Step 4: Commit release identity separately**
+- [x] **Step 4: Commit release identity separately**
 
 Run:
 
@@ -171,7 +171,7 @@ Expected: release metadata is independently reviewable from feature integration.
 - Consumes: the RC15 release branch and locked production metadata.
 - Produces: local evidence that GitHub's three-platform workflow can start from one commit.
 
-- [ ] **Step 1: Run the exact candidate preflight**
+- [x] **Step 1: Run the exact candidate preflight**
 
 Run:
 
@@ -187,7 +187,7 @@ node scripts/verify-release-preflight.mjs \
 
 Expected: JSON reports version `1.0.0-rc.15`, channel `candidate`, service environment `production`, and all three locked targets.
 
-- [ ] **Step 2: Run all local quality gates**
+- [x] **Step 2: Run all local quality gates**
 
 Run:
 
@@ -200,7 +200,7 @@ npm run build
 
 Expected: every gate passes from a clean checkout-equivalent state.
 
-- [ ] **Step 3: Verify release and publishing workflow contracts**
+- [x] **Step 3: Verify release and publishing workflow contracts**
 
 Run:
 
