@@ -86,3 +86,30 @@ matching installation identity/path; long source AND staging destination; file
 locks with a partial move followed by restore; cleanup success; cancellation;
 then the complete rc7 installation and the real user machine. No new installer
 containing this proposed takeover has been implemented or published yet.
+
+## rc14 implementation and validation
+
+The proposal above is now implemented (52cc2a0 and follow-ups): the installer
+checks the same-product registered uninstaller path and application executable,
+then extracts its embedded uninstaller to the temporary directory. It never
+replaces the legacy executable in place or falls back to it on launch failure.
+Extended paths are confined to file I/O, with source and staging roots converted
+separately; registry and display paths keep their original form.
+
+Windows Actions run 35491709366 passed the nine path/lock/restore fixtures and
+the complete isolated-product installer test. The latter installs an old package
+built from unpatched same-version builder templates, with an actual 260-character
+file, upgrades with the compatibility uninstaller, verifies new file content,
+and requires `compat-uninstaller-selected`, `atomic-relocation-return result=0`,
+and `install-complete` in logs. Its identity is com.insight-aigc.upgrade-probe;
+it is not the real rc7 application or account/session acceptance.
+
+The source-root removal log can report an error even after atomic relocation
+succeeds (for example an installation process can retain the directory). The
+test does not equate that log with a failed file relocation, nor require the
+root directory to disappear before extraction. Staging cleanup succeeded.
+
+Local full suite: 115 files / 747 tests passed; version preflight and targeted
+release tests passed after preparing 1.0.0-rc.14. Actual rc7 manual upgrade,
+account/session retention, automatic update, and all-users scope remain release
+gates. No OSS promotion is authorized by these test results.
