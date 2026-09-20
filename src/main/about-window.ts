@@ -7,6 +7,7 @@ export interface AboutMetadata {
 
 interface ManagedAboutWindow {
   isDestroyed(): boolean
+  webContents: { send(channel: string, value: unknown): void; mainFrame?: unknown }
   show(): void
   focus(): void
   close(): void
@@ -16,6 +17,8 @@ interface ManagedAboutWindow {
 export function aboutWindowOptions(input: {
   parent?: BrowserWindow
   icon: string
+  preload: string
+  backgroundColor?: string
   platform?: NodeJS.Platform
 }): BrowserWindowConstructorOptions {
   const platform = input.platform ?? process.platform
@@ -31,8 +34,9 @@ export function aboutWindowOptions(input: {
     ...(platform === 'win32' ? { autoHideMenuBar: true } : {}),
     title: '关于因赛AI',
     icon: input.icon,
-    backgroundColor: '#202024',
+    backgroundColor: input.backgroundColor ?? '#202024',
     webPreferences: {
+      preload: input.preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -96,5 +100,9 @@ export class AboutWindowController<Window extends ManagedAboutWindow> {
 
   close(): void {
     if (this.current && !this.current.isDestroyed()) this.current.close()
+  }
+
+  window(): Window | undefined {
+    return this.current && !this.current.isDestroyed() ? this.current : undefined
   }
 }

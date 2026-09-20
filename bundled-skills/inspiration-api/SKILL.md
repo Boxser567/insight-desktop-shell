@@ -12,7 +12,7 @@ metadata:
 本技能原为 OpenClaw 环境编写，在 DeepSeek Harness（DSH）中使用时按以下约定适配：
 
 - **联网检索**：统一用 DSH 官方 `web_search` 工具（替代 OpenClaw 的 Tavily Search），无需外部 API Key
-- **案例/标签检索**：用 DSH 的 `inspiration-api` 技能（`gapi-test.idealead.com/material-server`）
+- **案例/标签检索**：用 DSH 的 `inspiration-api` 技能；Dev 使用测试服务，编译版使用生产服务
 - **媒体生成**：用 DSH 的 `media-generator` 技能（网关 `http://59.37.128.50:52667/v1/proxy`）
 - **文件交付**：用 DSH 的 `artifact_save` 归入 `output/` 交付物，或用 `de_channel_send` 发送到 IM 渠道（替代 OpenClaw 的 file-uploader）
 - **输出位置**：产物写入当前工作区 `output/`（替代 OpenClaw 的 `/Users/insight/.openclaw/workspace/...`）
@@ -24,7 +24,7 @@ metadata:
 
 ## ⚠️ 调用前必读（重要！）
 
-**API 基础 URL：** `http://gapi-test.idealead.com/material-server`
+**API 基础 URL：** Dev 为 `http://gapi-test.idealead.com/material-server`，编译版为 `https://gapi.idealead.com/material-server`
 
 **禁止行为：**
 - ❌ 不得使用 `http://59.37.128.50:52667`（这是 Media Generator 技能的接口）
@@ -34,7 +34,7 @@ metadata:
 **接口区分：**
 | 技能 | 基础 URL | 用途 |
 |------|---------|------|
-| **Inspiration API** | `http://gapi-test.idealead.com/material-server` | 案例检索、案例详情、标签查询 |
+| **Inspiration API** | Dev: `http://gapi-test.idealead.com/material-server`；编译版: `https://gapi.idealead.com/material-server` | 案例检索、案例详情、标签查询 |
 | **Media Generator** | `http://59.37.128.50:52667/v1/proxy` | 图片/视频生成 |
 
 ---
@@ -81,7 +81,7 @@ metadata:
 
 ## 概述
 
-该技能封装了 `http://gapi-test.idealead.com/material-server` 的后端 API，支持：
+该技能封装了按运行环境选择的 `material-server` 后端 API，支持：
 
 - ✅ **动态查询** - 按需调用 API，不依赖本地静态数据
 - ✅ **多维度筛选** - 行业、创意手法、人性需求、奖项等
@@ -92,7 +92,7 @@ metadata:
 
 ### API 端点
 
-- **基础 URL**: `http://gapi-test.idealead.com/material-server`
+- **基础 URL**: Dev 为 `http://gapi-test.idealead.com/material-server`，编译版为 `https://gapi.idealead.com/material-server`
 - **标签查询**: `GET /tag/getTag?category={category}`
 - **案例列表**: `POST /case/query`
 - **案例详情**: `GET /case/detail?caseId={id}`

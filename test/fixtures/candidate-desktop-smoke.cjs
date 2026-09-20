@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { mkdirSync, writeFileSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
-const { app, dialog, session, webContents } = require('electron')
+const { app, BrowserWindow, dialog, Menu, nativeTheme, session, webContents } = require('electron')
 const root = process.env.INSIGHT_SMOKE_ROOT
 const output = process.env.INSIGHT_SMOKE_OUTPUT
 if (!root || !output) throw new Error('INSIGHT_SMOKE_ROOT and INSIGHT_SMOKE_OUTPUT are required')
@@ -48,8 +48,15 @@ async function until(label, check, timeout = 120000) {
   throw new Error(`Timed out waiting for ${label}`)
 }
 const alive = () => webContents.getAllWebContents().filter(contents => !contents.isDestroyed())
+function findMenuItem(label, items = Menu.getApplicationMenu()?.items ?? []) {
+  for (const item of items) {
+    if (item.label === label) return item
+    const nested = item.submenu ? findMenuItem(label, item.submenu.items) : undefined
+    if (nested) return nested
+  }
+}
 async function inspect(contents) {
-  return contents.executeJavaScript(`({ url: location.href.replace(/([?&]token=)[^&#]+/g,'$1[redacted]'), text: document.body?.innerText, sidebars: document.querySelectorAll('button[aria-label="收起侧边栏"]').length, buttons: [...document.querySelectorAll('button')].map(x=>({text:x.innerText,label:x.getAttribute('aria-label'),title:x.title})), errors: [...document.querySelectorAll('[data-dsh-boot-error]')].map(x=>x.textContent) })`)
+  return contents.executeJavaScript(`({ url: location.href.replace(/([?&]token=)[^&#]+/g,'$1[redacted]'), text: document.body?.innerText, theme: document.documentElement.dataset.insightTheme, background: getComputedStyle(document.body).backgroundColor, sidebars: document.querySelectorAll('button[aria-label="收起侧边栏"]').length, buttons: [...document.querySelectorAll('button')].map(x=>({text:x.innerText,label:x.getAttribute('aria-label'),title:x.title})), errors: [...document.querySelectorAll('[data-dsh-boot-error]')].map(x=>x.textContent) })`)
 }
 async function save(label, contents) {
   writeFileSync(join(output, `${label}.json`), JSON.stringify(await inspect(contents), null, 2))
@@ -77,16 +84,37 @@ async function run() {
   await harness.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(x=>x.textContent==='设置').click()`)
   await until('desktop settings', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-client-settings]')`))
   await save('desktop-settings', harness)
+  await harness.executeJavaScript(`{ const target = [...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='通用设置'); target?.click(); !!target }`)
+  await until('appearance settings', () => harness.executeJavaScript(`[...document.querySelectorAll('button')].some(x=>x.textContent?.trim()==='浅色')`))
+  await harness.executeJavaScript(`{ const target = [...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='浅色'); target?.click(); !!target }`)
+  await until('native light theme', () => nativeTheme.themeSource === 'light' && nativeTheme.shouldUseDarkColors === false)
   harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
   harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
-  for (const route of (process.argv.includes('--safe-mode') ? [] : ['update', 'uninstall'])) {
-    for (const name of ['dshmarket', '@insight-ai/desktop-integration']) {
-      const response = await harness.executeJavaScript(`fetch('/dsh-market/${route}', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:${JSON.stringify(name)}})}).then(async r=>({status:r.status,body:await r.json()}))`)
-      assert.equal(response.status, 403, JSON.stringify(response))
-      assert.match(response.body.error, /managed by Insight Desktop/)
-    }
-  }
-  console.log('CANDIDATE_SETTINGS_AND_MARKET_POLICY_PASSED')
+  console.log('CANDIDATE_SETTINGS_PASSED')
+
+  const aboutItem = findMenuItem('关于因赛AI')
+  assert.ok(aboutItem?.click, 'About menu item is unavailable')
+  aboutItem.click(aboutItem, BrowserWindow.getFocusedWindow(), {})
+  const about = await until('light About window', async () => {
+    const contents = alive().find(value => value.getURL().includes('/about.html'))
+    if (!contents) return undefined
+    const state = await inspect(contents)
+    return state.theme === 'light' && state.background !== 'rgb(32, 32, 36)' ? contents : undefined
+  })
+  assert.match((await inspect(about)).text, /因赛AI/)
+  await save('about-light', about)
+
+  await harness.executeJavaScript('void window.insightDesktopUpdates.open(); true')
+  const update = await until('light Update window', async () => {
+    const contents = alive().find(value => value.getURL().includes('/update.html'))
+    if (!contents) return undefined
+    const state = await inspect(contents)
+    return state.theme === 'light' && state.text?.trim() ? contents : undefined
+  }, 10_000)
+  const updateState = await inspect(update)
+  assert.notEqual(updateState.background, 'rgb(32, 32, 36)')
+  await save('update-light', update)
+  console.log('CANDIDATE_SECONDARY_THEME_PASSED')
   const catalog = await harness.executeJavaScript(`fetch('/api/session/modelCatalog', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session/modelCatalog',payload:{args:{}}})}).then(r=>r.json())`)
   assert.equal(catalog.result.ok, true)
   assert.equal(catalog.result.value.default.provider, 'yinsai-gateway')

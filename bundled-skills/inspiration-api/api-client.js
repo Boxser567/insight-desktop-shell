@@ -3,7 +3,8 @@
  * 调用后端 API 实现案例数据的按需查询
  * 
  * API 文档:
- * - 基础 URL: http://gapi-test.idealead.com/material-server
+ * - Dev 基础 URL: http://gapi-test.idealead.com/material-server
+ * - 生产基础 URL: https://gapi.idealead.com/material-server
  * - 标签查询：GET /tag/getTag?category={category}
  * - 案例列表：POST /case/query
  * - 案例详情：POST /case/detail?caseId={id}
@@ -14,7 +15,9 @@ const fs = require('fs');
 const path = require('path');
 
 // API 基础 URL
-const BASE_URL = 'http://gapi-test.idealead.com/material-server';
+const BASE_URL = process.env.INSIGHT_DESKTOP_SERVICE_ENVIRONMENT === 'test'
+  ? 'http://gapi-test.idealead.com/material-server'
+  : 'https://gapi.idealead.com/material-server';
 
 // 加载静态数据作为 fallback
 let staticData = null;

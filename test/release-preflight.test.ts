@@ -51,7 +51,7 @@ async function fixture() {
     })),
     writeFile(paths.serviceEnvironment, JSON.stringify({
       schemaVersion: 1,
-      releaseEnvironment: 'test',
+      releaseEnvironment: 'production',
       environments: {
         test: {
           authOrigin: 'https://gapi-test.insight-aigc.com',
@@ -90,7 +90,7 @@ describe('desktop release preflight', () => {
       channel: 'candidate',
       runtimeTag: 'insight-runtime-v0.1.1-rc.10',
       runtimeCommit: 'a'.repeat(40),
-      serviceEnvironment: 'test',
+      serviceEnvironment: 'production',
       targets: ['darwin-arm64', 'darwin-x64', 'win32-x64']
     })
   })
@@ -122,21 +122,16 @@ describe('desktop release preflight', () => {
     expect(JSON.parse(result.stdout).runtimeTag).toBe(runtimeTag)
   })
 
-  it('allows Candidate test services and requires production services for Stable', async () => {
+  it('requires production services for every packaged release channel', async () => {
     const candidate = await fixture()
     expect(run(candidate).status).toBe(0)
 
-    const blockedStable = await fixture()
-    await writeFile(blockedStable.packageJson, JSON.stringify({ version: '0.1.2' }))
-    await writeFile(blockedStable.policy, JSON.stringify({
-      schema: 1,
-      releaseVersion: '0.1.2',
-      channel: 'stable',
-      mode: 'optional',
-      minimumSupportedVersion: '0.1.1'
-    }))
-    expect(run(blockedStable, 'v0.1.2', 'stable').stderr).toContain(
-      'Stable releases require the production desktop service environment.'
+    const blockedCandidate = await fixture()
+    const candidateServices = JSON.parse(await readFile(blockedCandidate.serviceEnvironment, 'utf8'))
+    candidateServices.releaseEnvironment = 'test'
+    await writeFile(blockedCandidate.serviceEnvironment, JSON.stringify(candidateServices))
+    expect(run(blockedCandidate).stderr).toContain(
+      'Packaged releases require the production desktop service environment.'
     )
 
     const stable = await fixture()
@@ -148,9 +143,6 @@ describe('desktop release preflight', () => {
       mode: 'optional',
       minimumSupportedVersion: '0.1.1'
     }))
-    const services = JSON.parse(await readFile(stable.serviceEnvironment, 'utf8'))
-    services.releaseEnvironment = 'production'
-    await writeFile(stable.serviceEnvironment, JSON.stringify(services))
     expect(run(stable, 'v0.1.2', 'stable').status).toBe(0)
   })
 

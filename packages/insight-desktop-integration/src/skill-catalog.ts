@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 import type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
+import { bundledSkillPresentation } from './bundled-skill-presentations'
 import { parseSkillPresentation, SKILL_UI_MAX_BYTES } from './skill-presentation'
 
 /** Presentation subset of the native session skill summary. */
@@ -38,6 +39,7 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
       return Promise.all(result.value.skills.map(async (skill, order) => ({
         name: skill.name,
         description: skill.description,
+        ...bundledSkillPresentation(skill.name, skill.path),
         ...await readSkillPresentation(ctx, sessionId, skill.path),
         order,
         bundled: true,

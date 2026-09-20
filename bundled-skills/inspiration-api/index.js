@@ -2,7 +2,8 @@
  * Inspiration API 封装
  * 
  * 调用后端 API 实现案例数据的按需查询
- * API 基础 URL: http://gapi-test.idealead.com/material-server
+ * Dev API 基础 URL: http://gapi-test.idealead.com/material-server
+ * 生产 API 基础 URL: https://gapi.idealead.com/material-server
  * 
  * 用法:
  * const { 

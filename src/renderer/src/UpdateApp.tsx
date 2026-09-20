@@ -8,7 +8,6 @@ const actionLabels: Record<UpdateViewAction, string> = {
   check: '检查更新',
   download: '下载更新',
   'download-full-installer': '下载完整安装包',
-  install: '安装并重启',
   retry: '重试',
   skip: '跳过这个版本',
   quit: '退出因赛AI'
@@ -23,8 +22,6 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
       return api.download()
     case 'download-full-installer':
       return api.downloadFullInstaller()
-    case 'install':
-      return api.install()
     case 'skip':
       return status.phase === 'available'
         ? api.skip(status.availableVersion)

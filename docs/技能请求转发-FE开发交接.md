@@ -107,7 +107,7 @@ skillProxyServiceBaseUrl()
 // desktopServiceEnvironment().authOrigin + '/insight-harness-service'
 ```
 
-`build/client-service-environment.json` 的 `releaseEnvironment` 当前为 `test`。
+`build/client-service-environment.json` 的 `releaseEnvironment` 当前为 `production`；仅本地 Dev Harness 子进程通过受控环境变量切换到 `test`。
 
 ```text
 测试：POST https://gapi-test.insight-aigc.com/insight-harness-service/api/skill-proxy/{connection_id}

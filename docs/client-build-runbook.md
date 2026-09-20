@@ -11,7 +11,7 @@
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
 - Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
-- `dshmarket` 是新 Profile 中可卸载的出厂插件。构建必须固定版本并包含完整文件；用户卸载后，重启和应用升级不得自动恢复。
+- `dshmarket` 与 `dsh-genui` 由当前 Harness/Core Runtime 提供，不再由 Shell 的默认 Profile 重复内置；Shell 只固定交付仍由 Shell 负责的社区插件，并在旧 Profile 迁移时移除旧版 Shell 内置副本。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
 - 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；候选区允许按平台重建和覆盖，已公开版本的正式资产与渠道指针不得覆盖。
@@ -28,7 +28,7 @@
 | 仅文档 | 阶段 2 | 文档链接、命令存在性和 `git diff --check`；不构建应用 |
 | 不涉及 Runtime 或打包的 Shell UI | 阶段 2 | 当前开发平台；定向 UI 测试后执行受影响的普通 build/DEV 行为 |
 | Shell main/preload 或用户数据行为 | 阶段 2 | 当前开发平台，并覆盖受影响的 macOS/Windows 路径；必须验证既有用户数据不丢失 |
-| 默认 Profile、Better Sidebar 或 `dshmarket` | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
+| 默认 Profile、Core-owned 插件或 Better Sidebar 集成 | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
 | upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
@@ -133,9 +133,7 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用已满足 `dshmarket@1.46.1`、第一方集成和模板版本 6 要求（不含 `dsh-better-sidebar`）的 Profile，避免无意义地重新安装。
-
-Profile 准备还会执行锁定版本的 Market 宿主适配，包括必需插件保护、列表隐藏和桌面重启委托。若 `dshmarket` 内部更新导致保护列表、更新/卸载路由或客户端重启动作无法定位，脚本会直接失败；此时应先审查新版本并更新 `scripts/patch-bundled-market.mjs`，不能绕过后继续打包。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用满足 Profile 版本 7、第一方集成和当前社区插件归档校验的 Profile。它不会下载或重新内置由 Core Runtime 提供的 `dshmarket`、`dsh-genui`。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 
@@ -191,8 +189,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - Profile 不含 `dsh-better-sidebar` 的依赖、bundle 或安装目录；Runtime 提供原生 Sidebar、文件浏览和预览；
-- `Resources/bundled-profile/web/node_modules/dshmarket/package.json` 存在，且 Profile manifest 和 lockfile 均固定为 `1.46.1`；
-- `Resources/bundled-profile/web/node_modules/dshmarket/lib/patch.js` 包含 `Insight Desktop required capabilities`，`lib/routes.js` 同时包含 installed/updates 列表过滤与 update/uninstall 变更守卫，`client/client.js` 包含 `Insight Desktop delegates Harness restarts`；
+- `Resources/bundled-profile/web/package.json` 的 `insightDesktop.defaultProfileVersion` 为 `7`，且默认依赖只包含 Shell 负责交付的社区插件与桌面集成；
+- `Resources/bundled-profile/web/package.json` 和 lockfile 不包含 `dshmarket`、`@changfenhuang/dsh-genui`；Core Runtime 自带能力应通过 Harness 启动与 UI 验收确认；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 - macOS 包内主 App 的 `CFBundleIdentifier` 与上述固定身份一致，所有 Helper 使用相同主 ID 派生的 `.helper*` 前缀，且与包内 `insightDesktopAppId` 一致；旧 ID 包的签名/安装证据不得作为新身份的验收结果。
 
@@ -208,9 +206,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的新用户 Profile：模板版本 6、`dshmarket@1.46.1`、第一方集成以及 `.install-complete` 均存在；升级旧 Profile 后 better-sidebar 不再注册或恢复。
-- 对仍安装同版本 `dshmarket` 的既有 Profile，确认 Shell 启动后只刷新市场宿主适配文件，市场不重新安装、社区插件不回填，Core 原生 Sidebar 与桌面集成不出现在 Market 的可操作列表。
-- 打开设置中的 Plugin Market；卸载一个可选出厂插件并点击“立即重启”，确认 Shell 重新启动 Harness、没有插件恢复页或孤儿 Harness 进程、该插件不会恢复，登录、设置、退出和 Sidebar 仍可用。另行卸载 `dshmarket` 并重启同一应用，确认市场不会恢复；再用新账号范围确认首次初始化仍预装市场与可选出厂插件。
+- 检查复制后的新用户 Profile：模板版本 7、第一方集成、Shell 负责的社区插件归档以及 `.install-complete` 均存在；升级旧 Profile 后 Better Sidebar、旧版 `dshmarket` 和旧版 GenUI 不再由 Shell 注册或恢复。
+- 在设置中确认 Core Runtime 提供的市场与 GenUI 能力仍可用；对旧 Profile 验证用户自装的其他版本插件不被 Shell 误删，用户会话、工作区、设置和社区插件选择保持不变。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口或无限启动页，插件列表中没有内置 Better Sidebar。首页显示因赛 Logo 和“以专业为引擎，让团队与AI共成长”，无预览标签；Windows 任务栏与 Alt+Tab 标题为“因赛 AI”。
 - 原生右侧栏提供文件浏览/预览；better-sidebar 独有的编辑器、终端、Git 和嵌入式浏览器面板不再随客户端预装，不按旧插件按钮验收。

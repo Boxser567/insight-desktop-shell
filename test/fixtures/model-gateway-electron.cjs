@@ -7,7 +7,7 @@ const { app, utilityProcess } = require('electron')
 app.whenReady().then(async () => {
   const { bindModelCredentialBridge } = await import(pathToFileURL(join(__dirname, 'model-credential-bridge.mjs')))
   const peer = utilityProcess.fork(join(__dirname, 'run.mjs'), [], {
-    env: { ...process.env, DSH_HOME: join(__dirname, 'utility-process'), TEST_MODE: 'success' },
+    env: { ...process.env, DSH_HOME: join(__dirname, 'utility-process'), TEST_MODE: 'success', INSIGHT_DESKTOP_SERVICE_ENVIRONMENT: 'test' },
     stdio: 'pipe'
   })
   let requests = 0

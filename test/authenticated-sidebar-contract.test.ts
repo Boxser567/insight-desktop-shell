@@ -42,14 +42,16 @@ describe('authenticated single-sidebar integration contract', () => {
     }
   })
 
-  it('prepares a version-six Profile with protected first-party integration', async () => {
+  it('prepares a version-seven Profile with Core-owned built-ins', async () => {
     const prepare = await readFile('scripts/prepare-bundled-profile.mjs', 'utf8')
     const installationOwned = await readFile('src/main/state/installation-owned-bundles.ts', 'utf8')
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
 
     expect(prepare).not.toContain('const SIDEBAR_VERSION')
-    expect(prepare).toContain("const MARKET_VERSION = '1.46.1'")
-    expect(prepare).toContain("const DEFAULT_PROFILE_VERSION = 6")
+    expect(prepare).not.toContain('patchBundledMarket')
+    expect(prepare).not.toContain('dshmarket')
+    expect(prepare).not.toContain('@changfenhuang/dsh-genui')
+    expect(prepare).toContain('const DEFAULT_PROFILE_VERSION = 7')
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
     expect(prepare).toContain("packages.includes('packages/*')")
@@ -68,15 +70,15 @@ describe('authenticated single-sidebar integration contract', () => {
     const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
     expect(manifest.dependencies['dsh-better-sidebar']).toBeUndefined()
-    expect(manifest.dependencies.dshmarket).toBe('1.46.1')
+    expect(manifest.dependencies.dshmarket).toBeUndefined()
+    expect(manifest.dependencies['@changfenhuang/dsh-genui']).toBeUndefined()
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
-    expect(manifest.dsh.profile.bundles).toContain('dshmarket')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(6)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(7)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)
-    expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(true)
+    expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(false)
     expect(manifest.dependencies).not.toHaveProperty('dsh-at-file')
     expect(manifest.dsh.profile.bundles).not.toContain('dsh-at-file')
     expect(JSON.stringify(manifest)).not.toMatch(/Downloads|\/private\/tmp|[A-Za-z]:\\\\/u)

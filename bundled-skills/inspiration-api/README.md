@@ -109,7 +109,7 @@ const parsed = await parseCase({
 
 ## API 端点
 
-- 基础 URL: `http://gapi-test.idealead.com/material-server`
+- 基础 URL: Dev 为 `http://gapi-test.idealead.com/material-server`，编译版为 `https://gapi.idealead.com/material-server`
 - 标签查询：`GET /tag/getTag?category={category}`
 - 案例列表：`POST /case/query`
 - 案例详情：`GET /case/detail?caseId={id}`

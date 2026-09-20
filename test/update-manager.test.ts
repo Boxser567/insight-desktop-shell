@@ -478,11 +478,11 @@ describe('desktop update manager', () => {
     expect(openExternal).toHaveBeenCalledTimes(2)
   })
 
-  it('verifies the downloaded size and SHA512 before allowing installation', async () => {
+  it('verifies the downloaded size and immediately starts installation', async () => {
     const downloadedBytes = Buffer.from('verified installer')
     const release = resolvedRelease({ downloadedBytes })
     const executor = new FakeExecutor(release.manifest.version)
-    const { manager, userData } = await setup({ release, executor })
+    const { manager, userData, prepareToInstall } = await setup({ release, executor })
     const downloadedFile = join(userData, 'app.zip')
     await writeFile(downloadedFile, downloadedBytes)
     executor.download.mockImplementation(async () => {
@@ -493,7 +493,9 @@ describe('desktop update manager', () => {
 
     await manager.download()
 
-    expect(manager.status()).toMatchObject({ phase: 'downloaded', availableVersion: '1.1.0' })
+    expect(manager.status()).toMatchObject({ phase: 'installing', availableVersion: '1.1.0' })
+    expect(prepareToInstall).toHaveBeenCalledOnce()
+    expect(executor.quitAndInstall).toHaveBeenCalledOnce()
     await expect(readFile(downloadedFile)).resolves.toEqual(downloadedBytes)
   })
 
@@ -543,7 +545,6 @@ describe('desktop update manager', () => {
       failure.executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile: failedFile })
     })
     await failure.manager.download()
-    await failure.manager.install()
 
     expect(failure.executor.quitAndInstall).not.toHaveBeenCalled()
     expect(failure.manager.status()).toMatchObject({ phase: 'error', message: 'workspace stop failed' })

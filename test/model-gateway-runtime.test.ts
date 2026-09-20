@@ -36,7 +36,7 @@ afterAll(async () => { if (fixture) await rm(fixture, { recursive: true, force: 
 describe.skipIf(!hasPreparedCore)('selected Core adapter with real Node parent/child IPC', () => {
   it('keeps the same session usable after length, truncated tools and context overflow', async () => {
     const peer = spawn(process.execPath, [join(fixture, 'session.mjs')], {
-      cwd: fixture, env: { ...process.env, DSH_HOME: join(fixture, 'session') }, stdio: ['ignore', 'pipe', 'pipe']
+      cwd: fixture, env: { ...process.env, DSH_HOME: join(fixture, 'session'), INSIGHT_DESKTOP_SERVICE_ENVIRONMENT: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
     })
     let output = ''
     peer.stdout.on('data', chunk => { output += chunk })
@@ -48,7 +48,7 @@ describe.skipIf(!hasPreparedCore)('selected Core adapter with real Node parent/c
     } finally { if (peer.exitCode === null) peer.kill() }
   }, 20000)
   it.runIf(process.platform === 'darwin')('uses real Electron utilityProcess IPC on macOS', async () => {
-    const environment = { ...process.env }
+    const environment: NodeJS.ProcessEnv = { ...process.env, INSIGHT_DESKTOP_SERVICE_ENVIRONMENT: 'test' }
     delete environment.ELECTRON_RUN_AS_NODE
     const child = spawn(String(electronExecutable), [join(fixture, 'electron.cjs')], {
       cwd: fixture, env: environment, stdio: ['ignore', 'pipe', 'pipe']
@@ -75,7 +75,7 @@ describe.skipIf(!hasPreparedCore)('selected Core adapter with real Node parent/c
         return 'test-user-center-token'
       })
       const peer = spawn(process.execPath, [join(fixture, 'run.mjs')], {
-        cwd: fixture, env: { ...process.env, DSH_HOME: join(fixture, mode), TEST_MODE: mode },
+        cwd: fixture, env: { ...process.env, DSH_HOME: join(fixture, mode), TEST_MODE: mode, INSIGHT_DESKTOP_SERVICE_ENVIRONMENT: 'test' },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
       })
       let output = ''

@@ -1,48 +1,35 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { profilePackageJsonPath } from './plugin-recovery'
 import { clearProfileInstallMarker, markProfileInstallComplete } from './profile-install-marker'
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 6
+const DEFAULT_PROFILE_VERSION = 7
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const MARKET_PACKAGE = 'dshmarket'
-const MARKET_VERSION = '1.46.1'
 const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
-const MARKET_POLICY_FILES = [
-  {
-    path: join('lib', 'patch.js'),
-    markers: [
-      '// Insight Desktop required capabilities.',
-      '/^dshmarket$/u'
-    ]
+const RETIRED_MARKET_PACKAGE = 'dshmarket'
+const RETIRED_MARKET_VERSION = '1.46.1'
+const RETIRED_GENUI_PACKAGE = '@changfenhuang/dsh-genui'
+const RETIRED_GENUI_SPEC = 'file:.insight-bundled-plugins/changfenhuang-dsh-genui-0.9.8.tgz'
+const COMMUNITY_PLUGIN_SPECS = {
+  memory: {
+    packageName: 'dsh-memory-evolve',
+    current: 'file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz',
+    managedVersions: ['0.1.0']
   },
-  {
-    path: join('lib', 'routes.js'),
-    markers: [
-      '// Insight Desktop hides required capabilities from market installed.',
-      '// Insight Desktop hides required capabilities from market updates.',
-      '// Insight Desktop protects required capabilities from market update.',
-      '// Insight Desktop protects required capabilities from market uninstall.',
-      '// Insight Desktop reports every market mutation as restart-blocking.',
-      '// Insight Desktop records an explicit market uninstall.',
-      '// Insight Desktop owns the bundled market version.'
-    ]
-  },
-  {
-    path: join('client', 'client.js'),
-    markers: [
-      '// Insight Desktop exposes the shell restart capability.',
-      '// Insight Desktop delegates Harness restarts to the desktop shell (v2).'
-    ]
+  prompt: {
+    packageName: 'dsh-prompt-enhance',
+    current: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz',
+    legacy: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.1.9.tgz',
+    managedVersions: ['0.1.9', '0.2.1']
   }
-] as const
+} as const
 
 interface ProfileManifest {
   dependencies?: Record<string, string>
@@ -139,64 +126,112 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
 }
 
-async function restoreBundledPackage(
-  source: string,
-  destination: string,
-  packageName: string,
-  expectedVersion: string
-): Promise<boolean> {
-  const sourcePackage = join(source, 'node_modules', packageName)
-  const destinationPackage = join(destination, 'node_modules', packageName)
-  const sourceManifest = await readPackageManifest(join(sourcePackage, 'package.json'))
-  if (sourceManifest?.version !== expectedVersion) {
-    throw new Error(`The bundled ${packageName} package does not match ${expectedVersion}.`)
-  }
-  const destinationManifest = await readPackageManifest(join(destinationPackage, 'package.json'))
-  if (destinationManifest?.version === expectedVersion) return false
-
-  await mkdir(dirname(destinationPackage), { recursive: true })
-  await rm(destinationPackage, { recursive: true, force: true })
-  await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
-  return true
-}
-
-async function refreshBundledMarketPolicy(source: string, destination: string): Promise<void> {
-  const sourcePackage = join(source, 'node_modules', MARKET_PACKAGE)
-  const destinationPackage = join(destination, 'node_modules', MARKET_PACKAGE)
-  const destinationManifest = await readPackageManifest(join(destinationPackage, 'package.json'))
-  if (destinationManifest === undefined) return
-
-  const sourceManifest = await readPackageManifest(join(sourcePackage, 'package.json'))
-  if (
-    sourceManifest?.version === undefined ||
-    sourceManifest.version !== destinationManifest.version
-  ) return
-
-  for (const policyFile of MARKET_POLICY_FILES) {
-    const content = await readFile(join(sourcePackage, policyFile.path), 'utf8')
-    if (policyFile.markers.some(marker => !content.includes(marker))) {
-      throw new Error(`The bundled market policy is incomplete: ${policyFile.path}`)
-    }
-    const destinationPath = join(destinationPackage, policyFile.path)
-    await mkdir(dirname(destinationPath), { recursive: true })
-    await writeFile(destinationPath, content, 'utf8')
-  }
-}
-
 export async function refreshPromptEnhanceCompatibility(source: string, destination: string): Promise<void> {
   const packagePath = join('node_modules', 'dsh-prompt-enhance')
   const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
   // Optional plugins stay removed, and user-upgraded versions retain their own client.
-  if (installed?.version !== '0.1.9') return
+  if (
+    installed?.version === undefined ||
+    !(COMMUNITY_PLUGIN_SPECS.prompt.managedVersions as readonly string[]).includes(installed.version)
+  ) return
   const bundled = await readPackageManifest(join(source, packagePath, 'package.json'))
-  if (bundled?.version !== '0.1.9') throw new Error('The bundled prompt-enhance compatibility version is invalid.')
+  if (bundled?.version !== '0.2.1') throw new Error('The bundled prompt-enhance compatibility version is invalid.')
   const clientPath = join(packagePath, 'lib', 'client.js')
   const client = await readFile(join(source, clientPath), 'utf8')
-  if (!client.includes('const imageCount = useInput((state) => state.attachmentIds.length);')) {
+  if (
+    !client.includes('const imageCount = useInput((state) => state.attachmentIds.length);') ||
+    !client.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel')
+  ) {
     throw new Error('The bundled prompt-enhance composer compatibility patch is missing.')
   }
   await mkdir(dirname(join(destination, clientPath)), { recursive: true })
   await writeFile(join(destination, clientPath), client, 'utf8')
+}
+
+async function refreshBundledCommunityPackages(
+  source: string,
+  destination: string,
+  refreshSameVersion = false
+): Promise<boolean> {
+  let changed = false
+  for (const plugin of [COMMUNITY_PLUGIN_SPECS.memory, COMMUNITY_PLUGIN_SPECS.prompt]) {
+    const packagePath = join('node_modules', plugin.packageName)
+    const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
+    if (
+      installed?.version === undefined ||
+      !(plugin.managedVersions as readonly string[]).includes(installed.version)
+    ) continue
+    const bundled = await readPackageManifest(join(source, packagePath, 'package.json'))
+    if (!bundled?.version || !existsSync(join(source, packagePath))) {
+      throw new Error(`The bundled ${plugin.packageName} package was not found.`)
+    }
+    if (
+      installed.version !== bundled.version ||
+      (refreshSameVersion && plugin.packageName === COMMUNITY_PLUGIN_SPECS.memory.packageName)
+    ) {
+      await rm(join(destination, packagePath), { recursive: true, force: true })
+      await mkdir(dirname(join(destination, packagePath)), { recursive: true })
+      await cp(join(source, packagePath), join(destination, packagePath), {
+        recursive: true,
+        verbatimSymlinks: true
+      })
+      changed = true
+    }
+  }
+  await refreshPromptEnhanceCompatibility(source, destination)
+  return changed
+}
+
+async function refreshBundledCommunityArchives(source: string, destination: string): Promise<boolean> {
+  const manifest = await readProfileManifest(join(destination, 'package.json'))
+  const archiveDirectory = join(destination, '.insight-bundled-plugins')
+  let changed = false
+
+  for (const plugin of [COMMUNITY_PLUGIN_SPECS.memory, COMMUNITY_PLUGIN_SPECS.prompt]) {
+    const packagePath = join('node_modules', plugin.packageName)
+    const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
+    const dependency = manifest?.dependencies?.[plugin.packageName]
+    const managed = (installed?.version !== undefined &&
+      (plugin.managedVersions as readonly string[]).includes(installed.version)) ||
+      dependency === plugin.current ||
+      ('legacy' in plugin && dependency === plugin.legacy)
+    if (!managed) continue
+
+    const archiveName = basename(plugin.current)
+    const sourceArchive = join(source, '.insight-bundled-plugins', archiveName)
+    const destinationArchive = join(archiveDirectory, archiveName)
+    if (!existsSync(sourceArchive)) {
+      throw new Error(`The bundled archive for ${plugin.packageName} was not found.`)
+    }
+    const sourceContents = await readFile(sourceArchive)
+    let archiveNeedsRefresh = true
+    try {
+      archiveNeedsRefresh = !sourceContents.equals(await readFile(destinationArchive))
+    } catch {
+      // A missing or unreadable archive is repaired from the shipped copy.
+    }
+    if (archiveNeedsRefresh) {
+      await mkdir(archiveDirectory, { recursive: true })
+      await cp(sourceArchive, destinationArchive)
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+async function removeRetiredBundledPackages(destination: string): Promise<void> {
+  const retiredPackages = [
+    { name: RETIRED_MARKET_PACKAGE, version: RETIRED_MARKET_VERSION },
+    { name: RETIRED_GENUI_PACKAGE, version: '0.9.8' }
+  ] as const
+  for (const retired of retiredPackages) {
+    const packagePath = join(destination, 'node_modules', retired.name)
+    const installed = await readPackageManifest(join(packagePath, 'package.json'))
+    if (installed?.version === retired.version) {
+      await rm(packagePath, { recursive: true, force: true })
+    }
+  }
 }
 
 async function ensureWorkspacePackagePattern(profileDirectory: string): Promise<void> {
@@ -226,26 +261,35 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     delete manifest.dependencies[SIDEBAR_PACKAGE]
     changed = true
   }
-  for (const [name, version] of [
-    [MARKET_PACKAGE, MARKET_VERSION],
-    [DESKTOP_INTEGRATION_PACKAGE, 'workspace:*']
-  ] as const) {
-    if (manifest.dependencies[name] === version) continue
-    manifest.dependencies[name] = version
+  const marketWasManaged = manifest.dependencies[RETIRED_MARKET_PACKAGE] === RETIRED_MARKET_VERSION
+  if (marketWasManaged) {
+    delete manifest.dependencies[RETIRED_MARKET_PACKAGE]
+    changed = true
+  }
+  if (manifest.dependencies[RETIRED_GENUI_PACKAGE] === RETIRED_GENUI_SPEC) {
+    delete manifest.dependencies[RETIRED_GENUI_PACKAGE]
+    changed = true
+  }
+  const promptDependency = manifest.dependencies[COMMUNITY_PLUGIN_SPECS.prompt.packageName]
+  if (promptDependency === COMMUNITY_PLUGIN_SPECS.prompt.legacy) {
+    manifest.dependencies[COMMUNITY_PLUGIN_SPECS.prompt.packageName] = COMMUNITY_PLUGIN_SPECS.prompt.current
+    changed = true
+  }
+  if (manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] !== 'workspace:*') {
+    manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'
     changed = true
   }
   manifest.dsh ??= {}
   manifest.dsh.profile ??= {}
-  const managed = new Set([SIDEBAR_PACKAGE, MARKET_PACKAGE, DESKTOP_INTEGRATION_PACKAGE])
-  const remaining = (manifest.dsh.profile.bundles ?? []).filter(bundle => !managed.has(bundle))
-  const coreEnd = remaining.reduce(
-    (end, bundle, index) => CORE_BUNDLES.includes(bundle) ? index + 1 : end,
-    0
+  const dependencies = manifest.dependencies
+  const remaining = (manifest.dsh.profile.bundles ?? []).filter(bundle =>
+    bundle !== SIDEBAR_PACKAGE &&
+    !(marketWasManaged && bundle === RETIRED_MARKET_PACKAGE) &&
+    !(dependencies[RETIRED_GENUI_PACKAGE] === undefined && bundle === RETIRED_GENUI_PACKAGE) &&
+    bundle !== DESKTOP_INTEGRATION_PACKAGE
   )
   const bundles = [
-    ...remaining.slice(0, coreEnd),
-    MARKET_PACKAGE,
-    ...remaining.slice(coreEnd),
+    ...remaining,
     DESKTOP_INTEGRATION_PACKAGE
   ]
   if (JSON.stringify(manifest.dsh.profile.bundles ?? []) !== JSON.stringify(bundles)) {
@@ -266,22 +310,18 @@ async function restoreManagedProfile(
   source: string,
   destination: string,
   dshHome: string,
-  forceInstall: boolean
+  forceInstall: boolean,
+  refreshSameVersion = false
 ): Promise<void> {
   await copyDesktopIntegration(source, destination)
   // Retire the installation-owned sidebar; the Core web app supplies the native UI.
   await rm(join(destination, 'node_modules', SIDEBAR_PACKAGE), { recursive: true, force: true })
-  const marketRestored = await restoreBundledPackage(
-    source,
-    destination,
-    MARKET_PACKAGE,
-    MARKET_VERSION
-  )
+  await removeRetiredBundledPackages(destination)
+  const communityPackagesRestored = await refreshBundledCommunityPackages(source, destination, refreshSameVersion)
+  const communityArchivesRestored = await refreshBundledCommunityArchives(source, destination)
   const manifestRestored = await restoreManagedProfileManifest(destination)
   await ensureWorkspacePackagePattern(destination)
-  await refreshBundledMarketPolicy(source, destination)
-  await refreshPromptEnhanceCompatibility(source, destination)
-  if (forceInstall || marketRestored || manifestRestored) {
+  if (forceInstall || communityPackagesRestored || communityArchivesRestored || manifestRestored) {
     await clearProfileInstallMarker(dshHome)
   }
 }
@@ -313,17 +353,23 @@ export async function initializeBundledProfile(
   }
 
   if (current.insightDesktop?.defaultProfileVersion === 2) {
-    await restoreManagedProfile(source, destination, dshHome, true)
+    await restoreManagedProfile(source, destination, dshHome, true, true)
     return true
   }
 
   if (current.insightDesktop?.defaultProfileVersion === PRE_MARKET_PROFILE_VERSION) {
-    await restoreManagedProfile(source, destination, dshHome, false)
+    await restoreManagedProfile(source, destination, dshHome, false, true)
     return true
   }
 
-  if ([4, 5, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
-    await restoreManagedProfile(source, destination, dshHome, false)
+  if ([4, 5, 6, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
+    await restoreManagedProfile(
+      source,
+      destination,
+      dshHome,
+      false,
+      current.insightDesktop?.defaultProfileVersion !== DEFAULT_PROFILE_VERSION
+    )
     return true
   }
 

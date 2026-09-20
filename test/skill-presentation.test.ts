@@ -2,7 +2,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createSkillCatalog, filterSkills, toggleSkillDraft } from '../packages/insight-desktop-integration/src/skill-catalog'
+import { BUNDLED_SKILL_PRESENTATIONS } from '../packages/insight-desktop-integration/src/bundled-skill-presentations'
 import { parseSkillPresentation, skillDisplayName, skillShortDescription } from '../packages/insight-desktop-integration/src/skill-presentation'
+import { en, zh } from '../packages/insight-desktop-integration/src/client/locales'
 
 const native = { name: 'creator-recommendation', description: 'Original model-facing instructions', path: '/skills/creator-recommendation/SKILL.md' }
 const presentation = { displayName: '达人推荐', shortDescription: '发现并筛选合适达人。' }
@@ -23,6 +25,11 @@ function setup(entries: { name: string; description: string; path?: string }[] =
 }
 
 describe('skill UI-only metadata', () => {
+  it('uses the product-facing expert skills label when none are selected', () => {
+    expect(zh['skill.placeholder']).toBe('专家技能')
+    expect(en['skill.placeholder']).toBe('Expert Skills')
+  })
+
   it('whitelists presentation fields without accepting identity or instructions', () => {
     expect(parseSkillPresentation(JSON.stringify({ ...presentation, name: 'override', description: 'override', pickerVisible: false }))).toEqual(presentation)
     expect(parseSkillPresentation('{"displayName":" 名称 ","shortDescription":" 简介 "}')).toEqual({ displayName: '名称', shortDescription: '简介' })
@@ -48,6 +55,7 @@ describe('skill UI-only metadata', () => {
       expect(ui).toEqual(JSON.parse(text))
       expect(ui.displayName).toBeTruthy()
       expect(ui.shortDescription).toBeTruthy()
+      expect(BUNDLED_SKILL_PRESENTATIONS[entry.name]).toEqual(ui)
     }
   })
 })
@@ -85,6 +93,17 @@ describe('native catalog presentation adapter', () => {
     expect(skillDisplayName(skills[0]!)).toBe(native.name)
     expect(skillShortDescription(skills[0]!)).toBe(native.description)
     expect(skills[1]).toMatchObject(presentation)
+  })
+
+  it('uses the bundled presentation when the runtime sidecar read is unavailable', async () => {
+    const { readBytes, catalog, session } = setup([{
+      ...native,
+      path: '/Users/app/bundled-skills/creator-recommendation/SKILL.md'
+    }])
+    readBytes.mockRejectedValue(new Error('workspace resource unavailable'))
+    const [skill] = await catalog.list(session)
+    expect(skill).toMatchObject(BUNDLED_SKILL_PRESENTATIONS['creator-recommendation']!)
+    expect(filterSkills([skill!], '达人推荐')).toEqual([skill])
   })
 
   it('rejects unsuccessful, partial, oversized, malformed base64 and invalid UTF-8 responses', async () => {

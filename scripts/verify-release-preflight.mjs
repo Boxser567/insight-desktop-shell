@@ -179,8 +179,8 @@ function validateServiceEnvironment(value, channel) {
       throw new Error(`Desktop service environment ${name} endpoints are invalid.`)
     }
   }
-  if (channel === 'stable' && value.releaseEnvironment !== 'production') {
-    throw new Error('Stable releases require the production desktop service environment.')
+  if (value.releaseEnvironment !== 'production') {
+    throw new Error('Packaged releases require the production desktop service environment.')
   }
   return value.releaseEnvironment
 }

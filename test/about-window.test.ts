@@ -28,7 +28,7 @@ describe('desktop About window', () => {
       releaseDate: '2026-09-10'
     })).toEqual({
       productName: '因赛AI',
-      poweredBy: 'Powered by InClaw & OWL',
+      poweredBy: 'Powered by InClaw',
       versionText: '版本 1.0.0-rc.2',
       releaseText: '发布于 2026年9月10日',
       copyright: '© 因赛AI'
@@ -46,6 +46,7 @@ describe('desktop About window', () => {
     expect(aboutWindowOptions({
       parent,
       icon: '/app/icon.png',
+      preload: '/app/secondary-theme.cjs',
       platform: 'win32'
     })).toMatchObject({
       width: 380,
@@ -64,12 +65,14 @@ describe('desktop About window', () => {
         nodeIntegration: false,
         sandbox: true,
         webSecurity: true,
+        preload: '/app/secondary-theme.cjs',
         partition: 'insight-about'
       }
     })
     expect(aboutWindowOptions({
       parent,
       icon: '/app/icon.png',
+      preload: '/app/secondary-theme.cjs',
       platform: 'darwin'
     })).not.toHaveProperty('autoHideMenuBar')
   })

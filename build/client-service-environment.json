@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseEnvironment": "test",
+  "releaseEnvironment": "production",
   "environments": {
     "test": {
       "authOrigin": "https://gapi-test.insight-aigc.com",

@@ -59,9 +59,9 @@ SDK 自动处理 accepted/heartbeat/result NDJSON。同步代理不是持久化�
 ## 后台协议与配置
 
 后端地址与 `build/client-service-environment.json` 选择的 `authOrigin` 同域，固定服务前缀：
-`/insight-harness-service`。测试环境完整地址：
+`/insight-harness-service`。Dev 使用测试地址，编译版使用生产地址：
 
-`POST https://gapi-test.insight-aigc.com/insight-harness-service/api/skill-proxy/{connection_id}`
+`POST https://gapi.insight-aigc.com/insight-harness-service/api/skill-proxy/{connection_id}`
 
 请求：`{"method":"POST","path":"/v1/proxy","query":{},"body":{...}}`。
 本地代理只接受 connection_id，不允许指定其他后端 URL；上游地址和方法/path 白名单由后台控制。

@@ -21,7 +21,7 @@ export type InsightDesktopKey =
   | 'settings.platform.linux'
 
 export const zh: Record<InsightDesktopKey, string> = {
-  'skill.placeholder': '请选择 Skill',
+  'skill.placeholder': '专家技能',
   'skill.title': 'Skill',
   'skill.selected': '已选技能',
   'skill.search': '搜索技能',
@@ -43,7 +43,7 @@ export const zh: Record<InsightDesktopKey, string> = {
 }
 
 export const en: Record<InsightDesktopKey, string> = {
-  'skill.placeholder': 'Select Skill',
+  'skill.placeholder': 'Expert Skills',
   'skill.title': 'Skill',
   'skill.selected': 'Selected skills',
   'skill.search': 'Search skills',

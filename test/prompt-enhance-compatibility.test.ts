@@ -8,6 +8,7 @@ import { refreshPromptEnhanceCompatibility } from '../src/main/state/bundled-pro
 
 const original = 'const imageCount = useInput((state) => state.imageIds.length);'
 const adapted = 'const imageCount = useInput((state) => state.attachmentIds.length);'
+const themed = `${adapted}\nbody:not([data-ds-dark-theme]) .dsh-pe-panel { color: black; }`
 describe('prompt-enhance Core attachment compatibility', () => {
   it('adapts the removed input field and is idempotent', () => {
     expect(adaptPromptEnhanceClient(original)).toBe(adapted)
@@ -22,12 +23,12 @@ describe('prompt-enhance Core attachment compatibility', () => {
     try {
       for (const profile of [source, destination]) {
         await mkdir(join(profile, relative, 'lib'), { recursive: true })
-        await writeFile(join(profile, relative, 'package.json'), JSON.stringify({ version: '0.1.9' }))
+        await writeFile(join(profile, relative, 'package.json'), JSON.stringify({ version: '0.2.1' }))
       }
-      await writeFile(join(source, relative, 'lib/client.js'), adapted)
+      await writeFile(join(source, relative, 'lib/client.js'), themed)
       await writeFile(join(destination, relative, 'lib/client.js'), original)
       await refreshPromptEnhanceCompatibility(source, destination)
-      expect(await readFile(join(destination, relative, 'lib/client.js'), 'utf8')).toBe(adapted)
+      expect(await readFile(join(destination, relative, 'lib/client.js'), 'utf8')).toBe(themed)
       await writeFile(join(destination, relative, 'package.json'), JSON.stringify({ version: '0.2.0' }))
       await writeFile(join(destination, relative, 'lib/client.js'), 'user upgraded')
       await refreshPromptEnhanceCompatibility(source, destination)

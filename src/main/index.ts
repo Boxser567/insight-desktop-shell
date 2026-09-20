@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, unwatchFile, watchFile } from 'node:fs'
 import { parse } from 'yaml'
 import { mkdir } from 'node:fs/promises'
 import { clearStaleLoopbackHttpCache } from './cache-maintenance'
@@ -102,6 +102,7 @@ import {
 import packageJson from '../../package.json'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
+type DesktopThemePreference = 'light' | 'dark' | 'system'
 type SafeModeAction =
   | { type: 'uninstall'; plugins: string[] }
   | { type: 'agent' }
@@ -143,6 +144,8 @@ let workspaceLifecycle: WorkspaceLifecycle | undefined
 let updateManager: UpdateManager | undefined
 let updateWindowController: UpdateWindowController<BrowserWindow> | undefined
 let aboutWindowController: AboutWindowController<BrowserWindow> | undefined
+let resolvedHarnessThemeDark = false
+let themeSettingsWatchPath: string | undefined
 let disposeUpdateIpc: (() => void) | undefined
 let disposeStartupIpc: (() => void) | undefined
 let startupTracker: StartupTracker | undefined
@@ -292,6 +295,7 @@ function applyWorkspaceForCurrentSession(): void {
         return { scope, dshHome: paths.harness }
       })()
     : undefined
+  watchHarnessThemePreference(workspaceAccount?.dshHome)
   void workspaceLifecycle.apply(view, workspaceAccount).catch(showUnexpectedError)
 }
 
@@ -344,7 +348,8 @@ function createUpdateWindowController(): UpdateWindowController<BrowserWindow> {
       const window = new BrowserWindow(updateWindowOptions({
         parent,
         preload: join(import.meta.dirname, '../preload/update.cjs'),
-        icon: desktopIconPath()
+        icon: desktopIconPath(),
+        backgroundColor: resolvedHarnessThemeDark ? '#202024' : '#f8f8f6'
       }))
       suppressWindowsSecondaryMenu(window)
       secureWebContents(window.webContents, isTrustedUpdateUrl)
@@ -366,7 +371,12 @@ function createAboutWindowController(): AboutWindowController<BrowserWindow> {
   return new AboutWindowController({
     create: () => {
       const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
-      const window = new BrowserWindow(aboutWindowOptions({ parent, icon: desktopIconPath() }))
+      const window = new BrowserWindow(aboutWindowOptions({
+        parent,
+        icon: desktopIconPath(),
+        preload: join(import.meta.dirname, '../preload/secondary-theme.cjs'),
+        backgroundColor: resolvedHarnessThemeDark ? '#202024' : '#f7f7f8'
+      }))
       suppressWindowsSecondaryMenu(window)
       secureWebContents(window.webContents, isTrustedAboutUrl)
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -485,6 +495,7 @@ function windowsTitleBarOverlay(isDark: boolean): Electron.TitleBarOverlayOption
 }
 
 function applyWindowChromeTheme(window: BrowserWindow, isDark: boolean): void {
+  resolvedHarnessThemeDark = isDark
   if (window.isDestroyed()) return
   window.setBackgroundColor(isDark ? '#141416' : '#ffffff')
   if (process.platform === 'win32') {
@@ -492,6 +503,11 @@ function applyWindowChromeTheme(window: BrowserWindow, isDark: boolean): void {
     window.setTitleBarOverlay(windowsTitleBarOverlay(isDark))
     if (windowsMenuView && !windowsMenuView.webContents.isDestroyed()) {
       windowsMenuView.webContents.send('desktop-titlebar:theme-changed', isDark)
+    }
+  }
+  for (const secondary of [aboutWindowController?.window(), updateWindowController?.window()]) {
+    if (secondary && !secondary.isDestroyed()) {
+      secondary.webContents.send('desktop-secondary-theme:changed', isDark)
     }
   }
 }
@@ -639,9 +655,8 @@ function configureApplicationLocale(): void {
   app.commandLine.appendSwitch('lang', harnessLocale() === 'zh' ? 'zh-CN' : 'en-US')
 }
 
-function harnessThemePreference(): 'light' | 'dark' | 'system' {
+function harnessThemePreference(dshHome = currentDshHome()): DesktopThemePreference {
   try {
-    const dshHome = currentDshHome()
     if (!dshHome) return 'system'
     const settings = parse(
       readFileSync(join(dshHome, 'settings.yaml'), 'utf8')
@@ -653,6 +668,40 @@ function harnessThemePreference(): 'light' | 'dark' | 'system' {
   } catch {
     return 'system'
   }
+}
+
+function nativeThemeSourceForResolvedTheme(
+  persisted: DesktopThemePreference,
+  nativeIsDark: boolean,
+  rendererIsDark: boolean
+): DesktopThemePreference {
+  if (persisted === 'system' && nativeIsDark === rendererIsDark) return 'system'
+  return rendererIsDark ? 'dark' : 'light'
+}
+
+function applyNativeThemePreference(preference: DesktopThemePreference): void {
+  nativeTheme.themeSource = preference
+  const isDark = nativeTheme.shouldUseDarkColors
+  if (mainWindow && !mainWindow.isDestroyed()) applyWindowChromeTheme(mainWindow, isDark)
+  else resolvedHarnessThemeDark = isDark
+}
+
+function stopHarnessThemePreferenceWatch(): void {
+  if (themeSettingsWatchPath) unwatchFile(themeSettingsWatchPath)
+  themeSettingsWatchPath = undefined
+}
+
+function watchHarnessThemePreference(dshHome?: string): void {
+  const nextPath = dshHome ? join(dshHome, 'settings.yaml') : undefined
+  if (nextPath === themeSettingsWatchPath) return
+  stopHarnessThemePreferenceWatch()
+  if (!nextPath || !dshHome) return
+  themeSettingsWatchPath = nextPath
+  applyNativeThemePreference(harnessThemePreference(dshHome))
+  watchFile(nextPath, { interval: 250, persistent: false }, () => {
+    if (themeSettingsWatchPath !== nextPath) return
+    applyNativeThemePreference(harnessThemePreference(dshHome))
+  })
 }
 
 function isPluginRecoveryPage(url: string): boolean {
@@ -916,6 +965,7 @@ function launchHarness(): Promise<void> {
     safeModeVisible = false
     const dshHome = requireCurrentDshHome()
     nativeTheme.themeSource = harnessThemePreference()
+    resolvedHarnessThemeDark = nativeTheme.shouldUseDarkColors
     beginStartup()
     await showSplash()
     // The repair only holds on a stopped Harness, and a restart still has the
@@ -949,7 +999,7 @@ function launchHarness(): Promise<void> {
       return
     }
     // pnpm can replace a repaired managed package with the clean registry copy.
-    // Reapply the desktop-owned market policy before Harness loads it.
+    // Reconcile Shell-owned Profile entries before Harness loads them.
     await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
     startupTracker?.transition('auditing-runtime', '正在检查运行环境…')
     await reportProfileConsistency(dshHome)
@@ -969,6 +1019,7 @@ function launchSafeHarness(): Promise<void> {
     safeModeVisible = true
     const dshHome = requireCurrentDshHome()
     nativeTheme.themeSource = harnessThemePreference()
+    resolvedHarnessThemeDark = nativeTheme.shouldUseDarkColors
     beginStartup()
     await showSplash()
     await runtime.stop()
@@ -1033,21 +1084,31 @@ function registerHarnessHandlers(): void {
 
   ipcMain.removeHandler('desktop-titlebar:close-menu')
   ipcMain.handle('desktop-titlebar:close-menu', (event) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     if (mainWindow && !mainWindow.isDestroyed()) setWindowsMenuOpen(mainWindow, false, true)
     return { ok: true }
   })
 
   ipcMain.removeHandler('desktop-titlebar:set-theme')
   ipcMain.handle('desktop-titlebar:set-theme', (event, isDark: unknown) => {
-    assertTrustedMainWindowEvent(event)
+    assertTrustedHarnessEvent(event)
     if (typeof isDark !== 'boolean') {
       throw new Error('The DSH Desktop titlebar theme must be a boolean.')
     }
-    if (process.platform === 'win32' && mainWindow) {
-      applyWindowChromeTheme(mainWindow, isDark)
-    }
+    nativeTheme.themeSource = nativeThemeSourceForResolvedTheme(
+      harnessThemePreference(),
+      nativeTheme.shouldUseDarkColors,
+      isDark
+    )
+    if (mainWindow) applyWindowChromeTheme(mainWindow, isDark)
+    else resolvedHarnessThemeDark = isDark
     return { ok: true }
+  })
+
+  ipcMain.removeHandler('desktop-secondary-theme:get')
+  ipcMain.handle('desktop-secondary-theme:get', (event) => {
+    assertTrustedSecondaryWindowEvent(event)
+    return { isDark: resolvedHarnessThemeDark }
   })
 }
 
@@ -1086,6 +1147,18 @@ function assertTrustedMainWindowEvent(event: IpcMainInvokeEvent): void {
     event.senderFrame !== mainWindow.webContents.mainFrame
   ) {
     throw new Error('This action is only available from the main DSH Desktop window.')
+  }
+}
+
+function assertTrustedSecondaryWindowEvent(event: IpcMainInvokeEvent): void {
+  const about = aboutWindowController?.window()
+  const update = updateWindowController?.window()
+  const fromAbout = about && !about.isDestroyed() &&
+    event.sender === about.webContents && event.senderFrame === about.webContents.mainFrame
+  const fromUpdate = update && !update.isDestroyed() &&
+    event.sender === update.webContents && event.senderFrame === update.webContents.mainFrame
+  if (!fromAbout && !fromUpdate) {
+    throw new Error('This action is only available from a trusted secondary window.')
   }
 }
 
@@ -1763,6 +1836,7 @@ async function bootstrap(): Promise<void> {
   if (process.platform === 'darwin') app.dock?.setIcon(desktopIconPath())
   launchDirectory = join(insightRoot(), 'runtime-unconfigured')
   nativeTheme.themeSource = harnessThemePreference()
+  resolvedHarnessThemeDark = nativeTheme.shouldUseDarkColors
   const window = createWindow()
   aboutWindowController = createAboutWindowController()
   runtime = new HarnessRuntime({
@@ -1771,6 +1845,7 @@ async function bootstrap(): Promise<void> {
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
     bundledSkillDir: app.isPackaged ? join(process.resourcesPath, 'bundled-skills') : join(app.getAppPath(), 'bundled-skills'),
+    serviceEnvironment: developmentBuild ? 'test' : 'production',
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
     dshHome: join(insightRoot(), 'runtime-unconfigured'),
     logPath: join(app.getPath('logs'), 'harness.log'),
@@ -2020,6 +2095,7 @@ if (isDaemonLaunch(process.env, process.platform)) {
       if (quitting || !runtime) return
       event.preventDefault()
       quitting = true
+      stopHarnessThemePreferenceWatch()
       disposeUpdateIpc?.()
       disposeUpdateIpc = undefined
       disposeStartupIpc?.()
