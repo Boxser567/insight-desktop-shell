@@ -67,7 +67,7 @@ index 053772f..7e643d4 100644
    !insertmacro handleUninstallResult HKEY_CURRENT_USER
  ${endIf}
 diff --git a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
-index c3f4f11..2289e5e 100644
+index c3f4f11..5ca3e7e 100644
 --- a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
 +++ b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
 @@ -41,7 +41,7 @@ Function un.atomicRMDir
@@ -140,7 +140,7 @@ index c3f4f11..2289e5e 100644
  
      continue:
        FindNext $R1 $R2
-@@ -162,19 +162,21 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+@@ -162,19 +162,22 @@ Section "un.${UNINSTALL_SECTION_NAME}"
      !insertmacro customRemoveFiles
    !else
      ${if} ${isUpdated}
@@ -150,6 +150,7 @@ index c3f4f11..2289e5e 100644
        Push ""
        Call un.atomicRMDir
        Pop $R0
++      !insertmacro DshUpdateLog "atomic-relocation-return result=$R0"
  
        ${if} $R0 != 0
 +        !insertmacro DshUpdateLog "atomic-relocation-failed path=$R0 destination=$PLUGINSDIR\old-install"
@@ -163,14 +164,18 @@ index c3f4f11..2289e5e 100644
  
          Abort `Can't rename "$INSTDIR" to "$PLUGINSDIR\old-install".`
        ${endif}
-@@ -184,7 +186,11 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+@@ -184,7 +187,15 @@ Section "un.${UNINSTALL_SECTION_NAME}"
      # Move out of $INSTDIR so it can be removed
      SetOutPath $TEMP
      # Remove all files (or remaining shallow directories from the block above)
 -    RMDir /r $INSTDIR
++    ClearErrors
 +    RMDir /r "$DshUninstallRoot"
++    !insertmacro DshUpdateLog "uninstall-root-remove-return directory=$INSTDIR"
 +    ${If} ${isUpdated}
++      ClearErrors
 +      RMDir /r "$DshUninstallStage\old-install"
++      !insertmacro DshUpdateLog "uninstall-stage-remove-return directory=$PLUGINSDIR\old-install"
 +    ${EndIf}
 +    !insertmacro DshUpdateLog "uninstall-remove-return directory=$INSTDIR"
    !endif

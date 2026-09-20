@@ -63,6 +63,11 @@ try {
   const next = await build('0.0.2', path.join(repo, 'build/installer.nsh'))
   run(next, ['/S', '/currentuser', `/D=${install}`])
   if ((await readFile(path.join(install, relative), 'utf8')) !== 'new-payload') throw new Error('Upgrade payload mismatch')
+  const logDir = path.join(tmpdir(), 'insight-desktop-update-logs')
+  const logs = (await Promise.all((await readdir(logDir)).filter(n => n.endsWith('.log')).map(async n => (await readFile(path.join(logDir, n))).toString('utf16le')))).join('\n')
+  if (!logs.includes('compat-uninstaller-selected') || !logs.includes('atomic-relocation-return result=0') || !logs.includes('install-complete')) {
+    throw new Error('Expected compatibility atomic upgrade stages missing')
+  }
   await writeFile(path.join(evidence, 'result.json'), JSON.stringify({ sourceLength: path.join(install, relative).length, upgraded: true, product, identity: 'com.insight-aigc.upgrade-probe' }, null, 2))
 } finally {
   for (let i = 0; i < baselineFiles.length; i++) await writeFile(baselineFiles[i], patched[i])
