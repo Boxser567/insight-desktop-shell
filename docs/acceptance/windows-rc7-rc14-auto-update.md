@@ -2,22 +2,20 @@
 
 状态：rc14 手动覆盖升级已由用户确认成功、会话保留。自动升级尚未开始。用户同意复用现有 OSS/CDN 做内测，要求避免主动弹窗并尽量减少对 Mac 的影响。
 
-## 已确定的发布方式（2026-09-20）
+## 已确定的发布方式（2026-09-20，用户调整为仅 Windows）
 
-- 复用 `https://updates.insight-aigc.com`，不要求新增域名或修改单机更新配置。
-- Candidate 的 `desktop/candidate/current.json` 是跨平台共享指针，当前不能只向一台 Windows 宣告版本。
-- 仅 Windows 的 Manifest 会导致 Mac 检查时报缺少目标产物；因此补齐 rc14 全平台产物并签名后再 stage/promote，不改更新协议。
-- 已触发全平台构建：https://github.com/Boxser567/insight-desktop-shell/actions/runs/35493516218
-  源码为 `edeb64316641f08604f0d13be82aa41d68448b63`，与已手动验收的 Windows run 35491806028 相同。重新构建的安装器不能假定与之前逐字节相同；自动验收应记录新产物哈希。
-- 发布策略保持 `optional`、最低支持版本 `1.0.0-rc.1`，不移动 Stable 指针。
-- rc7 已有启动后 15–30 秒和每 6 小时的后台检查；不能声称只有点击检查才访问更新源。
-- rc7 的 `autoDownload=false`、`autoInstallOnAppQuit=false`；更新 IPC 只广播状态，更新窗口由用户操作打开。现有普通更新入口不等于主动弹窗。
-- Mac 可能出现非阻塞更新入口，手动检查也可发现 rc14；不承诺 Mac 完全不可见。无需为本次验收新增客户端通知机制。
-- 构建完成后须校验完整清单、签名、各平台文件与策略，再上传 OSS、核验 CDN 并切换 Candidate 指针。目前尚未上传或切换。
+- 用户取消全平台构建 run 35493516218，明确要求优先快速验收 Windows，暂不处理 Mac。
+- 复用 `https://updates.insight-aigc.com` 和成功构建 run 35491806028 的原始 `windows-x64` 安装器、blockmap、latest.yml，不重新编译。
+- 产物源码为 `edeb64316641f08604f0d13be82aa41d68448b63`。签名工作流验证原始构建成功、仓库/工作流身份、版本及可选更新策略，并按原始提交写入 Manifest。
+- 发布工具已通过 PR #3 支持 `windows-x64` Candidate 范围；Stable 仍必须包含全平台产物。签名和 OSS OIDC 权限不变。
+- Candidate 的 `desktop/candidate/current.json` 跨平台共享；切换到仅 Windows 清单后，Mac 检查会报告缺少目标产物。这是用户本次优先 Windows 验收所接受的临时限制，不能称为全平台可发布。
+- 策略保持 `optional`、最低支持版本 `1.0.0-rc.1`，不移动 Stable 指针。
+- rc7 已有启动后 15–30 秒和每 6 小时的后台检查。`autoDownload=false`、`autoInstallOnAppQuit=false`，更新窗口由用户操作打开；本次不增加主动弹窗。
+- 签名工作流 run 35494042276 成功；stage run 35494113269、promote run 35494212767 均成功。
 
 ## 更新源就绪标准
 
-`desktop/releases/v1.0.0-rc.14/` 中包含完整全平台产物及签名清单；签名与客户端已有公钥匹配。指针与 Manifest 版本一致，Windows 的 `latest.yml`、安装器和 blockmap 哈希正确。沿用发布工作流验证，不绕过签名、TLS 或覆盖不可变资产。
+`desktop/releases/v1.0.0-rc.14/` 中包含完整 Windows 产物及签名清单；签名与客户端已有公钥匹配。指针与 Manifest 版本一致，Windows 的 `latest.yml`、安装器和 blockmap 哈希正确。沿用发布工作流验证，不绕过签名、TLS 或覆盖不可变资产。
 
 ## 数据保护与执行顺序
 
@@ -30,4 +28,13 @@
 6. 保存主安装器与兼容卸载器两份日志；确认 rc14 版本、测试会话、基本对话、无遗留升级进程。区分自动重启与手动启动。
 7. 核验 `resources/update-distribution.json` 与发布内容一致；保留备份，完成退出后的数据恢复计划，不覆盖正在写入的数据。
 
-此文是准备清单，不是让用户现在执行卸载的指令。全平台构建、签名、OSS/CDN 和 Candidate 指针核验完成后，才通知用户执行。
+此文是准备清单，不是让用户现在执行卸载的指令。Windows 签名、OSS/CDN 和 Candidate 指针核验完成后，才通知用户执行。
+
+## 发布结果（2026-09-20 14:26 CST）
+
+- OSS `desktop/releases/v1.0.0-rc.14/` 已上传 5 个文件；Windows 安装器 297704834 字节。
+- Candidate 指针已从 `1.0.0-rc.12` 更新为 `1.0.0-rc.14`，发布工作流从 OSS 回读确认。Stable 未动。
+- GitHub rc14 已发布为 prerelease；原始 Windows 构建不变，签名通过客户端仓库公钥再次验证。
+- 发布工具 28 项相关测试及工作流契约校验通过。
+- 当前执行环境访问 CDN 的 HTTPS 握手失败，无法声称 CDN 已验证。OSS 发布成功不等于 Windows CDN 下载验收通过；请在目标 Windows 内手动检查并确认 rc14 后继续。
+- Windows 真实自动升级尚未验收。当前若仍运行 rc14，需要先备份用户数据并恢复 rc7 测试状态；同版本检查不能验证升级。
