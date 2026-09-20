@@ -471,6 +471,7 @@ describe('GitHub release contract', () => {
     expect(main).toContain("userDataDirectory ?? 'insight-desktop'")
     expect(main).not.toContain('insight-desktop-candidate')
     expect(main).toContain('const desktopChannel = applicationChannel()')
+    expect(main).toContain("serviceEnvironment: app.isPackaged ? 'production' : 'test'")
     expect(main).toContain("app.commandLine.appendSwitch('use-mock-keychain')")
     expect(main).toContain('persistCredentials: false')
     expect(candidateConfig).toContain("appId: 'com.insight-aigc.desktop'")

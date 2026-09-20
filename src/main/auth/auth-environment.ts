@@ -11,9 +11,8 @@ export interface AuthEnvironmentConfig {
 /** Resolve the authentication backend without a user-editable environment switch. */
 export function resolveAuthEnvironment(input: {
   packaged: boolean
-  channel?: unknown
 }): AuthEnvironmentConfig {
-  const development = !input.packaged || input.channel === 'development'
+  const development = !input.packaged
   const service = desktopServiceEnvironment(development ? 'test' : 'production')
   return {
     name: service.name,

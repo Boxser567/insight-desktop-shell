@@ -1845,7 +1845,7 @@ async function bootstrap(): Promise<void> {
     nodeExecutablePath: bundledNodePath(),
     nodeEntryPath: harnessNodeEntryPath(),
     bundledSkillDir: app.isPackaged ? join(process.resourcesPath, 'bundled-skills') : join(app.getAppPath(), 'bundled-skills'),
-    serviceEnvironment: developmentBuild ? 'test' : 'production',
+    serviceEnvironment: app.isPackaged ? 'production' : 'test',
     dshPatchPath: desktopResourcePath('dsh-desktop.patch.yml'),
     dshHome: join(insightRoot(), 'runtime-unconfigured'),
     logPath: join(app.getPath('logs'), 'harness.log'),
@@ -1890,8 +1890,7 @@ async function bootstrap(): Promise<void> {
   workspaceLifecycle = new WorkspaceLifecycle(workspaceController)
   await initializeUpdates()
   authEnvironment = resolveAuthEnvironment({
-    packaged: app.isPackaged,
-    channel: desktopChannel
+    packaged: app.isPackaged
   })
   const authSession = session.fromPartition(authEnvironment.partition)
   authManager = createElectronAuth({
