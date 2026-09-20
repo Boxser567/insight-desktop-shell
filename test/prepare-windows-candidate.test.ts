@@ -5,10 +5,10 @@ import { validateSourceRun } from '../scripts/prepare-windows-candidate.mjs'
 const run = { repository: { full_name: 'Boxser567/insight-desktop-shell' },
   path: '.github/workflows/release.yml', event: 'workflow_dispatch', status: 'completed',
   conclusion: 'success', head_sha: 'a'.repeat(40) }
-const policy = { releaseVersion: '1.0.0-rc.14', channel: 'candidate', mode: 'optional' }
+const policy = { releaseVersion: '1.0.0-rc.15', channel: 'candidate', mode: 'optional' }
 const lock = { releaseTag: 'runtime-test', targets: { win: { core: { commit: 'b'.repeat(40) } } } }
-const validate = (source = run, releasePolicy = policy, version = '1.0.0-rc.14') =>
-  validateSourceRun(source, 'v1.0.0-rc.14', releasePolicy, version, lock)
+const validate = (source = run, releasePolicy = policy, version = '1.0.0-rc.15') =>
+  validateSourceRun(source, 'v1.0.0-rc.15', releasePolicy, version, lock)
 
 describe('existing Windows build provenance', () => {
   it('keeps the original build commit and Runtime identity', () => {
