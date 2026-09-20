@@ -13,6 +13,9 @@
       "@deepseek-ai/dsh-api-session-controller/remote": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/typert.remote-client.d.ts"
       ],
+      "@deepseek-ai/dsh-api-workspace-files/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-workspace-files/lib/typert.remote-client.d.ts"
+      ],
       "@deepseek-ai/dsh-client-connection/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-client-connection/lib/types/client/index.d.ts"
       ],

@@ -3,12 +3,15 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
+import type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
+import { parseSkillPresentation, SKILL_UI_MAX_BYTES } from './skill-presentation'
 
 /** Presentation subset of the native session skill summary. */
 export interface InsightSkill {
   readonly name: string
   readonly description: string
   readonly displayName?: string
+  readonly shortDescription?: string
   readonly order?: number
   readonly pickerVisible?: boolean
   readonly bundled?: boolean
@@ -32,13 +35,14 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
     async list(sessionId) {
       const result = await ctx.remote.skills.list({ sessionId })
       if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-      return result.value.skills.map((skill, order) => ({
+      return Promise.all(result.value.skills.map(async (skill, order) => ({
         name: skill.name,
         description: skill.description,
+        ...await readSkillPresentation(ctx, sessionId, skill.path),
         order,
         bundled: true,
         pickerVisible: true
-      }))
+      })))
     },
     subscribe(sessionId, listener) {
       const sessionListeners = listeners.get(sessionId) ?? new Set<() => void>()
@@ -49,6 +53,22 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
         if (sessionListeners.size === 0) listeners.delete(sessionId)
       }
     }
+  }
+}
+
+/** Read only the winning native skill's sidecar through the public Host filesystem API. */
+async function readSkillPresentation(ctx: ClientContext, sessionId: SessionId, path?: string) {
+  if (!path || !/[\\/]SKILL\.md$/.test(path)) return {}
+  const uiPath = path.replace(/SKILL\.md$/, 'ui.json')
+  try {
+    const result = await ctx.remote.workspaceFiles.readBytes(sessionId, uiPath, { offset: 0, length: SKILL_UI_MAX_BYTES + 1 })
+    if (!result.ok || !result.value.eof || result.value.offset !== 0 || (result.value.bytes ?? 0) > SKILL_UI_MAX_BYTES) return {}
+    const bytes = Uint8Array.from(atob(result.value.data), character => character.charCodeAt(0))
+    if (bytes.length > SKILL_UI_MAX_BYTES) return {}
+    return parseSkillPresentation(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+  } catch {
+    // Optional metadata must never prevent native skills from being selected.
+    return {}
   }
 }
 
@@ -69,6 +89,6 @@ export function toggleSkillDraft(draft: string, name: string): string {
 export function filterSkills(skills: readonly InsightSkill[], query: string): readonly InsightSkill[] {
   const search = query.trim().toLocaleLowerCase()
   return skills.filter(skill => skill.bundled && skill.pickerVisible !== false &&
-    `${skill.displayName ?? ''} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(search))
+    `${skill.displayName ?? ''} ${skill.shortDescription ?? ''} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(search))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name))
 }

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { filterSkills, selectedSkillNames, toggleSkillDraft, type InsightSkill, type SkillCatalog } from '../skill-catalog'
+import { skillDisplayName, skillShortDescription } from '../skill-presentation'
 
 type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'insightDesktop'> & {
   catalog: SkillCatalog
@@ -148,8 +149,8 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
         {catalogAvailable && items.map((skill, index) => <div key={skill.name} id={`${id}-${skill.name}`} role="option"
           aria-selected={selected.includes(skill.name)} aria-labelledby={`${id}-${skill.name}-title`} aria-describedby={`${id}-${skill.name}-description`}
           data-active={index === active} onMouseMove={() => { scrollActive.current = false; setActive(index) }} onMouseDown={event => event.preventDefault()} onClick={() => choose(skill.name)}>
-          <div data-insight-skill-option-title><span id={`${id}-${skill.name}-title`}>{skill.displayName ?? skill.name}</span><span aria-hidden="true">{selected.includes(skill.name) ? '✓' : ''}</span></div>
-          <div id={`${id}-${skill.name}-description`} data-insight-skill-description>{skill.description}</div>
+          <div data-insight-skill-option-title><span id={`${id}-${skill.name}-title`}>{skillDisplayName(skill)}</span><span aria-hidden="true">{selected.includes(skill.name) ? '✓' : ''}</span></div>
+          <div id={`${id}-${skill.name}-description`} data-insight-skill-description>{skillShortDescription(skill)}</div>
         </div>)}
       </div>
       {(!catalogAvailable || items.length === 0) && <div role="status" data-insight-skill-empty>{t(catalogAvailable ? 'skill.empty' : 'skill.unavailable')}</div>}
