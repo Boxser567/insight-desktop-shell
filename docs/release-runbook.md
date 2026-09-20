@@ -47,6 +47,7 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 
 - `main` 是唯一长期集成基线；功能、修复和发布基础设施分支通过审核后合入 `main`，不得维护第二条长期发版主线。
 - Candidate 与 Stable 必须从 `main` 上可追溯的提交构建。进入版本冻结后如仍需并行开发，可从 `main` 创建短生命周期 `release/vX.Y.Z`，只接收该版本的阻断修复；发布或取消后合回 `main` 并删除。
+- `dzm/` 开头的本地或远端分支，以及作者或提交者身份为 `duzhimeng` 的提交，永久只作为产品意图 Demo 进行只读参考。禁止通过 merge、cherry-pick、rebase、squash、补丁搬运或直接复制代码进入本项目；需要的产品能力必须从当前 `main` 独立设计、独立实现并重新测试。发布前必须确认候选历史不包含这些分支的祖先提交，也不包含该作者或提交者身份。
 - Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。候选 OSS 前缀在未公开期间允许覆盖；禁止移动 tag、覆盖已公开 GitHub/正式 OSS 资产或回写低版本渠道指针。
 - 发布前的版本号、策略和 Runtime 锁调整使用独立提交；正式 tag 只打在测试、构建和人工门禁均通过的提交上。
 
@@ -60,7 +61,7 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 - 独立本地 DEV 应用的绝对路径和 Runtime 身份明确；
 - 全新 Profile 与既有 Profile 启动均正常，会话、工作区、设置和用户插件未丢失；
 - `dsh-better-sidebar@0.16.1` 已复制并注册，Markdown 和 HTML 实际在 Sidebar 内打开；
-- `dshmarket@1.44.0` 已复制并完成宿主适配，必需插件受保护，用户卸载的可选插件不会被升级流程回填；
+- Shell 未重复预装 Harness/Core 已提供的 `dsh-genui` 和 `dshmarket`；`dsh-memory-evolve@0.1.0` 与 `dsh-prompt-enhance@0.2.1` 已完成归档哈希、独立 Profile 安装和 Harness 启动验证；
 - 没有插件恢复窗口或无限启动页，并已收到明确人工验收结果。
 
 本地阶段未通过时禁止用 GitHub Actions 继续远程调试。Shell 发布标签也不得隐式升级 Core Runtime；Runtime 锁变更必须是独立、可审核的 Shell 提交。

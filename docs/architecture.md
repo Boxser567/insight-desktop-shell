@@ -32,3 +32,5 @@ Profile、插件、工作区和会话都位于应用安装目录之外，升级�
 ## 升级上游
 
 Shell 定期合并 `dataelement/dsh-desktop` 的宿主能力。解决冲突时必须保留 Core Runtime 锁定、`Resources/runtime` 资源路径、内置 Profile、用户数据隔离、未登录全屏 Shell、登录后全窗口 Harness View 和第一方集成插件；不恢复 Shell 对 registry DSH 包或其 `patch-package` 文件的直接依赖。
+
+`dzm/` 分支及 `duzhimeng` 作者或提交者提供的代码不属于可合并上游，只允许只读参考其产品 Demo 所表达的意图。任何对应能力都必须从本项目当前 `main` 独立实现并重新验证；完整禁止规则及发布前审计要求见 [发布说明的分支管理](release-runbook.md#分支管理)。

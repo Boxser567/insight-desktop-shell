@@ -44,6 +44,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce source intake policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git log --format='%an <%ae>|%cn <%ce>' | grep -Eiq 'duzhimeng'; then
+            echo '::error::Release history contains a forbidden demo-source author or committer.'
+            exit 1
+          fi
       - name: Validate release identity, policy, and Runtime lock
         id: release
         shell: bash

@@ -15,6 +15,7 @@
 - Core Runtime remains locked to `insight-runtime-v0.1.6-alpha.2-insight.1`, Core commit `fbbcc26c251a800929cd5414a23940974ad3453b`, for `darwin-arm64`, `darwin-x64`, and `win32-x64`.
 - Candidate/Stable identity remains `com.insight-aigc.desktop`, product name `因赛AI`, and user-data directory `insight-desktop`.
 - Do not restore bundled `dsh-genui` or `dsh-market`; retain the accepted `dsh-memory-evolve` and `dsh-prompt-enhance` packages.
+- Treat every `dzm/` branch and every commit authored or committed by `duzhimeng` as a read-only product Demo; never merge, cherry-pick, rebase, squash, patch, or copy its code into this project.
 - Do not move an existing tag or overwrite a published immutable release directory.
 - Preserve user worktrees and unrelated files; do not delete old branches during RC15 preparation.
 
@@ -39,7 +40,7 @@ Expected: `origin/main` and remote feature refs are current.
 
 Run: `git for-each-ref refs/heads`, `git rev-list --left-right --count`, and `git cherry` against `codex/rc12-client-polish-20260920`.
 
-Expected: all historical integration branches are ancestors or patch-equivalent; the old Web Search and `dzm` branches contain superseded implementations, not missing product capability.
+Expected: all historical internal integration branches are ancestors or patch-equivalent; old Web Search capability is independently present in RC15; every `dzm/` Demo ref remains outside RC15 ancestry and no `duzhimeng` author or committer identity appears in RC15 history.
 
 - [x] **Step 3: Audit every registered worktree and stash**
 
