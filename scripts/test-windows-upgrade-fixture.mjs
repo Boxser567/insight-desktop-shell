@@ -17,7 +17,7 @@ const evidence = path.join(repo, 'windows-upgrade-evidence')
 const product = 'Insight Upgrade Probe'
 const run = (exe, args) => execFileSync(exe, args, { cwd: repo, stdio: 'inherit', timeout: 180000 })
 await mkdir(evidence, { recursive: true })
-await mkdir(app, { recursive: true })
+await mkdir(path.join(app, 'resources'), { recursive: true })
 await mkdir(meta, { recursive: true })
 const baselineFiles = [
   'node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh',
