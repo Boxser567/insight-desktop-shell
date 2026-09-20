@@ -1,0 +1,81 @@
+name: Sign existing Windows Candidate
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful Release desktop installers run containing windows-x64
+        required: true
+        type: string
+      candidate_tag:
+        description: Unpublished Candidate tag matching the source package
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: desktop-release-${{ inputs.candidate_tag }}
+  cancel-in-progress: false
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    environment: desktop-release
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate source and download existing Windows bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          node scripts/prepare-windows-candidate.mjs "$RUNNER_TEMP/source-run.json" "$TAG" "$RUNNER_TEMP/source"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo '::error::Release already exists; do not replace immutable assets.'
+            exit 1
+          fi
+          gh run download "$SOURCE_RUN" --name windows-x64 --dir release-assets
+      - name: Sign and verify Windows-only Candidate
+        env:
+          DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/update-signing-private.pem"
+          trap 'rm -f "$key_path"' EXIT
+          test -n "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY"
+          umask 077
+          printf '%s' "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY" > "$key_path"
+          version=$(node -p "require(process.env.RUNNER_TEMP + '/source/source.json').version")
+          commit=$(node -p "require(process.env.RUNNER_TEMP + '/source/source.json').shellCommit")
+          node scripts/build-update-release.mjs --dir release-assets --version "$version" \
+            --channel candidate --shell-commit "$commit" \
+            --runtime-manifest "$RUNNER_TEMP/source/runtime.json" \
+            --compatibility "$RUNNER_TEMP/source/compatibility.json" \
+            --policy "$RUNNER_TEMP/source/policy.json" --private-key "$key_path" --scope windows-x64
+          node scripts/verify-release-assets.mjs --dir release-assets --version "$version" \
+            --channel candidate --public-key build/update-signing-public.pem --scope windows-x64
+      - name: Create draft without moving update pointers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.candidate_tag }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          set -euo pipefail
+          commit=$(node -p "require(process.env.RUNNER_TEMP + '/source/source.json').shellCommit")
+          printf 'Windows-only Candidate for upgrade acceptance. Reuses the original windows-x64 artifact from Actions run %s. macOS assets are not included.\n' "$SOURCE_RUN" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" --draft --prerelease --target "$commit" \
+            --title "因赛AI $TAG Windows 验证包" --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release upload "$TAG" release-assets/*

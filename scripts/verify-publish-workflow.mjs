@@ -26,6 +26,7 @@ async function main() {
   requireText(trigger, 'tag:', 'Publish workflow inputs')
   requireText(trigger, 'scope:', 'Publish workflow inputs')
   requireText(trigger, '- macos-arm64', 'Publish workflow scope choices')
+  requireText(trigger, '- windows-x64', 'Publish workflow scope choices')
   requireText(trigger, 'confirm_version:', 'Publish workflow inputs')
 
   const permissions = /^permissions:\r?\n((?:  [^\r\n]+\r?\n?)*)/mu.exec(workflow)?.[1]
