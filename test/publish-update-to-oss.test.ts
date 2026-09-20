@@ -34,6 +34,10 @@ describe('GitHub Actions OSS update publisher', () => {
       'stage', '--tag', 'v0.1.2-rc.4', '--scope', 'macos-arm64'
     ])).toMatchObject({ channel: 'candidate', scope: 'macos-arm64' })
 
+    expect(parsePublisherArguments([
+      'stage', '--tag', 'v0.1.2-rc.4', '--scope', 'windows-x64'
+    ])).toMatchObject({ channel: 'candidate', scope: 'windows-x64' })
+
     for (const invalid of [
       ['stage', '--tag', 'v0.1.2', '--unknown', 'value'],
       ['stage', '--tag', 'v0.1.2;rm'],
@@ -41,7 +45,7 @@ describe('GitHub Actions OSS update publisher', () => {
       ['stage', '--tag', 'v0.1.2', '--origin', 'https://attacker.example'],
       ['stage', '--tag', 'v0.1.2', '--profile', 'desktop-updates-publisher'],
       ['stage', '--tag', 'v0.1.2', '--scope', 'macos-arm64'],
-      ['stage', '--tag', 'v0.1.2-rc.2', '--scope', 'windows-x64'],
+      ['stage', '--tag', 'v0.1.2', '--scope', 'windows-x64'],
       ['stage', '--tag', 'v0.1.2', '--confirm-version', '0.1.2'],
       ['promote', '--tag', 'v0.1.2', '--confirm-version', '0.1.3']
     ]) {
