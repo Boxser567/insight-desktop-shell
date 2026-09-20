@@ -2,6 +2,27 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node", "electron-vite/node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": [
+        "build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-remotes/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-remotes/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-session-controller/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/typert.remote-client.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-workspace-files/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-workspace-files/lib/typert.remote-client.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-connection/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-client-connection/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session/types": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts"
+      ]
+    },
     "noEmit": true
   },
   "include": [

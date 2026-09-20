@@ -5,26 +5,45 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { accountMenuActions } from './account-menu-model'
-import { AccountFooter, BrandMark, BrandName, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, UpdateButton } from './components'
+import { AccountFooter, BrandMark, BrandName, HeroTitle, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, UpdateButton } from './components'
 import { en, zh } from './locales'
 import { installStyles } from './styles'
+import { SkillPicker } from './SkillPicker'
+import { createSkillCatalog } from '../skill-catalog'
+import type {} from '@deepseek-ai/dsh-client-ui-skill/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 
 const NS = 'insightDesktop'
 
 /** Services required by the product integration. */
-export const inject = ['slots', 'locale', 'settingsDialog']
+export const inject = ['slots', 'locale', 'settingsDialog', 'remote', 'remote.skills']
 
 /** Register product UI only through the public Harness extension seats. */
 export function apply(ctx: ClientContext): void {
+  const catalog = createSkillCatalog(ctx)
   ctx.effect(installStyles, 'insight-desktop: styles')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'insight-desktop: dictionaries')
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left',
+    id: 'insight-skill-picker',
+    order: 0,
+    locale: NS,
+    inject: () => ({ catalog })
+  }, SkillPicker))
   const t = ctx.locale.bind(NS)
   const actions = {
     ...accountMenuActions(ctx.settingsDialog, window.insightDesktopAccount),
     updates: window.insightDesktopUpdates
   }
 
+  ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({
+    name: 'conversation.hero.brand.mark'
+  }, BrandMark))
+  ctx.slots.inject('conversation.hero.brand.title', () => ctx.slots.register({
+    name: 'conversation.hero.brand.title'
+  }, HeroTitle))
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, BrandMark)

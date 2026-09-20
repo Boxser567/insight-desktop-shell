@@ -14,15 +14,6 @@ const PROFILE = 'web'
 const DESCRIPTOR_PATH = join('vendor', 'plugins', 'bundled-community-plugins.json')
 const REQUIRED_ENTRIES = new Map([
   ['dsh-memory-evolve', ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']],
-  ['@changfenhuang/dsh-genui', [
-    'lib/index.js',
-    'lib/client.js',
-    'lib/invariant.js',
-    'lib/assets/mermaid.js',
-    'lib/assets/three.js',
-    'lib/assets/echarts.js',
-    'cordis.patch.yml'
-  ]],
   ['dsh-prompt-enhance', ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']]
 ])
 

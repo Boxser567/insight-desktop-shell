@@ -23,6 +23,26 @@
   }
 }
 
+:root[data-insight-theme="light"] {
+  color-scheme: light;
+  --background: #f8f8f6;
+  --surface: #fff;
+  --text: #202124;
+  --muted: #6f7178;
+  --border: rgba(32, 33, 36, .14);
+  --danger: #d43d51;
+}
+
+:root[data-insight-theme="dark"] {
+  color-scheme: dark;
+  --background: #202024;
+  --surface: #29292e;
+  --text: #f3f4f6;
+  --muted: #a5a6ad;
+  --border: rgba(255, 255, 255, .12);
+  --danger: #ff667b;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 body { color: var(--text); background: var(--background); }

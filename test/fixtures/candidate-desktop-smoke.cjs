@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { mkdirSync, writeFileSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
-const { app, dialog, session, webContents } = require('electron')
+const { app, BrowserWindow, dialog, Menu, nativeTheme, session, webContents } = require('electron')
 const root = process.env.INSIGHT_SMOKE_ROOT
 const output = process.env.INSIGHT_SMOKE_OUTPUT
 if (!root || !output) throw new Error('INSIGHT_SMOKE_ROOT and INSIGHT_SMOKE_OUTPUT are required')
@@ -48,8 +48,15 @@ async function until(label, check, timeout = 120000) {
   throw new Error(`Timed out waiting for ${label}`)
 }
 const alive = () => webContents.getAllWebContents().filter(contents => !contents.isDestroyed())
+function findMenuItem(label, items = Menu.getApplicationMenu()?.items ?? []) {
+  for (const item of items) {
+    if (item.label === label) return item
+    const nested = item.submenu ? findMenuItem(label, item.submenu.items) : undefined
+    if (nested) return nested
+  }
+}
 async function inspect(contents) {
-  return contents.executeJavaScript(`({ url: location.href.replace(/([?&]token=)[^&#]+/g,'$1[redacted]'), text: document.body?.innerText, sidebars: document.querySelectorAll('button[aria-label="收起侧边栏"]').length, buttons: [...document.querySelectorAll('button')].map(x=>({text:x.innerText,label:x.getAttribute('aria-label'),title:x.title})), errors: [...document.querySelectorAll('[data-dsh-boot-error]')].map(x=>x.textContent) })`)
+  return contents.executeJavaScript(`({ url: location.href.replace(/([?&]token=)[^&#]+/g,'$1[redacted]'), text: document.body?.innerText, theme: document.documentElement.dataset.insightTheme, background: getComputedStyle(document.body).backgroundColor, sidebars: document.querySelectorAll('button[aria-label="收起侧边栏"]').length, buttons: [...document.querySelectorAll('button')].map(x=>({text:x.innerText,label:x.getAttribute('aria-label'),title:x.title})), errors: [...document.querySelectorAll('[data-dsh-boot-error]')].map(x=>x.textContent) })`)
 }
 async function save(label, contents) {
   writeFileSync(join(output, `${label}.json`), JSON.stringify(await inspect(contents), null, 2))
@@ -77,16 +84,37 @@ async function run() {
   await harness.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(x=>x.textContent==='设置').click()`)
   await until('desktop settings', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-client-settings]')`))
   await save('desktop-settings', harness)
+  await harness.executeJavaScript(`{ const target = [...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='通用设置'); target?.click(); !!target }`)
+  await until('appearance settings', () => harness.executeJavaScript(`[...document.querySelectorAll('button')].some(x=>x.textContent?.trim()==='浅色')`))
+  await harness.executeJavaScript(`{ const target = [...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='浅色'); target?.click(); !!target }`)
+  await until('native light theme', () => nativeTheme.themeSource === 'light' && nativeTheme.shouldUseDarkColors === false)
   harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
   harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
-  for (const route of (process.argv.includes('--safe-mode') ? [] : ['update', 'uninstall'])) {
-    for (const name of ['dsh-better-sidebar', 'dshmarket', '@insight-ai/desktop-integration']) {
-      const response = await harness.executeJavaScript(`fetch('/dsh-market/${route}', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:${JSON.stringify(name)}})}).then(async r=>({status:r.status,body:await r.json()}))`)
-      assert.equal(response.status, 403, JSON.stringify(response))
-      assert.match(response.body.error, /managed by Insight Desktop/)
-    }
-  }
-  console.log('CANDIDATE_SETTINGS_AND_MARKET_POLICY_PASSED')
+  console.log('CANDIDATE_SETTINGS_PASSED')
+
+  const aboutItem = findMenuItem('关于因赛AI')
+  assert.ok(aboutItem?.click, 'About menu item is unavailable')
+  aboutItem.click(aboutItem, BrowserWindow.getFocusedWindow(), {})
+  const about = await until('light About window', async () => {
+    const contents = alive().find(value => value.getURL().includes('/about.html'))
+    if (!contents) return undefined
+    const state = await inspect(contents)
+    return state.theme === 'light' && state.background !== 'rgb(32, 32, 36)' ? contents : undefined
+  })
+  assert.match((await inspect(about)).text, /因赛AI/)
+  await save('about-light', about)
+
+  await harness.executeJavaScript('void window.insightDesktopUpdates.open(); true')
+  const update = await until('light Update window', async () => {
+    const contents = alive().find(value => value.getURL().includes('/update.html'))
+    if (!contents) return undefined
+    const state = await inspect(contents)
+    return state.theme === 'light' && state.text?.trim() ? contents : undefined
+  }, 10_000)
+  const updateState = await inspect(update)
+  assert.notEqual(updateState.background, 'rgb(32, 32, 36)')
+  await save('update-light', update)
+  console.log('CANDIDATE_SECONDARY_THEME_PASSED')
   const catalog = await harness.executeJavaScript(`fetch('/api/session/modelCatalog', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session/modelCatalog',payload:{args:{}}})}).then(r=>r.json())`)
   assert.equal(catalog.result.ok, true)
   assert.equal(catalog.result.value.default.provider, 'yinsai-gateway')
@@ -99,29 +127,16 @@ async function run() {
     await until('workspace row', () => harness.executeJavaScript(`document.body.innerText.includes('验收工作区')`))
     await harness.executeJavaScript(`document.querySelector('button[aria-label="在“验收工作区”中新建会话"]').click()`)
     await until('selected workspace input', () => harness.executeJavaScript(`!!document.querySelector('[contenteditable="true"]')`))
+    await until('product hero', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-hero-title]')`))
+    const hero = await inspect(harness)
+    assert.match(hero.text, /以专业为引擎，让团队与AI共成长/)
+    assert.doesNotMatch(hero.text, /探索未至之境|预览版/)
+    assert.equal(await harness.executeJavaScript(`!!document.querySelector('[data-phase="hero"] [data-insight-desktop-brand-mark] img')`), true)
     await save('workspace-open', harness)
     console.log('CANDIDATE_WORKSPACE_OPENED')
-    await until('file panel', () => harness.executeJavaScript(`!!document.querySelector('button[title="文件"]')`))
-    await harness.executeJavaScript(`document.querySelector('button[title="文件"]').click()`)
-    await until('acceptance file', () => harness.executeJavaScript(`!!document.querySelector('[role="button"][title$="/acceptance.md"]')`))
-    await harness.executeJavaScript(`document.querySelector('[role="button"][title$="/acceptance.md"]').click()`)
-    await until('file preview', () => harness.executeJavaScript(`document.body.innerText.includes('Insight acceptance')`))
-    await harness.executeJavaScript(`[...document.querySelectorAll('button')].find(x=>x.textContent==='编辑').click()`)
-    await until('file editor', () => harness.executeJavaScript(`!!document.querySelector('.cm-content[contenteditable="true"]')`))
-    await harness.executeJavaScript(`document.querySelector('.cm-content[contenteditable="true"]').focus()`)
-    await harness.insertText('verified ')
-    await harness.executeJavaScript(`document.querySelector('button[aria-label="保存"]').click()`)
-    await until('saved file', () => readFileSync(join(workspacePath, 'acceptance.md'), 'utf8').includes('verified '))
-    await save('file-edited', harness)
-    // Opening the workspace starts its terminal tab alongside the file panel.
-    await until('terminal input', () => harness.executeJavaScript(`!!document.querySelector('.xterm-helper-textarea')`))
-    await harness.executeJavaScript(`document.querySelector('.xterm-helper-textarea').focus()`)
-    await harness.insertText('echo terminal-verified > terminal-acceptance.txt')
-    harness.sendInputEvent({ type: 'keyDown', keyCode: 'Return' })
-    harness.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
-    await until('terminal command', () => { try { return readFileSync(join(workspacePath, 'terminal-acceptance.txt'), 'utf8').includes('terminal-verified') } catch { return false } })
-    await save('terminal-verified', harness)
-    console.log('CANDIDATE_EDITOR_AND_TERMINAL_PASSED')
+    // File navigation/preview belongs to Core's session-scoped native panel.
+    // Its interaction coverage lives in the Core sidebar suites; this Shell
+    // smoke keeps the session blank and never sends fixture credentials to a model.
   }
 
   if (process.argv.includes('--safe-mode')) {

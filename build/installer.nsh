@@ -1,10 +1,92 @@
+; Diagnostics are best effort and must preserve registers and the NSIS error flag.
+; TEMP is outside the install tree and is shared with the spawned old uninstaller.
+!macro DshUpdateLog MESSAGE
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $2 0
+  IfErrors 0 +2
+  StrCpy $2 1
+  CreateDirectory "$TEMP\insight-desktop-update-logs"
+  System::Call 'kernel32::GetCurrentProcessId() i.r0'
+  FileOpen $1 "$TEMP\insight-desktop-update-logs\update-$0.log" a
+  FileSeek $1 0 END
+  System::Call 'kernel32::GetTickCount() i.r0'
+  FileWriteUTF16LE $1 "tick=$0 version=${VERSION} nsisError=$2 ${MESSAGE}$\r$\n"
+  FileClose $1
+  ClearErrors
+  StrCmp $2 0 +2
+  SetErrors
+  Pop $2
+  Pop $1
+  Pop $0
+!macroend
+
+!macro customInit
+  !insertmacro DshUpdateLog "installer-start exe=$EXEPATH temp=$TEMP"
+!macroend
+
+!macro customUnInit
+  !insertmacro DshUpdateLog "uninstaller-start exe=$EXEPATH directory=$INSTDIR"
+!macroend
+
+!macro customInstall
+  !insertmacro DshUpdateLog "install-complete directory=$INSTDIR"
+!macroend
+
+!macro customUnInstall
+  !insertmacro DshPrepareUninstallPaths
+  !insertmacro DshUpdateLog "uninstall-remove-start directory=$INSTDIR"
+!macroend
+
+!ifdef BUILD_UNINSTALLER
+  !include "${__FILEDIR__}\windows-long-path.nsh"
+!endif
+
 !ifndef BUILD_UNINSTALLER
-  ; electron-builder updates normally ask the old uninstaller to atomically move
-  ; every installed file before deletion. Large unpacked installations can make
-  ; that old uninstaller return code 2 even after the application has exited.
-  ; Retry only that failed case with the old uninstaller's regular removal path.
-  ; User data remains outside the old installation directory and the package contract keeps
-  ; deleteAppDataOnUninstall disabled.
+  ; Use the uninstaller built into THIS package, without replacing the legacy
+  ; executable on disk. The registered identity is already selected by builder.
+  !macro customExtractUpgradeUninstaller
+    Push $R6
+    Push $R7
+    Push $R8
+    StrCpy $R8 0
+    GetFullPathName $R6 "$installationDir\${UNINSTALL_FILENAME}"
+    GetFullPathName $R7 "$uninstallerFileName"
+    ${If} $R6 == $R7
+      IfFileExists "$installationDir\${APP_EXECUTABLE_FILENAME}" 0 DshCompatValidated
+      IfFileExists "$uninstallerFileName" 0 DshCompatValidated
+      StrLen $R6 $installationDir
+      ${If} $R6 > 3
+        StrCpy $R8 1
+      ${EndIf}
+    ${EndIf}
+    DshCompatValidated:
+    ${If} $R8 != 1
+      Pop $R8
+      Pop $R7
+      Pop $R6
+      !insertmacro DshUpdateLog "compat-uninstaller-rejected directory=$installationDir executable=$uninstallerFileName"
+      StrCpy $R0 2
+      SetErrors
+      Return
+    ${EndIf}
+    Pop $R8
+    Pop $R7
+    Pop $R6
+    StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\compat-uninstaller.exe"
+    ClearErrors
+    File "/oname=$PLUGINSDIR\compat-uninstaller.exe" "${UNINSTALLER_OUT_FILE}"
+    ${If} ${Errors}
+      !insertmacro DshUpdateLog "compat-uninstaller-extract-failed directory=$installationDir"
+      StrCpy $R0 2
+      SetErrors
+      Return
+    ${EndIf}
+    !insertmacro DshUpdateLog "compat-uninstaller-selected directory=$installationDir executable=$uninstallerFileNameTemp"
+  !macroend
+
+  ; Failed atomic upgrades must not fall back to destructive regular uninstall.
   !macro DshResolveLegacyInstallationDir ROOT_KEY
     !insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation
     ${If} $R7 == ""
@@ -42,6 +124,7 @@
       DetailPrint "Stopping previous-version processes (attempt $R8 of 3)."
       nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$$root = $$env:INSIGHT_LEGACY_INSTALL_DIR.TrimEnd([char]92) + [char]92; $$targets = @(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }); $$targets | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 400; if (@(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { exit 0 } else { exit 1 }"`
       Pop $R9
+      !insertmacro DshUpdateLog "process-cleanup attempt=$R8 result=$R9 directory=$R7"
       StrCmp $R9 "0" DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
       IntCmp $R8 3 DshLegacyProcessCleanupDone_${LABEL_SUFFIX} DshLegacyProcessCleanupDelay_${LABEL_SUFFIX} DshLegacyProcessCleanupDone_${LABEL_SUFFIX}
 
@@ -53,61 +136,35 @@
   !macroend
 
   !macro customBeforeUninstallOldVersion ROOT_KEY LABEL_SUFFIX
+    !insertmacro DshUpdateLog "legacy-cleanup-start registry=${ROOT_KEY}"
     !insertmacro DshStopLegacyProcesses "${ROOT_KEY}" "${LABEL_SUFFIX}"
+    !insertmacro DshUpdateLog "legacy-cleanup-end directory=$R7"
   !macroend
 
-  !macro DshRecoverFailedAtomicUninstall ROOT_KEY LABEL_SUFFIX
-    IfErrors DshLegacyUninstallNeeded_${LABEL_SUFFIX} 0
+  !macro DshCheckLegacyUninstall ROOT_KEY LABEL_SUFFIX
+    IfErrors DshLegacyUninstallFailed_${LABEL_SUFFIX} 0
     StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
 
-    DshLegacyUninstallNeeded_${LABEL_SUFFIX}:
-      !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
-      StrCmp $R7 "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$R7\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
-      IfFileExists "$R7\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$PLUGINSDIR\old-uninstaller.exe" DshLegacyUninstallRetry_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetry_${LABEL_SUFFIX}:
-      StrCpy $R8 0
-      StrCpy $R9 "/currentuser"
-      StrCmp "${ROOT_KEY}" "SHELL_CONTEXT" 0 DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-      StrCmp $installMode "CurrentUser" DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-      StrCpy $R9 "/allusers"
-
-    DshLegacyUninstallAttempt_${LABEL_SUFFIX}:
-      IntOp $R8 $R8 + 1
-      ClearErrors
-      DetailPrint "Retrying previous-version cleanup without atomic relocation (attempt $R8 of 3)."
-      ExecWait '"$PLUGINSDIR\old-uninstaller.exe" /S /KEEP_APP_DATA $R9 _?=$R7' $R0
-      IfErrors DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} 0
-      StrCmp $R0 "0" 0 DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}
-      IfFileExists "$R7\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}:
-      IntCmp $R8 3 DshLegacyUninstallFailed_${LABEL_SUFFIX} DshLegacyUninstallRetryDelay_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetryDelay_${LABEL_SUFFIX}:
-      Sleep 1000
-      Goto DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-
     DshLegacyUninstallFailed_${LABEL_SUFFIX}:
-      StrCpy $R0 2
-      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
-      DetailPrint "Previous-version cleanup still left files in $R7."
+      ; Record the original result before resolving the directory or assigning an exit code.
+      !insertmacro DshUpdateLog "upgrade-stopped registry=${ROOT_KEY} result=$R0 nonAtomicFallback=disabled"
+      !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
+      !insertmacro DshUpdateLog "upgrade-stopped-directory directory=$R7"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0$\r$\nLogs: $TEMP\insight-desktop-update-logs"
+      DetailPrint "Upgrade stopped; no additional regular uninstall will be attempted."
       SetErrorLevel 2
       Quit
 
     DshLegacyUninstallDone_${LABEL_SUFFIX}:
       ClearErrors
-      StrCpy $R0 0
   !macroend
 
   !macro customUnInstallCheck
-    !insertmacro DshRecoverFailedAtomicUninstall "SHELL_CONTEXT" "Shell"
+    !insertmacro DshCheckLegacyUninstall "SHELL_CONTEXT" "Shell"
   !macroend
 
   !macro customUnInstallCheckCurrentUser
-    !insertmacro DshRecoverFailedAtomicUninstall "HKEY_CURRENT_USER" "CurrentUser"
+    !insertmacro DshCheckLegacyUninstall "HKEY_CURRENT_USER" "CurrentUser"
   !macroend
 
   !ifndef ONE_CLICK

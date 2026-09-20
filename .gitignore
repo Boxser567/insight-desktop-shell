@@ -3,6 +3,7 @@ out/
 dist/
 dist-dev/
 dist-candidate/
+dist-rc12-local/
 .DS_Store
 *.log
 coverage/

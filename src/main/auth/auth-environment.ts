@@ -14,7 +14,7 @@ export function resolveAuthEnvironment(input: {
   channel?: unknown
 }): AuthEnvironmentConfig {
   const development = !input.packaged || input.channel === 'development'
-  const service = desktopServiceEnvironment(development ? 'test' : undefined)
+  const service = desktopServiceEnvironment(development ? 'test' : 'production')
   return {
     name: service.name,
     baseUrl: service.authOrigin,

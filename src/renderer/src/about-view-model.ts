@@ -25,7 +25,7 @@ export function createAboutViewModel(input: {
   const [, year, month, day] = match
   return {
     productName: '因赛AI',
-    poweredBy: 'Powered by InClaw & OWL',
+    poweredBy: 'Powered by InClaw',
     versionText: `版本 ${input.version}`,
     releaseText: `发布于 ${Number(year)}年${Number(month)}月${Number(day)}日`,
     copyright: '© 因赛AI'

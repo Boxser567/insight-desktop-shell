@@ -51,7 +51,7 @@ async function fixture() {
     })),
     writeFile(paths.serviceEnvironment, JSON.stringify({
       schemaVersion: 1,
-      releaseEnvironment: 'test',
+      releaseEnvironment: 'production',
       environments: {
         test: {
           authOrigin: 'https://gapi-test.insight-aigc.com',
@@ -90,26 +90,48 @@ describe('desktop release preflight', () => {
       channel: 'candidate',
       runtimeTag: 'insight-runtime-v0.1.1-rc.10',
       runtimeCommit: 'a'.repeat(40),
-      serviceEnvironment: 'test',
+      serviceEnvironment: 'production',
       targets: ['darwin-arm64', 'darwin-x64', 'win32-x64']
     })
   })
 
-  it('allows Candidate test services and requires production services for Stable', async () => {
+  it('accepts an Insight runtime revision while preserving locked asset URLs', async () => {
+    const paths = await fixture()
+    const lock = await readFile(paths.runtimeLock, 'utf8')
+    await writeFile(paths.runtimeLock, lock.replaceAll(
+      'insight-runtime-v0.1.1-rc.10', 'insight-runtime-v0.1.1-rc.10-insight.1'
+    ))
+    const result = run(paths)
+    expect(result.status, result.stderr).toBe(0)
+    expect(JSON.parse(result.stdout).runtimeTag).toBe('insight-runtime-v0.1.1-rc.10-insight.1')
+  })
+
+  it('accepts an alpha Core Runtime used by a candidate desktop release', async () => {
+    const paths = await fixture()
+    const lock = JSON.parse(await readFile(paths.runtimeLock, 'utf8'))
+    const runtimeTag = 'insight-runtime-v0.1.6-alpha.2-insight.1'
+    lock.releaseTag = runtimeTag
+    for (const target of Object.keys(lock.targets)) {
+      lock.targets[target].core.version = '0.1.6-alpha.2'
+      lock.targets[target].url = `https://github.com/Boxser567/insight-harness-core/releases/download/${runtimeTag}/insight-harness-runtime-0.1.6-alpha.2-${target}.tar.gz`
+    }
+    await writeFile(paths.runtimeLock, JSON.stringify(lock))
+
+    const result = run(paths)
+    expect(result.status, result.stderr).toBe(0)
+    expect(JSON.parse(result.stdout).runtimeTag).toBe(runtimeTag)
+  })
+
+  it('requires production services for every packaged release channel', async () => {
     const candidate = await fixture()
     expect(run(candidate).status).toBe(0)
 
-    const blockedStable = await fixture()
-    await writeFile(blockedStable.packageJson, JSON.stringify({ version: '0.1.2' }))
-    await writeFile(blockedStable.policy, JSON.stringify({
-      schema: 1,
-      releaseVersion: '0.1.2',
-      channel: 'stable',
-      mode: 'optional',
-      minimumSupportedVersion: '0.1.1'
-    }))
-    expect(run(blockedStable, 'v0.1.2', 'stable').stderr).toContain(
-      'Stable releases require the production desktop service environment.'
+    const blockedCandidate = await fixture()
+    const candidateServices = JSON.parse(await readFile(blockedCandidate.serviceEnvironment, 'utf8'))
+    candidateServices.releaseEnvironment = 'test'
+    await writeFile(blockedCandidate.serviceEnvironment, JSON.stringify(candidateServices))
+    expect(run(blockedCandidate).stderr).toContain(
+      'Packaged releases require the production desktop service environment.'
     )
 
     const stable = await fixture()
@@ -121,9 +143,6 @@ describe('desktop release preflight', () => {
       mode: 'optional',
       minimumSupportedVersion: '0.1.1'
     }))
-    const services = JSON.parse(await readFile(stable.serviceEnvironment, 'utf8'))
-    services.releaseEnvironment = 'production'
-    await writeFile(stable.serviceEnvironment, JSON.stringify(services))
     expect(run(stable, 'v0.1.2', 'stable').status).toBe(0)
   })
 

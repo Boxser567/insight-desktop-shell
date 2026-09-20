@@ -248,7 +248,7 @@ describe('plugin-recovery', () => {
 
     expect(isThirdPartyPackageName('@deepseek-ai/dsh-client-ui-directory-picker-native')).toBe(false)
     expect(isThirdPartyPackageName('dshmarket')).toBe(true)
-    expect(isThirdPartyPackageName('dsh-better-sidebar')).toBe(false)
+    expect(isThirdPartyPackageName('dsh-better-sidebar')).toBe(true)
     expect(isThirdPartyPackageName('@insight-ai/desktop-integration')).toBe(false)
     expect(isThirdPartyPackageName('@linxin666/dsh-web-ui-all')).toBe(true)
     await expect(
@@ -286,14 +286,12 @@ describe('plugin-recovery', () => {
     await expect(resetPluginProfile(testDir)).resolves.toBe(true)
     const manifest = JSON.parse(await readFile(pkgPath, 'utf8'))
     expect(manifest.dependencies).toEqual({
-      '@insight-ai/desktop-integration': 'workspace:*',
-      'dsh-better-sidebar': '0.16.1'
+      '@insight-ai/desktop-integration': 'workspace:*'
     })
     expect(manifest.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      '@insight-ai/desktop-integration',
-      'dsh-better-sidebar'
+      '@insight-ai/desktop-integration'
     ])
   })
 

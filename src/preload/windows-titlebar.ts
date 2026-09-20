@@ -24,6 +24,14 @@ export function mountWindowsTitlebarLayout(options: TitlebarLayoutMountOptions):
     })
   })
 
+  mountHarnessThemeSync(options)
+}
+
+/** Keep Electron's native theme in sync on every platform, not only Windows. */
+export function mountHarnessThemeSync(options: TitlebarLayoutMountOptions): void {
+  const { document, ipcRenderer } = options
+  if (!document.body) return
+
   syncTheme(document, ipcRenderer)
   const themeObserver = new MutationObserver(() => syncTheme(document, ipcRenderer))
   themeObserver.observe(document.body, {

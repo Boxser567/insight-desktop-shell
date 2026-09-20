@@ -9,6 +9,18 @@
     ],
     "noEmit": true,
     "paths": {
+      "@deepseek-ai/dsh-shell-env": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-shell-env/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-web": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-web/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-web-search-deepseek": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-web-search-deepseek/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-fs": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-fs/lib/types/index.d.ts"
+      ],
       "@deepseek-ai/dsh-llm": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts"
       ],
@@ -20,6 +32,21 @@
       ],
       "@deepseek-ai/cordis": [
         "build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-remotes/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-remotes/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-session-controller/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/typert.remote-client.d.ts"
+      ],
+      "@deepseek-ai/dsh-api-workspace-files/remote": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-api-workspace-files/lib/typert.remote-client.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-connection/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-client-connection/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session/types": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts"
       ],
       "@deepseek-ai/dsh-client-locale/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-client-locale/lib/types/client/index.d.ts"
@@ -41,6 +68,12 @@
       ],
       "@deepseek-ai/dsh-client-ui-renderer/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-conversation/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-skill/client": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-client-ui-skill/lib/types/client/index.d.ts"
       ]
     }
   },

@@ -226,11 +226,8 @@ describe('Generic update production flow', () => {
     ))
 
     await manager.download()
-    expect(manager.status()).toMatchObject({ phase: 'downloaded' })
+    expect(manager.status()).toMatchObject({ phase: 'installing' })
     await expect(readFile(downloadedFile)).resolves.toEqual(value.archive)
-    expect(executor.quitAndInstall).not.toHaveBeenCalled()
-
-    await manager.install()
     expect(executor.quitAndInstall).toHaveBeenCalledOnce()
     await manager.stop()
   })

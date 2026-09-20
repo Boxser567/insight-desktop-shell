@@ -5,16 +5,11 @@ import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parse, stringify } from 'yaml'
-import { patchBundledMarket } from './patch-bundled-market.mjs'
 import { patchBundledPromptEnhance } from './patch-bundled-prompt-enhance.mjs'
 
 const PROFILE = 'web'
-const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
-const SIDEBAR_VERSION = '0.19.1'
-const MARKET_PACKAGE = 'dshmarket'
-const MARKET_VERSION = '1.46.1'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 5
+const DEFAULT_PROFILE_VERSION = 7
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(
@@ -36,28 +31,19 @@ const EXPECTED_COMMUNITY_PLUGINS = [
     packageName: 'dsh-memory-evolve',
     version: '0.1.0',
     artifact: 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz',
-    sha256: '3c82d92fa0c305282c2084331ab53121e411149a921d18d35958e6ba10efa5e4',
+    sha256: '88fc21d567b7500f8f753fdf88c66241ef7e25541d807a654e96626130940906',
     sourceRepository: 'https://github.com/csyangwen/dsh-memory-evolve',
-    sourceRef: 'v26082401',
-    sourceCommit: '21d2a8518bc608c2958b08733f5b5eaf6b514c9c'
-  },
-  {
-    packageName: '@changfenhuang/dsh-genui',
-    version: '0.9.8',
-    artifact: 'vendor/plugins/changfenhuang-dsh-genui-0.9.8.tgz',
-    sha256: '9944aeea5fd864cbf93e29b5437ea4fdc2560637c216112258508c3a739f20ff',
-    sourceRepository: 'https://github.com/omdsh-dev/dsh-genui',
-    sourceRef: 'v0.9.8',
-    sourceCommit: '680693eda677926942c11a499c476c55587d97c1'
+    sourceRef: 'v26091501',
+    sourceCommit: 'c337dc1af7b5c8a5578e03150bf5c4d6133f66f9'
   },
   {
     packageName: 'dsh-prompt-enhance',
-    version: '0.1.9',
-    artifact: 'vendor/plugins/dsh-prompt-enhance-0.1.9.tgz',
-    sha256: '2ab3d57a55f399489d518361401b09b97ac0136712d72846f650f4cd25b9f123',
+    version: '0.2.1',
+    artifact: 'vendor/plugins/dsh-prompt-enhance-0.2.1.tgz',
+    sha256: '2bd468e243143ee7b5dc86c3d180667743c71dfc1a1cbb2a5de9780f3189c694',
     sourceRepository: 'https://github.com/rongxingda/dsh-prompt-enhance',
-    sourceRef: 'v0.1.9',
-    sourceCommit: 'ed535fbdf0a10d777e43a1f3130d5ffb4b94a5c2'
+    sourceRef: 'v0.2.1',
+    sourceCommit: '42c8f137937a406a1035a75f270d895ea5b0d3c1'
   }
 ]
 const projectRoot = process.cwd()
@@ -82,11 +68,7 @@ async function removeHarnessHomeResidue() {
 }
 
 function hasPinnedDefaultPlugins(manifest, communityPlugins) {
-  return manifest.dependencies?.[SIDEBAR_PACKAGE] === SIDEBAR_VERSION &&
-    manifest.dependencies?.[MARKET_PACKAGE] === MARKET_VERSION &&
-    manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
-    manifest.dsh?.profile?.bundles?.includes(SIDEBAR_PACKAGE) &&
-    manifest.dsh?.profile?.bundles?.includes(MARKET_PACKAGE) &&
+  return manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
     manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
     !manifest.dependencies?.['dsh-at-file'] &&
     !manifest.dsh?.profile?.bundles?.includes('dsh-at-file') &&
@@ -162,16 +144,6 @@ async function readCommunityPlugins() {
 async function templateIsReady(communityPlugins) {
   const manifest = await readManifest(join(bundledProfileDirectory, 'package.json'))
   if (!manifest || !hasPinnedDefaultPlugins(manifest, communityPlugins)) return false
-  const [sidebarManifest, marketManifest] = await Promise.all([
-    readManifest(join(bundledProfileDirectory, 'node_modules', SIDEBAR_PACKAGE, 'package.json')),
-    readManifest(join(bundledProfileDirectory, 'node_modules', MARKET_PACKAGE, 'package.json'))
-  ])
-  if (
-    sidebarManifest?.name !== SIDEBAR_PACKAGE ||
-    sidebarManifest.version !== SIDEBAR_VERSION ||
-    marketManifest?.name !== MARKET_PACKAGE ||
-    marketManifest.version !== MARKET_VERSION
-  ) return false
   const requiredFilesExist = existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
     existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
@@ -288,6 +260,7 @@ async function configureDefaultProfile(directory) {
   if (!packages.includes('.')) packages.unshift('.')
   if (!packages.includes('packages/*')) packages.push('packages/*')
   workspace.packages = packages
+  delete workspace.minimumReleaseAge
   await writeFile(workspacePath, stringify(workspace), 'utf8')
 }
 
@@ -300,7 +273,6 @@ await removeHarnessHomeResidue()
 
 if (await templateIsReady(communityPlugins)) {
   await configureDefaultProfile(bundledProfileDirectory)
-  await patchBundledMarket(bundledProfileDirectory)
   await patchBundledPromptEnhance(bundledProfileDirectory)
   console.log(`Refreshed bundled desktop profile version ${DEFAULT_PROFILE_VERSION}.`)
 } else {
@@ -314,13 +286,9 @@ if (await templateIsReady(communityPlugins)) {
     await writeFile(join(temporaryProfile, 'package.json'), `${JSON.stringify({
       name: 'dsh-profile-web',
       private: true,
-      dependencies: {
-        [SIDEBAR_PACKAGE]: SIDEBAR_VERSION,
-        [MARKET_PACKAGE]: MARKET_VERSION,
-        ...Object.fromEntries(communityPlugins.map(plugin => [plugin.packageName, plugin.profileSpecifier]))
-      },
+      dependencies: Object.fromEntries(communityPlugins.map(plugin => [plugin.packageName, plugin.profileSpecifier])),
       dsh: { profile: {
-        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', SIDEBAR_PACKAGE, MARKET_PACKAGE,
+        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
           ...communityPlugins.map(plugin => plugin.packageName)],
         patchReload: 'live'
       } }
@@ -330,9 +298,7 @@ if (await templateIsReady(communityPlugins)) {
       packages: ['.', 'packages/*'],
       nodeLinker: 'hoisted',
       autoInstallPeers: false,
-      allowBuilds: { 'node-pty': true },
-      // The reviewed, explicitly pinned release is younger than pnpm's default age floor.
-      minimumReleaseAgeExclude: [`${MARKET_PACKAGE}@${MARKET_VERSION}`]
+      allowBuilds: { 'node-pty': true }
     }))
     await configureDefaultProfile(temporaryProfile)
     await cp(profileLockPath, join(temporaryProfile, 'pnpm-lock.yaml'))
@@ -342,7 +308,6 @@ if (await templateIsReady(communityPlugins)) {
     if (await sha256(join(temporaryProfile, 'pnpm-lock.yaml')) !== await sha256(profileLockPath)) {
       throw new Error('Bundled Profile installation changed the frozen dependency lock.')
     }
-    await patchBundledMarket(temporaryProfile)
     await patchBundledPromptEnhance(temporaryProfile)
     await rm(bundledProfileRoot, { recursive: true, force: true })
     await mkdir(bundledProfileRoot, { recursive: true })

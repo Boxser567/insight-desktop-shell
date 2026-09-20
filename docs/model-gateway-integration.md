@@ -13,19 +13,19 @@ Shell 用户中心登录（现有安全存储及 Cookie）
   → currentUser；仅过期时 refresh 一次，再校验 currentUser
   → 短期 access token 经 IPC 返回 Host
   → 原生 DeepSeekAdapter 发送 Bearer + /chat/completions
-  → 测试 Gateway → 原有 SSE、工具和会话 UI
+  → Dev 测试 Gateway / 编译版生产 Gateway → 原有 SSE、工具和会话 UI
 ```
 
 | 项目 | 1.0 固定值 |
 | --- | --- |
-| 用户中心 | `https://gapi-test.insight-aigc.com` |
+| 用户中心 | Dev：`https://gapi-test.insight-aigc.com`；编译版：`https://gapi.insight-aigc.com` |
 | 登录 / 刷新 | `/user-server/loginV3`；GET `/user-server/refresh`，沿用隔离 Electron Session Cookie |
-| Cookie 分区 | DEV：`insight-auth-test`（非持久）；Candidate / Stable：`persist:insight-auth-test` |
-| 模型接口 | `https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1/chat/completions` |
+| Cookie 分区 | DEV：`insight-auth-test`（非持久）；Candidate / Stable：`persist:insight-auth-production` |
+| 模型接口 | Dev：`https://gapi-test.insight-aigc.com/insight-harness-llm-gateway/v1/chat/completions`；编译版：`https://gapi.insight-aigc.com/insight-harness-llm-gateway/v1/chat/completions` |
 | Provider / Model | `yinsai-gateway` / `deepseek-v4-flash-vision-exp` |
 | 用户中心 / 模型鉴权 | `token` header / `Authorization: Bearer <用户中心 access token>` |
 
-DEV、Candidate、Stable 均固定测试登录环境，与测试模型 Gateway 配套。之前打包版的生产登录选择已被这个已批准的 1.0 决策替代；未来切生产必须同时变更登录、Cookie 分区、模型地址并重新验收，不能只换域名。原生产账号目录不会被改写或迁入测试账号目录。
+DEV 使用测试登录环境，Candidate / Stable 使用生产登录环境；登录、Cookie 分区、模型地址和 Skill 代理保持同一环境。测试与生产账号目录隔离，已有生产账号不会被改写或迁入测试账号目录。
 
 更新上传仍使用 GitHub OIDC → 目录级 OSS STS。模型会话使用用户中心 token，二者不得混用，不增加 OSS AccessKey 或用户自填模型 Key。
 

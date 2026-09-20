@@ -234,7 +234,7 @@ export async function smokePackagedHarness(resourceRoot) {
       afterReady: async (_url, rpc) => {
         const catalog = await rpc.invoke(rpc.modern ? 'session.modelCatalog' : 'llm.models', {})
         const host = rpc.modern ? catalog.default : await rpc.invoke('host.describe', {})
-        if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-v4-flash-vision-exp') {
+        if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-flash') {
           throw new Error('Packaged Harness did not select the desktop Gateway as its default model route.')
         }
         const { providers } = rpc.modern
@@ -245,7 +245,7 @@ export async function smokePackagedHarness(resourceRoot) {
           throw new Error('Packaged Harness did not activate the desktop model Gateway exclusively over its factory providers.')
         }
         if (!catalog.groups.some(group => group.id === 'yinsai-gateway' &&
-          group.models.some(model => model.id === 'deepseek-v4-flash-vision-exp'))) {
+          group.models.some(model => model.id === 'deepseek-flash'))) {
           throw new Error('Packaged Harness did not advertise the desktop model.')
         }
         const workspace = await rpc.invoke('workspace.create', { path: workspacePath })

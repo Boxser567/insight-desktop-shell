@@ -1,6 +1,6 @@
 import type { UpdateStatus } from '../../shared/update-contracts'
 
-export type UpdateViewAction = 'check' | 'download' | 'download-full-installer' | 'install' | 'retry' | 'skip' | 'quit'
+export type UpdateViewAction = 'check' | 'download' | 'download-full-installer' | 'retry' | 'skip' | 'quit'
 
 export interface UpdateViewModel {
   title: string
@@ -39,10 +39,9 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
       }
     case 'downloaded':
       return {
-        title: '更新已经准备好',
-        detail: `版本 ${status.availableVersion} 下载并校验完成。`,
-        primary: 'install',
-        busy: false
+        title: '正在启动安装…',
+        detail: `版本 ${status.availableVersion} 已下载并校验完成，因赛AI 将自动重启完成更新。`,
+        busy: true
       }
     case 'installing':
       return {

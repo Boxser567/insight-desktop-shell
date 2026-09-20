@@ -1,12 +1,28 @@
 import { readFile } from 'node:fs/promises'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   desktopServiceEnvironment,
+  skillProxyServiceBaseUrl,
   type DesktopServiceEnvironmentName
 } from '../src/shared/service-environment'
 
 describe('desktop service environment', () => {
-  it('selects the test services for RC2', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('routes skills to the enterprise service in the selected environment, not LLM /v1', () => {
+    expect(skillProxyServiceBaseUrl('test')).toBe('https://gapi-test.insight-aigc.com/insight-harness-service')
+    expect(skillProxyServiceBaseUrl('production')).toBe('https://gapi.insight-aigc.com/insight-harness-service')
+  })
+  it('selects production services for packaged builds', () => {
+    expect(desktopServiceEnvironment()).toEqual({
+      name: 'production',
+      authOrigin: 'https://gapi.insight-aigc.com',
+      modelBaseUrl: 'https://gapi.insight-aigc.com/insight-harness-llm-gateway/v1'
+    })
+  })
+
+  it('uses the explicit Dev child-process override for local development', () => {
+    vi.stubEnv('INSIGHT_DESKTOP_SERVICE_ENVIRONMENT', 'test')
     expect(desktopServiceEnvironment()).toEqual({
       name: 'test',
       authOrigin: 'https://gapi-test.insight-aigc.com',

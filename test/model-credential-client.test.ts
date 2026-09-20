@@ -30,10 +30,22 @@ describe('Host model credential client', () => {
       const peer = transport()
       const client = createModelCredentialClient(peer)
       const pending = client.getToken()
-      const failed = expect(pending).rejects.toThrow('超时')
+      const failed = expect(pending).rejects.toMatchObject({ code: 'TIMEOUT', message: expect.stringContaining('超时') })
       await vi.advanceTimersByTimeAsync(35_000)
       await failed
       client.dispose()
     } finally { vi.useRealTimers() }
   })
+
+  it.each([['LOGIN_REQUIRED', 'AUTH'], ['SERVICE_UNAVAILABLE', 'TRANSPORT']])(
+    'preserves the category of %s without exposing server details', async (error, code) => {
+      const peer = transport()
+      const client = createModelCredentialClient(peer)
+      const pending = client.getToken()
+      const failed = expect(pending).rejects.toMatchObject({ code })
+      peer.emit('message', { type: 'insight:model-token:response', id: peer.postMessage.mock.calls[0]![0].id, error })
+      await failed
+      client.dispose()
+    }
+  )
 })

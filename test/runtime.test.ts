@@ -435,12 +435,12 @@ describe('harness failure cause extraction', () => {
 })
 
 describe('offending plugin extraction', () => {
-  it('does not offer the required Sidebar after a loader entry failure', () => {
+  it('offers the retired sidebar for recovery after a loader entry failure', () => {
     const logs = [
       '[stderr] [harness-node] DSH entry failed: Error: dsh: plugin tree failed to load: failed to apply loader entry web-ui-better-sidebar (dsh-better-sidebar): webserver: duplicate prefix route "/sidebar/api"',
       '[stderr] Error: webserver: duplicate prefix route "/sidebar/api"'
     ]
-    expect(extractOffendingPlugin(logs)).toBeUndefined()
+    expect(extractOffendingPlugin(logs)).toBe('dsh-better-sidebar')
   })
 
   it('extracts scoped plugin name from loader entry failure', () => {
@@ -534,6 +534,7 @@ describe('offending plugin extraction', () => {
       '[stderr] Error: failed to apply loader entry sidebar (dsh-better-sidebar): duplicate prefix route "/sidebar/api"'
     ]
     expect(extractOffendingPlugins(logs)).toEqual([
+      'dsh-better-sidebar',
       '@example/dsh-tools'
     ])
   })

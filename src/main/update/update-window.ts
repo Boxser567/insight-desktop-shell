@@ -12,6 +12,7 @@ export function updateWindowOptions(input: {
   parent?: BrowserWindow
   preload: string
   icon: string
+  backgroundColor?: string
   platform?: NodeJS.Platform
 }): BrowserWindowConstructorOptions {
   const platform = input.platform ?? process.platform
@@ -26,7 +27,7 @@ export function updateWindowOptions(input: {
     ...(platform === 'win32' ? { autoHideMenuBar: true } : {}),
     title: '因赛AI 更新',
     icon: input.icon,
-    backgroundColor: '#202024',
+    backgroundColor: input.backgroundColor ?? '#202024',
     webPreferences: {
       preload: input.preload,
       contextIsolation: true,

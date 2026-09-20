@@ -202,22 +202,7 @@ export class UpdateManager {
   }
 
   install(): Promise<void> {
-    return this.run(async () => {
-      const status = this.statusValue
-      if (status.phase !== 'downloaded') throw new Error('更新尚未下载完成。')
-      this.publish(reduceUpdateState(status, {
-        type: 'installing',
-        version: status.availableVersion,
-        required: status.required,
-        manual: status.manual
-      }))
-      try {
-        await this.options.prepareToInstall()
-        this.options.executor.quitAndInstall()
-      } catch (error) {
-        this.fail(error, status)
-      }
-    })
+    return this.run(() => this.performInstall())
   }
 
   private async performCheck(manual: boolean): Promise<void> {
@@ -316,10 +301,32 @@ export class UpdateManager {
       this.downloadCompletion = completion
       await this.options.executor.download()
       await completion.promise
+      // The artifact has been verified at this point. Installation is part of
+      // the same user-approved update action; do not leave a second click in
+      // the transient `downloaded` state.
+      await this.performInstall()
     } catch (error) {
       this.fail(error, status)
     } finally {
       this.downloadCompletion = undefined
+    }
+  }
+
+  private async performInstall(): Promise<void> {
+    const status = this.statusValue
+    if (status.phase === 'installing') return
+    if (status.phase !== 'downloaded') throw new Error('更新尚未下载完成。')
+    this.publish(reduceUpdateState(status, {
+      type: 'installing',
+      version: status.availableVersion,
+      required: status.required,
+      manual: status.manual
+    }))
+    try {
+      await this.options.prepareToInstall()
+      this.options.executor.quitAndInstall()
+    } catch (error) {
+      this.fail(error, status)
     }
   }
 

@@ -1,16 +1,183 @@
+diff --git a/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh b/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
+index 4736774..3906d78 100644
+--- a/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
++++ b/node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh
+@@ -206,8 +206,12 @@ Function uninstallOldVersion
+     StrCpy $0 "$0 --updated"
+   ${endif}
+ 
+-  StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\old-uninstaller.exe"
+-  !insertmacro copyFile "$uninstallerFileName" "$uninstallerFileNameTemp"
++  !ifmacrodef customExtractUpgradeUninstaller
++    !insertmacro customExtractUpgradeUninstaller
++  !else
++    StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\old-uninstaller.exe"
++    !insertmacro copyFile "$uninstallerFileName" "$uninstallerFileNameTemp"
++  !endif
+ 
+   # Retry counter
+   StrCpy $R5 0
+@@ -216,18 +220,27 @@ Function uninstallOldVersion
+     IntOp $R5 $R5 + 1
+ 
+     ${if} $R5 > 5
++      !insertmacro DshUpdateLog "legacy-retry-prompt attempt=$R5 result=$R0 directory=$installationDir"
+       MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY OneMoreAttempt
+       Return
+     ${endIf}
+ 
+   OneMoreAttempt:
++    !insertmacro DshUpdateLog "legacy-launch attempt=$R5 directory=$installationDir executable=$uninstallerFileNameTemp"
+     ExecWait '"$uninstallerFileNameTemp" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
++    !insertmacro DshUpdateLog "legacy-return result=$R0"
+     ifErrors TryInPlace CheckResult
+ 
+     TryInPlace:
++      !ifmacrodef customExtractUpgradeUninstaller
++        ; Never fall back to the known-broken legacy executable.
++        Goto DoesNotExist
++      !endif
++      !insertmacro DshUpdateLog "legacy-launch-error trying-in-place executable=$uninstallerFileName"
+       # the execution failed - might have been caused by some group policy restrictions
+       # we try to execute the uninstaller in place
+       ExecWait '"$uninstallerFileName" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
++      !insertmacro DshUpdateLog "legacy-in-place-return result=$R0"
+       ifErrors DoesNotExist
+ 
+     CheckResult:
 diff --git a/node_modules/app-builder-lib/templates/nsis/installSection.nsh b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
+index 053772f..7e643d4 100644
 --- a/node_modules/app-builder-lib/templates/nsis/installSection.nsh
 +++ b/node_modules/app-builder-lib/templates/nsis/installSection.nsh
-@@ -52,2 +52,5 @@
+@@ -49,10 +49,16 @@ ${if} $isTryToKeepShortcuts == "true"
+   ${endIf}
+ ${endif}
+ 
 +!ifmacrodef customBeforeUninstallOldVersion
 +  !insertmacro customBeforeUninstallOldVersion "SHELL_CONTEXT" "Shell"
 +!endif
  !insertmacro uninstallOldVersion SHELL_CONTEXT
  !insertmacro handleUninstallResult SHELL_CONTEXT
-@@ -55,3 +58,6 @@
+ 
  ${if} $installMode == "all"
 +  !ifmacrodef customBeforeUninstallOldVersion
 +    !insertmacro customBeforeUninstallOldVersion "HKEY_CURRENT_USER" "CurrentUser"
 +  !endif
    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
    !insertmacro handleUninstallResult HKEY_CURRENT_USER
+ ${endIf}
+diff --git a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
+index c3f4f11..5ca3e7e 100644
+--- a/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
++++ b/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh
+@@ -41,7 +41,7 @@ Function un.atomicRMDir
+   Push $R2
+   Push $R3
+ 
+-  StrCpy $R3 "$INSTDIR$R0\*.*"
++  StrCpy $R3 "$DshUninstallRoot$R0\*.*"
+   FindFirst $R1 $R2 $R3
+ 
+   loop:
+@@ -50,10 +50,10 @@ Function un.atomicRMDir
+     StrCmp $R2 "." continue
+     StrCmp $R2 ".." continue
+ 
+-    IfFileExists "$INSTDIR$R0\$R2\*.*" isDir isNotDir
++    IfFileExists "$DshUninstallRoot$R0\$R2\*.*" isDir isNotDir
+ 
+     isDir:
+-      CreateDirectory "$PLUGINSDIR\old-install$R0\$R2"
++      CreateDirectory "$DshUninstallStage\old-install$R0\$R2"
+ 
+       Push "$R0\$R2"
+       Call un.atomicRMDir
+@@ -67,14 +67,14 @@ Function un.atomicRMDir
+ 
+     isNotDir:
+       ClearErrors
+-      Rename "$INSTDIR$R0\$R2" "$PLUGINSDIR\old-install$R0\$R2"
++      Rename "$DshUninstallRoot$R0\$R2" "$DshUninstallStage\old-install$R0\$R2"
+ 
+       # Ignore errors when renaming ourselves.
+       StrCmp "$R0\$R2" "${UNINSTALL_FILENAME}" 0 +2
+       ClearErrors
+ 
+       IfErrors 0 +3
+-      StrCpy $R3 "$INSTDIR$R0\$R2"
++      StrCpy $R3 "$DshUninstallRoot$R0\$R2"
+       Goto done
+ 
+     continue:
+@@ -101,7 +101,7 @@ Function un.restoreFiles
+   Push $R2
+   Push $R3
+ 
+-  StrCpy $R3 "$PLUGINSDIR\old-install$R0\*.*"
++  StrCpy $R3 "$DshUninstallStage\old-install$R0\*.*"
+   FindFirst $R1 $R2 $R3
+ 
+   loop:
+@@ -110,10 +110,10 @@ Function un.restoreFiles
+     StrCmp $R2 "." continue
+     StrCmp $R2 ".." continue
+ 
+-    IfFileExists "$INSTDIR$R0\$R2\*.*" isDir isNotDir
++    IfFileExists "$DshUninstallRoot$R0\$R2\*.*" isDir isNotDir
+ 
+     isDir:
+-      CreateDirectory "$INSTDIR$R0\$R2"
++      CreateDirectory "$DshUninstallRoot$R0\$R2"
+ 
+       Push "$R0\$R2"
+       Call un.restoreFiles
+@@ -122,7 +122,7 @@ Function un.restoreFiles
+       Goto continue
+ 
+     isNotDir:
+-      Rename "$PLUGINSDIR\old-install$R0\$R2" "$INSTDIR$R0\$R2"
++      Rename "$DshUninstallStage\old-install$R0\$R2" "$DshUninstallRoot$R0\$R2"
+ 
+     continue:
+       FindNext $R1 $R2
+@@ -162,19 +162,22 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+     !insertmacro customRemoveFiles
+   !else
+     ${if} ${isUpdated}
+-      CreateDirectory "$PLUGINSDIR\old-install"
++      CreateDirectory "$DshUninstallStage\old-install"
+ 
+       Push ""
+       Call un.atomicRMDir
+       Pop $R0
++      !insertmacro DshUpdateLog "atomic-relocation-return result=$R0"
+ 
+       ${if} $R0 != 0
++        !insertmacro DshUpdateLog "atomic-relocation-failed path=$R0 destination=$PLUGINSDIR\old-install"
+         DetailPrint "File is busy, aborting: $R0"
+ 
+         # Attempt to restore previous directory
+         Push ""
+         Call un.restoreFiles
+         Pop $R0
++        !insertmacro DshUpdateLog "atomic-restore-return result=$R0"
+ 
+         Abort `Can't rename "$INSTDIR" to "$PLUGINSDIR\old-install".`
+       ${endif}
+@@ -184,7 +187,15 @@ Section "un.${UNINSTALL_SECTION_NAME}"
+     # Move out of $INSTDIR so it can be removed
+     SetOutPath $TEMP
+     # Remove all files (or remaining shallow directories from the block above)
+-    RMDir /r $INSTDIR
++    ClearErrors
++    RMDir /r "$DshUninstallRoot"
++    !insertmacro DshUpdateLog "uninstall-root-remove-return directory=$INSTDIR"
++    ${If} ${isUpdated}
++      ClearErrors
++      RMDir /r "$DshUninstallStage\old-install"
++      !insertmacro DshUpdateLog "uninstall-stage-remove-return directory=$PLUGINSDIR\old-install"
++    ${EndIf}
++    !insertmacro DshUpdateLog "uninstall-remove-return directory=$INSTDIR"
+   !endif
+ 
+   ${ifNot} ${isKeepShortcuts}

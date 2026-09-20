@@ -20,10 +20,12 @@ describe('GitHub release contract', () => {
     const stable = require('../package.json').build
     const candidate = require('../electron-builder.candidate.cjs')
     const development = require('../electron-builder.dev.cjs')
+    const rc12Local = require('../electron-builder.rc12-local.cjs')
     for (const [config, appId, productName, channel] of [
       [stable, 'com.insight-aigc.desktop', '因赛AI', 'stable'],
       [candidate, 'com.insight-aigc.desktop', '因赛AI', 'candidate'],
-      [development, 'com.insight-aigc.desktop.dev', '因赛AI Dev', 'development']
+      [development, 'com.insight-aigc.desktop.dev', '因赛AI Dev', 'development'],
+      [rc12Local, 'com.insight-aigc.desktop.rc12.local', '因赛AI RC12', 'development']
     ] as const) {
       expect(config.appId).toBe(appId)
       expect(config.extraMetadata.insightDesktopAppId).toBe(appId)
@@ -31,6 +33,8 @@ describe('GitHub release contract', () => {
       expect(config.productName).toBe(productName)
     }
     expect(development.mac.identity).toBeNull()
+    expect(rc12Local.extraMetadata.insightDesktopUserDataDirectory).toBe('insight-desktop-rc12-local')
+    expect(rc12Local.mac.identity).toBeNull()
     expect(candidate.mac).toEqual(stable.mac)
   })
 
@@ -203,7 +207,7 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('${NSD_SetText} $DshDirectoryEdit $3')
   })
 
-  it('recovers from the legacy Windows atomic-uninstall failure without deleting user data', async () => {
+  it('stops failed legacy upgrades without invoking a destructive regular uninstall', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as { build: { nsis: { deleteAppDataOnUninstall?: boolean } } }
@@ -215,20 +219,18 @@ describe('GitHub release contract', () => {
     expect(packageJson.build.nsis.deleteAppDataOnUninstall).not.toBe(true)
     expect(installer).toContain('!macro customUnInstallCheck')
     expect(installer).toContain('!macro customUnInstallCheckCurrentUser')
-    const fallbackCommand = installer
-      .split('\n')
-      .find((line) => line.includes('/S /KEEP_APP_DATA $R9 _?=$R7'))
-    expect(fallbackCommand).toBeDefined()
-    expect(fallbackCommand).not.toContain('--updated')
-    expect(installer).toContain('IntCmp $R8 3')
-    expect(installer).toContain(
-      '!insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation'
-    )
-    expect(installer).toContain('IfFileExists "$R7\\*.*"')
-    expect(installer).toContain('IfFileExists "$R7\\${APP_EXECUTABLE_FILENAME}"')
-    expect(installer).toContain('IfFileExists "$PLUGINSDIR\\old-uninstaller.exe"')
-    expect(installer).not.toContain('$installationDir')
-    expect(installer).not.toContain('$uninstallerFileNameTemp')
+    expect(installer).not.toContain('ExecWait')
+    expect(installer).not.toContain('DshRecoverFailedAtomicUninstall')
+    expect(installer).toContain('nonAtomicFallback=disabled')
+    expect(installer).toContain('IfErrors DshLegacyUninstallFailed_')
+    expect(installer).toContain('StrCmp $R0 "0" DshLegacyUninstallDone_')
+    expect(installer).toContain('SetErrorLevel 2')
+    const open = installer.indexOf('  FileOpen $1')
+    const seek = installer.indexOf('  FileSeek $1 0 END', open)
+    const write = installer.indexOf('  FileWriteUTF16LE $1', open)
+    expect(open).toBeGreaterThan(-1)
+    expect(seek).toBeGreaterThan(open)
+    expect(write).toBeGreaterThan(seek)
   })
 
   it('stops legacy Windows processes before invoking an old uninstaller', async () => {
@@ -249,6 +251,19 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('Stop-Process -Id $$_.ProcessId -Force')
     expect(installer).toContain('[System.StringComparison]::OrdinalIgnoreCase')
     expect(installer).toContain('IntCmp $R8 3')
+  })
+
+  it('uses a bundled upgrade uninstaller only after matching the registered product path', async () => {
+    const installer = await readFile(path.join(projectRoot, 'build/installer.nsh'), 'utf8')
+    const patch = await readFile(path.join(projectRoot, 'patches/app-builder-lib+26.15.3.patch'), 'utf8')
+    expect(installer).toContain('GetFullPathName $R6 "$installationDir\\${UNINSTALL_FILENAME}"')
+    expect(installer).toContain('GetFullPathName $R7 "$uninstallerFileName"')
+    expect(installer).toContain('compat-uninstaller-rejected')
+    expect(installer).toContain('File "/oname=$PLUGINSDIR\\compat-uninstaller.exe" "${UNINSTALLER_OUT_FILE}"')
+    expect(patch).toContain('!insertmacro customExtractUpgradeUninstaller')
+    expect(patch).toContain('Never fall back to the known-broken legacy executable.')
+    expect(patch).toContain('Rename "$DshUninstallRoot$R0\\$R2" "$DshUninstallStage\\old-install$R0\\$R2"')
+    expect(patch).toContain('Rename "$DshUninstallStage\\old-install$R0\\$R2" "$DshUninstallRoot$R0\\$R2"')
   })
 
   it('loads the Shell first and isolates the authenticated Harness surface', async () => {
@@ -286,8 +301,9 @@ describe('GitHub release contract', () => {
     expect(main).toContain("label: isChinese ? '导入本地插件…' : 'Import Local Plugin…'")
     expect(main).toContain('resolveLocalPluginImport(selectedPath)')
     expect(main).toContain('addProfilePluginWithDsh(')
-    expect(profile).toContain("const MARKET_PACKAGE = 'dshmarket'")
-    expect(profile).toContain("const MARKET_VERSION = '1.46.1'")
+    expect(profile).not.toContain('patchBundledMarket')
+    expect(profile).not.toContain('dshmarket')
+    expect(profile).not.toContain('@changfenhuang/dsh-genui')
     expect(profile).toContain("bundled-community-plugins.json")
     expect(profile).toContain("file:.insight-bundled-plugins/")
     expect(profile).not.toContain("packageName: 'dsh-at-file'")
@@ -451,8 +467,8 @@ describe('GitHub release contract', () => {
     expect(developmentConfig).toContain(
       "artifactName: 'insight-dev-windows-${arch}-setup.${ext}'"
     )
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop-dev'))")
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), 'insight-desktop'))")
+    expect(main).toContain("userDataDirectory ?? 'insight-desktop-dev'")
+    expect(main).toContain("userDataDirectory ?? 'insight-desktop'")
     expect(main).not.toContain('insight-desktop-candidate')
     expect(main).toContain('const desktopChannel = applicationChannel()')
     expect(main).toContain("app.commandLine.appendSwitch('use-mock-keychain')")

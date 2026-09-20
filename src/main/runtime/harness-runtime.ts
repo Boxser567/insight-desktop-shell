@@ -19,6 +19,8 @@ export interface HarnessRuntimeOptions {
   nodeExecutablePath: string
   nodeEntryPath: string
   dshPatchPath: string
+  bundledSkillDir?: string
+  serviceEnvironment?: 'test' | 'production'
   dshHome: string
   logPath: string
   launchProcess(
@@ -410,7 +412,12 @@ export class HarnessRuntime {
           launchDirectory,
           this.dshHome,
           process.platform,
-          resolveShellEnvironment()
+          {
+            ...resolveShellEnvironment(),
+            INSIGHT_BUNDLED_NODE_PATH: this.options.nodeExecutablePath,
+            INSIGHT_DESKTOP_SERVICE_ENVIRONMENT: this.options.serviceEnvironment ?? 'production',
+            ...(this.options.bundledSkillDir ? { DSH_BUNDLED_SKILL_DIR: this.options.bundledSkillDir } : {})
+          }
         )
       )
     } catch (error) {

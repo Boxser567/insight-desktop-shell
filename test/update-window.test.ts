@@ -56,6 +56,15 @@ describe('desktop update window', () => {
     })).not.toHaveProperty('autoHideMenuBar')
   })
 
+  it('keeps the sandboxed update preload self-contained while synchronizing theme', async () => {
+    const preload = await readFile('src/preload/update.ts', 'utf8')
+
+    expect(preload).not.toContain("import './secondary-theme'")
+    expect(preload).toContain("ipcRenderer.invoke('desktop-secondary-theme:get')")
+    expect(preload).toContain("ipcRenderer.on('desktop-secondary-theme:changed'")
+    expect(preload).toContain("dataset.insightTheme = isDark ? 'dark' : 'light'")
+  })
+
   it('focuses one existing window and clears it only after close', async () => {
     const window = fakeWindow()
     const create = vi.fn(() => window)
@@ -104,7 +113,10 @@ describe('desktop update window', () => {
     }).detail).toContain('42%')
     expect(updateViewModel({
       phase: 'downloaded', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
-    }).primary).toBe('install')
+    })).toMatchObject({
+      title: '正在启动安装…',
+      busy: true
+    })
     expect(updateViewModel({
       phase: 'installing', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
     })).toMatchObject({
@@ -134,7 +146,7 @@ describe('desktop update window', () => {
     expect(source).toContain('className="update-content"')
     expect(source).toContain('className="update-recovery"')
     expect(source).toContain("download: '下载更新'")
-    expect(source).toContain("install: '安装并重启'")
+    expect(source).not.toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
     expect(source).toContain("status.phase === 'checking' || status.phase === 'installing'")
     expect(source).toContain("model.busy ? 'update-logo update-logo--busy' : 'update-logo'")
