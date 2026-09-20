@@ -12,8 +12,8 @@ const compiler = await getMakeNsisPath()
 const template = await readFile(require.resolve('app-builder-lib/templates/nsis/uninstaller.nsh'), 'utf8')
 const functions = template.slice(template.indexOf('Function un.atomicRMDir'), template.indexOf('!ifndef UNINSTALL_SECTION_NAME'))
   .replaceAll('un.atomicRMDir', 'probeAtomic').replaceAll('un.restoreFiles', 'probeRestore')
-  .replaceAll('$PLUGINSDIR', '$ProbeStage')
-if (!functions.includes('Rename "$INSTDIR$R0\\$R2"')) throw new Error('Unexpected template')
+
+if (!functions.includes('Rename "$DshUninstallRoot$R0\\$R2"')) throw new Error('Unexpected template')
 const root = await mkdtemp(path.join(tmpdir(), 'insight-nsis-'))
 const output = path.resolve('nsis-path-results.json')
 const rows = []
@@ -25,11 +25,13 @@ RequestExecutionLevel user
 SilentInstall silent
 OutFile "${exe}"
 !include LogicLib.nsh
+!include "${path.resolve('build/windows-long-path.nsh')}"
 !define UNINSTALL_FILENAME "unused-uninstaller.exe"
 Var ProbeStage
 Var ProbeResult
 Var ProbeRelative
 Var ProbeLock
+Var ProbeMode
 ${functions}
 Section
   ReadEnvStr $INSTDIR INSIGHT_PROBE_SOURCE
@@ -37,17 +39,24 @@ Section
   ReadEnvStr $ProbeResult INSIGHT_PROBE_RESULT
   ReadEnvStr $ProbeRelative INSIGHT_PROBE_RELATIVE
   ReadEnvStr $ProbeLock INSIGHT_PROBE_LOCK
+  ReadEnvStr $ProbeMode INSIGHT_PROBE_MODE
+  StrCpy $DshUninstallRoot $INSTDIR
+  StrCpy $DshUninstallStage $ProbeStage
+  StrCmp $ProbeMode "ordinary" pathsReady
+  !insertmacro DshExtendedPath $DshUninstallRoot $INSTDIR
+  !insertmacro DshExtendedPath $DshUninstallStage $ProbeStage
+  pathsReady:
   StrCmp $ProbeLock "1" 0 +2
-  FileOpen $9 "$INSTDIR\\$ProbeRelative" r
+  FileOpen $9 "$DshUninstallRoot\\$ProbeRelative" r
   Push ""
   Call probeAtomic
   Pop $R0
   WriteINIStr "$ProbeResult" result atomic "$R0"
-  IfFileExists "$ProbeStage\\old-install\\$ProbeRelative" 0 +3
+  IfFileExists "$DshUninstallStage\\old-install\\$ProbeRelative" 0 +3
   WriteINIStr "$ProbeResult" result staged "yes"
   Goto +2
   WriteINIStr "$ProbeResult" result staged "no"
-  IfFileExists "$ProbeStage\\old-install\\a-marker" 0 +3
+  IfFileExists "$DshUninstallStage\\old-install\\a-marker" 0 +3
   WriteINIStr "$ProbeResult" result markerStaged "yes"
   Goto +2
   WriteINIStr "$ProbeResult" result markerStaged "no"
@@ -75,9 +84,9 @@ SectionEnd
       await writeFile(file, 'preserve-this-content')
       await writeFile(path.join(source, 'a-marker'), 'rollback-marker')
       const report = path.join(base, 'result.ini')
-      const prefix = mode.startsWith('extended') ? '\\\\?\\' : ''
+      const prefix = ''
       execFileSync(exe, [], { timeout: 30000, env: {
-        ...process.env, INSIGHT_PROBE_SOURCE: prefix + source,
+        ...process.env, INSIGHT_PROBE_MODE: mode, INSIGHT_PROBE_SOURCE: prefix + source,
         INSIGHT_PROBE_STAGE: prefix + stage, INSIGHT_PROBE_RESULT: report,
         INSIGHT_PROBE_RELATIVE: relative, INSIGHT_PROBE_LOCK: mode.endsWith('locked') ? '1' : '0'
       } })

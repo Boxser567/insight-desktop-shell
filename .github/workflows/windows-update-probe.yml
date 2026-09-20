@@ -4,6 +4,10 @@ on:
     branches: [codex/windows-update-diagnostics-20260920]
     paths:
       - scripts/probe-nsis-paths.mjs
+      - scripts/test-windows-upgrade-fixture.mjs
+      - build/installer.nsh
+      - build/windows-long-path.nsh
+      - patches/app-builder-lib+26.15.3.patch
       - .github/workflows/windows-update-probe.yml
   workflow_dispatch:
 permissions:
@@ -20,9 +24,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/probe-nsis-paths.mjs
+      - run: node scripts/test-windows-upgrade-fixture.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: nsis-path-results
-          path: nsis-path-results.json
+          path: |
+            nsis-path-results.json
+            windows-upgrade-evidence/
           if-no-files-found: warn

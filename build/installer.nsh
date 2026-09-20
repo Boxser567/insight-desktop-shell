@@ -35,10 +35,57 @@
 !macroend
 
 !macro customUnInstall
+  !insertmacro DshPrepareUninstallPaths
   !insertmacro DshUpdateLog "uninstall-remove-start directory=$INSTDIR"
 !macroend
 
+!ifdef BUILD_UNINSTALLER
+  !include "${__FILEDIR__}\windows-long-path.nsh"
+!endif
+
 !ifndef BUILD_UNINSTALLER
+  ; Use the uninstaller built into THIS package, without replacing the legacy
+  ; executable on disk. The registered identity is already selected by builder.
+  !macro customExtractUpgradeUninstaller
+    Push $R6
+    Push $R7
+    Push $R8
+    StrCpy $R8 0
+    GetFullPathName $R6 "$installationDir\${UNINSTALL_FILENAME}"
+    GetFullPathName $R7 "$uninstallerFileName"
+    ${If} $R6 == $R7
+      IfFileExists "$installationDir\${APP_EXECUTABLE_FILENAME}" 0 DshCompatValidated
+      IfFileExists "$uninstallerFileName" 0 DshCompatValidated
+      StrLen $R6 $installationDir
+      ${If} $R6 > 3
+        StrCpy $R8 1
+      ${EndIf}
+    ${EndIf}
+    DshCompatValidated:
+    ${If} $R8 != 1
+      Pop $R8
+      Pop $R7
+      Pop $R6
+      !insertmacro DshUpdateLog "compat-uninstaller-rejected directory=$installationDir executable=$uninstallerFileName"
+      StrCpy $R0 2
+      SetErrors
+      Return
+    ${EndIf}
+    Pop $R8
+    Pop $R7
+    Pop $R6
+    StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\compat-uninstaller.exe"
+    ClearErrors
+    File "/oname=$PLUGINSDIR\compat-uninstaller.exe" "${UNINSTALLER_OUT_FILE}"
+    ${If} ${Errors}
+      !insertmacro DshUpdateLog "compat-uninstaller-extract-failed directory=$installationDir"
+      StrCpy $R0 2
+      SetErrors
+      Return
+    ${EndIf}
+    !insertmacro DshUpdateLog "compat-uninstaller-selected directory=$installationDir executable=$uninstallerFileNameTemp"
+  !macroend
+
   ; Failed atomic upgrades must not fall back to destructive regular uninstall.
   !macro DshResolveLegacyInstallationDir ROOT_KEY
     !insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation
