@@ -253,6 +253,19 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('IntCmp $R8 3')
   })
 
+  it('uses a bundled upgrade uninstaller only after matching the registered product path', async () => {
+    const installer = await readFile(path.join(projectRoot, 'build/installer.nsh'), 'utf8')
+    const patch = await readFile(path.join(projectRoot, 'patches/app-builder-lib+26.15.3.patch'), 'utf8')
+    expect(installer).toContain('GetFullPathName $R6 "$installationDir\\${UNINSTALL_FILENAME}"')
+    expect(installer).toContain('GetFullPathName $R7 "$uninstallerFileName"')
+    expect(installer).toContain('compat-uninstaller-rejected')
+    expect(installer).toContain('File "/oname=$PLUGINSDIR\\compat-uninstaller.exe" "${UNINSTALLER_OUT_FILE}"')
+    expect(patch).toContain('!insertmacro customExtractUpgradeUninstaller')
+    expect(patch).toContain('Never fall back to the known-broken legacy executable.')
+    expect(patch).toContain('Rename "$DshUninstallRoot$R0\\$R2" "$DshUninstallStage\\old-install$R0\\$R2"')
+    expect(patch).toContain('Rename "$DshUninstallStage\\old-install$R0\\$R2" "$DshUninstallRoot$R0\\$R2"')
+  })
+
   it('loads the Shell first and isolates the authenticated Harness surface', async () => {
     const main = await readFile(path.join(projectRoot, 'src', 'main', 'index.ts'), 'utf8')
     const vite = await readFile(path.join(projectRoot, 'electron.vite.config.ts'), 'utf8')

@@ -42,6 +42,7 @@ try {
     const config = path.join(root, 'config.json')
     await writeFile(config, JSON.stringify({
       appId: 'com.insight-aigc.upgrade-probe', productName: product, npmRebuild: false,
+      electronVersion: '44.0.0',
       directories: { output }, artifactName: 'fixture.exe',
       win: { signAndEditExecutable: false },
       nsis: { oneClick: false, allowToChangeInstallationDirectory: true,
