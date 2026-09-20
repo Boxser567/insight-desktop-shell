@@ -207,7 +207,7 @@ describe('GitHub release contract', () => {
     expect(installer).toContain('${NSD_SetText} $DshDirectoryEdit $3')
   })
 
-  it('recovers from the legacy Windows atomic-uninstall failure without deleting user data', async () => {
+  it('stops failed legacy upgrades without invoking a destructive regular uninstall', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as { build: { nsis: { deleteAppDataOnUninstall?: boolean } } }
@@ -219,20 +219,18 @@ describe('GitHub release contract', () => {
     expect(packageJson.build.nsis.deleteAppDataOnUninstall).not.toBe(true)
     expect(installer).toContain('!macro customUnInstallCheck')
     expect(installer).toContain('!macro customUnInstallCheckCurrentUser')
-    const fallbackCommand = installer
-      .split('\n')
-      .find((line) => line.includes('/S /KEEP_APP_DATA $R9 _?=$R7'))
-    expect(fallbackCommand).toBeDefined()
-    expect(fallbackCommand).not.toContain('--updated')
-    expect(installer).toContain('IntCmp $R8 3')
-    expect(installer).toContain(
-      '!insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation'
-    )
-    expect(installer).toContain('IfFileExists "$R7\\*.*"')
-    expect(installer).toContain('IfFileExists "$R7\\${APP_EXECUTABLE_FILENAME}"')
-    expect(installer).toContain('IfFileExists "$PLUGINSDIR\\old-uninstaller.exe"')
-    expect(installer).not.toContain('$installationDir')
-    expect(installer).not.toContain('$uninstallerFileNameTemp')
+    expect(installer).not.toContain('ExecWait')
+    expect(installer).not.toContain('DshRecoverFailedAtomicUninstall')
+    expect(installer).toContain('nonAtomicFallback=disabled')
+    expect(installer).toContain('IfErrors DshLegacyUninstallFailed_')
+    expect(installer).toContain('StrCmp $R0 "0" DshLegacyUninstallDone_')
+    expect(installer).toContain('SetErrorLevel 2')
+    const open = installer.indexOf('  FileOpen $1')
+    const seek = installer.indexOf('  FileSeek $1 0 END', open)
+    const write = installer.indexOf('  FileWriteUTF16LE $1', open)
+    expect(open).toBeGreaterThan(-1)
+    expect(seek).toBeGreaterThan(open)
+    expect(write).toBeGreaterThan(seek)
   })
 
   it('stops legacy Windows processes before invoking an old uninstaller', async () => {

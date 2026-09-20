@@ -1,5 +1,10 @@
 # Windows update diagnostics for rc11
 
+> Correction (2026-09-20): the original macro overwrote records because it did not
+> seek to EOF after FileOpen `a`. The local correction and removal of the destructive
+> fallback are recorded in [the rc7 → rc12 investigation](2026-09-20-windows-rc7-rc12-upgrade.md).
+> The historical validation below did not verify append behavior on Windows.
+
 ## Scope
 
 Add persistent stage logs without changing uninstall, retry, process termination or user-data removal policy. The previous PML contained only profiling samples; it did not identify a root cause. Windows upgrade reliability is still pending real-device validation.

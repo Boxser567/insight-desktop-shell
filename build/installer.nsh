@@ -10,6 +10,7 @@
   CreateDirectory "$TEMP\insight-desktop-update-logs"
   System::Call 'kernel32::GetCurrentProcessId() i.r0'
   FileOpen $1 "$TEMP\insight-desktop-update-logs\update-$0.log" a
+  FileSeek $1 0 END
   System::Call 'kernel32::GetTickCount() i.r0'
   FileWriteUTF16LE $1 "tick=$0 version=${VERSION} nsisError=$2 ${MESSAGE}$\r$\n"
   FileClose $1
@@ -38,12 +39,7 @@
 !macroend
 
 !ifndef BUILD_UNINSTALLER
-  ; electron-builder updates normally ask the old uninstaller to atomically move
-  ; every installed file before deletion. Large unpacked installations can make
-  ; that old uninstaller return code 2 even after the application has exited.
-  ; Retry only that failed case with the old uninstaller's regular removal path.
-  ; User data remains outside the old installation directory and the package contract keeps
-  ; deleteAppDataOnUninstall disabled.
+  ; Failed atomic upgrades must not fall back to destructive regular uninstall.
   !macro DshResolveLegacyInstallationDir ROOT_KEY
     !insertmacro readReg $R7 "${ROOT_KEY}" "${INSTALL_REGISTRY_KEY}" InstallLocation
     ${If} $R7 == ""
@@ -98,62 +94,30 @@
     !insertmacro DshUpdateLog "legacy-cleanup-end directory=$R7"
   !macroend
 
-  !macro DshRecoverFailedAtomicUninstall ROOT_KEY LABEL_SUFFIX
-    IfErrors DshLegacyUninstallNeeded_${LABEL_SUFFIX} 0
+  !macro DshCheckLegacyUninstall ROOT_KEY LABEL_SUFFIX
+    IfErrors DshLegacyUninstallFailed_${LABEL_SUFFIX} 0
     StrCmp $R0 "0" DshLegacyUninstallDone_${LABEL_SUFFIX}
 
-    DshLegacyUninstallNeeded_${LABEL_SUFFIX}:
-      !insertmacro DshUpdateLog "fallback-needed registry=${ROOT_KEY} previous-result=$R0"
-      !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
-      StrCmp $R7 "" DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$R7\*.*" 0 DshLegacyUninstallDone_${LABEL_SUFFIX}
-      IfFileExists "$R7\${APP_EXECUTABLE_FILENAME}" 0 DshLegacyUninstallFailed_${LABEL_SUFFIX}
-      IfFileExists "$PLUGINSDIR\old-uninstaller.exe" DshLegacyUninstallRetry_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetry_${LABEL_SUFFIX}:
-      StrCpy $R8 0
-      StrCpy $R9 "/currentuser"
-      StrCmp "${ROOT_KEY}" "SHELL_CONTEXT" 0 DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-      StrCmp $installMode "CurrentUser" DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-      StrCpy $R9 "/allusers"
-
-    DshLegacyUninstallAttempt_${LABEL_SUFFIX}:
-      IntOp $R8 $R8 + 1
-      ClearErrors
-      DetailPrint "Retrying previous-version cleanup without atomic relocation (attempt $R8 of 3)."
-      !insertmacro DshUpdateLog "fallback-launch attempt=$R8 directory=$R7 mode=$R9"
-      ExecWait '"$PLUGINSDIR\old-uninstaller.exe" /S /KEEP_APP_DATA $R9 _?=$R7' $R0
-      !insertmacro DshUpdateLog "fallback-return result=$R0"
-      IfErrors DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} 0
-      StrCmp $R0 "0" 0 DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}
-      IfFileExists "$R7\*.*" DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX} DshLegacyUninstallDone_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetryOrFail_${LABEL_SUFFIX}:
-      IntCmp $R8 3 DshLegacyUninstallFailed_${LABEL_SUFFIX} DshLegacyUninstallRetryDelay_${LABEL_SUFFIX} DshLegacyUninstallFailed_${LABEL_SUFFIX}
-
-    DshLegacyUninstallRetryDelay_${LABEL_SUFFIX}:
-      Sleep 1000
-      Goto DshLegacyUninstallAttempt_${LABEL_SUFFIX}
-
     DshLegacyUninstallFailed_${LABEL_SUFFIX}:
-      !insertmacro DshUpdateLog "upgrade-failed directory=$R7 result=$R0"
-      StrCpy $R0 2
+      ; Record the original result before resolving the directory or assigning an exit code.
+      !insertmacro DshUpdateLog "upgrade-stopped registry=${ROOT_KEY} result=$R0 nonAtomicFallback=disabled"
+      !insertmacro DshResolveLegacyInstallationDir "${ROOT_KEY}"
+      !insertmacro DshUpdateLog "upgrade-stopped-directory directory=$R7"
       MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0$\r$\nLogs: $TEMP\insight-desktop-update-logs"
-      DetailPrint "Previous-version cleanup still left files in $R7."
+      DetailPrint "Upgrade stopped; no additional regular uninstall will be attempted."
       SetErrorLevel 2
       Quit
 
     DshLegacyUninstallDone_${LABEL_SUFFIX}:
       ClearErrors
-      StrCpy $R0 0
   !macroend
 
   !macro customUnInstallCheck
-    !insertmacro DshRecoverFailedAtomicUninstall "SHELL_CONTEXT" "Shell"
+    !insertmacro DshCheckLegacyUninstall "SHELL_CONTEXT" "Shell"
   !macroend
 
   !macro customUnInstallCheckCurrentUser
-    !insertmacro DshRecoverFailedAtomicUninstall "HKEY_CURRENT_USER" "CurrentUser"
+    !insertmacro DshCheckLegacyUninstall "HKEY_CURRENT_USER" "CurrentUser"
   !macroend
 
   !ifndef ONE_CLICK
