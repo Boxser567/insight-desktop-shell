@@ -61,7 +61,7 @@ function parseArguments(argv) {
 }
 
 function usage() {
-  return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path> [--scope <all|macos-arm64>]'
+  return 'Usage: verify-release-assets.mjs --dir <path> --version <semver> --channel <candidate|stable> --public-key <path> [--scope <all|macos-arm64|windows-x64>]'
 }
 
 function identity(values) {

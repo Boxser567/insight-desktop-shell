@@ -22,6 +22,11 @@ async function builtFixture(
   const root = await mkdtemp(path.join(tmpdir(), 'insight-release-verify-'))
   temporaryDirectories.push(root)
   const paths = await writeReleaseFixture(root, version, channel)
+  if (scope === 'windows-x64') {
+    const names = await readdir(paths.releaseDir)
+    await Promise.all(names.filter((name) => name.includes('mac'))
+      .map((name) => rm(path.join(paths.releaseDir, name))))
+  }
   if (scope === 'macos-arm64') {
     const names = await readdir(paths.releaseDir)
     await Promise.all(names
@@ -93,6 +98,15 @@ describe('complete release asset verifier', () => {
     const wrongScope = runVerify(paths, '0.1.2-rc.4', 'candidate')
     expect(wrongScope.status).not.toBe(0)
     expect(wrongScope.stderr).toContain('incomplete or unexpected')
+  })
+
+  it('verifies a Windows-only Candidate and rejects it as a complete release', async () => {
+    const paths = await builtFixture('0.1.2-rc.4', 'candidate', 'windows-x64')
+    expect(runVerify(paths, '0.1.2-rc.4', 'candidate', 'windows-x64').status).toBe(0)
+    expect(runVerify(paths, '0.1.2-rc.4', 'candidate').status).not.toBe(0)
+    const manifest = JSON.parse(await readFile(path.join(paths.releaseDir, 'insight-update.json'), 'utf8'))
+    expect(manifest.artifacts).toHaveLength(3)
+    expect(manifest.artifacts.every((entry: { platform: string }) => entry.platform === 'win32')).toBe(true)
   })
 
   it('rejects signature, digest, and requested-version mismatches', async () => {

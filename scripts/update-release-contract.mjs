@@ -26,7 +26,7 @@ export function releaseChannelForVersion(version) {
 }
 
 export function assertReleaseScope(scope, channel) {
-  if (scope !== 'all' && scope !== 'macos-arm64') {
+  if (!['all', 'macos-arm64', 'windows-x64'].includes(scope)) {
     throw new Error('Release scope is invalid.')
   }
   if (scope !== 'all' && channel !== 'candidate') {
@@ -53,6 +53,7 @@ export function artifactDefinitions(channel, version, scope = 'all') {
     ['win32', 'x64', 'blockmap', `${windows}.blockmap`],
     ['win32', 'x64', 'updater-metadata', 'latest.yml']
   ]
+  if (scope === 'windows-x64') return definitions.filter((entry) => entry[0] === 'win32')
   return scope === 'macos-arm64'
     ? definitions.filter((entry) => entry[0] === 'darwin' && entry[1] === 'arm64')
     : definitions

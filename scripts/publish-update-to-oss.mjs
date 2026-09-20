@@ -40,8 +40,8 @@ const sensitiveEnvironmentNames = new Set([
 function usage() {
   return [
     'Usage:',
-    '  publish-update-to-oss.mjs stage --tag <v-semver> [--scope <all|macos-arm64>]',
-    '  publish-update-to-oss.mjs promote --tag <v-semver> --confirm-version <semver> [--scope <all|macos-arm64>]'
+    '  publish-update-to-oss.mjs stage --tag <v-semver> [--scope <all|macos-arm64|windows-x64>]',
+    '  publish-update-to-oss.mjs promote --tag <v-semver> --confirm-version <semver> [--scope <all|macos-arm64|windows-x64>]'
   ].join('\n')
 }
 

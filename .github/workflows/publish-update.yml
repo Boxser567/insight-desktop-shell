@@ -22,6 +22,7 @@ on:
         options:
           - all
           - macos-arm64
+          - windows-x64
       confirm_version:
         description: Required for promote; enter the exact version without v
         required: false
@@ -68,7 +69,7 @@ jobs:
             echo '::error::Release tag is invalid.'
             exit 1
           }
-          if [ "$SCOPE" != 'all' ] && [ "$SCOPE" != 'macos-arm64' ]; then
+          if [ "$SCOPE" != 'all' ] && [ "$SCOPE" != 'macos-arm64' ] && [ "$SCOPE" != 'windows-x64' ]; then
             echo '::error::Release scope is invalid.'
             exit 1
           fi

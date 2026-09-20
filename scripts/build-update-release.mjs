@@ -39,7 +39,7 @@ function parseArguments(argv) {
 }
 
 function usage() {
-  return 'Usage: build-update-release.mjs --dir <path> --version <semver> --channel <candidate|stable> --shell-commit <40-hex> --runtime-manifest <path> --compatibility <path> --policy <path> --private-key <path> [--scope <all|macos-arm64>]'
+  return 'Usage: build-update-release.mjs --dir <path> --version <semver> --channel <candidate|stable> --shell-commit <40-hex> --runtime-manifest <path> --compatibility <path> --policy <path> --private-key <path> [--scope <all|macos-arm64|windows-x64>]'
 }
 
 function assertExactKeys(value, keys, label) {
