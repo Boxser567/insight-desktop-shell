@@ -1,0 +1,28 @@
+name: Windows NSIS path reproduction
+on:
+  push:
+    branches: [codex/windows-update-diagnostics-20260920]
+    paths:
+      - scripts/probe-nsis-paths.mjs
+      - .github/workflows/windows-update-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/probe-nsis-paths.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nsis-path-results
+          path: nsis-path-results.json
+          if-no-files-found: warn
