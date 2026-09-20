@@ -47,6 +47,10 @@ Section
   WriteINIStr "$ProbeResult" result staged "yes"
   Goto +2
   WriteINIStr "$ProbeResult" result staged "no"
+  IfFileExists "$ProbeStage\\old-install\\a-marker" 0 +3
+  WriteINIStr "$ProbeResult" result markerStaged "yes"
+  Goto +2
+  WriteINIStr "$ProbeResult" result markerStaged "no"
   StrCmp $ProbeLock "1" 0 +2
   FileClose $9
   Push ""
@@ -83,9 +87,10 @@ SectionEnd
       const marker = await readFile(path.join(source, 'a-marker'), 'utf8').catch(() => null)
       const atomicSucceeded = /atomic=0\r?\n/.test(result)
       const staged = /staged=yes/.test(result)
-      const passed = restored === 'preserve-this-content' && marker === 'rollback-marker' &&
+      const markerStaged = /markerStaged=yes/.test(result)
+      const passed = markerStaged && restored === 'preserve-this-content' && marker === 'rollback-marker' &&
         (mode === 'extended' ? atomicSucceeded && staged : !atomicSucceeded && !staged)
-      rows.push({ length: file.length, destinationLength: path.join(stage, 'old-install', relative).length, mode, result, restored: restored === 'preserve-this-content', markerRestored: marker === 'rollback-marker', passed })
+      rows.push({ length: file.length, destinationLength: path.join(stage, 'old-install', relative).length, mode, result, markerStaged, restored: restored === 'preserve-this-content', markerRestored: marker === 'rollback-marker', passed })
     }
   }
 } finally {
