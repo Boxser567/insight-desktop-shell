@@ -28,15 +28,27 @@ OutFile "${exe}"
 !define UNINSTALL_FILENAME "unused-uninstaller.exe"
 Var ProbeStage
 Var ProbeResult
+Var ProbeRelative
+Var ProbeLock
 ${functions}
 Section
   ReadEnvStr $INSTDIR INSIGHT_PROBE_SOURCE
   ReadEnvStr $ProbeStage INSIGHT_PROBE_STAGE
   ReadEnvStr $ProbeResult INSIGHT_PROBE_RESULT
+  ReadEnvStr $ProbeRelative INSIGHT_PROBE_RELATIVE
+  ReadEnvStr $ProbeLock INSIGHT_PROBE_LOCK
+  StrCmp $ProbeLock "1" 0 +2
+  FileOpen $9 "$INSTDIR\\$ProbeRelative" r
   Push ""
   Call probeAtomic
   Pop $R0
   WriteINIStr "$ProbeResult" result atomic "$R0"
+  IfFileExists "$ProbeStage\\old-install\\$ProbeRelative" 0 +3
+  WriteINIStr "$ProbeResult" result staged "yes"
+  Goto +2
+  WriteINIStr "$ProbeResult" result staged "no"
+  StrCmp $ProbeLock "1" 0 +2
+  FileClose $9
   Push ""
   Call probeRestore
   Pop $R0
@@ -46,7 +58,7 @@ SectionEnd
   execFileSync(compiler.path, ['/V2', script], { env: { ...process.env, ...compiler.env }, stdio: 'inherit' })
   const leaf = 'getchatcompletionfieldoptionscountsv1observabilitychatcompletionfieldsfieldnameoptionscountspost.js'
   for (const length of [259, 260, 261]) {
-    for (const mode of ['ordinary', 'extended']) {
+    for (const mode of ['ordinary', 'extended', 'extended-locked']) {
       const base = path.join(root, `${length}-${mode}`)
       const source = path.join(base, 'source')
       const stage = path.join(base, 'stage')
@@ -57,16 +69,23 @@ SectionEnd
       await mkdir(path.dirname(file), { recursive: true })
       await mkdir(path.join(stage, 'old-install'), { recursive: true })
       await writeFile(file, 'preserve-this-content')
+      await writeFile(path.join(source, 'a-marker'), 'rollback-marker')
       const report = path.join(base, 'result.ini')
-      const prefix = mode === 'extended' ? '\\\\?\\' : ''
+      const prefix = mode.startsWith('extended') ? '\\\\?\\' : ''
       execFileSync(exe, [], { timeout: 30000, env: {
         ...process.env, INSIGHT_PROBE_SOURCE: prefix + source,
-        INSIGHT_PROBE_STAGE: prefix + stage, INSIGHT_PROBE_RESULT: report
+        INSIGHT_PROBE_STAGE: prefix + stage, INSIGHT_PROBE_RESULT: report,
+        INSIGHT_PROBE_RELATIVE: relative, INSIGHT_PROBE_LOCK: mode.endsWith('locked') ? '1' : '0'
       } })
       const raw = await readFile(report)
       const result = raw[0] === 0xff ? raw.toString('utf16le') : raw.toString('utf8')
       const restored = await readFile(file, 'utf8').catch(() => null)
-      rows.push({ length: file.length, mode, result, restored: restored === 'preserve-this-content' })
+      const marker = await readFile(path.join(source, 'a-marker'), 'utf8').catch(() => null)
+      const atomicSucceeded = /atomic=0\r?\n/.test(result)
+      const staged = /staged=yes/.test(result)
+      const passed = restored === 'preserve-this-content' && marker === 'rollback-marker' &&
+        (mode === 'extended' ? atomicSucceeded && staged : !atomicSucceeded && !staged)
+      rows.push({ length: file.length, destinationLength: path.join(stage, 'old-install', relative).length, mode, result, restored: restored === 'preserve-this-content', markerRestored: marker === 'rollback-marker', passed })
     }
   }
 } finally {
@@ -74,3 +93,5 @@ SectionEnd
   await rm(root, { recursive: true, force: true })
 }
 console.log(JSON.stringify(rows, null, 2))
+
+if (rows.length !== 9 || rows.some(row => !row.passed)) throw new Error('NSIS path or restore expectation failed; see report')
