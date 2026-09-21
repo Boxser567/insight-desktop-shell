@@ -31,3 +31,11 @@ Core `pnpm run doc-sync`：40 项通过，1 项失败。失败为 `packages/exte
 5. 受影响 Mac 的网络问题尚缺原始错误码。恢复入口及脱敏诊断已实现；若清理认证状态后仍无法登录，使用新增 origin/endpoint/错误码定位网络原因，不能宣称所有网络故障已修复。
 
 上述验收通过后，再选择发布版本、生成正式资产和推广更新指针。
+
+## RC16 构建准备
+
+用户已确认创建独立 Runtime 预发布资产并构建 RC16 测试包，不修改 RC15 资产或生产更新指针。Shell 版本、发布策略及日期已更新到 `1.0.0-rc.16` / `2026-09-21`，类型检查通过；使用系统 Python 的全量测试通过 116 个文件、785 项测试。本机 `/opt/homebrew/bin/python3` 是空文件，首次全量测试的两个 Python 启动失败通过仅调整该次命令 PATH 解决，没有修改 Python 安装或放宽测试。
+
+[Runtime 校验构建 35572186446](https://github.com/Boxser567/insight-harness-core/actions/runs/35572186446) 的三个目标均已完成编译和归档。Windows、Apple Silicon 资产上传成功，Intel 的 GitHub Artifact CreateArtifact 接口重试五次后超时。因本机 Actions 归档下载速度极低，停止本机大文件中转及重复校验任务，改用现有 Runtime 发布流程由云端直接生成独立预发布资产。
+
+Runtime tag `insight-runtime-v0.1.6-alpha.2-insight.2` 固定到 `be346c81694e14091bc4021cac78d3cad5dd6090`；[预发布构建 35573491012](https://github.com/Boxser567/insight-harness-core/actions/runs/35573491012) 使用该 tag。待九项资产完整并核对身份、摘要后更新 Shell Runtime 锁，再启动安装包构建。
