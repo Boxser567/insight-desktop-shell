@@ -4,7 +4,7 @@
 
 - Shell：`codex/rc15-platform-repair-20260921`，功能提交 `84e0c07`。
 - Core：`codex/windows-console-repair-20260921`，功能提交 `14fbe92786`，测试启动目录修正 `be346c8169`；从已发布 Runtime 提交创建隔离 worktree，没有合并其它开发分支。
-- 保持 Electron 44.0.0，最低支持 macOS 13。没有修改生产指针，没有发布新的 Runtime 或安装器；Shell 当前锁定的 Runtime 仍是 RC15 基线，Windows 修复必须通过新 Runtime 打包后才进入客户端。
+- 保持 Electron 44.0.0，最低支持 macOS 13。没有修改生产更新指针。RC16 构建准备阶段已发布独立 Runtime `insight-runtime-v0.1.6-alpha.2-insight.2`，Shell 锁提交 `76f0cee` 已统一接入三平台修复产物；RC15 资产保持不变。
 
 ## 已完成验证
 
@@ -38,4 +38,16 @@ Core `pnpm run doc-sync`：40 项通过，1 项失败。失败为 `packages/exte
 
 [Runtime 校验构建 35572186446](https://github.com/Boxser567/insight-harness-core/actions/runs/35572186446) 的三个目标均已完成编译和归档。Windows、Apple Silicon 资产上传成功，Intel 的 GitHub Artifact CreateArtifact 接口重试五次后超时。因本机 Actions 归档下载速度极低，停止本机大文件中转及重复校验任务，改用现有 Runtime 发布流程由云端直接生成独立预发布资产。
 
-Runtime tag `insight-runtime-v0.1.6-alpha.2-insight.2` 固定到 `be346c81694e14091bc4021cac78d3cad5dd6090`；[预发布构建 35573491012](https://github.com/Boxser567/insight-harness-core/actions/runs/35573491012) 使用该 tag。待九项资产完整并核对身份、摘要后更新 Shell Runtime 锁，再启动安装包构建。
+Runtime tag `insight-runtime-v0.1.6-alpha.2-insight.2` 固定到 `be346c81694e14091bc4021cac78d3cad5dd6090`；[预发布构建 35573491012](https://github.com/Boxser567/insight-harness-core/actions/runs/35573491012) 的三个目标均成功，九项资产完整。三个目标的 metadata、checksum sidecar 与 GitHub 资产 SHA-256 记录一致，Node 24.9.0、pnpm 11.7.0 保持不变。
+
+| Runtime 目标 | 归档 SHA-256 |
+| --- | --- |
+| darwin-arm64 | `a26dd782cf24e84ecf031ffecd551c82c0225b90e52feac39677c6dc8d107b05` |
+| darwin-x64 | `8013217edaf9768a5ec442c091f3fea3497980e94bfdd6b734a08f2e6f9a15aa` |
+| win32-x64 | `535a7bf08ff661f8b79a5767bf63ab3050d71be1a6d14a4478f64b5860352b70` |
+
+ARM64 Release 归档已完整下载并计算 SHA-256，解压后的 runtime.json 与锁一致。编译后的 `dsh-win32-process/lib/index.js` 普通 CreateProcessW flags 为 `134218756`（CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT），确认修复已进入归档。复用该已验证归档生成 Runtime manifest、执行 `npm run build:prepared` 和 Profile 8 准备均成功；Runtime 锁与发布 preflight 相关 20 项测试通过。
+
+独立本地目录应用为 `/Users/boxser.shi/Documents/harness/insight-desktop-shell/dist-rc16-validation/mac-arm64/因赛AI Dev.app`，未覆盖 `/Applications` 的正式应用。目录应用的 RC16 版本、Runtime 身份、Profile 8、退役插件未注册以及 Info.plist 最低 macOS 13 均已检查；该未签名 DEV 目录应用不替代最终签名 DMG 的人工验收。
+
+`scripts/smoke-packaged-harness.mjs` 对该目录应用的实际资源运行通过：Harness 启动、认证 RPC、模型 Gateway 默认路由及目录、中文路径工作区与会话创建、20 秒稳定期均成功，测试进程已退出。该自动检查没有调用生产模型，不代表真实账号登录或 Windows 交互桌面问题已人工验收。
