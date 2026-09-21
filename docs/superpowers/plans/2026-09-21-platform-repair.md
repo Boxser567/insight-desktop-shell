@@ -47,10 +47,10 @@ Files: Core `packages/subprocess/subprocess-local`, `packages/subprocess/win32-p
 
 - [x] Trace runner and target console ownership, compare ordinary and restricted token behavior with the shipped baseline.
 - [x] Implement a candidate ordinary-target CREATE_NO_WINDOW change without changing restricted-target flags that previously caused DLL initialization failure.
-- [ ] Run focused unit checks and prepare repeatable native Windows acceptance commands; record unverified platform behavior explicitly.
+- [x] Run focused unit checks and prepare repeatable native Windows acceptance commands; record unverified platform behavior explicitly. Core run 35571053449 passes 84 Windows-native tests, including 20 fresh PowerShell processes per permission mode. Interactive Windows 10/11 acceptance remains a packaging gate.
 
 ### Task 5: Review and handoff
 
 - [x] Review NSIS old-runtime removal: existing compatibility uninstaller relocates the complete old installation using long paths, stops old rooted processes and aborts on failed relocation. Retain those mechanisms; profile migration fixes the uncovered retired-plugin path.
-- [ ] Run `git diff --check`, focused tests and type checks; commit only task files.
-- [ ] Record commit IDs, concrete test results and remaining Windows/macOS installation acceptance.
+- [x] Run `git diff --check`, focused tests and type checks; commit only task files.
+- [x] Record commit IDs, concrete test results and remaining Windows/macOS installation acceptance in `docs/acceptance/2026-09-21-platform-repair.md`.
