@@ -9,7 +9,7 @@ import { patchBundledPromptEnhance } from './patch-bundled-prompt-enhance.mjs'
 
 const PROFILE = 'web'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 7
+const DEFAULT_PROFILE_VERSION = 8
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(

@@ -28,6 +28,7 @@ async function fixture() {
     await writeFile(path.join(root, `${name}.blockmap`), `${arch} blockmap`)
     await writeFile(metadataPaths[arch], stringify({
       version: '0.1.2',
+      minimumSystemVersion: '22.0.0',
       files: [{ url: name, sha512: sha512(bytes), size: bytes.length }],
       path: name,
       sha512: sha512(bytes),
@@ -54,10 +55,12 @@ describe('macOS updater metadata merger', () => {
 
     const merged = parse(await readFile(paths.output, 'utf8')) as {
       version: string
+      minimumSystemVersion: string
       files: Array<{ url: string }>
       releaseDate: string
     }
     expect(merged.version).toBe('0.1.2')
+    expect(merged.minimumSystemVersion).toBe('22.0.0')
     expect(merged.files.map(({ url }) => url)).toEqual([
       'insight-mac-arm64.zip',
       'insight-mac-x64.zip'
@@ -89,5 +92,13 @@ describe('macOS updater metadata merger', () => {
     const result = run(invalid)
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('Invalid updater YAML')
+  })
+
+  it.each([undefined, '21.0.0', '13.0.0'])('rejects missing or incorrect macOS kernel floor %s', async (minimumSystemVersion) => {
+    const paths = await fixture()
+    const metadata = parse(await readFile(paths.metadataPaths.x64, 'utf8'))
+    metadata.minimumSystemVersion = minimumSystemVersion
+    await writeFile(paths.metadataPaths.x64, stringify(metadata))
+    expect(run(paths).stderr).toContain('must require Darwin 22.0.0')
   })
 })

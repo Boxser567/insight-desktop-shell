@@ -163,6 +163,7 @@ async function setup(input: {
   packaged?: boolean
   channel?: 'development' | 'stable'
   now?: () => number
+  systemRelease?: () => string
   prepareToInstall?: () => Promise<void>
   openExternal?: (url: string) => Promise<void>
 } = {}) {
@@ -189,6 +190,7 @@ async function setup(input: {
     prepareToInstall,
     openExternal,
     now: input.now,
+    systemRelease: input.systemRelease,
     random: () => 0,
     timers,
     resume
@@ -207,6 +209,25 @@ async function setup(input: {
 }
 
 describe('desktop update manager', () => {
+  it.each(['21.6.0', 'unknown'])('blocks incompatible OS %s before enabling download or required-update policy', async (version) => {
+    const release = { ...resolvedRelease({ mode: 'required', minimumSupportedVersion: '1.1.0' }), minimumSystemVersion: '22.0.0' }
+    const { manager, executor } = await setup({ release, systemRelease: () => version })
+    await manager.start()
+    await manager.check(true)
+    expect(manager.status()).toMatchObject({ phase: 'unsupported', manual: true, reason: expect.stringContaining('macOS 13') })
+    expect(executor.check).not.toHaveBeenCalled()
+    expect(executor.useRelease).not.toHaveBeenCalled()
+    await expect(manager.download()).rejects.toThrow()
+    await manager.stop()
+  })
+
+  it('allows the minimum supported kernel', async () => {
+    const { manager } = await setup({ release: { ...resolvedRelease(), minimumSystemVersion: '22.0.0' }, systemRelease: () => '22.0.0' })
+    await manager.start()
+    await manager.check(true)
+    expect(manager.status().phase).toBe('available')
+    await manager.stop()
+  })
   it('loads the CommonJS electron-updater package through its default export', async () => {
     const source = await readFile('src/main/update/update-executor.ts', 'utf8')
 

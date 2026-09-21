@@ -1,12 +1,39 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthSessionManager } from '../src/main/auth/auth-session-manager'
+import type { IpcMain } from 'electron'
 import {
   assertTrustedShellEvent,
+  registerAuthIpc,
   validatePasswordLoginInput,
   validateSmsLoginInput
 } from '../src/main/auth/auth-ipc'
 
 describe('desktop auth IPC', () => {
+  it('permits local reset only from an offline Shell main frame', async () => {
+    type Handler = (event: { sender: unknown; senderFrame: unknown }) => unknown
+    const handlers = new Map<string, Handler>()
+    const ipcMain = {
+      removeHandler: (channel: string) => handlers.delete(channel),
+      handle: (channel: string, handler: Handler) => handlers.set(channel, handler)
+    } as unknown as IpcMain
+    const manager = {
+      current: vi.fn().mockReturnValue({ kind: 'offline' }),
+      resetLocal: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn(() => () => {})
+    } as unknown as AuthSessionManager
+    const window = { isDestroyed: () => false, webContents: { mainFrame: {} } }
+    const dispose = registerAuthIpc({ ipcMain, manager, shellWindow: () => window })
+    const reset = handlers.get('auth:reset-local')!
+    const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    await expect(reset({ sender: {}, senderFrame: {} })).rejects.toThrow('Shell main frame')
+    await reset(event)
+    expect(manager.resetLocal).toHaveBeenCalledOnce()
+    vi.mocked(manager.current).mockReturnValue({ kind: 'unauthenticated' })
+    await expect(reset(event)).rejects.toThrow('offline')
+    dispose()
+    expect(handlers.size).toBe(0)
+  })
+
   it('accepts only the Shell main frame', () => {
     const mainFrame = {}
     const webContents = { mainFrame }

@@ -1,22 +1,23 @@
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { parse, stringify } from 'yaml'
-import { profilePackageJsonPath } from './plugin-recovery'
+import { profilePackageJsonPath, pluginDeclaredEntryIds } from './plugin-recovery'
+import { prunePatchLayer } from './patch-layer'
+import { removeTree } from './remove-tree'
 import { clearProfileInstallMarker, markProfileInstallComplete } from './profile-install-marker'
 import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 7
+const DEFAULT_PROFILE_VERSION = 8
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
 const MARKET_UNINSTALLED_MARKER = '.insight-market-uninstalled'
 const RETIRED_MARKET_PACKAGE = 'dshmarket'
-const RETIRED_MARKET_VERSION = '1.46.1'
 const RETIRED_GENUI_PACKAGE = '@changfenhuang/dsh-genui'
-const RETIRED_GENUI_SPEC = 'file:.insight-bundled-plugins/changfenhuang-dsh-genui-0.9.8.tgz'
+const RETIRED_PACKAGES = [RETIRED_MARKET_PACKAGE, RETIRED_GENUI_PACKAGE, 'dsh-genui']
 const COMMUNITY_PLUGIN_SPECS = {
   memory: {
     packageName: 'dsh-memory-evolve',
@@ -122,7 +123,7 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   }
   const destinationPackage = join(destination, relativePackage)
   await mkdir(dirname(destinationPackage), { recursive: true })
-  await rm(destinationPackage, { recursive: true, force: true })
+  await removeTree(destinationPackage)
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
 }
 
@@ -169,7 +170,7 @@ async function refreshBundledCommunityPackages(
       installed.version !== bundled.version ||
       (refreshSameVersion && plugin.packageName === COMMUNITY_PLUGIN_SPECS.memory.packageName)
     ) {
-      await rm(join(destination, packagePath), { recursive: true, force: true })
+      await removeTree(join(destination, packagePath))
       await mkdir(dirname(join(destination, packagePath)), { recursive: true })
       await cp(join(source, packagePath), join(destination, packagePath), {
         recursive: true,
@@ -221,15 +222,14 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
 }
 
 async function removeRetiredBundledPackages(destination: string): Promise<void> {
-  const retiredPackages = [
-    { name: RETIRED_MARKET_PACKAGE, version: RETIRED_MARKET_VERSION },
-    { name: RETIRED_GENUI_PACKAGE, version: '0.9.8' }
-  ] as const
-  for (const retired of retiredPackages) {
-    const packagePath = join(destination, 'node_modules', retired.name)
-    const installed = await readPackageManifest(join(packagePath, 'package.json'))
-    if (installed?.version === retired.version) {
-      await rm(packagePath, { recursive: true, force: true })
+  for (const name of RETIRED_PACKAGES) {
+    await removeTree(join(destination, 'node_modules', name))
+  }
+  const archives = join(destination, '.insight-bundled-plugins')
+  if (!existsSync(archives)) return
+  for (const name of await readdir(archives)) {
+    if (/^(?:changfenhuang-dsh-genui|dsh-genui|dshmarket)-.*\.tgz$/u.test(name)) {
+      await rm(join(archives, name), { force: true })
     }
   }
 }
@@ -261,14 +261,11 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     delete manifest.dependencies[SIDEBAR_PACKAGE]
     changed = true
   }
-  const marketWasManaged = manifest.dependencies[RETIRED_MARKET_PACKAGE] === RETIRED_MARKET_VERSION
-  if (marketWasManaged) {
-    delete manifest.dependencies[RETIRED_MARKET_PACKAGE]
-    changed = true
-  }
-  if (manifest.dependencies[RETIRED_GENUI_PACKAGE] === RETIRED_GENUI_SPEC) {
-    delete manifest.dependencies[RETIRED_GENUI_PACKAGE]
-    changed = true
+  for (const name of RETIRED_PACKAGES) {
+    if (name in manifest.dependencies) {
+      delete manifest.dependencies[name]
+      changed = true
+    }
   }
   const promptDependency = manifest.dependencies[COMMUNITY_PLUGIN_SPECS.prompt.packageName]
   if (promptDependency === COMMUNITY_PLUGIN_SPECS.prompt.legacy) {
@@ -281,11 +278,9 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
   }
   manifest.dsh ??= {}
   manifest.dsh.profile ??= {}
-  const dependencies = manifest.dependencies
   const remaining = (manifest.dsh.profile.bundles ?? []).filter(bundle =>
     bundle !== SIDEBAR_PACKAGE &&
-    !(marketWasManaged && bundle === RETIRED_MARKET_PACKAGE) &&
-    !(dependencies[RETIRED_GENUI_PACKAGE] === undefined && bundle === RETIRED_GENUI_PACKAGE) &&
+    !RETIRED_PACKAGES.includes(bundle) &&
     bundle !== DESKTOP_INTEGRATION_PACKAGE
   )
   const bundles = [
@@ -313,9 +308,31 @@ async function restoreManagedProfile(
   forceInstall: boolean,
   refreshSameVersion = false
 ): Promise<void> {
+  const manifest = await readProfileManifest(join(destination, 'package.json'))
+  const needsRetirement = manifest?.insightDesktop?.defaultProfileVersion !== DEFAULT_PROFILE_VERSION ||
+    RETIRED_PACKAGES.some(name => name in (manifest?.dependencies ?? {}) ||
+      manifest?.dsh?.profile?.bundles?.includes(name))
+  if (needsRetirement) {
+    // Invalidate before mutating: an interrupted migration must reinstall on retry.
+    await clearProfileInstallMarker(dshHome)
+    await rm(join(destination, 'pnpm-lock.yaml'), { force: true })
+    await rm(join(destination, 'node_modules', '.pnpm', 'lock.yaml'), { force: true })
+  }
+  for (const name of RETIRED_PACKAGES) {
+    const entryIds = await pluginDeclaredEntryIds(destination, name)
+    for (const path of [join(destination, 'cordis.patch.yml'), join(dshHome, 'cordis.patch.yml')]) {
+      if (!existsSync(path)) continue
+      const text = await readFile(path, 'utf8')
+      const pruned = prunePatchLayer(text, name, entryIds)
+      if (pruned.removed.length > 0) {
+        await clearProfileInstallMarker(dshHome)
+        await writeFile(path, pruned.text, 'utf8')
+      }
+    }
+  }
   await copyDesktopIntegration(source, destination)
   // Retire the installation-owned sidebar; the Core web app supplies the native UI.
-  await rm(join(destination, 'node_modules', SIDEBAR_PACKAGE), { recursive: true, force: true })
+  await removeTree(join(destination, 'node_modules', SIDEBAR_PACKAGE))
   await removeRetiredBundledPackages(destination)
   const communityPackagesRestored = await refreshBundledCommunityPackages(source, destination, refreshSameVersion)
   const communityArchivesRestored = await refreshBundledCommunityArchives(source, destination)
@@ -362,7 +379,7 @@ export async function initializeBundledProfile(
     return true
   }
 
-  if ([4, 5, 6, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
+  if ([4, 5, 6, 7, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
     await restoreManagedProfile(
       source,
       destination,

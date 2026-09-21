@@ -88,12 +88,16 @@ async function main() {
   if (metadata[0].version !== metadata[1].version) {
     throw new Error('macOS updater metadata versions do not match.')
   }
+  if (metadata.some(value => value.minimumSystemVersion !== '22.0.0')) {
+    throw new Error('macOS updater metadata must require Darwin 22.0.0 (macOS 13).')
+  }
 
   await Promise.all(metadata.map((value, index) => verifyReferencedFiles(value, inputPaths[index])))
   const files = metadata.flatMap((value) => value.files)
     .sort((left, right) => left.url.localeCompare(right.url))
   const merged = {
     version: metadata[0].version,
+    minimumSystemVersion: metadata[0].minimumSystemVersion,
     files,
     path: files.find((file) => file.url.endsWith('.zip'))?.url,
     sha512: files.find((file) => file.url.endsWith('.zip'))?.sha512,

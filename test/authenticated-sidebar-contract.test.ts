@@ -42,7 +42,7 @@ describe('authenticated single-sidebar integration contract', () => {
     }
   })
 
-  it('prepares a version-seven Profile with Core-owned built-ins', async () => {
+  it('prepares a version-eight Profile with Core-owned built-ins', async () => {
     const prepare = await readFile('scripts/prepare-bundled-profile.mjs', 'utf8')
     const installationOwned = await readFile('src/main/state/installation-owned-bundles.ts', 'utf8')
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
@@ -51,7 +51,7 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(prepare).not.toContain('patchBundledMarket')
     expect(prepare).not.toContain('dshmarket')
     expect(prepare).not.toContain('@changfenhuang/dsh-genui')
-    expect(prepare).toContain('const DEFAULT_PROFILE_VERSION = 7')
+    expect(prepare).toContain('const DEFAULT_PROFILE_VERSION = 8')
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
     expect(prepare).toContain("packages.includes('packages/*')")
@@ -74,7 +74,7 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(manifest.dependencies['@changfenhuang/dsh-genui']).toBeUndefined()
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(7)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)

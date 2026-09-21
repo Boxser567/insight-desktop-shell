@@ -65,7 +65,8 @@ export class AuthSessionManager {
   constructor(
     private readonly api: AuthSessionApi,
     private readonly credentials: CredentialPersistence,
-    private readonly onAccessTokenChanged: (token: string | undefined) => void
+    private readonly onAccessTokenChanged: (token: string | undefined) => void,
+    private readonly clearLocalSession: () => Promise<void> = async () => {}
   ) {}
 
   current(): SessionView {
@@ -177,11 +178,37 @@ export class AuthSessionManager {
     await Promise.all([this.clearCredentials(), remoteLogout])
   }
 
+  /** Reset local authentication without depending on the unavailable remote service. */
+  async resetLocal(): Promise<void> {
+    const revision = ++this.sessionRevision
+    this.modelCredentialOperation = undefined
+    this.account = undefined
+    this.setAccessToken(undefined)
+    this.transition({ kind: 'restoring' })
+    try {
+      await this.clearCredentials()
+      // Let an older response settle before clearing cookies it may have set.
+      await this.restoreOperation?.catch(() => undefined)
+      await this.clearLocalSession()
+      if (revision === this.sessionRevision) this.transition({ kind: 'unauthenticated' })
+    } catch (error) {
+      if (revision === this.sessionRevision) this.transition({ kind: 'offline' })
+      throw error
+    }
+  }
+
   private async performRestore(): Promise<void> {
-    ++this.sessionRevision
+    const revision = ++this.sessionRevision
     this.modelCredentialOperation = undefined
     this.transition({ kind: 'restoring' })
-    const token = await this.credentials.load()
+    let token: string | undefined
+    try {
+      token = await this.credentials.load()
+    } catch {
+      if (revision === this.sessionRevision) this.transition({ kind: 'offline' })
+      return
+    }
+    if (revision !== this.sessionRevision) return
     if (!token) {
       this.account = undefined
       this.setAccessToken(undefined)
@@ -191,13 +218,17 @@ export class AuthSessionManager {
     this.setAccessToken(token)
 
     try {
-      this.account = await this.currentUserWithOneRefresh()
+      const account = await this.currentUserWithOneRefresh(revision)
+      if (revision !== this.sessionRevision) return
+      this.account = account
       this.transition({ kind: 'authenticated', account: this.account.summary })
     } catch (error) {
+      if (revision !== this.sessionRevision) return
       this.account = undefined
       if (error instanceof AuthApiError && error.kind === 'expired') {
         this.setAccessToken(undefined)
         await this.clearCredentials()
+        if (revision !== this.sessionRevision) return
         this.transition({ kind: 'expired' })
         return
       }

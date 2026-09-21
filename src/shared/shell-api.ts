@@ -11,6 +11,7 @@ export interface ShellAuthApi {
   current(): Promise<SessionView>
   subscribe(listener: (view: SessionView) => void): () => void
   retry(): Promise<void>
+  resetLocal(): Promise<void>
   sendSmsCode(phone: string): Promise<AuthCommandResult>
   loadCaptcha(): Promise<CaptchaCommandResult>
   loginSms(input: SmsLoginInput): Promise<AuthCommandResult>

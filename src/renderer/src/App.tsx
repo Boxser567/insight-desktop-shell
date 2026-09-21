@@ -20,6 +20,7 @@ function StatusPage(props: {
   title: string
   detail: string
   action?: { label: string; run: () => void }
+  secondaryAction?: { label: string; run: () => void }
 }): React.JSX.Element {
   return (
     <main className="status-page">
@@ -32,6 +33,11 @@ function StatusPage(props: {
             {props.action.label}
           </button>
         )}
+        {props.secondaryAction && (
+          <button className="secondary-button" type="button" onClick={props.secondaryAction.run}>
+            {props.secondaryAction.label}
+          </button>
+        )}
       </div>
     </main>
   )
@@ -39,6 +45,7 @@ function StatusPage(props: {
 
 /** Root Shell surface driven entirely by the renderer-safe session projection. */
 export function App(): React.JSX.Element {
+  const [recoveryError, setRecoveryError] = useState('')
   const [session, setSession] = useState<SessionView>({ kind: 'restoring' })
   const [startup, setStartup] = useState<StartupView>({
     phase: 'restoring-session',
@@ -71,8 +78,12 @@ export function App(): React.JSX.Element {
     content = (
       <StatusPage
         title="暂时无法连接网络"
-        detail="登录状态仍被安全保留。网络恢复后请重试。"
+        detail={recoveryError || '请检查网络后重试，也可以重置本地登录状态后重新登录。'}
         action={{ label: '重新连接', run: () => void window.insightAuth.retry() }}
+        secondaryAction={{ label: '重置登录并重新登录', run: () => {
+          setRecoveryError('')
+          void window.insightAuth.resetLocal().catch(() => setRecoveryError('重置登录失败，请重试。'))
+        } }}
       />
     )
   } else {

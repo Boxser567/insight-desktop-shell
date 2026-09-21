@@ -20,6 +20,16 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe('desktop auth API client', () => {
+  it('logs a transport code without leaking error text or credentials', async () => {
+    const diagnostic = vi.fn()
+    const failure = new Error('net::ERR_CONNECTION_RESET https://host/?token=secret password=private')
+    const client = new AuthApiClient(vi.fn().mockRejectedValue(failure), environment, () => 'stored-secret', diagnostic)
+    await expect(client.currentUser()).rejects.toBeInstanceOf(AuthApiError)
+    const message = diagnostic.mock.calls[0]?.[0] as string
+    expect(message).toContain('ERR_CONNECTION_RESET')
+    expect(message).toContain('gapi-test.insight-aigc.com')
+    expect(message).not.toMatch(/secret|private|password|token=/u)
+  })
   it('bounds authentication requests and treats a timeout as offline', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout')
     try {

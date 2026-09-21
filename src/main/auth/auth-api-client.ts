@@ -92,7 +92,8 @@ export class AuthApiClient {
   constructor(
     private readonly fetch: FetchLike,
     private readonly environment: AuthEnvironmentConfig,
-    private readonly getAccessToken: () => string | undefined
+    private readonly getAccessToken: () => string | undefined,
+    private readonly diagnostic: (message: string) => void = () => {}
   ) {}
 
   async sendSmsCode(phone: string): Promise<void> {
@@ -229,14 +230,31 @@ export class AuthApiClient {
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) })
       })
     } catch (error) {
+      const failure = error instanceof Error ? error : undefined
+      const cause = failure?.cause as { code?: unknown } | undefined
+      const code = (failure as (Error & { code?: unknown }) | undefined)?.code ?? cause?.code
+      // Never log error.message: Electron/fetch errors can embed URLs or credentials.
+      this.diagnostic(JSON.stringify({
+        origin: new URL(this.environment.baseUrl).origin,
+        endpoint: path,
+        error: failure && ['TypeError', 'Error', 'AbortError', 'TimeoutError'].includes(failure.name)
+          ? failure.name : 'TransportError',
+        code: typeof code === 'string' && /^(?:ERR_|E)[A-Z_0-9]{2,60}$/u.test(code) ? code : undefined,
+        chromiumCode: failure?.message.match(/\bnet::(ERR_[A-Z_0-9]+)\b/u)?.[1]
+      }))
       if (
         error instanceof TypeError ||
+        (error instanceof Error && /\bnet::ERR_[A-Z_0-9]+\b/u.test(error.message)) ||
         (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))
       ) {
         throw new AuthApiError('offline', '网络不可用，请检查网络连接。')
       }
       throw new AuthApiError('service-error', '认证服务请求失败。')
     }
+
+    if (!response.ok) this.diagnostic(JSON.stringify({
+      origin: new URL(this.environment.baseUrl).origin, endpoint: path, status: response.status
+    }))
 
     let envelope: ApiEnvelope
     try {

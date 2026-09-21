@@ -20,6 +20,8 @@ interface ElectronAuthInput {
   environment: AuthEnvironmentConfig
   insightRoot: string
   fetch: FetchLike
+  clearLocalSession?: () => Promise<void>
+  diagnostic?: (message: string) => void
 }
 
 type ElectronCredentialInput =
@@ -51,10 +53,11 @@ export function createElectronAuth(
   const api = new AuthApiClient(
     input.fetch,
     input.environment,
-    () => accessToken
+    () => accessToken,
+    input.diagnostic
   )
   const credentials = createCredentialPersistence(input)
   return new AuthSessionManager(api, credentials, (token) => {
     accessToken = token
-  })
+  }, input.clearLocalSession)
 }

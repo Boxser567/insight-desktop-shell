@@ -5,6 +5,8 @@ import type {
 } from '../../shared/update-contracts'
 
 export interface ResolvedRelease {
+  /** Kernel release requirement read from hash-verified updater metadata. */
+  minimumSystemVersion?: string
   manifest: SignedReleaseManifest
   manifestBytes: Uint8Array
   signatureBytes: Uint8Array

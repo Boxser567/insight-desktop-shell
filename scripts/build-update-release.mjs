@@ -141,6 +141,9 @@ async function validateUpdaterVersion(path, version) {
   if (!value || typeof value !== 'object' || value.version !== version) {
     throw new Error(`Updater metadata version does not match ${version}: ${path}`)
   }
+  if (path.endsWith('latest-mac.yml') && value.minimumSystemVersion !== '22.0.0') {
+    throw new Error('macOS updater metadata must require Darwin 22.0.0 (macOS 13).')
+  }
 }
 
 function compareArtifacts(left, right) {

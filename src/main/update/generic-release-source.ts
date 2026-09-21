@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { createHash } from 'node:crypto'
+import { parse } from 'yaml'
+import semver from 'semver'
 import { selectManualInstaller, verifyReleaseManifest } from './release-manifest'
 import type { UpdateDistribution } from './update-environment'
 import type {
@@ -72,7 +75,26 @@ export class GenericReleaseSource implements UpdateSource {
       throw new Error('更新指针与 Manifest 版本不一致。')
     }
 
+    const metadataArtifact = manifest.artifacts.find(artifact =>
+      artifact.platform === target.platform && artifact.arch === target.arch && artifact.kind === 'updater-metadata'
+    )!
+    const metadataBytes = await this.#download(new URL(metadataArtifact.name, releaseBaseUrl), '平台更新元数据')
+    if (metadataBytes.byteLength !== metadataArtifact.size ||
+      createHash('sha512').update(metadataBytes).digest('base64') !== metadataArtifact.sha512) {
+      throw new Error('平台更新元数据与可信发布记录不一致。')
+    }
+    const metadata = parse(Buffer.from(metadataBytes).toString('utf8')) as {
+      version?: unknown; minimumSystemVersion?: unknown
+    } | null
+    if (metadata?.version !== manifest.version) throw new Error('平台更新元数据版本不一致。')
+    const minimumSystemVersion = metadata.minimumSystemVersion
+    if (minimumSystemVersion !== undefined &&
+      (typeof minimumSystemVersion !== 'string' || semver.valid(minimumSystemVersion) !== minimumSystemVersion)) {
+      throw new Error('平台更新元数据的最低系统版本无效。')
+    }
+
     return {
+      ...(typeof minimumSystemVersion === 'string' ? { minimumSystemVersion } : {}),
       manifest,
       manifestBytes,
       signatureBytes,

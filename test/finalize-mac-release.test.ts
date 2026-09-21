@@ -55,6 +55,7 @@ describe('macOS release finalizer', () => {
     const digest = createHash('sha512').update(value.archive).digest('base64')
     expect(metadata).toMatchObject({
       version: '0.1.2-rc.1',
+      minimumSystemVersion: '22.0.0',
       files: [{ url: value.archiveName, sha512: digest, size: value.archive.length }],
       path: value.archiveName,
       sha512: digest

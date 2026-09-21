@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { GenericReleaseSource } from '../src/main/update/generic-release-source'
 import { parseUpdateDistribution } from '../src/main/update/update-environment'
@@ -70,8 +70,15 @@ function fixture(options: {
   corruptSignature?: boolean
   pointerStatus?: number
   redirectManifestTo?: string
+  corruptMetadata?: boolean
+  minimumSystemVersion?: string
 } = {}) {
   const release = options.manifest ?? manifest(options.version)
+  const metadata = Buffer.from(`version: ${release.version}\nminimumSystemVersion: ${options.minimumSystemVersion ?? '22.0.0'}\n`)
+  for (const artifact of release.artifacts.filter(value => value.kind === 'updater-metadata')) {
+    artifact.size = metadata.byteLength
+    artifact.sha512 = createHash('sha512').update(metadata).digest('base64')
+  }
   const manifestBytes = Buffer.from(`${JSON.stringify(release, null, 2)}\n`)
   const signatureBytes = options.corruptSignature
     ? Buffer.alloc(64)
@@ -94,6 +101,7 @@ function fixture(options: {
       return response(url, manifestBytes, 200, options.redirectManifestTo ?? url)
     }
     if (url === signatureUrl) return response(url, signatureBytes)
+    if (url === new URL('latest-mac.yml', releaseBaseUrl).href) return response(url, options.corruptMetadata ? 'tampered' : metadata)
     return response(url, 'missing', 404)
   })
   return {
@@ -109,6 +117,7 @@ describe('Generic release source', () => {
     const release = await source.resolve('stable', stableTarget)
 
     expect(release.manifest.version).toBe('0.1.2')
+    expect(release.minimumSystemVersion).toBe('22.0.0')
     expect(release.releaseBaseUrl.href).toBe(
       'https://updates.example.test/desktop/releases/v0.1.2/'
     )
@@ -157,6 +166,11 @@ describe('Generic release source', () => {
   it('rejects an invalid product signature', async () => {
     const { source } = fixture({ corruptSignature: true })
     await expect(source.resolve('stable', stableTarget)).rejects.toThrow('签名无效')
+  })
+
+  it('rejects unsigned changes to the minimum OS requirement', async () => {
+    await expect(fixture({ corruptMetadata: true }).source.resolve('stable', stableTarget)).rejects.toThrow('可信发布记录不一致')
+    await expect(fixture({ minimumSystemVersion: 'invalid' }).source.resolve('stable', stableTarget)).rejects.toThrow('最低系统版本无效')
   })
 
   it('rejects redirects outside the exact immutable path', async () => {

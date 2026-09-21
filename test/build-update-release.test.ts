@@ -127,6 +127,14 @@ describe('authenticated update release builder', () => {
     expect(result.stderr).toContain('must match')
   })
 
+  it('refuses to sign macOS assets without a kernel version requirement', async () => {
+    const paths = await fixture()
+    await writeFile(path.join(paths.releaseDir, 'latest-mac.yml'), 'version: 0.1.2\n')
+    const result = runBuild(paths)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('must require Darwin 22.0.0')
+  })
+
   it('rejects unknown policy fields and a minimum version above the release', async () => {
     const paths = await fixture()
     await writeFile(paths.policy, JSON.stringify({

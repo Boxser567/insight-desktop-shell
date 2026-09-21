@@ -22,6 +22,7 @@ const auth: ShellAuthApi = Object.freeze({
     return () => ipcRenderer.removeListener('auth:changed', handler)
   },
   retry: () => ipcRenderer.invoke('auth:retry'),
+  resetLocal: () => ipcRenderer.invoke('auth:reset-local'),
   sendSmsCode: (phone: string) => ipcRenderer.invoke('auth:send-sms', phone),
   loadCaptcha: () => ipcRenderer.invoke('auth:captcha'),
   loginSms: (input: SmsLoginInput) => ipcRenderer.invoke('auth:login-sms', input),

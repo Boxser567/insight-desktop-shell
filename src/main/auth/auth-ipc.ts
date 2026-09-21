@@ -18,6 +18,7 @@ interface ShellInvokeEvent {
 const AUTH_CHANNELS = [
   'auth:current',
   'auth:retry',
+  'auth:reset-local',
   'auth:send-sms',
   'auth:captcha',
   'auth:login-sms',
@@ -107,6 +108,11 @@ export function registerAuthIpc(input: {
   input.ipcMain.handle('auth:retry', async (event) => {
     trusted(event)
     await input.manager.retry()
+  })
+  input.ipcMain.handle('auth:reset-local', async (event) => {
+    trusted(event)
+    if (input.manager.current().kind !== 'offline') throw new Error('Local reset requires an offline session.')
+    await input.manager.resetLocal()
   })
   input.ipcMain.handle('auth:send-sms', async (event, phone: unknown) => {
     trusted(event)

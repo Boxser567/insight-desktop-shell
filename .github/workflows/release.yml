@@ -215,6 +215,8 @@ jobs:
           set -euo pipefail
           dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
           zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          minimum_os="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$RELEASE_APP/Contents/Info.plist")"
+          test "$minimum_os" = '13.0' || { echo "::error::Expected macOS 13.0 minimum, got $minimum_os"; exit 1; }
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$RELEASE_APP/Contents/Info.plist")"
           bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$RELEASE_APP/Contents/Info.plist")"
           team_id="$(codesign -dv --verbose=4 "$RELEASE_APP" 2>&1 | awk -F= '/^TeamIdentifier=/{ print $2; exit }')"
@@ -365,6 +367,8 @@ jobs:
           set -euo pipefail
           dmg_path="$RELEASE_DIR/$RELEASE_BASENAME.dmg"
           zip_path="$RELEASE_DIR/$RELEASE_BASENAME.zip"
+          minimum_os="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$RELEASE_APP/Contents/Info.plist")"
+          test "$minimum_os" = '13.0' || { echo "::error::Expected macOS 13.0 minimum, got $minimum_os"; exit 1; }
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$RELEASE_APP/Contents/Info.plist")"
           bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$RELEASE_APP/Contents/Info.plist")"
           team_id="$(codesign -dv --verbose=4 "$RELEASE_APP" 2>&1 | awk -F= '/^TeamIdentifier=/{ print $2; exit }')"

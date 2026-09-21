@@ -37,6 +37,51 @@ function persistence(token: string | undefined = 'stored-token'): CredentialPers
 }
 
 describe('desktop auth session manager', () => {
+  it('resets an offline login locally even when remote logout is unavailable', async () => {
+    const service = api({ currentUser: vi.fn().mockRejectedValue(new AuthApiError('offline', 'offline')) })
+    const store = persistence()
+    const clearSession = vi.fn().mockResolvedValue(undefined)
+    const manager = new AuthSessionManager(service, store, () => {}, clearSession)
+    await manager.restore()
+    expect(manager.current().kind).toBe('offline')
+    await manager.resetLocal()
+    expect(store.clear).toHaveBeenCalledOnce()
+    expect(clearSession).toHaveBeenCalledOnce()
+    expect(service.logout).not.toHaveBeenCalled()
+    expect(manager.current().kind).toBe('unauthenticated')
+  })
+
+  it('does not restore old credentials after reset overtakes a pending restore', async () => {
+    let resolve!: (account: AuthenticatedAccount) => void
+    const pending = new Promise<AuthenticatedAccount>(done => { resolve = done })
+    const service = api({ currentUser: vi.fn(() => pending) })
+    const clearSession = vi.fn().mockResolvedValue(undefined)
+    const tokenChanged = vi.fn()
+    const manager = new AuthSessionManager(service, persistence(), tokenChanged, clearSession)
+    const restoring = manager.restore()
+    await vi.waitFor(() => expect(service.currentUser).toHaveBeenCalled())
+    const resetting = manager.resetLocal()
+    resolve(account)
+    await Promise.all([restoring, resetting])
+    expect(manager.current().kind).toBe('unauthenticated')
+    expect(manager.activeAccount()).toBeUndefined()
+    expect(tokenChanged).toHaveBeenLastCalledWith(undefined)
+    expect(clearSession).toHaveBeenCalledOnce()
+  })
+
+  it('allows recovery after credential loading or local cleanup fails', async () => {
+    const store = persistence()
+    vi.mocked(store.load).mockRejectedValue(new Error('keychain unavailable'))
+    const cleanup = vi.fn().mockRejectedValueOnce(new Error('busy')).mockResolvedValue(undefined)
+    const manager = new AuthSessionManager(api(), store, () => {}, cleanup)
+    await manager.restore()
+    expect(manager.current().kind).toBe('offline')
+    await expect(manager.resetLocal()).rejects.toThrow('busy')
+    expect(manager.current().kind).toBe('offline')
+    await manager.resetLocal()
+    expect(manager.current().kind).toBe('unauthenticated')
+  })
+
   it('clears a refresh persistence write that was already running when logout started', async () => {
     const service = api()
     const store = persistence()

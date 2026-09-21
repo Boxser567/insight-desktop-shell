@@ -1897,6 +1897,19 @@ async function bootstrap(): Promise<void> {
     environment: authEnvironment,
     insightRoot: insightRoot(),
     fetch: (input, init) => authSession.fetch(input.toString(), init),
+    clearLocalSession: async () => {
+      await authSession.closeAllConnections()
+      await authSession.clearStorageData()
+      await authSession.clearCache()
+      await authSession.clearAuthCache()
+    },
+    diagnostic: (message) => {
+      try {
+        appendFileSync(join(app.getPath('logs'), 'harness.log'), `[desktop] auth-request ${message}\n`)
+      } catch {
+        // Diagnostics must not prevent authentication when the log directory is unavailable.
+      }
+    },
     ...(developmentBuild
       ? { persistCredentials: false }
       : {

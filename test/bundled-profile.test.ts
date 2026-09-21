@@ -33,7 +33,7 @@ describe('bundled profile initialization', () => {
           ]
         }
       },
-      insightDesktop: { defaultProfileVersion: 7 }
+      insightDesktop: { defaultProfileVersion: 8 }
     }), 'utf8')
     await writeFile(
       join(profile, 'packages', 'insight-desktop-integration', 'package.json'),
@@ -130,7 +130,7 @@ describe('bundled profile initialization', () => {
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const profile = join(dshHome, 'profiles', 'web')
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(7)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
     expect(manifest.dependencies).not.toHaveProperty('dshmarket')
     expect(manifest.dependencies).not.toHaveProperty('@changfenhuang/dsh-genui')
     expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
@@ -153,7 +153,7 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(7)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
     expect(manifest.dependencies.dshmarket).toBeUndefined()
     expect(manifest.dependencies['@changfenhuang/dsh-genui']).toBeUndefined()
     expect(manifest.dependencies['dsh-better-sidebar']).toBeUndefined()
@@ -192,7 +192,7 @@ describe('bundled profile initialization', () => {
     await expect(isProfileInstallComplete(dshHome)).resolves.toBe(false)
   })
 
-  it('does not remove a user-managed market version', async () => {
+  it('retires normalized market versions in managed profiles and preserves unrelated plugins', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     await writeCurrentTemplate(template)
@@ -205,12 +205,13 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const migrated = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(migrated.dependencies.dshmarket).toBe('2.0.0')
-    expect(migrated.dsh.profile.bundles).toContain('dshmarket')
-    expect(await readFile(join(profile, 'node_modules', 'dshmarket', 'package.json'), 'utf8')).toContain('2.0.0')
+    expect(migrated.dependencies.dshmarket).toBeUndefined()
+    expect(migrated.dsh.profile.bundles).not.toContain('dshmarket')
+    await expect(readFile(join(profile, 'node_modules', 'dshmarket', 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(migrated.dependencies['dsh-user-plugin']).toBe('1.2.3')
   })
 
-  it.each([2, 3, 4, 5])('migrates managed generation %s to Profile version 7', async (version) => {
+  it.each([2, 3, 4, 5, 6, 7])('migrates managed generation %s to Profile version 8', async (version) => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     await writeCurrentTemplate(template)
@@ -222,8 +223,31 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const migrated = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(migrated.insightDesktop.defaultProfileVersion).toBe(7)
+    expect(migrated.insightDesktop.defaultProfileVersion).toBe(8)
     expect(migrated.dependencies.dshmarket).toBeUndefined()
+  })
+
+  it('cleans a partially installed GenUI and stale locks, and can run twice', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    const profile = await writeLegacyProfile(dshHome)
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest.insightDesktop.defaultProfileVersion = 7
+    manifest.dependencies['@changfenhuang/dsh-genui'] = '^0.9.8'
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await rm(join(profile, 'node_modules', '@changfenhuang', 'dsh-genui', 'package.json'))
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'obsolete lock')
+    await writeFile(join(profile, 'cordis.patch.yml'), '- insert:\n    - name: "@changfenhuang/dsh-genui"\n    - name: dsh-user-plugin\n')
+    await initializeBundledProfile(template, dshHome)
+    const first = await readFile(manifestPath, 'utf8')
+    await initializeBundledProfile(template, dshHome)
+    expect(await readFile(manifestPath, 'utf8')).toBe(first)
+    expect(first).not.toContain('genui')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).not.toContain('genui')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toContain('dsh-user-plugin')
+    await expect(readFile(join(profile, 'pnpm-lock.yaml'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('marks a copied packaged profile complete', async () => {

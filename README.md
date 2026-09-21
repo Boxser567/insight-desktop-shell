@@ -46,6 +46,10 @@ npm run package:win
 
 Each target must be built on its matching operating system and architecture. The GitHub Actions release workflow builds the Windows installer on `windows-2022`.
 
+macOS builds require macOS 13 or later on both Intel and Apple Silicon, using Electron 44.0.0. Release metadata enforces Darwin 22.0.0 as the minimum kernel version. A macOS 12 installation that already cannot open RC13–RC15 must upgrade macOS or manually restore a previously compatible installer; the incompatible app cannot repair itself through an in-app update.
+
+Managed profiles migrate to generation 8 before plugin startup and remove retired GenUI/Market references, packages and stale install locks. The offline login page offers a local authentication reset (encrypted credentials and the isolated authentication session), without requiring the logout server to respond. Network diagnostics in `harness.log` contain endpoint origins and error/status codes, never credentials or request bodies.
+
 ## Reference upstream
 
 This repository treats `dataelement/dsh-desktop` as a reference upstream. Changes are reviewed by upstream commit range and accepted through selective adoption; whole-repository merges are not the normal upgrade path. Every adoption must preserve the independently locked Core Runtime, bundled profile, product identity, account isolation, and first-party integrations. See [Upstream intake](docs/upstream-intake.md) for the review record.

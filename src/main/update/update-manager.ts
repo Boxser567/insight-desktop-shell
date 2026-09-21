@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { release as systemRelease } from 'node:os'
 import semver from 'semver'
 import {
   readRequiredUpdatePolicy,
@@ -50,6 +51,7 @@ export interface UpdateManagerOptions {
   prepareToInstall(): Promise<void>
   openExternal(url: string): Promise<void>
   now?: () => number
+  systemRelease?: () => string
   random?: () => number
   timers?: UpdateManagerTimers
   resume?: UpdateManagerResumeSource
@@ -225,6 +227,20 @@ export class UpdateManager {
         this.clearActiveRelease()
         this.publish(reduceUpdateState(this.statusValue, { type: 'up-to-date' }))
         return
+      }
+
+      if (release.minimumSystemVersion) {
+        const currentSystem = semver.coerce((this.options.systemRelease ?? systemRelease)())
+        if (!currentSystem || semver.lt(currentSystem, release.minimumSystemVersion)) {
+          this.clearActiveRelease()
+          this.publish({
+            phase: 'unsupported', currentVersion: this.options.currentVersion, manual,
+            reason: this.support.target.platform === 'darwin' && release.minimumSystemVersion === '22.0.0'
+              ? '此更新需要 macOS 13 或更高版本，请先升级 macOS。'
+              : `此更新需要系统内核版本 ${release.minimumSystemVersion} 或更高版本。`
+          })
+          return
+        }
       }
 
       const manifestRequiresUpdate = release.manifest.policy.mode === 'required' && semver.lt(

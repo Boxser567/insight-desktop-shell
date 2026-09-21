@@ -94,6 +94,7 @@ export async function writeReleaseFixture(
   if (!primaryMacFile) throw new Error('macOS release fixture is incomplete.')
   await Promise.all([
     writeFile(path.join(releaseDir, 'latest-mac.yml'), stringify({
+      minimumSystemVersion: '22.0.0',
       version,
       files: macFiles,
       path: primaryMacFile.url,

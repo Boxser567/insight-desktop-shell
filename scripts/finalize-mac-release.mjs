@@ -26,6 +26,7 @@ async function main() {
   const digest = createHash('sha512').update(archive).digest('base64')
   const metadata = [
     `version: ${version}`,
+    'minimumSystemVersion: 22.0.0',
     'files:',
     `  - url: ${JSON.stringify(archiveName)}`,
     `    sha512: ${digest}`,
