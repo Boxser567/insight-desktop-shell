@@ -7,12 +7,42 @@ afterEach(() => vi.useRealTimers())
 function setup() {
   vi.useFakeTimers()
   const emitter = Object.assign(new EventEmitter(), { isDestroyed: () => false, reload: vi.fn() })
-  const options = { isActive: vi.fn(() => true), onNativeCrash: vi.fn(() => false), note: vi.fn() }
+  const options = { isActive: vi.fn(() => true), onNativeCrash: vi.fn(() => false), note: vi.fn(), gpuStatus: vi.fn(() => ({ gpu_compositing: 'enabled' })) }
   installRendererRecovery(emitter as unknown as WebContents, options)
   const crash = () => emitter.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 })
   return { emitter, options, crash }
 }
 describe('renderer recovery wiring', () => {
+  it('records hangs and recovery without reloading or recording page content', () => {
+    const { emitter, options } = setup()
+    emitter.emit('unresponsive')
+    emitter.emit('responsive')
+    expect(options.note).toHaveBeenCalledWith(expect.stringContaining('"event":"unresponsive"'))
+    expect(options.note).toHaveBeenCalledWith(expect.stringContaining('"event":"responsive"'))
+    expect(options.note).toHaveBeenCalledWith(expect.stringContaining('"gpu_compositing":"enabled"'))
+    vi.runAllTimers()
+    expect(emitter.reload).not.toHaveBeenCalled()
+  })
+  it('records killed processes without restarting them', () => {
+    const { emitter, options } = setup()
+    emitter.emit('render-process-gone', {}, { reason: 'killed', exitCode: 9 })
+    expect(options.note).toHaveBeenCalledWith(expect.stringContaining('"exitCode":9'))
+    vi.runAllTimers()
+    expect(emitter.reload).not.toHaveBeenCalled()
+  })
+  it('keeps recovery working if GPU diagnostics fail and ignores inactive accounts', () => {
+    const { emitter, options, crash } = setup()
+    options.gpuStatus.mockImplementation(() => { throw new Error('sensitive details') })
+    crash()
+    expect(options.note).toHaveBeenCalledWith(expect.stringContaining('"gpu":"unavailable"'))
+    expect(JSON.stringify(options.note.mock.calls)).not.toContain('sensitive details')
+    vi.runAllTimers()
+    expect(emitter.reload).toHaveBeenCalledTimes(1)
+    options.isActive.mockReturnValue(false)
+    options.note.mockClear()
+    emitter.emit('unresponsive')
+    expect(options.note).not.toHaveBeenCalled()
+  })
   it('spaces reloads and stops after three crashes', () => {
     const { emitter, crash } = setup()
     crash(); vi.advanceTimersByTime(0)

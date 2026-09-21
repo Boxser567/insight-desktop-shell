@@ -435,6 +435,7 @@ function createHarnessWebContentsView(window: BrowserWindow, scope: string): Web
   secureWebContents(view.webContents, isHarnessUrl, true)
   installWebContentsContextMenu(view.webContents, window, harnessLocale)
   installRendererRecovery(view.webContents, {
+    gpuStatus: () => app.getGPUFeatureStatus(),
     isActive: () => !quitting && harnessWorkspaceView.webContents() === view.webContents && authManager?.current().kind === 'authenticated',
     onNativeCrash: (reason, exitCode) => gpuRecovery?.nativeCrash(reason, exitCode) ?? false,
     note: (line) => runtime?.note(line)
@@ -781,6 +782,7 @@ function createWindow(): BrowserWindow {
   secureWebContents(window.webContents, isTrustedShellUrl)
   installContextMenu(window, harnessLocale)
   installRendererRecovery(window.webContents, {
+    gpuStatus: () => app.getGPUFeatureStatus(),
     isActive: () => !quitting && mainWindow === window,
     onNativeCrash: (reason, exitCode) => gpuRecovery?.nativeCrash(reason, exitCode) ?? false,
     note: (line) => runtime?.note(line)
