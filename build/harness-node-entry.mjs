@@ -29,6 +29,17 @@ process.stdout.write(`[harness-node] execPath=${process.execPath}\n`)
 process.stdout.write(`[harness-node] cwd=${process.cwd()}\n`)
 process.stdout.write(`[harness-node] DSH_HOME=${process.env.DSH_HOME ?? ''}\n`)
 
+if (process.platform === 'win32' && dshEntryPath) {
+  const { default: childProcess } = await import('node:child_process')
+  const { syncBuiltinESMExports } = await import('node:module')
+  const { createHiddenConsole } = await import('./windows-hidden-console.mjs')
+  const { enforceWindowsChildProcessHide } = await import('./windows-child-process-hide.mjs')
+  const hidden = createHiddenConsole({ entryPath: dshEntryPath })
+  process.stdout.write(`[harness-node] hidden console: ${hidden ? 'attached' : 'unavailable'}\n`)
+  enforceWindowsChildProcessHide(childProcess, syncBuiltinESMExports)
+  process.stdout.write('[harness-node] Node child-process windowsHide default enabled\n')
+}
+
 if (!dshEntryPath) {
   report('startup error', 'missing DSH entry path')
   process.exitCode = 1

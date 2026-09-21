@@ -8,6 +8,17 @@ selective adoption 必须与 Core Runtime 锁更新分成独立提交和验证�
 
 ## 上游接收记录
 
+### 2026-09-21：Windows 控制台入口定向适配
+
+- 用户确认初审方案后，采用 c7faa1e 的 Node 子进程隐藏思路、fb168ef 的隐藏控制台及 4d34d8d 的依赖解析修复意图；没有整体 merge 上游。
+- 新增 build/windows-child-process-hide.mjs、build/windows-hidden-console.mjs，在 Windows Harness 加载 Core 前调用，并加入三种发行配置继承的 extraResources。
+- 因赛AI适配：从实际 Core entry 解析 runtime 中的 Koffi；原生依赖不可用输出固定诊断但继续启动；保留 detached、显式 windowsHide:false，以及原有 Core 原生进程实现。
+- 额外兼容：规范化 execFile 回调/options 重载，为 exec/execFile 重建 promisify.custom，保留 stdout/stderr、失败输出及 Promise.child；仅拷贝 Node 原始 promisifier 会绕过新 wrapper，不能这样处理。
+- 作用域只覆盖当前 Harness 进程的 Node child_process 调用，不声称覆盖后代进程或 Core 原生 Win32 路径。控制台创建本身是否会在特定终端宿主上短暂显示，仍需 Windows 实机确认。
+- 验证：新增 12 项测试，包括隔离 Node 进程的真实 ESM/Promise 调用、Windows 入口模拟、native loader 成败、两个 Core 布局及打包配置；全量 117 文件 / 800 项通过；typecheck、build:prepared 通过。
+- 尚未原生构建 Windows 测试包、尚未进行 Windows 视觉/焦点验收，不能标记用户问题已修复。完全权限输入闪退当前无法复现，仍待证据。
+- 没有修改 Core Runtime lock、Electron、版本号、用户数据或生产更新指针。本批不需要重新构建 Core Runtime，需重新构建 Shell 安装包才能生效。
+
 ### 2026-09-21：RC16 基线整理与最新 Shell 初审
 
 - 本地 main 已对齐已发布 RC16（5e0197b）；旧 RC15/RC16 本地分支经祖先检查后删除，远端与发布标签保留。

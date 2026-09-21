@@ -121,6 +121,14 @@
     ],
     "extraResources": [
       {
+        "from": "build/windows-hidden-console.mjs",
+        "to": "windows-hidden-console.mjs"
+      },
+      {
+        "from": "build/windows-child-process-hide.mjs",
+        "to": "windows-child-process-hide.mjs"
+      },
+      {
         "from": "scripts/diagnose-windows-update.ps1",
         "to": "diagnostics/diagnose-windows-update.ps1"
       },
