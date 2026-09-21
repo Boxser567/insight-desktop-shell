@@ -1,4 +1,6 @@
 import OSS from 'ali-oss'
+import { stat } from 'node:fs/promises'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const expectedRepository = 'Boxser567/insight-desktop-shell'
 const expectedRepositoryId = '1344679131'
@@ -40,7 +42,7 @@ function responseErrorCode(value) {
 function safeOssError(error) {
   const statusValue = error && typeof error === 'object' ? error.status : undefined
   const status = Number.isInteger(statusValue) ? String(statusValue) : 'unknown'
-  const code = safeMachineCode(error && typeof error === 'object' ? error.code : undefined)
+  const code = safeMachineCode(error && typeof error === 'object' ? error.code ?? error.name : undefined)
   const requestIdValue = error && typeof error === 'object'
     ? error.requestId ?? error.request_id
     : undefined
@@ -186,6 +188,8 @@ export function createGithubOssClient({
   environment = process.env,
   fetch: fetchImplementation = globalThis.fetch,
   now = Date.now,
+  wait = delay,
+  note = console.log,
   ossClientFactory = (configuration) => new OSS(configuration)
 } = {}) {
   const identity = assertGithubPublisherEnvironment(environment)
@@ -193,7 +197,7 @@ export function createGithubOssClient({
   if (typeof ossClientFactory !== 'function') throw new Error('OSS client factory is unavailable.')
   let session
 
-  async function refreshSession() {
+  async function requestCredentials() {
     const oidcUrl = new URL(identity.oidcRequestUrl)
     oidcUrl.searchParams.set('audience', oidcAudience)
     const oidcResponse = await readJsonResponse(fetchImplementation, oidcUrl, {
@@ -215,6 +219,12 @@ export function createGithubOssClient({
       }, 'STS request')
     const credentials = validateStsResponse(stsResponse, environment)
     if (credentials.expirationMs <= now()) throw new Error('STS credentials are already expired.')
+    note('[oss] STS credentials acquired')
+    return credentials
+  }
+
+  async function refreshSession() {
+    const credentials = await requestCredentials()
     const configuration = {
       accessKeyId: credentials.accessKeyId,
       accessKeySecret: credentials.accessKeySecret,
@@ -226,12 +236,15 @@ export function createGithubOssClient({
       authorizationV4: true,
       retryMax: 0,
       timeout: 30 * 60_000,
-      refreshSTSToken: async () => ({
-        accessKeyId: credentials.accessKeyId,
-        accessKeySecret: credentials.accessKeySecret,
-        stsToken: credentials.securityToken
-      }),
-      refreshSTSTokenInterval: 24 * 60 * 60_000
+      refreshSTSToken: async () => {
+        const fresh = await requestCredentials()
+        return {
+          accessKeyId: fresh.accessKeyId,
+          accessKeySecret: fresh.accessKeySecret,
+          stsToken: fresh.securityToken
+        }
+      },
+      refreshSTSTokenInterval: 60_000
     }
     session = {
       client: ossClientFactory(configuration),
@@ -264,6 +277,55 @@ export function createGithubOssClient({
   }
 
   return {
+    async uploadReleaseObject(key, source, headers) {
+      assertObjectKey(key, 'object key')
+      requiredString(source, 'OSS upload source')
+      if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+        throw new Error('OSS upload headers are invalid.')
+      }
+      const { size } = await stat(source)
+      let checkpoint
+      let tokenRetries = 0
+      let networkRetries = 0
+      let lastProgress = -1
+      note(`[oss] upload ${JSON.stringify(key)} bytes=${size}`)
+      while (true) {
+        const active = await currentSession()
+        try {
+          const options = { headers: { ...headers }, timeout: 120_000 }
+          const result = size >= 8 * 1024 * 1024
+            ? await active.client.multipartUpload(key, source, {
+                ...options, checkpoint, partSize: 4 * 1024 * 1024, parallel: 1,
+                progress: async (fraction, nextCheckpoint) => {
+                  if (nextCheckpoint) checkpoint = nextCheckpoint
+                  const percent = Math.floor(fraction * 100)
+                  if (percent >= lastProgress + 10) {
+                    lastProgress = percent
+                    note(`[oss] upload ${JSON.stringify(key)} progress=${percent}%`)
+                  }
+                }
+              })
+            : await active.client.put(key, source, options)
+          const summary = resultSummary(result)
+          note(`[oss] upload ${JSON.stringify(key)} complete`)
+          return summary
+        } catch (error) {
+          if (securityTokenErrorCodes.has(error?.code) && tokenRetries++ < 1) {
+            session = undefined
+            note('[oss] upload token expired; refreshing once')
+            continue
+          }
+          const transient = ['ResponseTimeoutError', 'ConnectionTimeoutError'].includes(error?.name) ||
+            ['ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'EAI_AGAIN'].includes(error?.code) ||
+            [429, 500, 502, 503, 504].includes(error?.status)
+          if (!transient || networkRetries >= 2) throw safeOssError(error)
+          networkRetries += 1
+          note(`[oss] upload ${JSON.stringify(key)} retry=${networkRetries}: ${safeOssError(error).message}`)
+          await wait(networkRetries * 1000)
+        }
+      }
+    },
+
     async listObjects(prefix) {
       assertObjectKey(prefix, 'prefix')
       const result = await runOperation((client) => client.listV2({

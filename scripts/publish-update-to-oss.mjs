@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import {
   chmod,
   mkdir,
@@ -207,14 +208,45 @@ async function downloadAndVerifyRelease(options, temporaryDirectory) {
   return { release, releaseDir, manifest }
 }
 
-async function uploadImmutableRelease(options, releaseDir, files, oss) {
+async function verifyRemoteObjects(objects, files, prefix, oss) {
+  const expected = new Map(files.map((file) => [`${prefix}${file.name}`, file]))
+  const seen = new Set()
+  for (const object of objects) {
+    const file = expected.get(object.key)
+    if (!file || file.size !== object.size || seen.has(object.key)) {
+      throw new Error('OSS immutable release prefix contains unexpected or different assets.')
+    }
+    seen.add(object.key)
+  }
+  const directory = await mkdtemp(join(tmpdir(), 'insight-oss-verify-'))
+  try {
+    const destination = join(directory, 'object')
+    for (const object of objects) {
+      console.log(`[publisher] verifying ${JSON.stringify(object.key)}`)
+      await oss.getObject(object.key, destination)
+      const hash = createHash('sha512')
+      let size = 0
+      for await (const chunk of createReadStream(destination)) {
+        size += chunk.length
+        hash.update(chunk)
+      }
+      const file = expected.get(object.key)
+      if (size !== file.size || hash.digest('base64') !== file.sha512) {
+        throw new Error(`OSS asset content differs from verified Draft: ${file.name}`)
+      }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
+export async function uploadImmutableRelease(options, releaseDir, files, oss) {
   const prefix = `desktop/releases/v${options.version}/`
   const existing = await oss.listObjects(prefix)
-  if (existing.length > 0) {
-    assertExactRemoteFiles(existing, files, prefix)
-    return { prefix, reused: true }
-  }
+  await verifyRemoteObjects(existing, files, prefix, oss)
+  const present = new Set(existing.map((object) => object.key))
   for (const file of files) {
+    if (present.has(`${prefix}${file.name}`)) continue
     const headers = {
       'x-oss-forbid-overwrite': 'true',
       'cache-control': immutableCache
@@ -222,10 +254,10 @@ async function uploadImmutableRelease(options, releaseDir, files, oss) {
     if (file.name.endsWith('.dmg') || file.name.endsWith('.exe')) {
       headers['content-disposition'] = `attachment; filename="${basename(file.name)}"`
     }
-    await oss.putObject(`${prefix}${file.name}`, join(releaseDir, file.name), headers)
+    await oss.uploadReleaseObject(`${prefix}${file.name}`, join(releaseDir, file.name), headers)
   }
   assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
-  return { prefix, reused: false }
+  return { prefix, reused: existing.length === files.length }
 }
 
 async function readAuthoritativePointer(options, temporaryDirectory, suffix, oss) {
@@ -325,7 +357,9 @@ async function promote(options, temporaryDirectory, oss) {
   const { release, releaseDir, manifest } = await downloadAndVerifyRelease(options, temporaryDirectory)
   const files = await releaseFiles(releaseDir, options.channel, options.version, options.scope)
   const prefix = `desktop/releases/v${options.version}/`
-  assertExactRemoteFiles(await oss.listObjects(prefix), files, prefix)
+  const remote = await oss.listObjects(prefix)
+  assertExactRemoteFiles(remote, files, prefix)
+  await verifyRemoteObjects(remote, files, prefix, oss)
   const currentBefore = await readAuthoritativePointer(options, temporaryDirectory, 'before', oss)
   const alreadyCommitted = pointerIsTarget(currentBefore, options)
   if (alreadyCommitted && release.isDraft) {

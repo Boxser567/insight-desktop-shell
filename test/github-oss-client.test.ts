@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtemp, open, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 // @ts-expect-error Production scripts are plain ESM and expose runtime-tested helpers.
 import * as githubOss from '../scripts/github-oss-client.mjs'
 
@@ -70,6 +73,77 @@ function createFetch(sts = stsPayload()) {
 }
 
 describe('GitHub OIDC OSS client', () => {
+  it('resumes multipart uploads with bounded retries and immutable headers', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oss-upload-test-'))
+    const source = join(dir, 'asset.dmg')
+    const file = await open(source, 'w')
+    await file.truncate(8 * 1024 * 1024)
+    await file.close()
+    const checkpoint = { uploadId: 'private-upload-id', doneParts: [{ number: 1 }] }
+    const calls: any[] = []
+    const logs: string[] = []
+    const multipartUpload = vi.fn(async (_key, _source, options) => {
+      calls.push(options)
+      await options.progress(0.5, checkpoint)
+      if (calls.length === 1) throw Object.assign(new Error('secret'), { name: 'ResponseTimeoutError' })
+      return { res: { status: 200 } }
+    })
+    try {
+      const client = createGithubOssClient({ environment: baseEnvironment, fetch: createFetch(),
+        ossClientFactory: () => ({ multipartUpload }), wait: async () => {}, note: (line: string) => logs.push(line) })
+      await client.uploadReleaseObject('desktop/releases/v1/asset.dmg', source, { 'x-oss-forbid-overwrite': 'true' })
+      expect(calls).toHaveLength(2)
+      expect(calls[1]).toMatchObject({ checkpoint, partSize: 4 * 1024 * 1024, parallel: 1, timeout: 120_000,
+        headers: { 'x-oss-forbid-overwrite': 'true' } })
+      expect(logs.join('\n')).not.toMatch(/secret|private-upload-id/)
+      calls.length = 0
+      multipartUpload.mockImplementation(async () => { throw Object.assign(new Error('secret'), { status: 403, code: 'AccessDenied' }) })
+      await expect(client.uploadReleaseObject('desktop/releases/v1/asset.dmg', source, {})).rejects.toThrow('AccessDenied')
+      expect(multipartUpload).toHaveBeenCalledTimes(3)
+      multipartUpload.mockClear()
+      let tokenAttempt = 0
+      multipartUpload.mockImplementation(async (_key, _source, options) => {
+        if (++tokenAttempt === 1) {
+          await options.progress(0.5, checkpoint)
+          throw Object.assign(new Error('secret'), { code: 'SecurityTokenExpired', status: 403 })
+        }
+        expect(options.checkpoint).toBe(checkpoint)
+        return { res: { status: 200 } }
+      })
+      await client.uploadReleaseObject('desktop/releases/v1/asset.dmg', source, {})
+      expect(multipartUpload).toHaveBeenCalledTimes(2)
+      multipartUpload.mockClear().mockImplementation(async () => { throw Object.assign(new Error('secret'), { name: 'ResponseTimeoutError' }) })
+      await expect(client.uploadReleaseObject('desktop/releases/v1/asset.dmg', source, {})).rejects.toThrow('ResponseTimeoutError')
+      expect(multipartUpload).toHaveBeenCalledTimes(3)
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it('requests new credentials from the SDK refresh callback', async () => {
+    let configuration: any
+    const fetch = createFetch()
+    const client = createGithubOssClient({ environment: baseEnvironment, fetch,
+      ossClientFactory: (value: any) => { configuration = value; return { listV2: async () => ({ objects: [] }) } } })
+    await client.listObjects('desktop/')
+    await configuration.refreshSTSToken()
+    expect(fetch).toHaveBeenCalledTimes(4)
+  })
+
+  it('uses a bounded ordinary upload for small release files', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oss-small-test-'))
+    const source = join(dir, 'asset')
+    const file = await open(source, 'w')
+    await file.write('small')
+    await file.close()
+    const put = vi.fn(async () => ({ res: { status: 200 } }))
+    const multipartUpload = vi.fn()
+    try {
+      const client = createGithubOssClient({ environment: baseEnvironment, fetch: createFetch(),
+        ossClientFactory: () => ({ put, multipartUpload }) })
+      await client.uploadReleaseObject('desktop/asset', source, { 'x-oss-forbid-overwrite': 'true' })
+      expect(put).toHaveBeenCalledWith('desktop/asset', source, { timeout: 120_000, headers: { 'x-oss-forbid-overwrite': 'true' } })
+      expect(multipartUpload).not.toHaveBeenCalled()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
   it('accepts only the approved GitHub Actions publisher identity', () => {
     expect(assertGithubPublisherEnvironment(baseEnvironment)).toMatchObject({
       repositoryId: '1344679131',

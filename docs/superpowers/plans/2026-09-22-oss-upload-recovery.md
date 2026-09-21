@@ -28,3 +28,14 @@ Files: scripts/publish-update-to-oss.mjs; test/publish-update-to-oss.test.ts.
 - [ ] Reuse remote verification in promote before GitHub publication/pointer mutation. Log only object name, size and transfer progress.
 - [ ] Run focused tests, typecheck and publisher contract checks. Review diff, commit and merge publisher-only change to main for authorized OIDC workflow.
 - [ ] Run stage; only after success run promote. If authentication/permission failure appears, stop and report the safe error and request ID for service owners.
+
+## Local verification
+
+2026-09-22: implementation and local verification complete. Added failing tests
+first for multipart retry and the stale-credential SDK callback; both failed on
+the original code. Focused publisher/adapter suite: 15 passed. Full suite:
+117 files / 804 tests passed using the system Python PATH. An initial full run
+hit the pre-existing local Homebrew python3 ENOEXEC issue (not changed).
+Typecheck, diff whitespace checks and publisher workflow contract passed.
+Live OSS transfer remains the release gate; no assertion that timeout root cause
+is definitively resolved until that succeeds.
