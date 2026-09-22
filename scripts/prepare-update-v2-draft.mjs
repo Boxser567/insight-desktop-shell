@@ -119,6 +119,17 @@ export async function prepareV2Draft(input) {
   const tag = `v${input.version}`
   const refPath = `/git/ref/tags/${encodeURIComponent(tag)}`
   let ref = await githubRequest(input, refPath)
+  const tagRefs = await githubRequest(input, '/git/matching-refs/tags/v')
+  if (!Array.isArray(tagRefs)) throw new Error('GitHub Tag listing is invalid.')
+  const allocatedVersions = tagRefs.flatMap((entry) => {
+    const match = /^refs\/tags\/v(\d+\.\d+\.\d+)$/u.exec(entry?.ref)
+    return match && semver.valid(match[1]) === match[1] ? [match[1]] : []
+  })
+  const allocatedFloor = allocatedVersions.sort(semver.rcompare)[0]
+  if (
+    allocatedFloor &&
+    (semver.gt(allocatedFloor, input.version) || (!ref && !semver.gt(input.version, allocatedFloor)))
+  ) throw new Error(`v2 release version must exceed allocated Tag floor ${allocatedFloor}.`)
   let createdTag = false
   if (!ref) {
     ref = await githubRequest(input, '/git/refs', {

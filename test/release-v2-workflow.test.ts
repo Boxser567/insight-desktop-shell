@@ -63,6 +63,7 @@ describe('release v2 workflow contract', () => {
         return jsonResponse({ schemaVersion: 1, channel: 'candidate', version: '1.0.0-rc.18' })
       }
       if (url.endsWith('/git/ref/tags/v1.0.1')) return jsonResponse({}, 404)
+      if (url.endsWith('/git/matching-refs/tags/v')) return jsonResponse([])
       if (url.endsWith('/git/refs') && init?.method === 'POST') {
         return jsonResponse({ object: { sha: commit } })
       }
@@ -115,6 +116,9 @@ describe('release v2 workflow contract', () => {
       if (String(input).startsWith('https://updates.insight-aigc.com/')) {
         return jsonResponse({ schemaVersion: 1, channel: 'candidate', version: '1.0.0-rc.18' })
       }
+      if (String(input).endsWith('/git/matching-refs/tags/v')) {
+        return jsonResponse([{ ref: 'refs/tags/v1.0.1', object: { sha: 'b'.repeat(40) } }])
+      }
       return jsonResponse({ object: { sha: 'b'.repeat(40) } })
     })
     await expect(prepareV2Draft({
@@ -127,6 +131,28 @@ describe('release v2 workflow contract', () => {
       floorUrls: ['https://updates.insight-aigc.com/desktop/candidate/current.json'],
       fetch: wrongTagFetch
     })).rejects.toThrow('points to another commit')
+
+    const burnedVersionFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('https://updates.insight-aigc.com/')) {
+        return jsonResponse({ schemaVersion: 1, channel: 'candidate', version: '1.0.0-rc.18' })
+      }
+      if (url.endsWith('/git/ref/tags/v1.0.1')) return jsonResponse({}, 404)
+      if (url.endsWith('/git/matching-refs/tags/v')) {
+        return jsonResponse([{ ref: 'refs/tags/v1.0.2', object: { sha: 'c'.repeat(40) } }])
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    await expect(prepareV2Draft({
+      version: '1.0.1',
+      commit: 'a'.repeat(40),
+      repository: 'Boxser567/insight-desktop-shell',
+      token: 'token',
+      packagePath: files.packagePath,
+      publicKeyPath: files.publicKeyPath,
+      floorUrls: ['https://updates.insight-aigc.com/desktop/candidate/current.json'],
+      fetch: burnedVersionFetch
+    })).rejects.toThrow('allocated Tag floor 1.0.2')
   })
 
   it('prefixes assets by target and never replaces conflicting Draft bytes', async () => {

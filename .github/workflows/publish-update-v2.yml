@@ -1,0 +1,136 @@
+name: Publish desktop v2 updates
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: One guarded v2 release transition
+        required: true
+        type: choice
+        options:
+          - stage-target
+          - publish-candidate
+          - accept-target
+          - promote-stable
+          - reject-version
+      version:
+        description: Exact final semantic version without v
+        required: true
+        type: string
+      target:
+        description: Required for target commands; none for release commands
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - darwin-arm64
+          - darwin-x64
+          - win32-x64
+      confirm_version:
+        description: Exact version confirmation for promote-stable or reject-version
+        required: false
+        default: ''
+        type: string
+      reason:
+        description: Concise reason required only for reject-version
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: desktop-update-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ inputs.command }} v${{ inputs.version }} ${{ inputs.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment: desktop-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate trusted invocation
+        env:
+          COMMAND: ${{ inputs.command }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          case "$COMMAND" in
+            stage-target|publish-candidate|accept-target)
+              test "$TARGET" != 'none'
+              ;;
+            promote-stable|reject-version)
+              test "$TARGET" = 'none'
+              ;;
+            *) exit 1 ;;
+          esac
+      - run: npm ci --ignore-scripts
+      - name: Verify v2 publisher contracts
+        run: |
+          set -euo pipefail
+          node scripts/verify-publish-v2-workflow.mjs .github/workflows/publish-update-v2.yml
+          node --check scripts/publish-update-v2-to-oss.mjs
+          node --check scripts/github-oss-client.mjs
+      - name: Prepare product update signing key
+        if: inputs.command == 'publish-candidate' || inputs.command == 'promote-stable'
+        env:
+          DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY"
+          key_path="$RUNNER_TEMP/update-signing-private.pem"
+          umask 077
+          printf '%s' "$DESKTOP_UPDATE_SIGNING_PRIVATE_KEY" > "$key_path"
+          echo "UPDATE_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
+      - name: Execute guarded v2 release transition
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMAND: ${{ inputs.command }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ inputs.target }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+          REJECTION_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          policy_path="$RUNNER_TEMP/update-release-policy.json"
+          git show "refs/tags/v$VERSION:build/update-release-policy.json" > "$policy_path"
+          export UPDATE_RELEASE_POLICY_PATH="$policy_path"
+          args=(node scripts/publish-update-v2-to-oss.mjs "$COMMAND" --version "$VERSION")
+          case "$COMMAND" in
+            stage-target|publish-candidate|accept-target)
+              args+=(--target "$TARGET")
+              ;;
+            promote-stable)
+              args+=(--confirm-version "$CONFIRM_VERSION")
+              ;;
+            reject-version)
+              args+=(--confirm-version "$CONFIRM_VERSION" --reason "$REJECTION_REASON")
+              ;;
+          esac
+          "${args[@]}"
+      - name: Remove product update signing key
+        if: always()
+        run: test -z "${UPDATE_SIGNING_PRIVATE_KEY:-}" || rm -f "$UPDATE_SIGNING_PRIVATE_KEY"
+      - name: Upload redacted publisher report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-update-v2-${{ inputs.version }}-${{ inputs.command }}-${{ inputs.target }}
+          path: release-reports/
+          if-no-files-found: warn
+          retention-days: 180
