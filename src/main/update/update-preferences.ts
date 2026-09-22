@@ -2,16 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
+import type { UpdatePreferences } from '../../shared/about-update-api'
 import type { UpdateChannel } from '../../shared/update-contracts'
 
 const updatePreferencesSchema = z.object({
   schema: z.literal(1),
   candidateOptIn: z.boolean()
 }).strict()
-
-export interface UpdatePreferences {
-  candidateOptIn: boolean
-}
 
 export interface UpdatePreferenceService {
   read(): Promise<UpdatePreferences>
