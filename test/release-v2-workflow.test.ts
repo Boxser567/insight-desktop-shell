@@ -81,7 +81,7 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 describe('release v2 workflow contract', () => {
   it('pins a final version, builds only fixed targets, and appends signed assets', async () => {
-    const workflow = await readFile(workflowPath, 'utf8')
+    const workflow = (await readFile(workflowPath, 'utf8')).replace(/\r\n?/gu, '\n')
     expect(workflow).toContain('group: desktop-release-v2-${{ inputs.version }}')
     expect(workflow.match(/ref: refs\/tags\/v\$\{\{ inputs\.version \}\}/gu)).toHaveLength(4)
     expect(workflow).toContain("if: inputs.target == 'darwin-arm64'")
