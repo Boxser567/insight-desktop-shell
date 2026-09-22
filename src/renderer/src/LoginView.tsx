@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AuthCommandResult, CaptchaView } from '../../shared/auth-contracts'
 import brandMark from '../../../build/brand-mark.svg'
 import { canSubmitPassword, canSubmitSms, validatePhone } from './auth-form-model'
+import { DotGrid } from './DotGrid'
 
 type LoginMethod = 'sms' | 'password'
 
@@ -86,6 +87,7 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
 
   return (
     <main className="login-page">
+      <DotGrid />
       <section className="login-visual" aria-label="因赛AI">
         <div className="login-brand">
           <div className="brand-mark" aria-hidden="true"><img src={brandMark} alt="" /></div>
@@ -93,7 +95,10 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
             <strong>因赛AI</strong>
           </div>
         </div>
-        <p>让智能工作区、安全会话和业务资产在一个桌面客户端中协同。</p>
+        <div className="login-slogan">
+          <p>以专业为引擎</p>
+          <p>让团队与 AI 共成长</p>
+        </div>
       </section>
       <section className="login-panel">
         <div className="login-card">

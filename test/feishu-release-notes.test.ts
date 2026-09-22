@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('Feishu release notes pipeline', () => {
   const pythonTestTimeoutMs = 15_000
+  const python = process.env.PYTHON ?? (process.platform === 'darwin' ? '/usr/bin/python3' : 'python3')
   const scriptPath = join(process.cwd(), '.github', 'scripts', 'feishu_release_notes.py')
   const workflowPath = join(process.cwd(), '.github', 'workflows', 'release.yml')
 
@@ -13,7 +14,7 @@ describe('Feishu release notes pipeline', () => {
   it(
     'builds a prompt with valid metadata and evidence blocks',
     () => {
-      const output = execFileSync('python3', [scriptPath, 'build-prompt', '--tag', 'v0.4.0'], {
+      const output = execFileSync(python, [scriptPath, 'build-prompt', '--tag', 'v0.4.0'], {
         encoding: 'utf8',
         env: pythonEnv
       })
@@ -33,7 +34,7 @@ describe('Feishu release notes pipeline', () => {
   it('generates deterministic fallback release notes that pass validation', () => {
     const tempFile = join(process.cwd(), '.temp-feishu-test-notes.md')
     try {
-      execFileSync('python3', [scriptPath, 'generate-fallback', '--tag', 'v0.4.0', '--output', tempFile], {
+      execFileSync(python, [scriptPath, 'generate-fallback', '--tag', 'v0.4.0', '--output', tempFile], {
         encoding: 'utf8',
         env: pythonEnv
       })
@@ -45,7 +46,7 @@ describe('Feishu release notes pipeline', () => {
       expect(content).toContain('---')
 
       // Validate passes without error
-      const validateOutput = execFileSync('python3', [scriptPath, 'validate', '--tag', 'v0.4.0', '--input', tempFile], {
+      const validateOutput = execFileSync(python, [scriptPath, 'validate', '--tag', 'v0.4.0', '--input', tempFile], {
         encoding: 'utf8',
         env: pythonEnv
       })
@@ -82,7 +83,7 @@ Description here.
       writeFileSync(tempFile, invalidContent, 'utf8')
 
       expect(() => {
-        execFileSync('python3', [scriptPath, 'validate', '--tag', 'v0.4.0', '--input', tempFile], {
+        execFileSync(python, [scriptPath, 'validate', '--tag', 'v0.4.0', '--input', tempFile], {
           encoding: 'utf8',
           stdio: 'pipe',
           env: pythonEnv
