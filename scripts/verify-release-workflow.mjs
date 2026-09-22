@@ -178,6 +178,23 @@ async function main() {
   if (scripts.postinstall !== 'install-electron --no && patch-package') {
     throw new Error('Postinstall must apply locked dependency patches after installing Electron.')
   }
+  for (const name of [
+    'package:bridge:mac:arm64',
+    'package:bridge:mac:x64',
+    'package:bridge:win'
+  ]) {
+    const command = scripts[name]
+    if (
+      typeof command !== 'string' ||
+      !command.includes('--publish never') ||
+      !command.includes('electron-builder.candidate.cjs')
+    ) throw new Error(`Legacy bridge package script is unsafe: ${name}`)
+  }
+  for (const forbidden of ['candidate-v2/', 'build-update-v2-target.mjs', 'publish-update-v2-to-oss.mjs']) {
+    if (workflow.includes(forbidden)) {
+      throw new Error(`Legacy bridge workflow contains v2 operation: ${forbidden}`)
+    }
+  }
   if (!osxSignPatch.includes('-        return await Promise.all(children.map(async (child) => {') ||
       !osxSignPatch.includes('+        for (const child of children) {')) {
     throw new Error('The osx-sign patch must serialize binary file inspection.')

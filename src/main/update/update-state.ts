@@ -6,7 +6,7 @@ export type UpdateStateEvent =
   | { type: 'progress'; version: string; required: boolean; percent: number; manual: boolean }
   | { type: 'downloaded'; version: string; required: boolean; manual: boolean }
   | { type: 'installing'; version: string; required: boolean; manual: boolean }
-  | { type: 'up-to-date' }
+  | { type: 'up-to-date'; promotedFromCandidate?: boolean }
   | { type: 'unsupported'; reason: string; manual: boolean }
   | { type: 'error'; version?: string; required: boolean; message: string; retryable: boolean; manual: boolean; manualInstallerAvailable: boolean }
   | { type: 'reset' }
@@ -66,7 +66,8 @@ export function reduceUpdateState(
             phase: 'up-to-date',
             currentVersion: state.currentVersion,
             track: state.track,
-            manual: true
+            manual: true,
+            ...(event.promotedFromCandidate ? { promotedFromCandidate: true } : {})
           }
         : initialUpdateStatus(state.currentVersion)
     case 'unsupported':

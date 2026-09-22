@@ -259,7 +259,13 @@ export class UpdateManager {
           throw new Error('可信发布记录不能解除尚未满足的强制更新。')
         }
         this.clearActiveRelease()
-        this.publish(reduceUpdateState(this.statusValue, { type: 'up-to-date' }))
+        const promotedFromCandidate = track === 'stable' &&
+          isV2Release(release) &&
+          (await this.preferences().read()).candidateOptIn
+        this.publish(reduceUpdateState(this.statusValue, {
+          type: 'up-to-date',
+          ...(promotedFromCandidate ? { promotedFromCandidate: true } : {})
+        }))
         return
       }
 

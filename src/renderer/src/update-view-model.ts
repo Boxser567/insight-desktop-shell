@@ -63,12 +63,19 @@ function baseUpdateViewModel(status: UpdateStatus): UpdateViewModel {
         busy: true
       }
     case 'up-to-date':
-      return {
-        title: '已经是最新版本',
-        detail: `当前版本 ${status.currentVersion}`,
-        primary: 'check',
-        busy: false
-      }
+      return status.promotedFromCandidate
+        ? {
+            title: '当前版本已转为正式版',
+            detail: `版本 ${status.currentVersion} 无需重新下载。`,
+            primary: 'check',
+            busy: false
+          }
+        : {
+            title: '已经是最新版本',
+            detail: `当前版本 ${status.currentVersion}`,
+            primary: 'check',
+            busy: false
+          }
     case 'unsupported':
       return {
         title: '当前版本不支持真实更新',

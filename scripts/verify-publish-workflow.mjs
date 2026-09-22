@@ -62,7 +62,10 @@ async function main() {
     'OSS_SESSION_TOKEN',
     'ossutil',
     'pull_request_target:',
-    'secrets.'
+    'secrets.',
+    'stage-target',
+    'candidate-v2/',
+    'publish-update-v2-to-oss.mjs'
   ]) {
     if (workflow.includes(forbidden)) throw new Error(`Publish workflow contains ${forbidden}.`)
   }

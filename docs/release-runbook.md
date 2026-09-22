@@ -6,6 +6,12 @@
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
+> 1.0 首发更新流程已经切换到 [Desktop Update v2 操作清单](releases/update-v2-operator-checklist.md)。
+> `.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 仅负责
+> `v1.0.0-rc.18` legacy 桥接；日常最终 SemVer Candidate 使用 `release-v2.yml`，按目标
+> `stage-target → publish-candidate → accept-target`，三个目标完成后再以
+> `promote-stable` 转正，期间不重新构建已验收字节。
+
 仓库的生产发布链已经按两阶段模型实现：
 
 - 手动 `workflow_dispatch` 只接收 `candidate_tag`，用于 Candidate；
