@@ -47,16 +47,16 @@
     "package:candidate:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version arm64",
     "package:candidate:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version x64",
     "package:candidate:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.candidate.cjs",
-    "package:bridge:mac:arm64": "npm run package:candidate:mac:arm64",
-    "package:bridge:mac:x64": "npm run package:candidate:mac:x64",
-    "package:bridge:win": "npm run package:candidate:win",
+    "package:bridge:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version arm64",
+    "package:bridge:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never --config electron-builder.candidate.cjs && node scripts/finalize-mac-release.mjs dist-candidate candidate $npm_package_version x64",
+    "package:bridge:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never --config electron-builder.candidate.cjs",
     "package:mac": "npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --publish never",
     "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version arm64",
     "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version x64",
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never",
-    "package:release:mac:arm64": "npm run package:mac:arm64",
-    "package:release:mac:x64": "npm run package:mac:x64",
-    "package:release:win": "npm run package:win"
+    "package:release:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version arm64",
+    "package:release:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version x64",
+    "package:release:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
