@@ -4,6 +4,7 @@ import { rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { release as systemRelease } from 'node:os'
 import semver from 'semver'
+import { assertCandidateRecoveryCompatible } from './v2-release-contract'
 import {
   readRequiredUpdatePolicy,
   writeRequiredUpdatePolicy,
@@ -262,6 +263,19 @@ export class UpdateManager {
         return
       }
 
+      let recoveryInstallerUrl: URL | undefined
+      if (track === 'candidate' && isV2Release(release)) {
+        if (!isV2Source(this.options.source)) {
+          throw new Error('内测更新缺少可信恢复源。')
+        }
+        const baseline = await this.options.source.resolveRecoveryBaseline(this.support.target)
+        assertCandidateRecoveryCompatible({
+          recoveryReads: baseline.readsDataSchema,
+          candidateWrites: release.manifest.compatibility.writesDataSchema
+        })
+        recoveryInstallerUrl = baseline.manualInstallerUrl
+      }
+
       if (release.minimumSystemVersion) {
         const currentSystem = semver.coerce((this.options.systemRelease ?? systemRelease)())
         if (!currentSystem || semver.lt(currentSystem, release.minimumSystemVersion)) {
@@ -304,7 +318,7 @@ export class UpdateManager {
         required,
         manual
       }
-      this.bindRelease(release)
+      this.bindRelease(release, recoveryInstallerUrl)
       if (manifestRequiresUpdate) {
         if (isV2Release(release)) {
           if (!release.releaseIndexBytes || !release.releaseIndexSignatureBytes) {
@@ -540,10 +554,10 @@ export class UpdateManager {
     for (const listener of this.listeners) listener(status)
   }
 
-  private bindRelease(release: AnyResolvedRelease): void {
+  private bindRelease(release: AnyResolvedRelease, recoveryInstallerUrl?: URL): void {
     this.activeManifest = release.manifest
     this.activeReleaseBaseUrl = release.releaseBaseUrl
-    this.manualInstallerUrl = release.manualInstallerUrl
+    this.manualInstallerUrl = recoveryInstallerUrl ?? release.manualInstallerUrl
     this.executorVersion = undefined
     this.options.executor.useRelease(release.releaseBaseUrl)
   }

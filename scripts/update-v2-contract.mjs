@@ -213,6 +213,19 @@ export function sha512(bytes) {
   return createHash('sha512').update(bytes).digest('base64')
 }
 
+export function assertCandidateRecoveryCompatible(input) {
+  if (
+    !Number.isSafeInteger(input?.candidateWrites) || input.candidateWrites < 0 ||
+    !Number.isSafeInteger(input?.recoveryReads?.minimum) || input.recoveryReads.minimum < 0 ||
+    !Number.isSafeInteger(input?.recoveryReads?.maximum) || input.recoveryReads.maximum < 0 ||
+    input.recoveryReads.minimum > input.recoveryReads.maximum ||
+    input.candidateWrites < input.recoveryReads.minimum ||
+    input.candidateWrites > input.recoveryReads.maximum
+  ) {
+    throw new Error('Candidate data cannot be recovered by the current Stable baseline.')
+  }
+}
+
 function assertFinalVersion(version) {
   assertSemver(version, 'update version')
   const parsed = semver.parse(version)

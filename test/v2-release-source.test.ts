@@ -201,6 +201,7 @@ describe('v2 release source', () => {
     const { source, target } = fixture({ track: 'stable', target: 'darwin-arm64' })
 
     const release = await source.resolve('stable', target)
+    const recovery = await source.resolveRecoveryBaseline(target)
 
     expect(release.rollout.track).toBe('stable')
     expect(release.releaseIndex?.targets.map(({ id }) => id)).toEqual([
@@ -210,6 +211,72 @@ describe('v2 release source', () => {
     ])
     expect(release.releaseIndexBytes).toBeDefined()
     expect(release.releaseIndexSignatureBytes).toBeDefined()
+    expect(recovery).toMatchObject({
+      version: '1.0.0',
+      source: 'stable',
+      readsDataSchema: { minimum: 1, maximum: 1 }
+    })
+  })
+
+  it('uses only the signed rc.18 bridge before the first Stable pointer exists', async () => {
+    const target = targetValues['darwin-x64']
+    const version = '1.0.0-rc.18'
+    const metadata = Buffer.from(`version: ${version}\nminimumSystemVersion: 22.0.0\n`)
+    const legacyManifest = {
+      schema: 'insight-desktop-update/v1',
+      version,
+      channel: 'candidate',
+      publishedAt: '2026-09-22T08:00:00.000Z',
+      shellCommit: 'a'.repeat(40),
+      coreRuntime: { tag: 'runtime-v1', commit: 'b'.repeat(40) },
+      policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.17' },
+      compatibility: {
+        profileSchema: 1,
+        accountStorageSchema: 1,
+        minimumReadableDataSchema: 1,
+        maximumReadableDataSchema: 1
+      },
+      artifacts: [
+        artifact(target, 'dmg', 'bridge.dmg'),
+        artifact(target, 'zip', 'bridge.zip'),
+        artifact(target, 'blockmap', 'bridge.zip.blockmap'),
+        artifact(target, 'updater-metadata', 'latest-mac.yml', metadata)
+      ]
+    }
+    const authenticated = signedJson(legacyManifest)
+    const stablePointer = distribution.v2PointerUrl('stable').href
+    const candidatePointer = distribution.currentPointerUrl('candidate').href
+    const releaseBaseUrl = distribution.releaseBaseUrl('candidate', version)
+    const files = new Map<string, Uint8Array>([
+      [candidatePointer, Buffer.from(JSON.stringify({
+        schemaVersion: 1, channel: 'candidate', version
+      }))],
+      [new URL('insight-update.json', releaseBaseUrl).href, authenticated.bytes],
+      [new URL('insight-update.json.sig', releaseBaseUrl).href, authenticated.signature],
+      [new URL('latest-mac.yml', releaseBaseUrl).href, metadata]
+    ])
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : input.toString()
+      if (url === stablePointer) return response(url, 'missing', 404)
+      const bytes = files.get(url)
+      return bytes ? response(url, Buffer.from(bytes)) : response(url, 'missing', 404)
+    })
+    const source = new V2ReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
+
+    await expect(source.resolveRecoveryBaseline(target)).resolves.toMatchObject({
+      version,
+      source: 'bridge',
+      readsDataSchema: { minimum: 1, maximum: 1 },
+      manualInstallerUrl: new URL(`${releaseBaseUrl.href}bridge.dmg`)
+    })
+  })
+
+  it('does not hide a broken Stable trust chain behind the legacy bridge', async () => {
+    const { source, target } = fixture({
+      track: 'stable',
+      corruptEnvelopeSignature: true
+    })
+    await expect(source.resolveRecoveryBaseline(target)).rejects.toThrow('签名')
   })
 
   it.each([

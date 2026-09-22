@@ -1,6 +1,9 @@
 {
   "profileSchema": 1,
   "accountStorageSchema": 1,
-  "minimumReadableDataSchema": 1,
-  "maximumReadableDataSchema": 1
+  "readsDataSchema": {
+    "minimum": 1,
+    "maximum": 1
+  },
+  "writesDataSchema": 1
 }

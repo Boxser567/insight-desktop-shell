@@ -41,6 +41,16 @@ export interface ResolvedV2Release {
   manualInstallerUrl: URL
 }
 
+export interface ResolvedRecoveryBaseline {
+  version: string
+  source: 'stable' | 'bridge'
+  readsDataSchema: {
+    minimum: number
+    maximum: number
+  }
+  manualInstallerUrl: URL
+}
+
 export type AnyResolvedRelease = ResolvedRelease | ResolvedV2Release
 
 export interface V2UpdateSource {
@@ -53,6 +63,9 @@ export interface V2UpdateSource {
     manifest: SignedTargetManifest,
     target: Pick<UpdateTarget, 'platform' | 'arch'>
   ): URL
+  resolveRecoveryBaseline(
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): Promise<ResolvedRecoveryBaseline>
 }
 
 export type AnyUpdateSource = UpdateSource | V2UpdateSource

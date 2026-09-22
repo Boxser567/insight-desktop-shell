@@ -155,6 +155,7 @@ describe('desktop update window', () => {
     expect(source).toContain('className="update-content"')
     expect(source).toContain('className="update-recovery"')
     expect(source).toContain("download: '下载更新'")
+    expect(source).toContain("'下载正式版完整安装包'")
     expect(source).not.toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
     expect(source).toContain("status.phase === 'checking' || status.phase === 'installing'")

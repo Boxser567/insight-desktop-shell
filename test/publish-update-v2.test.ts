@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { sign } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -52,6 +53,33 @@ class MemoryOss {
     this.objects.set(key, await readFile(source))
     return { status: 200 }
   }
+}
+
+async function installBridgeBaseline(
+  fixture: Awaited<ReturnType<typeof releaseFixture>>,
+  oss: MemoryOss
+) {
+  const version = '1.0.0-rc.18'
+  const manifestBytes = Buffer.from(JSON.stringify({
+    schema: 'insight-desktop-update/v1',
+    version,
+    channel: 'candidate',
+    compatibility: {
+      profileSchema: 1,
+      accountStorageSchema: 1,
+      minimumReadableDataSchema: 1,
+      maximumReadableDataSchema: 1
+    }
+  }))
+  const privateKey = await readFile(fixture.paths.privateKey, 'utf8')
+  oss.objects.set('desktop/candidate/current.json', Buffer.from(JSON.stringify({
+    schemaVersion: 1, channel: 'candidate', version
+  })))
+  oss.objects.set(`desktop/releases/v${version}/insight-update.json`, manifestBytes)
+  oss.objects.set(
+    `desktop/releases/v${version}/insight-update.json.sig`,
+    sign(null, manifestBytes, privateKey)
+  )
 }
 
 type Target = 'darwin-arm64' | 'darwin-x64' | 'win32-x64'
@@ -204,6 +232,7 @@ describe('v2 update publisher', () => {
     const targetDir = await buildTarget(fixture, 'win32-x64')
     const temporaryDirectory = await operationDirectory(fixture.root, 'candidate-op')
     const common = commonInput(fixture, oss, temporaryDirectory)
+    await installBridgeBaseline(fixture, oss)
     await stageV2Target({ ...common, target: 'win32-x64', targetDir })
     const result = await publishV2Candidate({ ...common, target: 'win32-x64' })
     expect(result.pointerAfter).toMatchObject({
@@ -229,6 +258,26 @@ describe('v2 update publisher', () => {
       .rejects.toThrow('below authoritative pointer')
   })
 
+  it('rejects a Candidate whose data cannot be read by the recovery bridge', async () => {
+    const fixture = await releaseFixture()
+    await writeFile(fixture.paths.compatibility, JSON.stringify({
+      profileSchema: 1,
+      accountStorageSchema: 1,
+      readsDataSchema: { minimum: 1, maximum: 2 },
+      writesDataSchema: 2
+    }))
+    const oss = new MemoryOss()
+    await installBridgeBaseline(fixture, oss)
+    const targetDir = await buildTarget(fixture, 'darwin-arm64')
+    const temporaryDirectory = await operationDirectory(fixture.root, 'incompatible-op')
+    const common = commonInput(fixture, oss, temporaryDirectory)
+    await stageV2Target({ ...common, target: 'darwin-arm64', targetDir })
+
+    await expect(publishV2Candidate({ ...common, target: 'darwin-arm64' }))
+      .rejects.toThrow('cannot be recovered by the current Stable')
+    expect(oss.objects.has('desktop/candidate-v2/darwin-arm64/current.json')).toBe(false)
+  })
+
   it('requires matching identities and all three immutable acceptance records', async () => {
     const fixture = await releaseFixture()
     const oss = new MemoryOss()
@@ -236,6 +285,7 @@ describe('v2 update publisher', () => {
     const intel = await buildTarget(fixture, 'darwin-x64', 'c'.repeat(40))
     let temporaryDirectory = await operationDirectory(fixture.root, 'identity-op')
     let common = commonInput(fixture, oss, temporaryDirectory)
+    await installBridgeBaseline(fixture, oss)
     await stageV2Target({ ...common, target: 'darwin-arm64', targetDir: arm })
     await stageV2Target({ ...common, target: 'darwin-x64', targetDir: intel })
     await publishV2Candidate({ ...common, target: 'darwin-arm64' })
@@ -246,6 +296,7 @@ describe('v2 update publisher', () => {
     const cleanOss = new MemoryOss()
     temporaryDirectory = await operationDirectory(clean.root, 'incomplete-op')
     common = commonInput(clean, cleanOss, temporaryDirectory)
+    await installBridgeBaseline(clean, cleanOss)
     const cleanArm = await buildTarget(clean, 'darwin-arm64')
     await stageV2Target({ ...common, target: 'darwin-arm64', targetDir: cleanArm })
     await publishV2Candidate({ ...common, target: 'darwin-arm64' })
@@ -258,6 +309,7 @@ describe('v2 update publisher', () => {
     const oss = new MemoryOss()
     const temporaryDirectory = await operationDirectory(fixture.root, 'promotion-op')
     const common = commonInput(fixture, oss, temporaryDirectory)
+    await installBridgeBaseline(fixture, oss)
     for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64'] as const) {
       const targetDir = await buildTarget(fixture, target)
       await stageV2Target({ ...common, target, targetDir })
@@ -307,6 +359,7 @@ describe('v2 update publisher', () => {
     const targetDir = await buildTarget(fixture, 'darwin-arm64')
     const temporaryDirectory = await operationDirectory(fixture.root, 'cdn-op')
     const common = commonInput(fixture, oss, temporaryDirectory)
+    await installBridgeBaseline(fixture, oss)
     await stageV2Target({ ...common, target: 'darwin-arm64', targetDir })
     const failed = { ...common, target: 'darwin-arm64', verifyCdn: vi.fn(async () => {
       throw new Error('CDN did not converge')

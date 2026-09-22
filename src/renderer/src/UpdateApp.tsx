@@ -33,6 +33,13 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
   }
 }
 
+function actionLabel(action: UpdateViewAction, status: UpdateStatus): string {
+  return action === 'download-full-installer' &&
+    'track' in status && status.track === 'candidate'
+    ? '下载正式版完整安装包'
+    : actionLabels[action]
+}
+
 export function UpdateApp(): React.JSX.Element {
   const api = window.insightDesktopUpdates as DesktopUpdateWindowApi
   const [status, setStatus] = useState<UpdateStatus>({ phase: 'idle', currentVersion: '—' })
@@ -76,7 +83,7 @@ export function UpdateApp(): React.JSX.Element {
           {commandError && <p className="update-error">{commandError}</p>}
           {model.recovery && (
             <button type="button" className="update-recovery" onClick={() => execute(model.recovery!)}>
-              {actionLabels[model.recovery]}
+              {actionLabel(model.recovery, status)}
             </button>
           )}
           {(status.phase === 'checking' || status.phase === 'installing') && (
@@ -95,7 +102,7 @@ export function UpdateApp(): React.JSX.Element {
       <footer className="update-actions">
         {model.secondary && (
           <button type="button" className="secondary" onClick={() => execute(model.secondary!)}>
-            {actionLabels[model.secondary]}
+            {actionLabel(model.secondary, status)}
           </button>
         )}
         <span />
@@ -104,7 +111,7 @@ export function UpdateApp(): React.JSX.Element {
         )}
         {model.primary && (
           <button type="button" className="primary" onClick={() => execute(model.primary!)}>
-            {actionLabels[model.primary]}
+            {actionLabel(model.primary, status)}
           </button>
         )}
       </footer>

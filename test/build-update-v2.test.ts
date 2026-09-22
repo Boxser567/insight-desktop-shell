@@ -231,10 +231,11 @@ describe('v2 update release builders', () => {
     expect(candidate.appId).toBe(packageJson.build.appId)
     expect(candidate.productName).toBe(packageJson.build.productName)
     expect(packageJson.scripts).toMatchObject({
-      'package:bridge:mac:arm64': expect.stringContaining('package:candidate'),
-      'package:release:mac:arm64': expect.stringContaining('package:mac:arm64'),
-      'package:release:mac:x64': expect.stringContaining('package:mac:x64'),
-      'package:release:win': expect.stringContaining('package:win')
+      'package:bridge:mac:arm64': expect.stringContaining('electron-builder.candidate.cjs'),
+      'package:release:mac:arm64': expect.stringContaining('dist stable'),
+      'package:release:mac:x64': expect.stringContaining('dist stable'),
+      'package:release:win': expect.stringContaining('--publish never')
     })
+    expect(packageJson.scripts['package:bridge:mac:arm64']).toContain('--publish never')
   })
 })

@@ -173,6 +173,25 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 
 ## 最终安装验收
 
+### v2 Candidate 恢复门禁
+
+移动任一 `desktop/candidate-v2/<target>/current.json` 前，发布器和客户端都会校验
+Candidate 的 `writesDataSchema` 是否落在恢复基线的 `readsDataSchema` 范围内。已有
+Stable 时，恢复基线只能来自完整签名链验证后的 Stable 目标；首个 Stable 尚未发布时，
+只能使用版本精确为 `v1.0.0-rc.18` 的已签名桥接包。Stable 指针存在但签名、Index、
+Manifest 或摘要损坏时必须停止，禁止静默退回桥接包。
+
+内测更新窗口的“下载正式版完整安装包”只打开上述可信恢复基线中的 DMG/NSIS URL，
+不接受渲染进程传入的地址，也不启用 electron-updater 降级。恢复验收步骤：
+
+1. macOS 退出因赛AI，从可信 DMG 将应用覆盖安装到原应用目录，不删除
+   `~/Library/Application Support/insight-desktop`。
+2. Windows 退出因赛AI，运行可信 NSIS 完整安装包执行修复/覆盖安装，沿用原安装目录，
+   不卸载用户数据。
+3. 启动后核对账号、会话、工作区、设置、插件和数据 Schema，并连续重启三次。
+4. 如果任一安装器要求删除用户数据、重建 Profile 或无法读取 Candidate 已写入的数据，
+   立即停止验收并拒绝该版本；不得以清空数据作为通过条件。
+
 从本次 GitHub Draft 或 OSS 不可变版本目录下载确切安装包后，在目标平台完成：
 
 - macOS DMG 校验、完整 bundle 签名、Gatekeeper、notarization 和 stapling 检查；

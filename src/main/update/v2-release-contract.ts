@@ -118,6 +118,18 @@ export interface AuthenticatedTargetManifest {
   manifestBytes: Uint8Array
 }
 
+export function assertCandidateRecoveryCompatible(input: {
+  recoveryReads: { minimum: number; maximum: number }
+  candidateWrites: number
+}): void {
+  if (
+    input.candidateWrites < input.recoveryReads.minimum ||
+    input.candidateWrites > input.recoveryReads.maximum
+  ) {
+    throw new Error('该内测版本写入的数据无法由当前正式版恢复读取。')
+  }
+}
+
 export function verifyRolloutEnvelope(
   bytes: Uint8Array,
   publicKeyPem: string

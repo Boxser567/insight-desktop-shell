@@ -30,9 +30,12 @@ import { buildV2Index } from './build-update-v2-index.mjs'
 import {
   UPDATE_V2_SCHEMAS,
   UPDATE_V2_TARGET_IDS,
+  assertCandidateRecoveryCompatible,
   canonicalJsonBytes,
   parseCanonicalV2Envelope,
+  parseV2ReleaseIndex,
   parseV2RolloutPayload,
+  parseV2TargetManifest,
   sha512
 } from './update-v2-contract.mjs'
 import { verifyV2TargetAssets } from './verify-update-v2-assets.mjs'
@@ -295,6 +298,16 @@ async function readAuthenticatedPointer(input, key, { allowLegacy = false } = {}
     publicKey,
     authenticated.signatureBytes
   )) throw new Error(`Update pointer signature is invalid: ${key}`)
+  if (key === pointerKey('stable')) {
+    if (authenticated.payload.track !== 'stable' || authenticated.payload.target !== undefined) {
+      throw new Error('Stable pointer payload identity is invalid.')
+    }
+  } else if (key.startsWith('desktop/candidate-v2/')) {
+    const target = key.split('/')[2]
+    if (authenticated.payload.track !== 'candidate' || authenticated.payload.target !== target) {
+      throw new Error('Candidate pointer payload identity is invalid.')
+    }
+  }
   return {
     ...object,
     version: authenticated.payload.version,
@@ -323,6 +336,83 @@ function assertVersionAtGlobalFloor(version, pointers) {
       throw new Error(`Release version is below authoritative pointer ${pointer.name}.`)
     }
   }
+}
+
+async function requiredRemoteBytes(input, key, label) {
+  const object = await readRemoteObject(input.oss, key, input.temporaryDirectory, label)
+  if (!object) throw new Error(`${label} is missing.`)
+  return object.bytes
+}
+
+async function legacyRecoveryReads(input, pointer, channel) {
+  if (channel === 'candidate' && pointer.version !== '1.0.0-rc.18') {
+    throw new Error('The recovery bridge must be exactly v1.0.0-rc.18.')
+  }
+  const prefix = `desktop/releases/v${pointer.version}/`
+  const [manifestBytes, signatureBytes, publicKeyPem] = await Promise.all([
+    requiredRemoteBytes(input, `${prefix}insight-update.json`, 'Legacy recovery Manifest'),
+    requiredRemoteBytes(input, `${prefix}insight-update.json.sig`, 'Legacy recovery signature'),
+    readFile(input.publicKeyPath, 'utf8')
+  ])
+  if (!verifySignature(null, manifestBytes, createPublicKey(publicKeyPem), signatureBytes)) {
+    throw new Error('Legacy recovery Manifest signature is invalid.')
+  }
+  const manifest = JSON.parse(manifestBytes.toString('utf8'))
+  const compatibility = manifest?.compatibility
+  if (
+    manifest?.schema !== 'insight-desktop-update/v1' ||
+    manifest.version !== pointer.version || manifest.channel !== channel ||
+    !Number.isSafeInteger(compatibility?.minimumReadableDataSchema) ||
+    !Number.isSafeInteger(compatibility?.maximumReadableDataSchema) ||
+    compatibility.minimumReadableDataSchema > compatibility.maximumReadableDataSchema
+  ) throw new Error('Legacy recovery Manifest is invalid.')
+  return {
+    minimum: compatibility.minimumReadableDataSchema,
+    maximum: compatibility.maximumReadableDataSchema
+  }
+}
+
+async function recoveryReads(input, pointers) {
+  const stable = pointers.find((pointer) => pointer.name === 'stable')
+  if (stable?.legacy) return legacyRecoveryReads(input, stable, 'stable')
+  if (stable) {
+    const releasePrefix = `desktop/releases/v${stable.version}/`
+    const [indexBytes, indexSignature, publicKeyPem] = await Promise.all([
+      requiredRemoteBytes(input, `${releasePrefix}insight-release.json`, 'Stable Release Index'),
+      requiredRemoteBytes(input, `${releasePrefix}insight-release.json.sig`, 'Stable Release Index signature'),
+      readFile(input.publicKeyPath, 'utf8')
+    ])
+    const publicKey = createPublicKey(publicKeyPem)
+    if (
+      digest(indexBytes) !== stable.value.referencedSha512 ||
+      !verifySignature(null, indexBytes, publicKey, indexSignature)
+    ) throw new Error('Stable Release Index trust chain is invalid.')
+    const index = parseV2ReleaseIndex(JSON.parse(indexBytes.toString('utf8')))
+    if (index.version !== stable.version) throw new Error('Stable Release Index version is invalid.')
+    const reference = index.targets.find(({ id }) => id === input.target)
+    if (!reference) throw new Error('Stable Release Index is missing the Candidate target.')
+    const targetPrefixValue = targetPrefix(stable.version, input.target)
+    const [manifestBytes, manifestSignature] = await Promise.all([
+      requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json`, 'Stable Target Manifest'),
+      requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json.sig`, 'Stable Target signature')
+    ])
+    if (
+      digest(manifestBytes) !== reference.manifestSha512 ||
+      !verifySignature(null, manifestBytes, publicKey, manifestSignature)
+    ) throw new Error('Stable Target Manifest trust chain is invalid.')
+    const manifest = parseV2TargetManifest(JSON.parse(manifestBytes.toString('utf8')))
+    if (
+      manifest.version !== stable.version ||
+      `${manifest.target.platform}-${manifest.target.arch}` !== input.target ||
+      manifest.shellCommit !== index.shellCommit ||
+      manifest.coreRuntime.tag !== index.coreRuntime.tag ||
+      manifest.coreRuntime.commit !== index.coreRuntime.commit
+    ) throw new Error('Stable Target Manifest identity is invalid.')
+    return manifest.compatibility.readsDataSchema
+  }
+  const bridge = pointers.find((pointer) => pointer.name === 'legacy-candidate')
+  if (!bridge?.legacy) throw new Error('The validated rc.18 recovery bridge is unavailable.')
+  return legacyRecoveryReads(input, bridge, 'candidate')
 }
 
 async function readReleasePolicy(path, version) {
@@ -372,6 +462,10 @@ export async function publishV2Candidate(input) {
   const target = await downloadVerifiedTarget(input, input.target)
   const pointers = await authoritativePointers(input)
   assertVersionAtGlobalFloor(input.version, pointers)
+  assertCandidateRecoveryCompatible({
+    recoveryReads: await recoveryReads(input, pointers),
+    candidateWrites: target.manifest.compatibility.writesDataSchema
+  })
   const stableAtVersion = pointers.find((pointer) =>
     pointer.name === 'stable' && pointer.version === input.version)
   if (stableAtVersion) throw new Error('A Stable version cannot be republished as Candidate.')

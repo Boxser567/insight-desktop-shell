@@ -9,8 +9,15 @@ import type {
   UpdateTrack
 } from '../../shared/update-contracts'
 import type { UpdateDistribution } from './update-environment'
-import type { ResolvedV2Release, V2UpdateSource } from './update-source'
-import { UPDATE_SOURCE_REQUEST_TIMEOUT_MS } from './generic-release-source'
+import type {
+  ResolvedRecoveryBaseline,
+  ResolvedV2Release,
+  V2UpdateSource
+} from './update-source'
+import {
+  GenericReleaseSource,
+  UPDATE_SOURCE_REQUEST_TIMEOUT_MS
+} from './generic-release-source'
 import {
   updateTargetId,
   verifyReleaseIndex,
@@ -27,6 +34,9 @@ const RELEASE_INDEX_NAME = 'insight-release.json'
 const RELEASE_INDEX_SIGNATURE_NAME = 'insight-release.json.sig'
 const TARGET_MANIFEST_NAME = 'insight-target.json'
 const TARGET_MANIFEST_SIGNATURE_NAME = 'insight-target.json.sig'
+const LEGACY_BRIDGE_VERSION = '1.0.0-rc.18'
+
+class StablePointerNotFoundError extends Error {}
 
 export interface V2ReleaseSourceOptions {
   distribution: UpdateDistribution
@@ -38,11 +48,17 @@ export class V2ReleaseSource implements V2UpdateSource {
   readonly #distribution: UpdateDistribution
   readonly #publicKeyPem: string
   readonly #fetch: FetchImplementation
+  readonly #legacySource: GenericReleaseSource
 
   constructor(options: V2ReleaseSourceOptions) {
     this.#distribution = options.distribution
     this.#publicKeyPem = options.publicKeyPem
     this.#fetch = options.fetch ?? globalThis.fetch
+    this.#legacySource = new GenericReleaseSource({
+      distribution: options.distribution,
+      publicKeyPem: options.publicKeyPem,
+      fetch: this.#fetch
+    })
   }
 
   async resolve(
@@ -57,7 +73,7 @@ export class V2ReleaseSource implements V2UpdateSource {
     const rolloutEnvelopeBytes = await this.#download(pointerUrl, '更新投放信封', {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache' }
-    })
+    }, track === 'stable')
     const { payload: rollout } = verifyRolloutEnvelope(
       rolloutEnvelopeBytes,
       this.#publicKeyPem
@@ -147,6 +163,37 @@ export class V2ReleaseSource implements V2UpdateSource {
     }
   }
 
+  async resolveRecoveryBaseline(
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): Promise<ResolvedRecoveryBaseline> {
+    try {
+      const stable = await this.resolve('stable', target)
+      return {
+        version: stable.manifest.version,
+        source: 'stable',
+        readsDataSchema: stable.manifest.compatibility.readsDataSchema,
+        manualInstallerUrl: stable.manualInstallerUrl
+      }
+    } catch (error) {
+      if (!(error instanceof StablePointerNotFoundError)) throw error
+    }
+
+    const bridgeTarget: UpdateTarget = { ...target, channel: 'candidate' }
+    const bridge = await this.#legacySource.resolve('candidate', bridgeTarget)
+    if (bridge.manifest.version !== LEGACY_BRIDGE_VERSION) {
+      throw new Error('首个正式版发布前只能使用已验证的 rc.18 桥接包作为恢复基线。')
+    }
+    return {
+      version: bridge.manifest.version,
+      source: 'bridge',
+      readsDataSchema: {
+        minimum: bridge.manifest.compatibility.minimumReadableDataSchema,
+        maximum: bridge.manifest.compatibility.maximumReadableDataSchema
+      },
+      manualInstallerUrl: bridge.manualInstallerUrl
+    }
+  }
+
   v2ReleaseBaseUrl(
     version: string,
     target: Pick<UpdateTarget, 'platform' | 'arch'>
@@ -181,7 +228,12 @@ export class V2ReleaseSource implements V2UpdateSource {
     )
   }
 
-  async #download(url: URL, label: string, init?: RequestInit): Promise<Uint8Array> {
+  async #download(
+    url: URL,
+    label: string,
+    init?: RequestInit,
+    stablePointer = false
+  ): Promise<Uint8Array> {
     const controller = new AbortController()
     const timeout = setTimeout(
       () => controller.abort(new Error(`${label}请求超时，请稍后重试。`)),
@@ -194,6 +246,9 @@ export class V2ReleaseSource implements V2UpdateSource {
         signal: controller.signal
       })
       if (response.url !== url.href) throw new Error(`${label} 响应地址不受信任。`)
+      if (stablePointer && response.status === 404) {
+        throw new StablePointerNotFoundError('Stable 更新指针尚未发布。')
+      }
       if (!response.ok) throw new Error(`${label}请求失败：HTTP ${response.status}。`)
       return new Uint8Array(await response.arrayBuffer())
     } finally {
