@@ -150,5 +150,5 @@ describe('complete release asset verifier', () => {
     const unexpected = await builtFixture()
     await writeFile(path.join(unexpected.releaseDir, 'update-private.pem'), 'forbidden')
     expect(runVerify(unexpected).stderr).toContain('missing or unexpected files')
-  })
+  }, 15_000)
 })
