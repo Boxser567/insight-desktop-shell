@@ -54,7 +54,7 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
-  const [position, setPosition] = useState<{ left: number; bottom?: number; top?: number; width: number; maxHeight: number }>({ left: 0, bottom: 0, width: 360, maxHeight: 480 })
+  const [position, setPosition] = useState<{ left: number; bottom?: number; top?: number; width: number; maxHeight: number }>({ left: 0, bottom: 0, width: 360, maxHeight: 360 })
   const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
@@ -84,8 +84,8 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
       const below = window.innerHeight - rect.bottom - 20
       const placeAbove = above >= 240 || above >= below
       setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), width,
-        ...(placeAbove ? { bottom: window.innerHeight - rect.top + 8, maxHeight: Math.max(0, above) }
-          : { top: rect.bottom + 8, maxHeight: Math.max(0, below) }) })
+        ...(placeAbove ? { bottom: window.innerHeight - rect.top + 8, maxHeight: Math.max(0, Math.min(360, above)) }
+          : { top: rect.bottom + 8, maxHeight: Math.max(0, Math.min(360, below)) }) })
     }
     place()
     search.current?.focus()
@@ -150,7 +150,7 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
           aria-selected={selected.includes(skill.name)} aria-labelledby={`${id}-${skill.name}-title`} aria-describedby={`${id}-${skill.name}-description`}
           data-active={index === active} onMouseMove={() => { scrollActive.current = false; setActive(index) }} onMouseDown={event => event.preventDefault()} onClick={() => choose(skill.name)}>
           <div data-insight-skill-option-title><span id={`${id}-${skill.name}-title`}>{skillDisplayName(skill)}</span><span aria-hidden="true">{selected.includes(skill.name) ? '✓' : ''}</span></div>
-          <div id={`${id}-${skill.name}-description`} data-insight-skill-description>{skillShortDescription(skill)}</div>
+          <div id={`${id}-${skill.name}-description`} data-insight-skill-description title={skillShortDescription(skill)}>{skillShortDescription(skill)}</div>
         </div>)}
       </div>
       {(!catalogAvailable || items.length === 0) && <div role="status" data-insight-skill-empty>{t(catalogAvailable ? 'skill.empty' : 'skill.unavailable')}</div>}

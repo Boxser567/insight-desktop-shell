@@ -61,6 +61,34 @@ describe('skill UI-only metadata', () => {
 })
 
 describe('native catalog presentation adapter', () => {
+  it.each([
+    ['/Applications/因赛AI.app/Contents/Resources/bundled-skills/creator-recommendation/SKILL.md', true],
+    ['C:\\Program Files\\因赛AI\\resources\\bundled-skills\\creator-recommendation\\SKILL.md', true],
+    ['/Users/dev/project/bundled-skills/creator-recommendation/SKILL.md', true],
+    ['/Users/dev/.agents/skills/creator-recommendation/SKILL.md', false],
+    ['C:\\Users\\dev\\.agents\\skills\\creator-recommendation\\SKILL.md', false],
+    ['/app/bundled-skills/another-skill/SKILL.md', false],
+    ['/app/not-bundled-skills/creator-recommendation/SKILL.md', false],
+    [undefined, false]
+  ])('classifies the winning source %s as bundled=%s', async (path, bundled) => {
+    const { catalog, session } = setup([{ ...native, path }])
+    const skills = await catalog.list(session)
+    expect(skills[0]?.bundled).toBe(bundled)
+    expect(filterSkills(skills, '达人推荐')).toHaveLength(bundled ? 1 : 0)
+  })
+
+  it('excludes external and unknown skills from both the list and selected count', async () => {
+    const { catalog, session } = setup([
+      { ...native, path: '/app/bundled-skills/creator-recommendation/SKILL.md' },
+      { name: 'anysearch', description: 'search', path: '/Users/dev/.agents/skills/anysearch/SKILL.md' },
+      { name: 'unknown', description: 'unknown', path: '/app/bundled-skills/unknown/SKILL.md' },
+      { name: 'toString', description: 'prototype', path: '/app/bundled-skills/toString/SKILL.md' }
+    ])
+    const visible = filterSkills(await catalog.list(session), '')
+    expect(visible.map(skill => skill.name)).toEqual([native.name])
+    expect(visible.filter(skill => ['anysearch', 'unknown'].includes(skill.name))).toHaveLength(0)
+  })
+
   it('reads the winning path via public Remote and keeps invocation/model metadata intact', async () => {
     const { readBytes, catalog, session } = setup()
     const [skill] = await catalog.list(session)
@@ -69,7 +97,8 @@ describe('native catalog presentation adapter', () => {
     expect(skillDisplayName(skill!)).toBe(presentation.displayName)
     expect(skillShortDescription(skill!)).toBe(presentation.shortDescription)
     expect(toggleSkillDraft('', skill!.name)).toBe('/creator-recommendation ')
-    for (const query of ['达人推荐', '筛选', native.name, 'model-facing']) expect(filterSkills([skill!], query)).toEqual([skill])
+    // External metadata remains available, but never enters the product picker.
+    for (const query of ['达人推荐', '筛选', native.name, 'model-facing']) expect(filterSkills([skill!], query)).toEqual([])
   })
 
   it('handles Windows paths and does not use metadata from a shadowed bundle', async () => {

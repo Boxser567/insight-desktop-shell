@@ -59,7 +59,14 @@ export const BUNDLED_SKILL_PRESENTATIONS: Readonly<Record<string, SkillPresentat
   }
 }
 
+/** Classify the winning native source; a matching name alone is not bundled. */
+export function isBundledSkill(name: string, path?: string): boolean {
+  if (!path || !Object.hasOwn(BUNDLED_SKILL_PRESENTATIONS, name)) return false
+  const parts = path.split(/[\\/]/u)
+  return parts.at(-3) === 'bundled-skills' && parts.at(-2) === name && parts.at(-1) === 'SKILL.md'
+}
+
 export function bundledSkillPresentation(name: string, path?: string): SkillPresentation {
-  if (!path || !/(?:^|[\\/])bundled-skills[\\/][^\\/]+[\\/]SKILL\.md$/u.test(path)) return {}
+  if (!isBundledSkill(name, path)) return {}
   return BUNDLED_SKILL_PRESENTATIONS[name] ?? {}
 }
