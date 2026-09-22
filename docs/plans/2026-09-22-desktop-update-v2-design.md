@@ -254,12 +254,14 @@ Draft → Target Staged → Candidate Published → Target Accepted
 - `Stable`：GitHub Release 公开，最后提交 Stable 投放信封。
 - `Rejected`：版本不可重新使用；已发布 Candidate 只能由更高版本修复。
 
-Stable 推广要求三个 Candidate 指针均指向同一版本，并且该版本严格高于此前所有
-Stable 与 Candidate 版本。推广重新下载并校验每个远端对象，禁止重新构建。
+Stable 推广要求三个 Candidate 指针均指向同一版本。该版本在首次创建时必须严格
+高于当时的 Stable、旧版 Candidate 和三个 v2 Candidate 指针；推广时允许三个当前
+Candidate 指针与待转正版本相等。推广重新下载并校验每个远端对象，禁止重新构建。
 
 ## Candidate 故障恢复
 
-Candidate 发布前必须证明其 `writesDataSchema` 可由当前 Stable 的读取范围覆盖。
+Candidate 发布前必须证明其 `writesDataSchema` 可由恢复基线的读取范围覆盖。恢复基线
+通常是当前 Stable；首个 Stable 尚未发布时，恢复基线是已验证的 rc.18 桥接版。
 不满足该条件的不可逆迁移不进入 v2 首期发布范围。
 
 内测确认文案明确说明：
@@ -267,25 +269,26 @@ Candidate 发布前必须证明其 `writesDataSchema` 可由当前 Stable 的读
 - 版本可能损坏功能或无法启动；
 - 关闭内测不会自动降级；
 - 失败版本需要等待更高 Candidate 或 Stable；
-- 当前 Stable 完整安装包始终可从公开恢复入口下载。
+- 当前恢复基线的完整安装包始终可从公开恢复入口下载。
 
-恢复安装保留 userData。因为 Candidate 的写入 Schema 必须保持 Stable 可读，使用
-当前 Stable 整包覆盖安装不会要求删除用户数据。macOS 和 Windows 都必须把该路径
-纳入人工验收。
+恢复安装保留 userData。因为 Candidate 的写入 Schema 必须保持恢复基线可读，使用
+当前 Stable（首发前使用已验证桥接版）整包覆盖安装不会要求删除用户数据。macOS
+和 Windows 都必须把该路径纳入人工验收。
 
 ## rc.18 桥接
 
-`v1.0.0-rc.18` 是最后一个 v1 Candidate：
+`v1.0.0-rc.18` 是计划中的最后一个 v1 Candidate。只有三平台桥接验收通过后才冻结
+旧指针；如果 rc.18 被拒绝，必须消耗该版本并用更高的 legacy RC 重新验证：
 
 1. 继续使用 Candidate 包元数据和 v1 `candidate/current.json`；
 2. 包含 v2 协议、内测偏好和手动 Candidate 检查能力；
 3. 首次启动时，如果偏好不存在，自动写入 `candidateOptIn=true`；
 4. 安装后停止 Candidate 后台检查；
 5. 允许手动从 Candidate v2 目标指针升级到正式编号版本；
-6. 旧 `candidate/current.json` 永久保持指向 rc.18。
+6. 旧 `candidate/current.json` 永久保持指向最终通过验收的桥接版本，预期为 rc.18。
 
-因此仍停留在 rc.17 的用户以后启动时仍能取得 rc.18，不会因 v2 指针改为正式版本号
-而被遗留。
+因此仍停留在 rc.17 的用户以后启动时仍能取得已验证桥接版，不会因 v2 指针改为
+正式版本号而被遗留。
 
 ## 安全失败语义
 
@@ -311,4 +314,3 @@ Candidate 发布前必须证明其 `writesDataSchema` 可由当前 Stable 的读
 - Candidate 签名、Index、Manifest、资产或 CDN 响应被篡改时安全失败。
 - Candidate 无法启动时可以用当前 Stable 整包保留数据恢复。
 - 强制 Stable 更新在离线重启后仍能恢复可信策略。
-
