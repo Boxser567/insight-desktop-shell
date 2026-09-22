@@ -104,6 +104,7 @@ import {
   isTrustedAboutUrl,
   type AboutMetadata
 } from './about-window'
+import { registerAboutUpdateIpc } from './about-update-ipc'
 import packageJson from '../../package.json'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
@@ -379,7 +380,7 @@ function createAboutWindowController(): AboutWindowController<BrowserWindow> {
       const window = new BrowserWindow(aboutWindowOptions({
         parent,
         icon: desktopIconPath(),
-        preload: join(import.meta.dirname, '../preload/secondary-theme.cjs'),
+        preload: join(import.meta.dirname, '../preload/about.cjs'),
         backgroundColor: resolvedHarnessThemeDark ? '#202024' : '#f7f7f8'
       }))
       suppressWindowsSecondaryMenu(window)
@@ -417,6 +418,22 @@ function checkForUpdatesFromMenu(): Promise<void> {
     throw new Error('The update manager is unavailable.')
   }
   return openUpdateWindowAndCheck(updateManager, updateWindowController)
+}
+
+async function confirmCandidateOptIn(): Promise<boolean> {
+  const about = aboutWindowController?.window()
+  if (!about || about.isDestroyed()) throw new Error('The About window is unavailable.')
+  const confirmation = await dialog.showMessageBox(about, {
+    type: 'warning',
+    title: '加入内测更新？',
+    message: '内测版本可能不稳定，甚至无法正常启动。',
+    detail: '关闭内测不会自动降级；如遇问题，可使用正式版完整安装包覆盖恢复，用户数据不会被删除。',
+    buttons: ['取消', '加入内测'],
+    cancelId: 0,
+    defaultId: 0,
+    noLink: true
+  })
+  return confirmation.response === 1
 }
 
 function createHarnessWebContentsView(window: BrowserWindow, scope: string): WebContentsView {
@@ -1169,6 +1186,19 @@ function assertTrustedSecondaryWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
+function assertTrustedAboutEvent(event: IpcMainInvokeEvent): BrowserWindow {
+  const about = aboutWindowController?.window()
+  if (
+    !about ||
+    about.isDestroyed() ||
+    event.sender !== about.webContents ||
+    event.senderFrame !== about.webContents.mainFrame
+  ) {
+    throw new Error('This action is only available from the About window.')
+  }
+  return about
+}
+
 function assertTrustedHarnessEvent(event: IpcMainInvokeEvent): void {
   if (!workspaceController?.isTrustedSender(event.sender, event.senderFrame)) {
     throw new Error('This action is only available from the authenticated Harness view.')
@@ -1743,6 +1773,18 @@ async function initializeUpdates(): Promise<void> {
       return updateWindowController.open()
     },
     quit: () => app.quit()
+  })
+  registerAboutUpdateIpc({
+    ipcMain,
+    preferences,
+    assertTrusted: assertTrustedAboutEvent,
+    confirmCandidateOptIn,
+    openCandidateCheck: async () => {
+      if (!updateManager || !updateWindowController) {
+        throw new Error('The update manager is unavailable.')
+      }
+      await openUpdateWindowAndCheck(updateManager, updateWindowController, 'candidate')
+    }
   })
   await updateManager.start()
 }

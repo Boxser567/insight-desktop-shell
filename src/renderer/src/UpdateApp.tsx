@@ -67,8 +67,12 @@ export function UpdateApp(): React.JSX.Element {
           <img src={brandMark} alt="" />
         </span>
         <div className="update-content">
-          <h1>{model.title}</h1>
+          <div className="update-title-row">
+            <h1>{model.title}</h1>
+            {model.badge && <span className="update-track-badge">{model.badge}</span>}
+          </div>
           <p>{model.detail}</p>
+          {model.warning && <p className="update-warning">{model.warning}</p>}
           {commandError && <p className="update-error">{commandError}</p>}
           {model.recovery && (
             <button type="button" className="update-recovery" onClick={() => execute(model.recovery!)}>

@@ -5,6 +5,8 @@ export type UpdateViewAction = 'check' | 'download' | 'download-full-installer' 
 export interface UpdateViewModel {
   title: string
   detail: string
+  badge?: string
+  warning?: string
   primary?: UpdateViewAction
   secondary?: UpdateViewAction
   recovery?: 'download-full-installer'
@@ -12,6 +14,17 @@ export interface UpdateViewModel {
 }
 
 export function updateViewModel(status: UpdateStatus): UpdateViewModel {
+  const model = baseUpdateViewModel(status)
+  return 'track' in status && status.track === 'candidate'
+    ? {
+        ...model,
+        badge: '内测版本',
+        warning: '内测版本可能不稳定；关闭内测不会自动降级。'
+      }
+    : model
+}
+
+function baseUpdateViewModel(status: UpdateStatus): UpdateViewModel {
   switch (status.phase) {
     case 'idle':
       return {

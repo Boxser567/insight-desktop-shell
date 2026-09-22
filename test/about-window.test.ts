@@ -5,6 +5,7 @@ import {
   aboutWindowOptions,
   isTrustedAboutUrl
 } from '../src/main/about-window'
+import { registerAboutUpdateIpc } from '../src/main/about-update-ipc'
 import { createAboutViewModel } from '../src/renderer/src/about-view-model'
 
 function fakeWindow() {
@@ -49,8 +50,8 @@ describe('desktop About window', () => {
       preload: '/app/secondary-theme.cjs',
       platform: 'win32'
     })).toMatchObject({
-      width: 380,
-      height: 312,
+      width: 440,
+      height: 430,
       resizable: false,
       maximizable: false,
       minimizable: false,
@@ -75,6 +76,51 @@ describe('desktop About window', () => {
       preload: '/app/secondary-theme.cjs',
       platform: 'darwin'
     })).not.toHaveProperty('autoHideMenuBar')
+  })
+
+  it('keeps Candidate preference and checks behind the trusted About main frame', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      removeHandler: vi.fn((channel: string) => handlers.delete(channel)),
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const trusted = { sender: {}, senderFrame: {} }
+    let candidateOptIn = false
+    const preferences = {
+      read: vi.fn(async () => ({ candidateOptIn })),
+      setCandidateOptIn: vi.fn(async (value: boolean) => { candidateOptIn = value })
+    }
+    const confirmCandidateOptIn = vi.fn().mockResolvedValue(false)
+    const openCandidateCheck = vi.fn().mockResolvedValue(undefined)
+    registerAboutUpdateIpc({
+      ipcMain: ipcMain as never,
+      preferences,
+      assertTrusted: (event) => {
+        if (event !== trusted) throw new Error('untrusted About sender')
+      },
+      confirmCandidateOptIn,
+      openCandidateCheck
+    })
+
+    await expect(handlers.get('about-updates:preference')?.(trusted)).resolves.toEqual({
+      candidateOptIn: false
+    })
+    await expect(handlers.get('about-updates:set-candidate-opt-in')?.(trusted, true))
+      .resolves.toEqual({ candidateOptIn: false })
+    expect(preferences.setCandidateOptIn).not.toHaveBeenCalled()
+
+    confirmCandidateOptIn.mockResolvedValue(true)
+    await expect(handlers.get('about-updates:set-candidate-opt-in')?.(trusted, true))
+      .resolves.toEqual({ candidateOptIn: true })
+    expect(preferences.setCandidateOptIn).toHaveBeenCalledWith(true)
+    await handlers.get('about-updates:open-candidate-check')?.(trusted)
+    expect(openCandidateCheck).toHaveBeenCalledOnce()
+
+    await expect(Promise.resolve().then(() =>
+      handlers.get('about-updates:set-candidate-opt-in')?.({ sender: {}, senderFrame: {} }, false)
+    )).rejects.toThrow('untrusted')
   })
 
   it('accepts only the packaged or configured development About page', () => {
@@ -130,10 +176,12 @@ describe('desktop About window', () => {
   })
 
   it('wires controlled metadata and security from Main', async () => {
-    const [main, vite, aboutHtml, packageJson] = await Promise.all([
+    const [main, vite, aboutHtml, aboutApp, aboutStyles, packageJson] = await Promise.all([
       readFile('src/main/index.ts', 'utf8'),
       readFile('electron.vite.config.ts', 'utf8'),
       readFile('src/renderer/about.html', 'utf8'),
+      readFile('src/renderer/src/AboutApp.tsx', 'utf8'),
+      readFile('src/renderer/src/about.css', 'utf8'),
       readFile('package.json', 'utf8')
     ])
     const creation = main.slice(
@@ -147,6 +195,13 @@ describe('desktop About window', () => {
     expect(main).toContain('releaseDate: packageJson.insightReleaseDate')
     expect(main).toContain("window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))")
     expect(vite).toContain("about: resolve('src/renderer/about.html')")
+    expect(vite).toContain("about: resolve('src/preload/about.ts')")
+    expect(creation).toContain("preload: join(import.meta.dirname, '../preload/about.cjs')")
+    expect(aboutApp).toContain('接收内测更新')
+    expect(aboutApp).toContain('检查内测更新')
+    expect(aboutStyles).toContain(':root[data-insight-theme="light"]')
+    expect(aboutStyles).toContain(':root[data-insight-theme="dark"]')
+    expect(aboutStyles).toContain('--warning-surface')
     expect(aboutHtml).toContain("connect-src 'none'")
     expect(JSON.parse(packageJson).insightReleaseDate).toBe('2026-09-22')
   })

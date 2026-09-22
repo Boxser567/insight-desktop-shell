@@ -130,6 +130,14 @@ describe('desktop update window', () => {
     expect(updateViewModel({
       phase: 'unsupported', currentVersion: '1.0.0', track: 'stable', reason: 'development build', manual: true
     }).detail).toContain('development build')
+    expect(updateViewModel({
+      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'candidate', required: false, manual: true
+    })).toMatchObject({
+      badge: '内测版本',
+      warning: expect.stringContaining('不会自动降级'),
+      primary: 'download',
+      secondary: 'skip'
+    })
   })
 
   it('renders checking as indeterminate progress without a fake cancel action', async () => {
