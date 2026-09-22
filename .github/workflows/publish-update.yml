@@ -10,6 +10,7 @@ on:
         options:
           - stage
           - promote
+          - diagnose
       tag:
         description: Existing GitHub Draft tag, for example v1.0.0-rc.1
         required: true
@@ -77,16 +78,19 @@ jobs:
             echo '::error::Partial release scopes are allowed for Candidate releases only.'
             exit 1
           fi
-          if [ "$COMMAND" = 'stage' ]; then
+          if [ "$COMMAND" = 'stage' ] || [ "$COMMAND" = 'diagnose' ]; then
             test -z "$CONFIRM_VERSION" || {
-              echo '::error::confirm_version must be empty for stage.'
+              echo '::error::confirm_version must be empty for stage/diagnose.'
               exit 1
             }
-          else
+          elif [ "$COMMAND" = 'promote' ]; then
             test -n "$CONFIRM_VERSION" || {
               echo '::error::confirm_version is required for promote.'
               exit 1
             }
+          else
+            echo '::error::Unknown command.'
+            exit 1
           fi
       - run: npm ci --ignore-scripts
       - name: Verify publisher contracts
@@ -97,7 +101,13 @@ jobs:
             scripts/github-oss-client.mjs
           node --check scripts/github-oss-client.mjs
           node --check scripts/publish-update-to-oss.mjs
+          node --check scripts/diagnose-oss-upload.mjs
+      - name: Diagnose OSS upload transport (no publishing)
+        if: inputs.command == 'diagnose'
+        timeout-minutes: 15
+        run: node scripts/diagnose-oss-upload.mjs
       - name: Publish verified update assets
+        if: inputs.command != 'diagnose'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

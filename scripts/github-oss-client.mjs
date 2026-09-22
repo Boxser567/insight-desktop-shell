@@ -277,6 +277,13 @@ export function createGithubOssClient({
   }
 
   return {
+    async diagnoseUploads(id) {
+      if (!/^[a-f0-9-]{36}$/u.test(id)) throw new Error('Invalid diagnostic ID')
+      const { client } = await currentSession()
+      const { runUploadProbe } = await import('./diagnose-oss-upload.mjs')
+      return runUploadProbe(client, `desktop/diagnostics/${identity.runId}-${id}/`)
+    },
+
     async uploadReleaseObject(key, source, headers) {
       assertObjectKey(key, 'object key')
       requiredString(source, 'OSS upload source')
