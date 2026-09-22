@@ -1,6 +1,6 @@
 {
   "name": "insight-desktop",
-  "version": "1.0.0",
+  "version": "1.0.0-rc.18",
   "insightReleaseDate": "2026-09-22",
   "description": "因赛AI的跨平台 Harness 桌面宿主。",
   "private": true,
