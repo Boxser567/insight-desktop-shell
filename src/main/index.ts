@@ -91,6 +91,10 @@ import { UpdateManager } from './update/update-manager'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 import { openUpdateWindowAndCheck } from './update/open-update-window'
+import {
+  migrateLegacyCandidatePreference,
+  updatePreferencesPath
+} from './update/update-preferences'
 import { StartupTracker } from './startup/startup-tracker'
 import { registerStartupIpc } from './startup/startup-ipc'
 import {
@@ -1693,6 +1697,12 @@ async function prepareForUpdateInstall(): Promise<void> {
 
 async function initializeUpdates(): Promise<void> {
   const publicKeyPem = readUpdatePublicKey()
+  const userData = app.getPath('userData')
+  await migrateLegacyCandidatePreference({
+    path: updatePreferencesPath(userData),
+    packagedChannel: desktopChannel,
+    currentVersion: app.getVersion()
+  })
   updateWindowController = createUpdateWindowController()
   updateManager = new UpdateManager({
     currentVersion: app.getVersion(),
@@ -1709,7 +1719,7 @@ async function initializeUpdates(): Promise<void> {
     }),
     executor: new ElectronUpdateExecutor(),
     publicKeyPem,
-    userData: app.getPath('userData'),
+    userData,
     prepareToInstall: prepareForUpdateInstall,
     openExternal: (url) => shell.openExternal(url),
     resume: {
