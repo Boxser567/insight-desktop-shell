@@ -2,6 +2,10 @@ export type UpdateChannel = 'development' | 'candidate' | 'stable'
 
 export type ReleaseUpdateChannel = Exclude<UpdateChannel, 'development'>
 
+export type UpdateTrack = ReleaseUpdateChannel
+
+export type UpdateTargetId = 'darwin-arm64' | 'darwin-x64' | 'win32-x64'
+
 export type UpdatePlatform = 'darwin' | 'win32'
 
 export type UpdateArch = 'arm64' | 'x64'
@@ -49,6 +53,65 @@ export interface SignedReleaseManifest {
     maximumReadableDataSchema: number
   }
   artifacts: ReleaseArtifact[]
+}
+
+export interface UpdateDataCompatibility {
+  profileSchema: number
+  accountStorageSchema: number
+  readsDataSchema: {
+    minimum: number
+    maximum: number
+  }
+  writesDataSchema: number
+}
+
+export interface SignedTargetManifest {
+  schema: 'insight-desktop-target/v2'
+  version: string
+  target: {
+    platform: UpdatePlatform
+    arch: UpdateArch
+  }
+  shellCommit: string
+  coreRuntime: {
+    tag: string
+    commit: string
+  }
+  compatibility: UpdateDataCompatibility
+  artifacts: ReleaseArtifact[]
+}
+
+export interface SignedReleaseIndex {
+  schema: 'insight-desktop-release/v2'
+  version: string
+  shellCommit: string
+  coreRuntime: {
+    tag: string
+    commit: string
+  }
+  targets: Array<{
+    id: UpdateTargetId
+    manifestSha512: string
+  }>
+}
+
+export interface RolloutPayload {
+  schema: 'insight-desktop-rollout/v2'
+  track: UpdateTrack
+  version: string
+  target?: UpdateTargetId
+  referencedSha512: string
+  policy: {
+    mode: 'optional' | 'required'
+    minimumSupportedVersion: string
+  }
+  publishedAt: string
+}
+
+export interface SignedRolloutEnvelope {
+  schema: 'insight-desktop-rollout-envelope/v2'
+  payloadBase64: string
+  signatureBase64: string
 }
 
 export type UpdateStatus =
