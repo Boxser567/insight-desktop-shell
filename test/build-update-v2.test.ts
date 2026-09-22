@@ -36,7 +36,8 @@ async function fixture() {
 async function writeTargetMetadata(
   releaseDir: string,
   target: 'darwin-arm64' | 'darwin-x64' | 'win32-x64',
-  metadataVersion = '1.0.1'
+  metadataVersion = '1.0.1',
+  metadataSha512?: string
 ): Promise<void> {
   const version = '1.0.1'
   const name = target === 'darwin-arm64'
@@ -47,9 +48,9 @@ async function writeTargetMetadata(
   const bytes = await readFile(path.join(releaseDir, name))
   const metadata = {
     version: metadataVersion,
-    files: [{ url: name, sha512: sha512(bytes), size: bytes.length }],
+    files: [{ url: name, sha512: metadataSha512 ?? sha512(bytes), size: bytes.length }],
     path: name,
-    sha512: sha512(bytes),
+    sha512: metadataSha512 ?? sha512(bytes),
     ...(target.startsWith('darwin-') ? { minimumSystemVersion: '22.0.0' } : {})
   }
   await writeFile(
@@ -119,6 +120,23 @@ describe('v2 update release builders', () => {
   it('rejects updater metadata for another version or target', async () => {
     const { root, paths } = await fixture()
     await writeTargetMetadata(paths.releaseDir, 'darwin-arm64', '1.0.0')
+    const result = runTarget({
+      paths,
+      outDir: path.join(root, 'target'),
+      target: 'darwin-arm64'
+    })
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('exactly the current target and version')
+  })
+
+  it('rejects updater metadata whose artifact digest is not the packaged update', async () => {
+    const { root, paths } = await fixture()
+    await writeTargetMetadata(
+      paths.releaseDir,
+      'darwin-arm64',
+      '1.0.1',
+      Buffer.alloc(64).toString('base64')
+    )
     const result = runTarget({
       paths,
       outDir: path.join(root, 'target'),

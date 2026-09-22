@@ -115,8 +115,20 @@ function acceptanceKey(version, target) {
   return `desktop/releases/v${version}/acceptance/${target}.json`
 }
 
+function rejectionKey(version) {
+  return `desktop/releases/v${version}/rejection.json`
+}
+
+function auditSignatureKey(key) {
+  return `${key}.sig`
+}
+
 function digest(bytes) {
   return createHash('sha512').update(bytes).digest('base64')
+}
+
+function byteIdentity(bytes) {
+  return { size: bytes.length, sha512: digest(bytes) }
 }
 
 async function fileDigest(path) {
@@ -148,23 +160,34 @@ async function run(file, args) {
   }
 }
 
-async function readRemoteObject(oss, key, directory, label) {
+async function readRemoteObject(oss, key, directory, label, { includeBytes = true } = {}) {
   const objects = await oss.listObjects(key)
   const exact = objects.filter((object) => object.key === key)
   if (exact.length === 0) return undefined
   if (exact.length !== 1) throw new Error(`${label} has duplicate objects.`)
   const path = join(directory, `${createHash('sha256').update(key).digest('hex')}.object`)
   await oss.getObject(key, path)
-  const bytes = await readFile(path)
-  if (bytes.length !== exact[0].size) throw new Error(`${label} size changed during verification.`)
-  return { key, path, bytes, size: exact[0].size }
+  const identity = await fileDigest(path)
+  if (identity.size !== exact[0].size) throw new Error(`${label} size changed during verification.`)
+  return {
+    key,
+    path,
+    ...identity,
+    ...(includeBytes ? { bytes: await readFile(path) } : {})
+  }
 }
 
 async function putImmutableFile(oss, key, source, directory) {
   const expected = await fileDigest(source)
-  const existing = await readRemoteObject(oss, key, directory, 'Immutable release object')
+  const existing = await readRemoteObject(
+    oss,
+    key,
+    directory,
+    'Immutable release object',
+    { includeBytes: false }
+  )
   if (existing) {
-    if (existing.size !== expected.size || digest(existing.bytes) !== expected.sha512) {
+    if (existing.size !== expected.size || existing.sha512 !== expected.sha512) {
       throw new Error(`Immutable release object conflicts: ${key}`)
     }
     return { key, ...expected, action: 'verified' }
@@ -176,8 +199,14 @@ async function putImmutableFile(oss, key, source, directory) {
       ? { 'content-disposition': `attachment; filename="${basename(key)}"` }
       : {})
   })
-  const committed = await readRemoteObject(oss, key, directory, 'Immutable release object')
-  if (!committed || committed.size !== expected.size || digest(committed.bytes) !== expected.sha512) {
+  const committed = await readRemoteObject(
+    oss,
+    key,
+    directory,
+    'Immutable release object',
+    { includeBytes: false }
+  )
+  if (!committed || committed.size !== expected.size || committed.sha512 !== expected.sha512) {
     throw new Error(`Immutable release object verification failed: ${key}`)
   }
   return { key, ...expected, action: 'uploaded' }
@@ -189,23 +218,111 @@ async function putImmutableBytes(oss, key, bytes, directory) {
   return putImmutableFile(oss, key, source, directory)
 }
 
-async function verifyCdnBytes(key, expected, {
+async function putSignedAuditRecord(input, key, bytes) {
+  if (!input.privateKeyPath) throw new Error('Product update signing key is required.')
+  const privateKey = createPrivateKey(await readFile(input.privateKeyPath, 'utf8'))
+  const signature = sign(null, bytes, privateKey)
+  await putImmutableBytes(input.oss, auditSignatureKey(key), signature, input.temporaryDirectory)
+  await putImmutableBytes(input.oss, key, bytes, input.temporaryDirectory)
+}
+
+async function readSignedAuditRecord(input, key, label) {
+  const record = await readRemoteObject(input.oss, key, input.temporaryDirectory, label)
+  if (!record) return undefined
+  const signature = await readRemoteObject(
+    input.oss,
+    auditSignatureKey(key),
+    input.temporaryDirectory,
+    `${label} signature`
+  )
+  if (!signature) throw new Error(`${label} signature is missing.`)
+  const publicKey = createPublicKey(await readFile(input.publicKeyPath, 'utf8'))
+  if (!verifySignature(null, record.bytes, publicKey, signature.bytes)) {
+    throw new Error(`${label} signature is invalid.`)
+  }
+  return record.bytes
+}
+
+function parseRejection(bytes, version) {
+  const rejection = JSON.parse(bytes.toString('utf8'))
+  const keys = Object.keys(rejection).sort().join(',')
+  if (
+    keys !== 'actor,reason,rejectedAt,schema,version,workflowRun' ||
+    rejection?.schema !== 'insight-desktop-rejection/v1' ||
+    rejection.version !== version ||
+    typeof rejection.reason !== 'string' || rejection.reason.length === 0 ||
+    typeof rejection.actor !== 'string' || rejection.actor.length === 0 ||
+    !/^\d+$/u.test(rejection.workflowRun) ||
+    !Number.isFinite(Date.parse(rejection.rejectedAt))
+  ) throw new Error('Rejection record is invalid.')
+  return rejection
+}
+
+async function assertVersionNotRejected(input) {
+  const bytes = await readSignedAuditRecord(
+    input,
+    rejectionKey(input.version),
+    'Rejection record'
+  )
+  if (!bytes) return
+  const rejection = parseRejection(bytes, input.version)
+  throw new Error(`v2 release version was rejected: ${rejection.reason}`)
+}
+
+export async function verifyCdnBytes(key, expected, {
   fetch: fetchImplementation = globalThis.fetch,
   wait = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)),
   attempts = 7
 } = {}) {
   const url = new URL(key, updateOrigin)
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    let response
     try {
       const requestUrl = new URL(url)
       requestUrl.searchParams.set('publisher-check', String(Date.now()))
-      response = await fetchImplementation(requestUrl, {
+      if (expected.requireRange) {
+        const head = await fetchImplementation(requestUrl, {
+          method: 'HEAD',
+          cache: 'no-store',
+          redirect: 'error',
+          signal: AbortSignal.timeout(30_000)
+        })
+        if (head.status !== 200 || head.headers.get('content-length') !== String(expected.size)) {
+          throw new Error('CDN recovery installer HEAD verification failed.')
+        }
+        const range = await fetchImplementation(requestUrl, {
+          headers: { Range: 'bytes=0-0' },
+          cache: 'no-store',
+          redirect: 'error',
+          signal: AbortSignal.timeout(30_000)
+        })
+        let rangeSize = 0
+        if (range.status === 206 && range.body) {
+          for await (const chunk of range.body) {
+            rangeSize += chunk.byteLength
+            if (rangeSize > 1) break
+          }
+        }
+        if (
+          range.status !== 206 ||
+          range.headers.get('content-range') !== `bytes 0-0/${expected.size}` ||
+          rangeSize !== 1
+        ) throw new Error('CDN recovery installer Range verification failed.')
+      }
+      const response = await fetchImplementation(requestUrl, {
         cache: 'no-store',
         redirect: 'error',
         signal: AbortSignal.timeout(30_000)
       })
-      if (response.ok && Buffer.from(await response.arrayBuffer()).equals(expected)) return
+      if (response.ok && response.body) {
+        const hash = createHash('sha512')
+        let size = 0
+        for await (const chunk of response.body) {
+          size += chunk.byteLength
+          if (size > expected.size) throw new Error('CDN response exceeds expected size.')
+          hash.update(chunk)
+        }
+        if (size === expected.size && hash.digest('base64') === expected.sha512) return
+      }
     } catch {
       // Retry only within the bounded CDN convergence window.
     }
@@ -219,6 +336,7 @@ async function verifyTargetDirectory(targetDir, version, target, publicKeyPath) 
 }
 
 export async function stageV2Target(input) {
+  await assertVersionNotRejected(input)
   const manifest = await verifyTargetDirectory(
     input.targetDir,
     input.version,
@@ -288,6 +406,9 @@ async function readAuthenticatedPointer(input, key, { allowLegacy = false } = {}
       value.channel !== expectedChannel ||
       Object.keys(value).sort().join(',') !== 'channel,schemaVersion,version'
     ) throw new Error(`Legacy update pointer is invalid: ${key}`)
+    if (key !== 'desktop/candidate/current.json' || value.version !== '1.0.0-rc.19') {
+      throw new Error('Legacy update pointer must be the signed rc.19 recovery bridge.')
+    }
     return { ...object, version: value.version, legacy: true, value }
   }
   const authenticated = parseCanonicalV2Envelope(object.bytes)
@@ -324,7 +445,9 @@ async function authoritativePointers(input) {
   ]
   const result = []
   for (const [name, key] of entries) {
-    const pointer = await readAuthenticatedPointer(input, key, { allowLegacy: true })
+    const pointer = await readAuthenticatedPointer(input, key, {
+      allowLegacy: name === 'legacy-candidate'
+    })
     if (pointer) result.push({ name, key, ...pointer })
   }
   return result
@@ -344,9 +467,37 @@ async function requiredRemoteBytes(input, key, label) {
   return object.bytes
 }
 
+async function verifyRecoveryInstaller(input, prefix, manifest, target) {
+  const [platform, arch] = target.split('-')
+  const kind = platform === 'darwin' ? 'dmg' : 'nsis'
+  const installer = manifest?.artifacts?.find((artifact) =>
+    artifact.platform === platform && artifact.arch === arch && artifact.kind === kind)
+  if (
+    !installer || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u.test(installer.name) ||
+    !Number.isSafeInteger(installer.size) || installer.size <= 0 ||
+    !/^[A-Za-z0-9+/]{86}==$/u.test(installer.sha512)
+  ) throw new Error('Recovery installer declaration is invalid.')
+  const key = `${prefix}${installer.name}`
+  const object = await readRemoteObject(
+    input.oss,
+    key,
+    input.temporaryDirectory,
+    'Recovery installer',
+    { includeBytes: false }
+  )
+  if (
+    !object || object.size !== installer.size || object.sha512 !== installer.sha512
+  ) throw new Error('Recovery installer bytes are unavailable or invalid.')
+  await input.verifyCdn(key, {
+    size: installer.size,
+    sha512: installer.sha512,
+    requireRange: true
+  })
+}
+
 async function legacyRecoveryReads(input, pointer, channel) {
-  if (channel === 'candidate' && pointer.version !== '1.0.0-rc.18') {
-    throw new Error('The recovery bridge must be exactly v1.0.0-rc.18.')
+  if (channel === 'candidate' && pointer.version !== '1.0.0-rc.19') {
+    throw new Error('The recovery bridge must be exactly v1.0.0-rc.19.')
   }
   const prefix = `desktop/releases/v${pointer.version}/`
   const [manifestBytes, signatureBytes, publicKeyPem] = await Promise.all([
@@ -366,6 +517,7 @@ async function legacyRecoveryReads(input, pointer, channel) {
     !Number.isSafeInteger(compatibility?.maximumReadableDataSchema) ||
     compatibility.minimumReadableDataSchema > compatibility.maximumReadableDataSchema
   ) throw new Error('Legacy recovery Manifest is invalid.')
+  await verifyRecoveryInstaller(input, prefix, manifest, input.target)
   return {
     minimum: compatibility.minimumReadableDataSchema,
     maximum: compatibility.maximumReadableDataSchema
@@ -374,7 +526,6 @@ async function legacyRecoveryReads(input, pointer, channel) {
 
 async function recoveryReads(input, pointers) {
   const stable = pointers.find((pointer) => pointer.name === 'stable')
-  if (stable?.legacy) return legacyRecoveryReads(input, stable, 'stable')
   if (stable) {
     const releasePrefix = `desktop/releases/v${stable.version}/`
     const [indexBytes, indexSignature, publicKeyPem] = await Promise.all([
@@ -408,10 +559,11 @@ async function recoveryReads(input, pointers) {
       manifest.coreRuntime.tag !== index.coreRuntime.tag ||
       manifest.coreRuntime.commit !== index.coreRuntime.commit
     ) throw new Error('Stable Target Manifest identity is invalid.')
+    await verifyRecoveryInstaller(input, targetPrefixValue, manifest, input.target)
     return manifest.compatibility.readsDataSchema
   }
   const bridge = pointers.find((pointer) => pointer.name === 'legacy-candidate')
-  if (!bridge?.legacy) throw new Error('The validated rc.18 recovery bridge is unavailable.')
+  if (!bridge?.legacy) throw new Error('The validated rc.19 recovery bridge is unavailable.')
   return legacyRecoveryReads(input, bridge, 'candidate')
 }
 
@@ -425,16 +577,17 @@ async function readReleasePolicy(path, version) {
   return policy
 }
 
-async function signedRollout(input, release, track, policy) {
+async function signedRollout(input, referencedBytes, track, policy, options = {}) {
   const privateKey = createPrivateKey(await readFile(input.privateKeyPath, 'utf8'))
   const payload = parseV2RolloutPayload({
     schema: UPDATE_V2_SCHEMAS.rollout,
+    state: options.state ?? 'active',
     track,
     version: input.version,
-    ...(track === 'candidate' ? { target: input.target } : {}),
-    referencedSha512: sha512(release),
+    ...(track === 'candidate' ? { target: options.target ?? input.target } : {}),
+    referencedSha512: sha512(referencedBytes),
     policy,
-    publishedAt: input.now().toISOString()
+    publishedAt: options.publishedAt ?? input.now().toISOString()
   })
   const payloadBytes = canonicalJsonBytes(payload)
   return canonicalJsonBytes({
@@ -455,15 +608,17 @@ async function commitPointer(input, key, bytes, before) {
   await input.oss.putObject(key, source, { 'cache-control': pointerCache })
   const committed = await readRemoteObject(input.oss, key, input.temporaryDirectory, 'Update pointer')
   if (!committed?.bytes.equals(bytes)) throw new Error(`Update pointer commit failed: ${key}`)
-  await input.verifyCdn(key, bytes)
+  await input.verifyCdn(key, byteIdentity(bytes))
 }
 
 export async function publishV2Candidate(input) {
+  await assertVersionNotRejected(input)
   const target = await downloadVerifiedTarget(input, input.target)
   const pointers = await authoritativePointers(input)
+  const verifiedRecoveryReads = await recoveryReads(input, pointers)
   assertVersionAtGlobalFloor(input.version, pointers)
   assertCandidateRecoveryCompatible({
-    recoveryReads: await recoveryReads(input, pointers),
+    recoveryReads: verifiedRecoveryReads,
     candidateWrites: target.manifest.compatibility.writesDataSchema
   })
   const stableAtVersion = pointers.find((pointer) =>
@@ -484,10 +639,13 @@ export async function publishV2Candidate(input) {
   const current = pointers.find((pointer) => pointer.key === key)
   const manifestDigest = digest(target.manifestBytes)
   if (current?.version === input.version) {
-    if (current.legacy || current.value.referencedSha512 !== manifestDigest) {
+    if (
+      current.legacy || current.value.state !== 'active' ||
+      current.value.referencedSha512 !== manifestDigest
+    ) {
       throw new Error('Candidate pointer already uses this version with different bytes.')
     }
-    await input.verifyCdn(key, current.bytes)
+    await input.verifyCdn(key, byteIdentity(current.bytes))
     return { pointerBefore: current.value, pointerAfter: current.value, alreadyPublished: true }
   }
   if (current && !semver.gt(input.version, current.version)) {
@@ -522,19 +680,21 @@ function parseAcceptance(bytes, version, target) {
 }
 
 export async function acceptV2Target(input) {
+  await assertVersionNotRejected(input)
   const target = await downloadVerifiedTarget(input, input.target)
   const key = pointerKey('candidate', input.target)
   const pointer = await readAuthenticatedPointer(input, key)
   const manifestDigest = digest(target.manifestBytes)
   if (
     !pointer || pointer.value.track !== 'candidate' || pointer.value.target !== input.target ||
-    pointer.version !== input.version || pointer.value.referencedSha512 !== manifestDigest
+    pointer.value.state !== 'active' || pointer.version !== input.version ||
+    pointer.value.referencedSha512 !== manifestDigest
   ) throw new Error('Candidate pointer does not reference the target being accepted.')
   for (const object of target.objects) {
     const localName = object.key.slice(target.prefix.length)
-    await input.verifyCdn(object.key, await readFile(join(target.directory, localName)))
+    await input.verifyCdn(object.key, await fileDigest(join(target.directory, localName)))
   }
-  await input.verifyCdn(key, pointer.bytes)
+  await input.verifyCdn(key, byteIdentity(pointer.bytes))
   const record = canonicalJsonBytes({
     schema: 'insight-desktop-acceptance/v1',
     version: input.version,
@@ -545,15 +705,15 @@ export async function acceptV2Target(input) {
     acceptedAt: input.now().toISOString()
   })
   const recordKey = acceptanceKey(input.version, input.target)
-  const existing = await readRemoteObject(input.oss, recordKey, input.temporaryDirectory, 'Acceptance record')
+  const existing = await readSignedAuditRecord(input, recordKey, 'Acceptance record')
   if (existing) {
-    const accepted = parseAcceptance(existing.bytes, input.version, input.target)
+    const accepted = parseAcceptance(existing, input.version, input.target)
     if (accepted.manifestSha512 !== manifestDigest) {
       throw new Error('Existing acceptance record references another Target Manifest.')
     }
     return { acceptance: accepted, alreadyAccepted: true }
   }
-  await putImmutableBytes(input.oss, recordKey, record, input.temporaryDirectory)
+  await putSignedAuditRecord(input, recordKey, record)
   return { acceptance: parseAcceptance(record, input.version, input.target), alreadyAccepted: false }
 }
 
@@ -563,21 +723,20 @@ async function requireAcceptedTargets(input) {
     const pointer = await readAuthenticatedPointer(input, pointerKey('candidate', targetId))
     if (
       !pointer || pointer.value.track !== 'candidate' || pointer.value.target !== targetId ||
-      pointer.version !== input.version
+      pointer.value.state !== 'active' || pointer.version !== input.version
     ) throw new Error(`Stable promotion requires Candidate target ${targetId}.`)
     const target = await downloadVerifiedTarget(input, targetId)
     const manifestDigest = digest(target.manifestBytes)
     if (pointer.value.referencedSha512 !== manifestDigest) {
       throw new Error(`Candidate pointer digest does not match: ${targetId}`)
     }
-    const acceptanceObject = await readRemoteObject(
-      input.oss,
+    const acceptanceBytes = await readSignedAuditRecord(
+      input,
       acceptanceKey(input.version, targetId),
-      input.temporaryDirectory,
       'Acceptance record'
     )
-    if (!acceptanceObject) throw new Error(`Stable promotion requires acceptance: ${targetId}`)
-    const acceptance = parseAcceptance(acceptanceObject.bytes, input.version, targetId)
+    if (!acceptanceBytes) throw new Error(`Stable promotion requires acceptance: ${targetId}`)
+    const acceptance = parseAcceptance(acceptanceBytes, input.version, targetId)
     if (acceptance.manifestSha512 !== manifestDigest) {
       throw new Error(`Acceptance digest does not match: ${targetId}`)
     }
@@ -593,7 +752,7 @@ async function githubReleaseState(version) {
     '--json', 'tagName,isDraft,isPrerelease,name,assets'
   ])
   const value = JSON.parse(result.stdout)
-  if (value.tagName !== tag || value.isPrerelease) {
+  if (value.tagName !== tag) {
     throw new Error('GitHub Release identity is invalid for v2 promotion.')
   }
   return value
@@ -603,6 +762,7 @@ async function appendGithubIndex(version, releaseRoot, temporaryDirectory) {
   const tag = `v${version}`
   const files = ['insight-release.json', 'insight-release.json.sig']
   let state = await githubReleaseState(version)
+  if (state.isPrerelease) throw new Error('Rejected GitHub Release cannot be modified.')
   for (const name of files) {
     const source = join(releaseRoot, name)
     const asset = state.assets?.find((entry) => entry.name === name)
@@ -630,15 +790,17 @@ async function appendGithubIndex(version, releaseRoot, temporaryDirectory) {
 
 async function publishGithubRelease(version) {
   const state = await githubReleaseState(version)
+  if (state.isPrerelease) throw new Error('Rejected GitHub Release cannot be published.')
   if (!state.isDraft) return false
   await run('gh', [
     'release', 'edit', `v${version}`, '--repo', repository,
-    '--draft=false', '--prerelease=false', '--latest=false'
+    '--draft=false', '--prerelease=false', '--latest'
   ])
   return true
 }
 
 export async function promoteV2Stable(input) {
+  await assertVersionNotRejected(input)
   const targets = await requireAcceptedTargets(input)
   const releaseRoot = join(input.temporaryDirectory, `release-v${input.version}`)
   await mkdir(join(releaseRoot, 'targets'), { recursive: true, mode: 0o700 })
@@ -666,19 +828,26 @@ export async function promoteV2Stable(input) {
   )
 
   const key = pointerKey('stable')
-  const current = await readAuthenticatedPointer(input, key, { allowLegacy: true })
+  const current = await readAuthenticatedPointer(input, key)
   if (current?.version === input.version) {
     if (current.legacy || current.value.referencedSha512 !== digest(indexBytes)) {
       throw new Error('Stable pointer already uses this version with different bytes.')
     }
     await input.appendGithubIndex(input.version, releaseRoot, input.temporaryDirectory)
     const releaseState = input.githubReleaseState ?? githubReleaseState
-    if ((await releaseState(input.version)).isDraft) {
+    const state = await releaseState(input.version)
+    if (state.isDraft || state.isPrerelease) {
       throw new Error('Stable pointer references a GitHub Draft; manual investigation is required.')
     }
-    await input.verifyCdn(`desktop/releases/v${input.version}/insight-release.json`, indexBytes)
-    await input.verifyCdn(`desktop/releases/v${input.version}/insight-release.json.sig`, signatureBytes)
-    await input.verifyCdn(key, current.bytes)
+    await input.verifyCdn(
+      `desktop/releases/v${input.version}/insight-release.json`,
+      byteIdentity(indexBytes)
+    )
+    await input.verifyCdn(
+      `desktop/releases/v${input.version}/insight-release.json.sig`,
+      byteIdentity(signatureBytes)
+    )
+    await input.verifyCdn(key, byteIdentity(current.bytes))
     return { index, pointerBefore: current.value, pointerAfter: current.value, alreadyPromoted: true }
   }
   if (current && !semver.gt(input.version, current.version)) {
@@ -689,8 +858,14 @@ export async function promoteV2Stable(input) {
     mode: policy.mode,
     minimumSupportedVersion: policy.minimumSupportedVersion
   })
-  await input.verifyCdn(`desktop/releases/v${input.version}/insight-release.json`, indexBytes)
-  await input.verifyCdn(`desktop/releases/v${input.version}/insight-release.json.sig`, signatureBytes)
+  await input.verifyCdn(
+    `desktop/releases/v${input.version}/insight-release.json`,
+    byteIdentity(indexBytes)
+  )
+  await input.verifyCdn(
+    `desktop/releases/v${input.version}/insight-release.json.sig`,
+    byteIdentity(signatureBytes)
+  )
   await input.appendGithubIndex(input.version, releaseRoot, input.temporaryDirectory)
   const githubPublished = await input.publishGithubRelease(input.version)
   await commitPointer(input, key, pointerBytes, current?.bytes)
@@ -706,17 +881,22 @@ export async function promoteV2Stable(input) {
 export async function rejectV2Version(input) {
   const releaseState = input.githubReleaseState ?? githubReleaseState
   const state = await releaseState(input.version)
-  if (!state.isDraft) throw new Error('Only a Draft v2 release can be rejected.')
-  const key = `desktop/releases/v${input.version}/rejection.json`
-  const existing = await readRemoteObject(input.oss, key, input.temporaryDirectory, 'Rejection record')
+  const stablePointer = await readAuthenticatedPointer(input, pointerKey('stable'))
+  if (stablePointer?.version === input.version) {
+    throw new Error('A version already published to Stable cannot be rejected.')
+  }
+  const key = rejectionKey(input.version)
+  const existing = await readSignedAuditRecord(input, key, 'Rejection record')
+  let rejectionBytes
+  let rejection
   if (existing) {
-    const rejection = JSON.parse(existing.bytes.toString('utf8'))
-    if (
-      rejection?.schema !== 'insight-desktop-rejection/v1' ||
-      rejection.version !== input.version || rejection.reason !== input.reason
-    ) throw new Error('Existing rejection record conflicts with this request.')
+    rejection = parseRejection(existing, input.version)
+    if (rejection.reason !== input.reason) {
+      throw new Error('Existing rejection record conflicts with this request.')
+    }
+    rejectionBytes = existing
   } else {
-    const record = canonicalJsonBytes({
+    rejectionBytes = canonicalJsonBytes({
       schema: 'insight-desktop-rejection/v1',
       version: input.version,
       actor: input.actor,
@@ -724,11 +904,37 @@ export async function rejectV2Version(input) {
       reason: input.reason,
       rejectedAt: input.now().toISOString()
     })
-    await putImmutableBytes(input.oss, key, record, input.temporaryDirectory)
+    await putSignedAuditRecord(input, key, rejectionBytes)
+    rejection = parseRejection(rejectionBytes, input.version)
+  }
+  for (const target of UPDATE_V2_TARGET_IDS) {
+    const candidateKey = pointerKey('candidate', target)
+    const pointer = await readAuthenticatedPointer(input, candidateKey)
+    if (!pointer || pointer.version !== input.version) continue
+    if (pointer.value.state === 'rejected') {
+      if (pointer.value.referencedSha512 !== digest(rejectionBytes)) {
+        throw new Error(`Rejected Candidate pointer conflicts: ${target}`)
+      }
+      await input.verifyCdn(candidateKey, byteIdentity(pointer.bytes))
+      continue
+    }
+    const tombstone = await signedRollout(
+      { ...input, target },
+      rejectionBytes,
+      'candidate',
+      pointer.value.policy,
+      {
+        state: 'rejected',
+        target,
+        publishedAt: rejection.rejectedAt
+      }
+    )
+    await commitPointer(input, candidateKey, tombstone, pointer.bytes)
   }
   const rejectGithubRelease = input.rejectGithubRelease ?? (async (version) => run('gh', [
     'release', 'edit', `v${version}`, '--repo', repository,
-    '--title', `因赛AI v${version} [REJECTED]`
+    '--title', `因赛AI v${version} [REJECTED]`,
+    '--prerelease', '--latest=false'
   ]))
   await rejectGithubRelease(input.version)
   return { rejected: true, reason: input.reason }
@@ -736,7 +942,9 @@ export async function rejectV2Version(input) {
 
 async function downloadGithubTarget(version, target, temporaryDirectory) {
   const state = await githubReleaseState(version)
-  if (!state.isDraft) throw new Error('Target staging requires a GitHub Draft Release.')
+  if (!state.isDraft || state.isPrerelease) {
+    throw new Error('Target staging requires a GitHub Draft Release.')
+  }
   const downloadDirectory = join(temporaryDirectory, 'github-target')
   await mkdir(downloadDirectory, { recursive: true, mode: 0o700 })
   await run('gh', [
@@ -787,7 +995,7 @@ async function main() {
       actor: process.env.GITHUB_ACTOR,
       workflowRun: process.env.GITHUB_RUN_ID,
       now: () => new Date(),
-      verifyCdn: (key, bytes) => verifyCdnBytes(key, bytes),
+      verifyCdn: (key, expected) => verifyCdnBytes(key, expected),
       publishGithubRelease,
       appendGithubIndex,
       githubReleaseState
@@ -800,11 +1008,13 @@ async function main() {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await publishV2Candidate(common)
     } else if (options.command === 'accept-target') {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await acceptV2Target(common)
     } else if (options.command === 'promote-stable') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await promoteV2Stable(common)
     } else {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await rejectV2Version(common)
     }
     const reportPath = await writeReport(options, {

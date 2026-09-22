@@ -86,6 +86,7 @@ import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
 import { ElectronUpdateExecutor } from './update/update-executor'
 import { V2ReleaseSource } from './update/v2-release-source'
+import { createRolloutHistoryService, rolloutHistoryPath } from './update/rollout-history'
 import { parseUpdateDistribution } from './update/update-environment'
 import { UpdateManager } from './update/update-manager'
 import { registerUpdateIpc } from './update/update-ipc'
@@ -1747,7 +1748,8 @@ async function initializeUpdates(): Promise<void> {
     },
     source: new V2ReleaseSource({
       distribution: readUpdateDistribution(),
-      publicKeyPem
+      publicKeyPem,
+      rolloutHistory: createRolloutHistoryService(rolloutHistoryPath(userData))
     }),
     preferences,
     executor: new ElectronUpdateExecutor(),

@@ -97,6 +97,7 @@ export interface SignedReleaseIndex {
 
 export interface RolloutPayload {
   schema: 'insight-desktop-rollout/v2'
+  state: 'active' | 'rejected'
   track: UpdateTrack
   version: string
   target?: UpdateTargetId

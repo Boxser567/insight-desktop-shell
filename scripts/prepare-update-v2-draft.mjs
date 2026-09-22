@@ -1,7 +1,11 @@
+import { verify } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semver from 'semver'
+import { parseCanonicalV2Envelope } from './update-v2-contract.mjs'
+
+const MAX_UPDATE_METADATA_BYTES = 4 * 1024 * 1024
 
 function parseArguments(argv) {
   const names = new Set([
@@ -54,19 +58,20 @@ async function githubRequest(input, path, init = {}) {
   return response.json()
 }
 
-function parseCanonicalBase64(value, label) {
-  if (typeof value !== 'string' || value.length === 0) throw new Error(`${label} is invalid.`)
-  const bytes = Buffer.from(value, 'base64')
-  if (bytes.toString('base64') !== value) throw new Error(`${label} is not canonical Base64.`)
-  return bytes
-}
-
 async function readPointerVersion(input, rawUrl, publicKeyPem) {
   const url = new URL(rawUrl)
   if (
     url.protocol !== 'https:' || url.hostname !== 'updates.insight-aigc.com' ||
-    url.username || url.password || url.hash
+    url.username || url.password || url.hash || url.search
   ) throw new Error('Version floor URL is not an approved public update URL.')
+  const legacyCandidate = url.pathname === '/desktop/candidate/current.json'
+  const stable = url.pathname === '/desktop/stable/current.json'
+  const candidateMatch = /^\/desktop\/candidate-v2\/(darwin-arm64|darwin-x64|win32-x64)\/current\.json$/u.exec(
+    url.pathname
+  )
+  if (!legacyCandidate && !stable && !candidateMatch) {
+    throw new Error('Version floor URL is not an approved public update URL.')
+  }
   const response = await input.fetch(url, {
     headers: { Accept: 'application/json' },
     redirect: 'error',
@@ -74,27 +79,73 @@ async function readPointerVersion(input, rawUrl, publicKeyPem) {
   })
   if (response.status === 404) return undefined
   if (!response.ok) throw new Error(`Version floor request failed: ${response.status}`)
-  const value = await response.json()
+  const bytes = await readBoundedResponse(response, 'Version floor pointer')
+  const value = JSON.parse(bytes.toString('utf8'))
   if (
-    value?.schemaVersion === 1 &&
-    (value.channel === 'stable' || value.channel === 'candidate') &&
-    semver.valid(value.version) === value.version
-  ) return value.version
-  const { verify } = await import('node:crypto')
-  const payloadBytes = parseCanonicalBase64(value?.payloadBase64, 'Rollout payload')
-  const signature = parseCanonicalBase64(value?.signatureBase64, 'Rollout signature')
-  if (!verify(null, payloadBytes, publicKeyPem, signature)) {
+    legacyCandidate && value?.schemaVersion === 1 &&
+    value.channel === 'candidate' && semver.valid(value.version) === value.version &&
+    Object.keys(value).sort().join(',') === 'channel,schemaVersion,version'
+  ) {
+    if (value.version !== '1.0.0-rc.19') {
+      throw new Error('Legacy version floor must be exactly the signed rc.19 bridge.')
+    }
+    const releaseUrl = new URL(`/desktop/releases/v${value.version}/insight-update.json`, url)
+    const signatureUrl = new URL(`${releaseUrl.pathname}.sig`, url)
+    const [manifestResponse, signatureResponse] = await Promise.all([
+      input.fetch(releaseUrl, { redirect: 'error', signal: AbortSignal.timeout(30_000) }),
+      input.fetch(signatureUrl, { redirect: 'error', signal: AbortSignal.timeout(30_000) })
+    ])
+    if (!manifestResponse.ok || !signatureResponse.ok) {
+      throw new Error('Signed rc.19 recovery bridge is unavailable.')
+    }
+    const [manifestBytes, signatureBytes] = await Promise.all([
+      readBoundedResponse(manifestResponse, 'rc.19 recovery Manifest'),
+      readBoundedResponse(signatureResponse, 'rc.19 recovery signature')
+    ])
+    if (!verify(null, manifestBytes, publicKeyPem, signatureBytes)) {
+      throw new Error('Signed rc.19 recovery bridge is invalid.')
+    }
+    const manifest = JSON.parse(manifestBytes.toString('utf8'))
+    if (
+      manifest?.schema !== 'insight-desktop-update/v1' ||
+      manifest.version !== value.version || manifest.channel !== 'candidate'
+    ) throw new Error('Signed rc.19 recovery bridge identity is invalid.')
+    return value.version
+  }
+  const authenticated = parseCanonicalV2Envelope(bytes)
+  const { payload, payloadBytes, signatureBytes } = authenticated
+  if (!verify(null, payloadBytes, publicKeyPem, signatureBytes)) {
     throw new Error('Version floor rollout signature is invalid.')
   }
-  const payload = JSON.parse(payloadBytes.toString('utf8'))
-  if (
-    payload?.schema !== 'insight-desktop-rollout/v2' ||
-    semver.valid(payload.version) !== payload.version
-  ) throw new Error('Version floor rollout payload is invalid.')
+  if (stable && (payload.track !== 'stable' || payload.target !== undefined)) {
+    throw new Error('Version floor Stable pointer identity is invalid.')
+  }
+  if (candidateMatch && (
+    payload.track !== 'candidate' || payload.target !== candidateMatch[1]
+  )) throw new Error('Version floor Candidate pointer identity is invalid.')
   return payload.version
 }
 
-async function assertAboveAuthoritativePointers(input) {
+async function readBoundedResponse(response, label) {
+  const contentLength = response.headers.get('content-length')
+  if (
+    contentLength !== null &&
+    (!/^\d+$/u.test(contentLength) || Number(contentLength) > MAX_UPDATE_METADATA_BYTES)
+  ) throw new Error(`${label} exceeds the allowed size.`)
+  if (!response.body) return Buffer.alloc(0)
+  const chunks = []
+  let total = 0
+  for await (const chunk of response.body) {
+    total += chunk.byteLength
+    if (total > MAX_UPDATE_METADATA_BYTES) {
+      throw new Error(`${label} exceeds the allowed size.`)
+    }
+    chunks.push(Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks, total)
+}
+
+async function assertAuthoritativePointerFloor(input, continuation) {
   const urls = input.floorUrls ?? []
   if (urls.length === 0) throw new Error('At least one authoritative version floor URL is required.')
   const publicKeyPem = await readFile(resolve(input.publicKeyPath), 'utf8')
@@ -102,8 +153,10 @@ async function assertAboveAuthoritativePointers(input) {
     readPointerVersion(input, url, publicKeyPem)
   ))).filter(Boolean)
   const floor = versions.sort(semver.rcompare)[0]
-  if (floor && !semver.gt(input.version, floor)) {
-    throw new Error(`v2 release version must be greater than authoritative floor ${floor}.`)
+  if (floor && (semver.gt(floor, input.version) || (!continuation && !semver.gt(input.version, floor)))) {
+    throw new Error(continuation
+      ? `v2 release version is below authoritative floor ${floor}.`
+      : `v2 release version must be greater than authoritative floor ${floor}.`)
   }
   return floor ?? null
 }
@@ -111,14 +164,15 @@ async function assertAboveAuthoritativePointers(input) {
 export async function prepareV2Draft(input) {
   assertVersion(input.version)
   if (!/^[0-9a-f]{40}$/u.test(input.commit)) throw new Error('Release commit is invalid.')
-  const packageJson = JSON.parse(await readFile(resolve(input.packagePath), 'utf8'))
-  if (packageJson.version !== input.version) {
-    throw new Error('package.json version does not match the requested v2 release.')
-  }
-  const versionFloor = await assertAboveAuthoritativePointers(input)
   const tag = `v${input.version}`
   const refPath = `/git/ref/tags/${encodeURIComponent(tag)}`
   let ref = await githubRequest(input, refPath)
+  const continuation = ref !== undefined
+  const packageJson = JSON.parse(await readFile(resolve(input.packagePath), 'utf8'))
+  if (!continuation && packageJson.version !== input.version) {
+    throw new Error('package.json version does not match the requested v2 release.')
+  }
+  const versionFloor = await assertAuthoritativePointerFloor(input, continuation)
   const tagRefs = await githubRequest(input, '/git/matching-refs/tags/v')
   if (!Array.isArray(tagRefs)) throw new Error('GitHub Tag listing is invalid.')
   const allocatedVersions = tagRefs.flatMap((entry) => {
@@ -139,9 +193,8 @@ export async function prepareV2Draft(input) {
     })
     createdTag = true
   }
-  if (ref?.object?.sha !== input.commit) {
-    throw new Error('Existing v2 release Tag points to another commit.')
-  }
+  const pinnedCommit = ref?.object?.sha
+  if (!/^[0-9a-f]{40}$/u.test(pinnedCommit ?? '')) throw new Error('v2 release Tag is invalid.')
 
   let release = await githubRequest(input, `/releases/tags/${encodeURIComponent(tag)}`)
   let createdDraft = false
@@ -151,7 +204,7 @@ export async function prepareV2Draft(input) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tag_name: tag,
-        target_commitish: input.commit,
+        target_commitish: pinnedCommit,
         name: `因赛AI v${input.version}`,
         draft: true,
         prerelease: false,
@@ -165,7 +218,7 @@ export async function prepareV2Draft(input) {
   }
   return {
     tag,
-    commit: input.commit,
+    commit: pinnedCommit,
     releaseId: release.id,
     versionFloor,
     createdTag,

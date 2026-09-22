@@ -7,6 +7,8 @@ import type {
   UpdateTarget
 } from '../../shared/update-contracts'
 
+export class StablePointerNotFoundError extends Error {}
+
 export interface ResolvedRelease {
   /** Kernel release requirement read from hash-verified updater metadata. */
   minimumSystemVersion?: string
@@ -63,6 +65,8 @@ export interface V2UpdateSource {
     manifest: SignedTargetManifest,
     target: Pick<UpdateTarget, 'platform' | 'arch'>
   ): URL
+  legacyReleaseBaseUrl(channel: ReleaseUpdateChannel, version: string): URL
+  legacyManualInstallerUrl(manifest: SignedReleaseManifest, target: UpdateTarget): URL
   resolveRecoveryBaseline(
     target: Pick<UpdateTarget, 'platform' | 'arch'>
   ): Promise<ResolvedRecoveryBaseline>

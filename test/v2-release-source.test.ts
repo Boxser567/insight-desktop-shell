@@ -1,7 +1,9 @@
 import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
+import { stringify } from 'yaml'
 import { parseUpdateDistribution } from '../src/main/update/update-environment'
 import { V2ReleaseSource } from '../src/main/update/v2-release-source'
+import type { RolloutHistoryService } from '../src/main/update/rollout-history'
 import type {
   ReleaseArtifact,
   RolloutPayload,
@@ -103,10 +105,26 @@ function fixture(options: {
   incompleteIndex?: boolean
   manifestShellCommit?: string
   redirectPointerTo?: string
+  metadataUpdateShaMismatch?: boolean
+  rolloutState?: 'active' | 'rejected'
+  rolloutHistory?: RolloutHistoryService
 } = {}) {
   const track = options.track ?? 'candidate'
   const targetId = options.target ?? 'darwin-x64'
-  const metadata = Buffer.from('version: 1.0.0\nminimumSystemVersion: 22.0.0\n')
+  const updateName = targetId.startsWith('darwin-')
+    ? `insight-1.0.0-${targetId}.zip`
+    : `insight-1.0.0-${targetId}-setup.exe`
+  const updateBytes = Buffer.from(updateName)
+  const updateSha512 = options.metadataUpdateShaMismatch
+    ? Buffer.alloc(64).toString('base64')
+    : sha512(updateBytes)
+  const metadata = Buffer.from(stringify({
+    version: '1.0.0',
+    files: [{ url: updateName, sha512: updateSha512, size: updateBytes.length }],
+    path: updateName,
+    sha512: updateSha512,
+    minimumSystemVersion: '22.0.0'
+  }))
   const targetManifest = manifest(targetId, metadata)
   if (options.manifestShellCommit) targetManifest.shellCommit = options.manifestShellCommit
   const authenticatedManifest = signedJson(targetManifest)
@@ -132,13 +150,14 @@ function fixture(options: {
       : sha512(authenticatedManifest.bytes)
   const payload: RolloutPayload = {
     schema: 'insight-desktop-rollout/v2',
+    state: options.rolloutState ?? 'active',
     track,
     version: '1.0.0',
     ...(track === 'candidate' ? { target: options.rolloutTarget ?? targetId } : {}),
     referencedSha512,
     policy: {
       mode: options.requiredCandidate ? 'required' : 'optional',
-      minimumSupportedVersion: '1.0.0-rc.18'
+      minimumSupportedVersion: '1.0.0-rc.19'
     },
     publishedAt: '2026-09-22T08:00:00.000Z'
   }
@@ -169,7 +188,12 @@ function fixture(options: {
   })
   return {
     fetchMock,
-    source: new V2ReleaseSource({ distribution, publicKeyPem, fetch: fetchMock }),
+    source: new V2ReleaseSource({
+      distribution,
+      publicKeyPem,
+      fetch: fetchMock,
+      rolloutHistory: options.rolloutHistory
+    }),
     target: targetValues[targetId]
   }
 }
@@ -218,9 +242,9 @@ describe('v2 release source', () => {
     })
   })
 
-  it('uses only the signed rc.18 bridge before the first Stable pointer exists', async () => {
+  it('uses only the signed rc.19 bridge before the first Stable pointer exists', async () => {
     const target = targetValues['darwin-x64']
-    const version = '1.0.0-rc.18'
+    const version = '1.0.0-rc.19'
     const metadata = Buffer.from(`version: ${version}\nminimumSystemVersion: 22.0.0\n`)
     const legacyManifest = {
       schema: 'insight-desktop-update/v1',
@@ -279,11 +303,49 @@ describe('v2 release source', () => {
     await expect(source.resolveRecoveryBaseline(target)).rejects.toThrow('签名')
   })
 
+  it('records and rejects a signed Candidate tombstone before fetching release assets', async () => {
+    const rolloutHistory: RolloutHistoryService = {
+      hasSeen: vi.fn(async () => true),
+      assertAndRecord: vi.fn(async () => undefined)
+    }
+    const { source, target, fetchMock } = fixture({
+      rolloutState: 'rejected',
+      rolloutHistory
+    })
+
+    await expect(source.resolve('candidate', target)).rejects.toThrow('已由发布方撤回')
+    expect(rolloutHistory.assertAndRecord).toHaveBeenCalledWith(expect.objectContaining({
+      track: 'candidate',
+      target: 'darwin-x64',
+      version: '1.0.0',
+      state: 'rejected'
+    }))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when a previously verified Stable pointer disappears', async () => {
+    const pointerUrl = distribution.v2PointerUrl('stable').href
+    const rolloutHistory: RolloutHistoryService = {
+      hasSeen: vi.fn(async () => true),
+      assertAndRecord: vi.fn(async () => undefined)
+    }
+    const source = new V2ReleaseSource({
+      distribution,
+      publicKeyPem,
+      rolloutHistory,
+      fetch: vi.fn(async () => response(pointerUrl, 'missing', 404))
+    })
+
+    await expect(source.resolve('stable', targetValues['darwin-arm64']))
+      .rejects.toThrow('拒绝可能的回放')
+  })
+
   it.each([
     ['wrong target', { rolloutTarget: 'win32-x64' as const }, '目标'],
     ['manifest hash mismatch', { corruptManifestReference: true }, '摘要'],
     ['envelope signature mismatch', { corruptEnvelopeSignature: true }, '签名'],
     ['required Candidate', { requiredCandidate: true }, 'optional'],
+    ['metadata artifact mismatch', { metadataUpdateShaMismatch: true }, '可信安装产物'],
     ['redirect', { redirectPointerTo: 'https://attacker.test/current.json' }, '不受信任']
   ])('rejects %s', async (_label, options, message) => {
     const { source, target } = fixture(options)
@@ -309,22 +371,39 @@ describe('v2 release source', () => {
     const pointerUrl = distribution.v2PointerUrl('candidate', 'darwin-x64').href
     const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       signal = init?.signal ?? undefined
-      const reply = response(pointerUrl, '')
-      reply.arrayBuffer = () => new Promise<ArrayBuffer>((_resolve, reject) => {
-        signal!.addEventListener('abort', () => reject(signal!.reason), { once: true })
+      const body = new ReadableStream({
+        start(controller) {
+          signal!.addEventListener('abort', () => controller.error(signal!.reason), { once: true })
+        }
       })
-      return reply
+      return response(pointerUrl, body)
     })
     try {
       const source = new V2ReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
       const checking = expect(source.resolve('candidate', targetValues['darwin-x64']))
         .rejects.toThrow('请求超时')
-      await vi.advanceTimersByTimeAsync(30_000)
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(signal).toBeDefined()
+      vi.advanceTimersByTime(30_000)
       await checking
       expect(signal?.aborted).toBe(true)
       expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('rejects oversized metadata before buffering it', async () => {
+    const pointerUrl = distribution.v2PointerUrl('candidate', 'darwin-x64').href
+    const fetchMock = vi.fn(async () => {
+      const reply = response(pointerUrl, '{}')
+      reply.headers.set('content-length', String(4 * 1024 * 1024 + 1))
+      return reply
+    })
+    const source = new V2ReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
+
+    await expect(source.resolve('candidate', targetValues['darwin-x64']))
+      .rejects.toThrow('超过允许大小')
   })
 })

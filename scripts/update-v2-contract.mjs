@@ -71,6 +71,7 @@ export const v2ReleaseIndexSchema = z.object({
 
 export const v2RolloutPayloadSchema = z.object({
   schema: z.literal(UPDATE_V2_SCHEMAS.rollout),
+  state: z.enum(['active', 'rejected']),
   track: z.enum(['stable', 'candidate']),
   version: z.string().min(1),
   target: targetIdSchema.optional(),
@@ -142,8 +143,9 @@ export function parseV2RolloutPayload(value) {
   if (payload.track === 'candidate') {
     if (payload.target === undefined) throw new Error('Candidate rollout must name a target.')
     if (payload.policy.mode !== 'optional') throw new Error('Candidate rollout must be optional.')
-  } else if (payload.target !== undefined) {
-    throw new Error('Stable rollout cannot name one target.')
+  } else {
+    if (payload.target !== undefined) throw new Error('Stable rollout cannot name one target.')
+    if (payload.state !== 'active') throw new Error('Stable rollout cannot be rejected.')
   }
   return payload
 }

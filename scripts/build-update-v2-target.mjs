@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -78,16 +79,17 @@ function targetParts(target) {
 async function buildArtifact(assetDir, definition) {
   const [platform, arch, kind, name] = definition
   const path = join(assetDir, name)
-  const bytes = await readFile(path)
   const file = await stat(path)
   if (file.size <= 0) throw new Error(`Release asset is empty: ${name}`)
+  const hash = createHash('sha512')
+  for await (const chunk of createReadStream(path)) hash.update(chunk)
   return {
     platform,
     arch,
     kind,
     name,
     size: file.size,
-    sha512: createHash('sha512').update(bytes).digest('base64')
+    sha512: hash.digest('base64')
   }
 }
 
@@ -99,8 +101,18 @@ async function validateUpdaterMetadata(assetDir, definition, version) {
   const document = parseDocument(await readFile(join(assetDir, metadataName), 'utf8'))
   if (document.errors.length > 0) throw new Error(`Invalid updater YAML: ${metadataName}`)
   const value = document.toJS()
-  const urls = Array.isArray(value?.files) ? value.files.map((file) => file?.url) : []
-  if (value?.version !== version || urls.length !== 1 || urls[0] !== expectedAsset) {
+  const updateArtifact = await buildArtifact(
+    assetDir,
+    definition.find((entry) => entry[3] === expectedAsset)
+  )
+  const metadataFile = Array.isArray(value?.files) && value.files.length === 1
+    ? value.files[0]
+    : undefined
+  if (
+    value?.version !== version || metadataFile?.url !== expectedAsset ||
+    metadataFile.sha512 !== updateArtifact.sha512 || metadataFile.size !== updateArtifact.size ||
+    value.path !== expectedAsset || value.sha512 !== updateArtifact.sha512
+  ) {
     throw new Error('Updater metadata must reference exactly the current target and version.')
   }
 }

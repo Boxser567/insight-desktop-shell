@@ -97,6 +97,7 @@ function v2Policy(mode: 'optional' | 'required' = 'required') {
   const indexAuthenticated = signedV2Json(index)
   const payload: RolloutPayload = {
     schema: 'insight-desktop-rollout/v2',
+    state: 'active',
     track: 'stable',
     version: '1.2.0',
     referencedSha512: digest(indexAuthenticated.bytes),

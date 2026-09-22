@@ -23,11 +23,26 @@ async function main() {
     'scripts/build-update-v2-target.mjs',
     'scripts/verify-update-v2-assets.mjs',
     'scripts/upload-update-v2-target.mjs',
+    'scripts/verify-sandboxed-preload.mjs out/preload/about.cjs',
     'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY',
     'environment: desktop-release',
     'APPLE_API_KEY_CONTENT',
     'finalize-windows-release.mjs'
   ]) requireText(workflow, value, 'v2 release workflow')
+  if ((workflow.match(/persist-credentials: false/gu) ?? []).length !== 5) {
+    throw new Error('Every v2 release checkout must disable persisted credentials.')
+  }
+  requireText(workflow, 'permissions:\n  contents: read', 'v2 release workflow')
+  if ((workflow.match(/permissions:\n      contents: write/gu) ?? []).length !== 2) {
+    throw new Error('Only v2 release mutation jobs may request contents: write.')
+  }
+  for (const command of [
+    'npm run typecheck',
+    'npm test',
+    'npm run build:desktop-integration',
+    'npx electron-vite build',
+    'scripts/verify-publish-v2-workflow.mjs'
+  ]) requireText(workflow, command, 'v2 pre-Tag gate')
   for (const forbidden of [
     '--clobber',
     'OSS_ACCESS_KEY',

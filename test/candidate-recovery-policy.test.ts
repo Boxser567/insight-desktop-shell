@@ -47,6 +47,7 @@ function candidateRelease(writesDataSchema: number): ResolvedV2Release {
   return {
     rollout: {
       schema: 'insight-desktop-rollout/v2',
+      state: 'active',
       track: 'candidate',
       target: 'darwin-arm64',
       version: '1.0.1',
@@ -86,7 +87,9 @@ async function managerFixture(input: { candidateWrites: number; stableMaximum: n
       manualInstallerUrl: stableInstaller
     })),
     v2ReleaseBaseUrl: vi.fn(() => release.releaseBaseUrl),
-    v2ManualInstallerUrl: vi.fn(() => release.manualInstallerUrl)
+    v2ManualInstallerUrl: vi.fn(() => release.manualInstallerUrl),
+    legacyReleaseBaseUrl: vi.fn(() => release.releaseBaseUrl),
+    legacyManualInstallerUrl: vi.fn(() => release.manualInstallerUrl)
   }
   const executor = new Executor()
   const openExternal = vi.fn(async () => undefined)

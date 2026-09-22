@@ -104,6 +104,7 @@ function allAuthenticatedManifests() {
 function rolloutPayload(overrides: Partial<RolloutPayload> = {}): RolloutPayload {
   return {
     schema: 'insight-desktop-rollout/v2',
+    state: 'active',
     track: 'candidate',
     version: '1.0.0',
     target: 'darwin-arm64',

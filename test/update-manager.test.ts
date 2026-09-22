@@ -7,6 +7,7 @@ import { UPDATE_CHECK_INTERVAL_MS } from '../src/main/update/update-policy'
 import { readRequiredUpdatePolicy } from '../src/main/update/required-update-policy'
 import { writeSkippedVersion } from '../src/main/update/skipped-version'
 import { writeCandidateOptIn } from '../src/main/update/update-preferences'
+import { candidateInstallPath, readCandidateInstall } from '../src/main/update/candidate-install'
 import {
   UpdateManager,
   type UpdateManagerResumeSource,
@@ -21,6 +22,7 @@ import type {
   ResolvedRelease,
   UpdateSource
 } from '../src/main/update/update-source'
+import { StablePointerNotFoundError } from '../src/main/update/update-source'
 import type { SignedReleaseManifest, UpdateTarget } from '../src/shared/update-contracts'
 
 const temporaryDirectories: string[] = []
@@ -424,6 +426,19 @@ describe('desktop update manager', () => {
     expect(manager.status().phase).toBe('up-to-date')
   })
 
+  it('treats an unpublished first Stable pointer as no available update', async () => {
+    const release = resolvedRelease()
+    const source = fakeSource(release)
+    vi.mocked(source.resolve).mockRejectedValue(new StablePointerNotFoundError('not published'))
+    const { manager, executor } = await setup({ source })
+    await manager.start()
+
+    await manager.check('stable', true)
+
+    expect(manager.status().phase).toBe('up-to-date')
+    expect(executor.check).not.toHaveBeenCalled()
+  })
+
   it('suppresses a skipped optional version automatically but shows it manually', async () => {
     const { manager, executor, userData } = await setup()
     await writeSkippedVersion(join(userData, 'updates', 'skipped-version.json'), '1.1.0')
@@ -563,6 +578,33 @@ describe('desktop update manager', () => {
     expect(prepareToInstall).toHaveBeenCalledOnce()
     expect(executor.quitAndInstall).toHaveBeenCalledOnce()
     await expect(readFile(downloadedFile)).resolves.toEqual(downloadedBytes)
+  })
+
+  it('records only a Candidate version handed to the native installer', async () => {
+    const downloadedBytes = Buffer.from('verified installer')
+    const release = resolvedRelease({ downloadedBytes })
+    const executor = new FakeExecutor(release.manifest.version)
+    const result = await setup({
+      release,
+      executor,
+      currentVersion: '1.0.0-rc.19'
+    })
+    await writeCandidateOptIn(
+      join(result.userData, 'updates', 'preferences.json'),
+      true
+    )
+    const downloadedFile = join(result.userData, 'app.zip')
+    await writeFile(downloadedFile, downloadedBytes)
+    executor.download.mockImplementation(async () => {
+      executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
+    })
+    await result.manager.start()
+    await result.manager.check('candidate', true)
+    await result.manager.download()
+
+    await expect(readCandidateInstall(candidateInstallPath(result.userData)))
+      .resolves.toBe('1.1.0')
+    expect(executor.quitAndInstall).toHaveBeenCalledOnce()
   })
 
   it('deletes only a mismatched downloaded installer and preserves sibling data', async () => {

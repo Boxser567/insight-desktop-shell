@@ -87,7 +87,7 @@ jobs:
           node --check scripts/publish-update-v2-to-oss.mjs
           node --check scripts/github-oss-client.mjs
       - name: Prepare product update signing key
-        if: inputs.command == 'publish-candidate' || inputs.command == 'promote-stable'
+        if: inputs.command == 'publish-candidate' || inputs.command == 'accept-target' || inputs.command == 'promote-stable' || inputs.command == 'reject-version'
         env:
           DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
         run: |

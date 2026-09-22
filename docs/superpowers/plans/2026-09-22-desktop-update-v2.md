@@ -1,5 +1,10 @@
 # Desktop Update v2 Implementation Plan
 
+> **2026-09-23 修订：** rc.18 已构建并投放，但其沙箱 About preload 在生产包中引用拆分
+> 模块，内测入口不可用，因此不得作为恢复桥。本文后续出现的 rc.18 执行步骤属于原始计划
+> 记录；当前操作一律以 `v1.0.0-rc.19` 和
+> [Desktop Update v2 操作清单](../../releases/update-v2-operator-checklist.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a safe, manual-only Candidate track whose exact per-platform artifacts can be promoted to Stable without rebuilding, while bridging `v1.0.0-rc.17` through `v1.0.0-rc.18`.

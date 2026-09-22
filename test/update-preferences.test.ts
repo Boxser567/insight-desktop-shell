@@ -32,19 +32,19 @@ describe('desktop update preferences', () => {
     await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('opts rc.18 Candidate users in once without overriding an explicit choice', async () => {
+  it('opts rc.19 Candidate users in once without overriding an explicit choice', async () => {
     const path = await temporaryPreferencePath()
     await expect(migrateLegacyCandidatePreference({
       path,
       packagedChannel: 'candidate',
-      currentVersion: '1.0.0-rc.18'
+      currentVersion: '1.0.0-rc.19'
     })).resolves.toBe(true)
     await writeCandidateOptIn(path, false)
 
     await expect(migrateLegacyCandidatePreference({
       path,
       packagedChannel: 'candidate',
-      currentVersion: '1.0.0-rc.18'
+      currentVersion: '1.0.0-rc.19'
     })).resolves.toBe(false)
     await expect(readUpdatePreferences(path)).resolves.toEqual({ candidateOptIn: false })
   })
@@ -52,7 +52,7 @@ describe('desktop update preferences', () => {
   it.each([
     ['another Candidate version', 'candidate', '1.0.0-rc.17'],
     ['a Stable package', 'stable', '1.0.0'],
-    ['a development package', 'development', '1.0.0-rc.18']
+    ['a development package', 'development', '1.0.0-rc.19']
   ] as const)('does not migrate %s', async (_label, packagedChannel, currentVersion) => {
     const path = await temporaryPreferencePath()
     await expect(migrateLegacyCandidatePreference({

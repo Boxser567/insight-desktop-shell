@@ -72,6 +72,7 @@ const releaseIndexSchema = z.object({
 
 const rolloutPayloadSchema = z.object({
   schema: z.literal('insight-desktop-rollout/v2'),
+  state: z.enum(['active', 'rejected']),
   track: z.enum(['stable', 'candidate']),
   version: z.string().min(1),
   target: targetIdSchema.optional(),
@@ -259,8 +260,9 @@ function validateRolloutPayload(payload: RolloutPayload): void {
     if (payload.policy.mode !== 'optional') {
       throw new Error('Candidate rollout must be optional.')
     }
-  } else if (payload.target !== undefined) {
-    throw new Error('Stable 投放不能指定单一目标。')
+  } else {
+    if (payload.target !== undefined) throw new Error('Stable 投放不能指定单一目标。')
+    if (payload.state !== 'active') throw new Error('Stable 投放不能标记为已撤回。')
   }
 }
 

@@ -23,6 +23,15 @@ function fakeWindow() {
 }
 
 describe('desktop About window', () => {
+  it('keeps the sandboxed About preload self-contained while synchronizing theme', async () => {
+    const preload = await readFile('src/preload/about.ts', 'utf8')
+
+    expect(preload).not.toContain("import './secondary-theme'")
+    expect(preload).toContain("ipcRenderer.invoke('desktop-secondary-theme:get')")
+    expect(preload).toContain("ipcRenderer.on('desktop-secondary-theme:changed'")
+    expect(preload).toContain("dataset.insightTheme = isDark ? 'dark' : 'light'")
+  })
+
   it('formats approved product metadata without hard-coded release output', () => {
     expect(createAboutViewModel({
       version: '1.0.0-rc.2',

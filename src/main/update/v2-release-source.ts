@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import semver from 'semver'
 import { parse } from 'yaml'
 import type {
+  ReleaseUpdateChannel,
+  SignedReleaseManifest,
   SignedReleaseIndex,
   SignedTargetManifest,
   UpdateTarget,
@@ -14,6 +16,7 @@ import type {
   ResolvedV2Release,
   V2UpdateSource
 } from './update-source'
+import { StablePointerNotFoundError } from './update-source'
 import {
   GenericReleaseSource,
   UPDATE_SOURCE_REQUEST_TIMEOUT_MS
@@ -24,6 +27,7 @@ import {
   verifyRolloutEnvelope,
   verifyTargetManifest
 } from './v2-release-contract'
+import type { RolloutHistoryService } from './rollout-history'
 
 type FetchImplementation = (
   input: string | URL | Request,
@@ -34,14 +38,14 @@ const RELEASE_INDEX_NAME = 'insight-release.json'
 const RELEASE_INDEX_SIGNATURE_NAME = 'insight-release.json.sig'
 const TARGET_MANIFEST_NAME = 'insight-target.json'
 const TARGET_MANIFEST_SIGNATURE_NAME = 'insight-target.json.sig'
-const LEGACY_BRIDGE_VERSION = '1.0.0-rc.18'
-
-class StablePointerNotFoundError extends Error {}
+const LEGACY_BRIDGE_VERSION = '1.0.0-rc.19'
+const MAX_UPDATE_METADATA_BYTES = 4 * 1024 * 1024
 
 export interface V2ReleaseSourceOptions {
   distribution: UpdateDistribution
   publicKeyPem: string
   fetch?: FetchImplementation
+  rolloutHistory?: RolloutHistoryService
 }
 
 export class V2ReleaseSource implements V2UpdateSource {
@@ -49,11 +53,13 @@ export class V2ReleaseSource implements V2UpdateSource {
   readonly #publicKeyPem: string
   readonly #fetch: FetchImplementation
   readonly #legacySource: GenericReleaseSource
+  readonly #rolloutHistory?: RolloutHistoryService
 
   constructor(options: V2ReleaseSourceOptions) {
     this.#distribution = options.distribution
     this.#publicKeyPem = options.publicKeyPem
     this.#fetch = options.fetch ?? globalThis.fetch
+    this.#rolloutHistory = options.rolloutHistory
     this.#legacySource = new GenericReleaseSource({
       distribution: options.distribution,
       publicKeyPem: options.publicKeyPem,
@@ -70,10 +76,22 @@ export class V2ReleaseSource implements V2UpdateSource {
       track,
       track === 'candidate' ? targetId : undefined
     )
-    const rolloutEnvelopeBytes = await this.#download(pointerUrl, '更新投放信封', {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' }
-    }, track === 'stable')
+    let rolloutEnvelopeBytes: Uint8Array
+    try {
+      rolloutEnvelopeBytes = await this.#download(pointerUrl, '更新投放信封', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      }, track === 'stable')
+    } catch (error) {
+      if (
+        track === 'stable' &&
+        error instanceof StablePointerNotFoundError &&
+        await this.#rolloutHistory?.hasSeen({ track: 'stable' })
+      ) {
+        throw new Error('此前已验证的 Stable 更新指针缺失，已拒绝可能的回放。')
+      }
+      throw error
+    }
     const { payload: rollout } = verifyRolloutEnvelope(
       rolloutEnvelopeBytes,
       this.#publicKeyPem
@@ -81,6 +99,16 @@ export class V2ReleaseSource implements V2UpdateSource {
     if (rollout.track !== track) throw new Error('更新投放 Track 与请求不一致。')
     if (track === 'candidate' && rollout.target !== targetId) {
       throw new Error('Candidate 更新投放目标与当前平台不一致。')
+    }
+    await this.#rolloutHistory?.assertAndRecord({
+      track,
+      ...(track === 'candidate' ? { target: targetId } : {}),
+      version: rollout.version,
+      state: rollout.state,
+      envelopeBytes: rolloutEnvelopeBytes
+    })
+    if (rollout.state === 'rejected') {
+      throw new Error(`Candidate v${rollout.version} 已由发布方撤回，不能安装。`)
     }
 
     let releaseIndex: SignedReleaseIndex | undefined
@@ -135,8 +163,21 @@ export class V2ReleaseSource implements V2UpdateSource {
     const metadata = parse(Buffer.from(metadataBytes).toString('utf8')) as {
       version?: unknown
       minimumSystemVersion?: unknown
+      files?: Array<{ url?: unknown; sha512?: unknown; size?: unknown }>
+      path?: unknown
+      sha512?: unknown
     } | null
     if (metadata?.version !== manifest.version) throw new Error('平台更新元数据版本不一致。')
+    const updateKind = manifest.target.platform === 'darwin' ? 'zip' : 'nsis'
+    const updateArtifact = manifest.artifacts.find(({ kind }) => kind === updateKind)!
+    if (
+      metadata.files?.length !== 1 ||
+      metadata.files[0]?.url !== updateArtifact.name ||
+      metadata.files[0]?.sha512 !== updateArtifact.sha512 ||
+      metadata.files[0]?.size !== updateArtifact.size ||
+      metadata.path !== updateArtifact.name ||
+      metadata.sha512 !== updateArtifact.sha512
+    ) throw new Error('平台更新元数据与可信安装产物不一致。')
     const minimumSystemVersion = metadata.minimumSystemVersion
     if (
       minimumSystemVersion !== undefined &&
@@ -147,7 +188,6 @@ export class V2ReleaseSource implements V2UpdateSource {
     ) {
       throw new Error('平台更新元数据的最低系统版本无效。')
     }
-
     return {
       ...(typeof minimumSystemVersion === 'string' ? { minimumSystemVersion } : {}),
       rollout,
@@ -181,7 +221,7 @@ export class V2ReleaseSource implements V2UpdateSource {
     const bridgeTarget: UpdateTarget = { ...target, channel: 'candidate' }
     const bridge = await this.#legacySource.resolve('candidate', bridgeTarget)
     if (bridge.manifest.version !== LEGACY_BRIDGE_VERSION) {
-      throw new Error('首个正式版发布前只能使用已验证的 rc.18 桥接包作为恢复基线。')
+      throw new Error('首个正式版发布前只能使用已验证的 rc.19 桥接包作为恢复基线。')
     }
     return {
       version: bridge.manifest.version,
@@ -214,6 +254,14 @@ export class V2ReleaseSource implements V2UpdateSource {
     )
   }
 
+  legacyReleaseBaseUrl(channel: ReleaseUpdateChannel, version: string): URL {
+    return this.#legacySource.releaseBaseUrl(channel, version)
+  }
+
+  legacyManualInstallerUrl(manifest: SignedReleaseManifest, target: UpdateTarget): URL {
+    return this.#legacySource.manualInstallerUrl(manifest, target)
+  }
+
   manualInstallerUrl(manifest: SignedTargetManifest, target: UpdateTargetId): URL {
     if (updateTargetId(manifest.target.platform, manifest.target.arch) !== target) {
       throw new Error('目标 Manifest 与整包目标不一致。')
@@ -235,26 +283,85 @@ export class V2ReleaseSource implements V2UpdateSource {
     stablePointer = false
   ): Promise<Uint8Array> {
     const controller = new AbortController()
-    const timeout = setTimeout(
-      () => controller.abort(new Error(`${label}请求超时，请稍后重试。`)),
-      UPDATE_SOURCE_REQUEST_TIMEOUT_MS
-    )
+    let rejectDeadline!: (error: Error) => void
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject
+    })
+    const timeout = setTimeout(() => {
+      const error = new Error(`${label}请求超时，请稍后重试。`)
+      controller.abort(error)
+      rejectDeadline(error)
+    }, UPDATE_SOURCE_REQUEST_TIMEOUT_MS)
     try {
-      const response = await this.#fetch(url, {
-        ...init,
-        redirect: 'manual',
-        signal: controller.signal
-      })
+      const response = await Promise.race([
+        this.#fetch(url, {
+          ...init,
+          redirect: 'manual',
+          signal: controller.signal
+        }),
+        deadline
+      ])
       if (response.url !== url.href) throw new Error(`${label} 响应地址不受信任。`)
       if (stablePointer && response.status === 404) {
         throw new StablePointerNotFoundError('Stable 更新指针尚未发布。')
       }
       if (!response.ok) throw new Error(`${label}请求失败：HTTP ${response.status}。`)
-      return new Uint8Array(await response.arrayBuffer())
+      return await Promise.race([
+        readBoundedResponse(response, label, controller.signal),
+        deadline
+      ])
     } finally {
       clearTimeout(timeout)
     }
   }
+}
+
+async function readBoundedResponse(
+  response: Response,
+  label: string,
+  signal: AbortSignal
+): Promise<Uint8Array> {
+  const contentLength = response.headers.get('content-length')
+  if (
+    contentLength !== null &&
+    (!/^\d+$/u.test(contentLength) || Number(contentLength) > MAX_UPDATE_METADATA_BYTES)
+  ) throw new Error(`${label}响应超过允许大小。`)
+  if (!response.body) return new Uint8Array()
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await readChunk(reader, signal)
+    if (done) break
+    total += value.byteLength
+    if (total > MAX_UPDATE_METADATA_BYTES) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error(`${label}响应超过允许大小。`)
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    reader.read().then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
 }
 
 function assertIndexIdentity(

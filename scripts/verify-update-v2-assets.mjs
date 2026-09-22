@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, verify } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -53,10 +54,12 @@ export async function verifyV2TargetAssets(input) {
   }
   for (const artifact of manifest.artifacts) {
     const path = join(targetDir, artifact.name)
-    const [bytes, file] = await Promise.all([readFile(path), stat(path)])
+    const file = await stat(path)
+    const hash = createHash('sha512')
+    for await (const chunk of createReadStream(path)) hash.update(chunk)
     if (
       file.size !== artifact.size ||
-      createHash('sha512').update(bytes).digest('base64') !== artifact.sha512
+      hash.digest('base64') !== artifact.sha512
     ) {
       throw new Error(`Target Manifest does not match release asset: ${artifact.name}`)
     }
@@ -72,7 +75,11 @@ export async function verifyV2TargetAssets(input) {
     value?.version !== manifest.version ||
     !Array.isArray(value?.files) ||
     value.files.length !== 1 ||
-    value.files[0]?.url !== updateAsset.name
+    value.files[0]?.url !== updateAsset.name ||
+    value.files[0]?.sha512 !== updateAsset.sha512 ||
+    value.files[0]?.size !== updateAsset.size ||
+    value.path !== updateAsset.name ||
+    value.sha512 !== updateAsset.sha512
   ) {
     throw new Error('Target updater metadata is invalid.')
   }

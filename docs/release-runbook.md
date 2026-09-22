@@ -2,13 +2,13 @@
 
 ## 当前发布状态
 
-截至 2026-09-22，公网 Candidate 指针为 `1.0.0-rc.17`，缓存策略为 60 秒；Stable 指针尚未创建。仓库正在准备首个 `v1.0.0` Stable，版本、生产服务环境和发布策略已切换到正式渠道。正式 tag 只能在三平台构建、签名/公证、干净安装、覆盖安装、Candidate N→N+1 和同源整包兜底门禁完成后创建。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-23，公网 legacy Candidate 指针为 `1.0.0-rc.18`，缓存策略为 60 秒；Stable 指针尚未创建。rc.18 已完成构建和投放，但其沙箱 About preload 在打包后引用拆分模块，导致内测入口不可用，因此不能作为最终桥接基线。下一步必须发布并三平台验收 `v1.0.0-rc.19`，验收通过后把 legacy Candidate 指针永久冻结在 rc.19，再开始首个 `v1.0.0` v2 Candidate/Stable 流程。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
 > 1.0 首发更新流程已经切换到 [Desktop Update v2 操作清单](releases/update-v2-operator-checklist.md)。
 > `.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 仅负责
-> `v1.0.0-rc.18` legacy 桥接；日常最终 SemVer Candidate 使用 `release-v2.yml`，按目标
+> `v1.0.0-rc.19` legacy 桥接；日常最终 SemVer Candidate 使用 `release-v2.yml`，按目标
 > `stage-target → publish-candidate → accept-target`，三个目标完成后再以
 > `promote-stable` 转正，期间不重新构建已验收字节。
 
@@ -55,7 +55,10 @@ Bundle ID 与包内 `insightDesktopAppId` 必须一致；Candidate 不增加 `.c
 - Candidate 与 Stable 必须从 `main` 上可追溯的提交构建。进入版本冻结后如仍需并行开发，可从 `main` 创建短生命周期 `release/vX.Y.Z`，只接收该版本的阻断修复；发布或取消后合回 `main` 并删除。
 - `dzm/` 开头的本地或远端分支，以及作者或提交者身份为 `duzhimeng` 的提交，永久只作为产品意图 Demo 进行只读参考。禁止通过 merge、cherry-pick、rebase、squash、补丁搬运或直接复制代码进入本项目；需要的产品能力必须从当前 `main` 独立设计、独立实现并重新测试。发布前必须确认候选历史不包含这些分支的祖先提交，也不包含该作者或提交者身份。
 - Candidate 使用不可复用的 `vX.Y.Z-rc.N`，Stable 使用 `vX.Y.Z`。候选 OSS 前缀在未公开期间允许覆盖；禁止移动 tag、覆盖已公开 GitHub/正式 OSS 资产或回写低版本渠道指针。
-- 发布前的版本号、策略和 Runtime 锁调整使用独立提交；正式 tag 只打在测试、构建和人工门禁均通过的提交上。
+- 发布前的版本号、策略和 Runtime 锁调整使用独立提交。legacy RC tag 由构建 workflow 创建；
+  v2 最终 SemVer tag 在首个目标构建前、源代码测试通过后作为不可移动的版本预约创建，
+  不代表已经发布。只有三平台构建和人工验收全部通过后才能公开对应 GitHub Release 并提交
+  Stable 指针。
 
 ## 进入安装包构建前
 
@@ -184,8 +187,11 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 移动任一 `desktop/candidate-v2/<target>/current.json` 前，发布器和客户端都会校验
 Candidate 的 `writesDataSchema` 是否落在恢复基线的 `readsDataSchema` 范围内。已有
 Stable 时，恢复基线只能来自完整签名链验证后的 Stable 目标；首个 Stable 尚未发布时，
-只能使用版本精确为 `v1.0.0-rc.18` 的已签名桥接包。Stable 指针存在但签名、Index、
+只能使用版本精确为 `v1.0.0-rc.19` 的已签名桥接包。Stable 指针存在但签名、Index、
 Manifest 或摘要损坏时必须停止，禁止静默退回桥接包。
+发布 Candidate 前还必须从 OSS 和 CDN 校验当前目标恢复 DMG/NSIS 的存在、HEAD 长度、Range
+响应与 SHA-512；
+只验证兼容数字或 Manifest URL 不足以通过恢复门禁。
 
 内测更新窗口的“下载正式版完整安装包”只打开上述可信恢复基线中的 DMG/NSIS URL，
 不接受渲染进程传入的地址，也不启用 electron-updater 降级。恢复验收步骤：

@@ -17,7 +17,7 @@ on:
           - win32-x64
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-release-v2-${{ inputs.version }}
@@ -26,12 +26,16 @@ concurrency:
 jobs:
   initialize:
     name: Pin release source and Draft
+    environment: desktop-release
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,7 +45,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = 'refs/heads/main'
+          npm run typecheck
+          npm test
+          npm run build:desktop-integration
+          npx electron-vite build
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
           node scripts/verify-release-v2-workflow.mjs .github/workflows/release-v2.yml
+          node scripts/verify-publish-v2-workflow.mjs .github/workflows/publish-update-v2.yml
           node --check scripts/prepare-update-v2-draft.mjs
           node --check scripts/upload-update-v2-target.mjs
       - name: Create or verify immutable Tag and Draft
@@ -74,6 +84,7 @@ jobs:
         with:
           ref: refs/tags/v${{ inputs.version }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -123,6 +134,7 @@ jobs:
           set -euo pipefail
           ulimit -n 65536
           npm run package:release:mac:arm64
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
       - name: Test prepared Runtime
         run: npm test
       - name: Certify and verify Apple Silicon distribution
@@ -182,6 +194,7 @@ jobs:
         with:
           ref: refs/tags/v${{ inputs.version }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -231,6 +244,7 @@ jobs:
           set -euo pipefail
           ulimit -n 65536
           npm run package:release:mac:x64
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
       - name: Test prepared Runtime
         run: npm test
       - name: Certify and verify Intel distribution
@@ -290,6 +304,7 @@ jobs:
         with:
           ref: refs/tags/v${{ inputs.version }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -303,6 +318,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           npm run package:release:win
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
           $installer = "insight-$($env:RELEASE_VERSION)-windows-x64-setup.exe"
           $appExecutable = 'dist/win-unpacked/因赛AI.exe'
           node scripts/verify-packaged-update-config.mjs 'dist/win-unpacked/resources'
@@ -323,6 +339,8 @@ jobs:
 
   append-draft:
     name: Sign target manifest and append immutable Draft assets
+    permissions:
+      contents: write
     needs:
       - initialize
       - darwin-arm64
@@ -344,6 +362,7 @@ jobs:
         with:
           ref: refs/tags/v${{ inputs.version }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

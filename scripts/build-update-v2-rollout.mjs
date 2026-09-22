@@ -69,6 +69,7 @@ export async function buildV2Rollout(input) {
   const referencedBytes = await readFile(resolve(input.referencedFile))
   const payload = parseV2RolloutPayload({
     schema: UPDATE_V2_SCHEMAS.rollout,
+    state: 'active',
     track: input.track,
     version: input.version,
     ...(input.track === 'candidate' ? { target: input.target } : {}),

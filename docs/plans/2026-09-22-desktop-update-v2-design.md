@@ -20,7 +20,8 @@ v2 将“制品是什么”与“向谁投放”分离。开发验证仍可按�
 - Stable 只接受三个目标齐全且全部通过验收的版本。
 - Candidate 转正时复用完全相同的安装包、更新元数据和 blockmap。
 - 保留签名、摘要、不可覆盖目录、单调指针和强制更新离线缓存等安全属性。
-- 用 `v1.0.0-rc.18` 将现有 rc.17 用户迁移到 v2。
+- 用 `v1.0.0-rc.19` 将现有 rc.17 用户迁移到 v2；rc.18 因打包后的 About preload
+  不可用而被废弃。
 
 ## 非目标
 
@@ -85,8 +86,9 @@ Track 只描述投放受众，不再描述安装包身份：
 - Candidate 投放策略固定为 `optional`。
 - 关闭开关只影响未来检查，不删除数据、不卸载、不降级。
 
-如果当前 Candidate 后续转正，客户端通过签名 Stable 投放记录确认当前版本已经
-进入 Stable，并显示“当前版本已转为正式版”，不重新下载。
+如果当前 Candidate 后续转正，客户端通过签名 Stable 投放记录和本地 Candidate 安装
+标记确认当前版本确实由 Candidate 安装，再显示“当前版本已转为正式版”，不重新下载。
+仅加入过内测或仅检查过 Candidate 不足以显示该状态。
 
 ## 本地偏好
 
@@ -178,9 +180,10 @@ Index 只有在三个 Target Manifest 的版本、Commit、Runtime 和兼容声�
 }
 ```
 
-Candidate payload 引用一个目标 Manifest；Stable payload 引用完整 Release Index。
-payload 同时携带 Track、版本、目标（Candidate）、被引用对象摘要、`optional|required`
-策略和最低支持版本。Candidate 构建器只允许 `optional`。
+Candidate active payload 引用一个目标 Manifest；Stable payload 引用完整 Release Index。
+payload 同时携带 `active|rejected` 状态、Track、版本、目标（Candidate）、被引用对象摘要、
+`optional|required` 策略和最低支持版本。Candidate 构建器只允许 `optional`，Stable 只允许
+`active`。
 
 Candidate 路径：
 
@@ -196,12 +199,23 @@ Stable 路径保持：
 desktop/stable/current.json
 ```
 
+legacy schema 1 指针只允许出现在 `desktop/candidate/current.json`。v2 Stable 信封必须
+声明 `track=stable` 且不能携带目标；每个平台的 Candidate 信封必须声明
+`track=candidate` 并与 URL 中的目标完全一致，防止把合法签名信封跨路径重放。
+
 ## 检查与安装流程
 
 ### 自动检查
 
 自动检查永远解析 Stable 信封。客户端验证：信封签名、版本单调性、Release Index
 签名与摘要、目标 Manifest 签名与摘要、目标资产集合以及本机系统版本。
+设备从未验证过 Stable 指针且首个 Stable 尚未创建时，HTTP 404 表示“暂无正式更新”；设备
+一旦验证过 Stable 指针，后续 404 必须安全失败，不能把指针删除伪装成“没有更新”。
+
+客户端在 `<userData>/updates/rollout-history.json` 记录每个 Stable/Candidate 目标已验证的
+最高版本、状态和信封摘要。同一路径回到更低版本，或同一状态、同一版本出现不同信封字节
+时安全失败；唯一允许的同版本变更是由签名 `active` 单向进入签名 `rejected`，禁止重新激活。
+网络元数据响应限制为 4 MiB，并在流式读取期间受统一请求超时约束。
 
 ### 手动 Candidate 检查
 
@@ -225,7 +239,8 @@ v2 把策略从 Target Manifest 分离后，强制更新缓存必须保存完整
 
 ## 单平台构建与制品汇集
 
-首次构建某版本时创建不可移动的 `vX.Y.Z` Tag，并把 Commit 记录到 Draft Release。
+受保护 `desktop-release` Environment 批准后，先运行类型检查、全量测试、桌面 bundle 构建和
+沙箱 preload 自包含校验，再创建不可移动的 `vX.Y.Z` Tag，并把 Commit 记录到 Draft Release。
 构建失败或版本被拒绝时 Tag 仍保留，版本视为已消耗。
 
 后续补建目标必须：
@@ -252,7 +267,13 @@ Draft → Target Staged → Candidate Published → Target Accepted
 - `Target Accepted`：人工完成该目标安装和升级验收。
 - `Complete Release`：三个目标均已验收，生成并验证 Release Index。
 - `Stable`：GitHub Release 公开，最后提交 Stable 投放信封。
-- `Rejected`：版本不可重新使用；已发布 Candidate 只能由更高版本修复。
+- `Rejected`：版本不可重新使用；已发布 Candidate 指针原位切换为同版本签名 tombstone，
+  客户端拒绝安装，后续修复只能使用更高版本。
+
+验收记录和拒绝记录都由产品更新密钥签名并写入不可变版本目录；缺少签名、签名无效或
+内容冲突时不能验收或转正。拒绝记录一经写入，后续 stage、Candidate 投放、验收和 Stable
+推广全部终止。即使 GitHub Release 已公开，只要 Stable 指针尚未提交，仍允许执行拒绝流程并
+把 Release 标记为 prerelease/REJECTED；Stable 指针已经指向该版本后则禁止撤回。
 
 Stable 推广要求三个 Candidate 指针均指向同一版本。该版本在首次创建时必须严格
 高于当时的 Stable、旧版 Candidate 和三个 v2 Candidate 指针；推广时允许三个当前
@@ -261,8 +282,10 @@ Candidate 指针与待转正版本相等。推广重新下载并校验每个远�
 ## Candidate 故障恢复
 
 Candidate 发布前必须证明其 `writesDataSchema` 可由恢复基线的读取范围覆盖。恢复基线
-通常是当前 Stable；首个 Stable 尚未发布时，恢复基线是已验证的 rc.18 桥接版。
-不满足该条件的不可逆迁移不进入 v2 首期发布范围。
+通常是当前 Stable；首个 Stable 尚未发布时，恢复基线是已验证的 rc.19 桥接版。
+发布器除校验签名链和 Schema 范围外，还必须从 OSS 和 CDN 校验当前目标恢复 DMG/NSIS
+的存在、HEAD 长度、Range 响应和流式 SHA-512。不满足任一条件的不可逆迁移不进入 v2
+首期发布范围。
 
 内测确认文案明确说明：
 
@@ -275,17 +298,18 @@ Candidate 发布前必须证明其 `writesDataSchema` 可由恢复基线的读�
 当前 Stable（首发前使用已验证桥接版）整包覆盖安装不会要求删除用户数据。macOS
 和 Windows 都必须把该路径纳入人工验收。
 
-## rc.18 桥接
+## rc.19 桥接
 
-`v1.0.0-rc.18` 是计划中的最后一个 v1 Candidate。只有三平台桥接验收通过后才冻结
-旧指针；如果 rc.18 被拒绝，必须消耗该版本并用更高的 legacy RC 重新验证：
+`v1.0.0-rc.18` 已因沙箱 About preload 的生产打包缺陷被消耗。`v1.0.0-rc.19` 是新的
+最终 v1 Candidate；只有三平台桥接验收通过后才冻结旧指针。如果 rc.19 被拒绝，必须
+继续消耗该版本并用更高的 legacy RC 重新验证：
 
 1. 继续使用 Candidate 包元数据和 v1 `candidate/current.json`；
 2. 包含 v2 协议、内测偏好和手动 Candidate 检查能力；
 3. 首次启动时，如果偏好不存在，自动写入 `candidateOptIn=true`；
 4. 安装后停止 Candidate 后台检查；
 5. 允许手动从 Candidate v2 目标指针升级到正式编号版本；
-6. 旧 `candidate/current.json` 永久保持指向最终通过验收的桥接版本，预期为 rc.18。
+6. 旧 `candidate/current.json` 永久保持指向最终通过验收的桥接版本，预期为 rc.19。
 
 因此仍停留在 rc.17 的用户以后启动时仍能取得已验证桥接版，不会因 v2 指针改为
 正式版本号而被遗留。
@@ -293,6 +317,7 @@ Candidate 发布前必须证明其 `writesDataSchema` 可由恢复基线的读�
 ## 安全失败语义
 
 - 任一签名、摘要、目标、版本或 Commit 不匹配时不下载、不移动指针。
+- updater YAML 必须把文件名、大小和 SHA-512 精确绑定到 Target Manifest 中的 zip/NSIS。
 - Candidate 指针按目标严格递增；Stable 指针全局严格递增。
 - 发布器对所有指针执行 compare-and-check；指针并发变化时停止。
 - Stable 推广先公开已验证 GitHub Release，最后原子写入 Stable 信封；中断后可用相同
@@ -302,8 +327,9 @@ Candidate 发布前必须证明其 `writesDataSchema` 可由恢复基线的读�
 
 ## 验收矩阵
 
-- rc.17 自动发现、下载、安装 rc.18。
-- rc.18 没有 Candidate 后台检查，但能手动发现 `1.0.0` Candidate v2。
+- rc.17 自动发现、下载、安装 rc.19。
+- rc.18 内部测试机人工安装 rc.19；rc.18 不会通过 Stable-only 后台任务发现 legacy rc.19。
+- rc.19 没有 Candidate 后台检查，但能手动发现 `1.0.0` Candidate v2。
 - 新 Stable 安装默认关闭内测。
 - 开启内测后只有主动点击才产生 Candidate 网络请求。
 - 单平台 Candidate 不影响另外两个平台。

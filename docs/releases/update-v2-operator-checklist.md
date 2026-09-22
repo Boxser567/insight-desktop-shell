@@ -1,6 +1,6 @@
 # Desktop Update v2 操作清单
 
-本清单用于 `v1.0.0-rc.18` 桥接、按目标测试最终版本、拒绝失败版本，以及把同一批
+本清单用于 `v1.0.0-rc.19` 桥接、按目标测试最终版本、拒绝失败版本，以及把同一批
 已验收字节转为 Stable。任何签名、摘要、身份、兼容或 CDN 门禁失败都必须停止，禁止
 覆盖 tag、Release Asset 或 OSS 不可变对象。
 
@@ -16,22 +16,25 @@
 - [ ] `node scripts/verify-publish-v2-workflow.mjs .github/workflows/publish-update-v2.yml`
 - [ ] `git diff --check`
 
-## 1. 发布 rc.18 桥接包
+## 1. 发布 rc.19 桥接包
 
-旧 `.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 在 rc.18 后只
-用于桥接维护，不再创建新的日常 Candidate。
+rc.18 因打包后的沙箱 About preload 引用拆分模块而被拒绝。旧
+`.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 在 rc.19 后只用于
+桥接维护，不再创建新的日常 Candidate。
 
 - [ ] 从已审核提交创建短期分支，设置 `package.json` / lock / policy 为
-  `1.0.0-rc.18`、`candidate`、`optional`。
-- [ ] 运行 `Release desktop installers`：`candidate_tag=v1.0.0-rc.18`，`target=all`。
+  `1.0.0-rc.19`、`candidate`、`optional`。
+- [ ] 运行 `Release desktop installers`：`candidate_tag=v1.0.0-rc.19`，`target=all`。
 - [ ] 核对三端签名/公证、Runtime 测试、Manifest 和 Draft 资产。
 - [ ] 运行 `Publish desktop updates` 的 `stage`，然后以精确版本确认执行 `promote`。
 - [ ] 在 rc.17 的 macOS arm64、macOS x64、Windows x64 实机验证自动发现、下载、安装、
   重启和 userData 连续性。
-- [ ] 确认 rc.18 首次启动写入 `candidateOptIn=true`，但启动、六小时和恢复定时任务只检查
+- [ ] 确认 rc.19 首次启动写入 `candidateOptIn=true`，但启动、六小时和恢复定时任务只检查
   Stable；Candidate 只在用户点击“检查内测更新”后执行。
-- [ ] 冻结 `desktop/candidate/current.json` 在 rc.18。失败时废弃 rc.18 并使用更高 legacy
-  RC，禁止替换 rc.18 字节。
+- [ ] 从 rc.17 三平台验证自动发现 rc.19；已安装 rc.18 的内部测试机因只执行 Stable 后台
+  检查，必须人工安装 rc.19，不能把它计为自动升级通过。
+- [ ] 冻结 `desktop/candidate/current.json` 在 rc.19。失败时废弃 rc.19 并使用更高 legacy
+  RC，禁止替换 rc.19 字节。
 
 ## 2. 初始化最终版本并按目标构建
 
@@ -63,17 +66,21 @@
 4. 完成干净安装、覆盖安装、上一接受版本到当前版本、连续三次重启、主题、完整安装包恢复、
    userData、账号、会话、工作区、设置和插件验证。
 5. `command=accept-target`，填写相同版本和目标。验收记录包含操作者、run、时间、目标与
-   Target Manifest 摘要，写入后不可覆盖。
+   Target Manifest 摘要，以产品更新密钥签名后写入且不可覆盖。
 
-任一目标失败时运行 `reject-version`，填写精确版本确认和简短原因。拒绝不会删除资产或回滚
-指针；修复必须使用全局更高的最终 SemVer。
+任一目标失败时运行 `reject-version`，填写精确版本确认和简短原因。拒绝不会删除资产；已
+指向该版本的 Candidate 指针会原位提交同版本签名 `rejected` tombstone，GitHub Release 会
+标记为 prerelease/REJECTED，客户端后续检查必须拒绝安装。即使 Release 已公开但 Stable 指针
+尚未提交也可执行该动作；Stable 指针已经指向该版本后禁止撤回。修复必须使用全局更高的最终
+SemVer。
 
 ## 4. 转为 Stable（不重新构建）
 
 - [ ] 三个 Candidate 指针均指向相同版本。
 - [ ] 三个不可变验收记录均存在且摘要匹配。
 - [ ] 三个 Target Manifest 的 Shell commit、Runtime、兼容声明和版本完全一致。
-- [ ] Candidate `writesDataSchema` 可由当前 Stable 读取；首个 Stable 前由签名 rc.18 桥接包读取。
+- [ ] Candidate `writesDataSchema` 可由当前 Stable 读取；首个 Stable 前由签名 rc.19 桥接包读取。
+- [ ] 对应目标的恢复 DMG/NSIS 已从 OSS 与 CDN 按 Manifest 长度和 SHA-512 校验通过。
 - [ ] 运行 `Publish desktop v2 updates`：`command=promote-stable`、`target=none`、
   `version=<精确版本>`、`confirm_version=<精确版本>`。
 - [ ] 确认发布器生成并签名 Release Index、追加到 GitHub Draft 和 OSS，先公开 GitHub Release，
@@ -96,6 +103,6 @@
 - [ ] 安装资产支持 HTTPS、HEAD 和 Range，无重定向或字节改写。
 - [ ] CDN 下载摘要与 Target Manifest 完全一致。
 - [ ] 报告中不包含更新私钥、OIDC Token、STS 凭证、用户路径或完整异常响应。
-- [ ] rc.17 仍能通过冻结的 legacy Candidate 指针到达 rc.18。
+- [ ] rc.17 仍能通过冻结的 legacy Candidate 指针到达 rc.19。
 
 只有以上证据齐全后才清理不再被 legacy 或 v2 指针引用的旧 Draft/Release；不得先删除再验证。

@@ -7,10 +7,12 @@ import semver from 'semver'
 import {
   readRequiredUpdatePolicy,
   requiredUpdatePolicyPath,
+  writeRequiredUpdatePolicy,
   writeRequiredUpdatePolicyV2
 } from '../src/main/update/required-update-policy'
 import { ElectronUpdateExecutor, type ExecutorEvent, type UpdateExecutor } from '../src/main/update/update-executor'
 import { UpdateManager, type UpdateManagerTimers } from '../src/main/update/update-manager'
+import { candidateInstallPath, writeCandidateInstall } from '../src/main/update/candidate-install'
 import {
   createUpdatePreferenceService,
   migrateLegacyCandidatePreference,
@@ -22,6 +24,7 @@ import { updateViewModel } from '../src/renderer/src/update-view-model'
 import { shouldShowUpdateEntry } from '../src/shared/update-visibility'
 import type {
   RolloutPayload,
+  SignedReleaseManifest,
   SignedReleaseIndex,
   SignedTargetManifest,
   UpdateStatus
@@ -84,13 +87,14 @@ function releaseFixture() {
   const resolved = (track: 'candidate' | 'stable'): ResolvedV2Release => {
     const payload: RolloutPayload = {
       schema: 'insight-desktop-rollout/v2',
+      state: 'active',
       track,
       version: '1.0.0',
       ...(track === 'candidate' ? { target: 'darwin-arm64' as const } : {}),
       referencedSha512: track === 'candidate'
         ? digest(authenticatedManifest.bytes)
         : digest(authenticatedIndex.bytes),
-      policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.18' },
+      policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.19' },
       publishedAt: '2026-09-22T12:00:00.000Z'
     }
     return {
@@ -139,13 +143,15 @@ function sourceFixture(release: ReturnType<typeof releaseFixture>): V2UpdateSour
   return {
     resolve: vi.fn(async (track) => release.resolved(track)),
     resolveRecoveryBaseline: vi.fn(async () => ({
-      version: '1.0.0-rc.18',
+      version: '1.0.0-rc.19',
       source: 'bridge' as const,
       readsDataSchema: { minimum: 1, maximum: 1 },
-      manualInstallerUrl: new URL('https://updates.example.test/desktop/releases/v1.0.0-rc.18/bridge.dmg')
+      manualInstallerUrl: new URL('https://updates.example.test/desktop/releases/v1.0.0-rc.19/bridge.dmg')
     })),
     v2ReleaseBaseUrl: vi.fn(() => release.resolved('stable').releaseBaseUrl),
-    v2ManualInstallerUrl: vi.fn(() => release.resolved('stable').manualInstallerUrl)
+    v2ManualInstallerUrl: vi.fn(() => release.resolved('stable').manualInstallerUrl),
+    legacyReleaseBaseUrl: vi.fn(() => release.resolved('stable').releaseBaseUrl),
+    legacyManualInstallerUrl: vi.fn(() => release.resolved('stable').manualInstallerUrl)
   }
 }
 
@@ -173,9 +179,9 @@ async function manager(input: {
   return value
 }
 
-describe('rc.18 bridge to v2 Stable integration', () => {
-  it('moves rc.17 through rc.18 into the same Candidate and Stable 1.0.0 bytes', async () => {
-    expect(semver.gt('1.0.0-rc.18', '1.0.0-rc.17')).toBe(true)
+describe('rc.19 bridge to v2 Stable integration', () => {
+  it('moves rc.17 through rc.19 into the same Candidate and Stable 1.0.0 bytes', async () => {
+    expect(semver.gt('1.0.0-rc.19', '1.0.0-rc.17')).toBe(true)
     const nativeUpdater = {
       autoDownload: true,
       autoInstallOnAppQuit: true,
@@ -196,7 +202,7 @@ describe('rc.18 bridge to v2 Stable integration', () => {
     await expect(migrateLegacyCandidatePreference({
       path: preferencePath,
       packagedChannel: 'candidate',
-      currentVersion: '1.0.0-rc.18'
+      currentVersion: '1.0.0-rc.19'
     })).resolves.toBe(true)
 
     const release = releaseFixture()
@@ -204,7 +210,7 @@ describe('rc.18 bridge to v2 Stable integration', () => {
     const candidateTimers = new Timers()
     const candidateExecutor = new Executor()
     const candidate = await manager({
-      currentVersion: '1.0.0-rc.18', userData, source,
+      currentVersion: '1.0.0-rc.19', userData, source,
       timers: candidateTimers, executor: candidateExecutor
     })
     expect(candidateTimers.timeouts).toHaveLength(1)
@@ -218,6 +224,17 @@ describe('rc.18 bridge to v2 Stable integration', () => {
     expect(shouldShowUpdateEntry(candidateStatus)).toBe(false)
     expect(candidateExecutor.check).toHaveBeenCalledOnce()
     await candidate.stop()
+
+    const unprovenStable = await manager({
+      currentVersion: '1.0.0', userData, source,
+      timers: new Timers(), executor: new Executor()
+    })
+    await unprovenStable.check('stable', true)
+    expect(unprovenStable.status()).toMatchObject({ phase: 'up-to-date' })
+    expect(unprovenStable.status()).not.toHaveProperty('promotedFromCandidate')
+    await unprovenStable.stop()
+
+    await writeCandidateInstall(candidateInstallPath(userData), '1.0.0')
 
     const stableExecutor = new Executor()
     const stable = await manager({
@@ -271,14 +288,69 @@ describe('rc.18 bridge to v2 Stable integration', () => {
       path,
       publicKeyPem,
       target: { channel: 'stable', platform: 'darwin', arch: 'arm64' },
-      currentVersion: '1.0.0-rc.18'
+      currentVersion: '1.0.0-rc.19'
     })).resolves.toMatchObject({ schema: 2, manifest: { version: '1.0.0' } })
+  })
+
+  it('keeps enforcing a cached required v1 policy after switching to the v2 source', async () => {
+    const release = releaseFixture()
+    const checksum = Buffer.alloc(64, 9).toString('base64')
+    const manifest: SignedReleaseManifest = {
+      schema: 'insight-desktop-update/v1',
+      version: '1.0.0',
+      channel: 'stable',
+      publishedAt: '2026-09-22T12:00:00.000Z',
+      shellCommit: 'a'.repeat(40),
+      coreRuntime: { tag: 'runtime-v1', commit: 'b'.repeat(40) },
+      policy: { mode: 'required', minimumSupportedVersion: '1.0.0' },
+      compatibility: {
+        profileSchema: 1,
+        accountStorageSchema: 1,
+        minimumReadableDataSchema: 1,
+        maximumReadableDataSchema: 1
+      },
+      artifacts: [
+        { platform: 'darwin', arch: 'arm64', kind: 'dmg', name: 'legacy.dmg', size: 1, sha512: checksum },
+        { platform: 'darwin', arch: 'arm64', kind: 'zip', name: 'legacy.zip', size: 1, sha512: checksum },
+        { platform: 'darwin', arch: 'arm64', kind: 'blockmap', name: 'legacy.zip.blockmap', size: 1, sha512: checksum },
+        { platform: 'darwin', arch: 'arm64', kind: 'updater-metadata', name: 'latest-mac.yml', size: 1, sha512: checksum }
+      ]
+    }
+    const authenticated = signedJson(manifest)
+    const userData = await mkdtemp(join(tmpdir(), 'update-v1-required-on-v2-'))
+    temporaryDirectories.push(userData)
+    await writeRequiredUpdatePolicy({
+      path: requiredUpdatePolicyPath(userData),
+      manifestBytes: authenticated.bytes,
+      signatureBytes: authenticated.signature,
+      publicKeyPem,
+      target: { channel: 'stable', platform: 'darwin', arch: 'arm64' }
+    })
+    const source = sourceFixture(release)
+    const executor = new Executor()
+    const value = await manager({
+      currentVersion: '1.0.0-rc.19',
+      userData,
+      source,
+      timers: new Timers(),
+      executor
+    })
+
+    expect(value.status()).toMatchObject({
+      phase: 'available',
+      availableVersion: '1.0.0',
+      required: true
+    })
+    expect(source.legacyReleaseBaseUrl).toHaveBeenCalledWith('stable', '1.0.0')
+    expect(source.legacyManualInstallerUrl).toHaveBeenCalled()
+    expect(executor.useRelease).toHaveBeenCalled()
+    await value.stop()
   })
 
   it('keeps Candidate availability outside the global badge contract', () => {
     const status: UpdateStatus = {
       phase: 'available',
-      currentVersion: '1.0.0-rc.18',
+      currentVersion: '1.0.0-rc.19',
       availableVersion: '1.0.0',
       track: 'candidate',
       required: false,

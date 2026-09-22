@@ -6,6 +6,12 @@ import { release as systemRelease } from 'node:os'
 import semver from 'semver'
 import { assertCandidateRecoveryCompatible } from './v2-release-contract'
 import {
+  candidateInstallPath,
+  clearCandidateInstall,
+  readCandidateInstall,
+  writeCandidateInstall
+} from './candidate-install'
+import {
   readRequiredUpdatePolicy,
   writeRequiredUpdatePolicy,
   writeRequiredUpdatePolicyV2
@@ -36,6 +42,7 @@ import type {
   UpdateSource,
   V2UpdateSource
 } from './update-source'
+import { StablePointerNotFoundError } from './update-source'
 import type {
   ReleaseArtifact,
   SignedReleaseManifest,
@@ -261,7 +268,9 @@ export class UpdateManager {
         this.clearActiveRelease()
         const promotedFromCandidate = track === 'stable' &&
           isV2Release(release) &&
-          (await this.preferences().read()).candidateOptIn
+          version === this.options.currentVersion &&
+          (await readCandidateInstall(this.candidateInstallPath())) === version
+        if (promotedFromCandidate) await clearCandidateInstall(this.candidateInstallPath())
         this.publish(reduceUpdateState(this.statusValue, {
           type: 'up-to-date',
           ...(promotedFromCandidate ? { promotedFromCandidate: true } : {})
@@ -364,6 +373,12 @@ export class UpdateManager {
         manual
       }))
     } catch (error) {
+      if (track === 'stable' && error instanceof StablePointerNotFoundError && !cachedRequired) {
+        this.lastStableCheckedAt = this.now()
+        this.clearActiveRelease()
+        this.publish(reduceUpdateState(this.statusValue, { type: 'up-to-date' }))
+        return
+      }
       if (track === 'stable') this.lastStableCheckedAt = this.now()
       this.fail(error, previous, verifiedContext)
     }
@@ -411,10 +426,18 @@ export class UpdateManager {
       required: status.required,
       manual: status.manual
     }))
+    let candidateInstallRecorded = false
     try {
       await this.options.prepareToInstall()
+      if (status.track === 'candidate') {
+        await writeCandidateInstall(this.candidateInstallPath(), status.availableVersion)
+        candidateInstallRecorded = true
+      }
       this.options.executor.quitAndInstall()
     } catch (error) {
+      if (candidateInstallRecorded) {
+        await clearCandidateInstall(this.candidateInstallPath()).catch(() => undefined)
+      }
       this.fail(error, status)
     }
   }
@@ -489,15 +512,25 @@ export class UpdateManager {
     if (!cached) return
     this.activeManifest = cached.manifest
     if (cached.schema === 1) {
-      if (!isV1Source(this.options.source)) return
-      this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
-        cached.manifest.channel,
-        cached.manifest.version
-      )
-      this.manualInstallerUrl = this.options.source.manualInstallerUrl(
-        cached.manifest,
-        this.support.target
-      )
+      if (isV1Source(this.options.source)) {
+        this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
+          cached.manifest.channel,
+          cached.manifest.version
+        )
+        this.manualInstallerUrl = this.options.source.manualInstallerUrl(
+          cached.manifest,
+          this.support.target
+        )
+      } else {
+        this.activeReleaseBaseUrl = this.options.source.legacyReleaseBaseUrl(
+          cached.manifest.channel,
+          cached.manifest.version
+        )
+        this.manualInstallerUrl = this.options.source.legacyManualInstallerUrl(
+          cached.manifest,
+          this.support.target
+        )
+      }
     } else {
       if (!isV2Source(this.options.source)) return
       this.activeReleaseBaseUrl = this.options.source.v2ReleaseBaseUrl(
@@ -581,6 +614,10 @@ export class UpdateManager {
 
   private requiredPolicyPath(): string {
     return join(this.options.userData, 'updates', 'required-policy.json')
+  }
+
+  private candidateInstallPath(): string {
+    return candidateInstallPath(this.options.userData)
   }
 
   private preferences(): UpdatePreferenceService {

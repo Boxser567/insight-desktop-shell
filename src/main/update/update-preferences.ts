@@ -50,7 +50,7 @@ export async function migrateLegacyCandidatePreference(input: {
   }
 
   const candidateOptIn = input.packagedChannel === 'candidate' &&
-    input.currentVersion === '1.0.0-rc.18'
+    input.currentVersion === '1.0.0-rc.19'
   if (candidateOptIn) await writeCandidateOptIn(input.path, true)
   return candidateOptIn
 }
