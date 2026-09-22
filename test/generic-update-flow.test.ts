@@ -216,7 +216,7 @@ describe('Generic update production flow', () => {
     })
 
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
     expect(manager.status()).toMatchObject({
       phase: 'available',
       availableVersion: value.version

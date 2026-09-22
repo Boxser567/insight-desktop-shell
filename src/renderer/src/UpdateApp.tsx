@@ -17,7 +17,9 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
   switch (action) {
     case 'check':
     case 'retry':
-      return api.check()
+      return 'track' in status && status.track === 'candidate'
+        ? api.checkCandidate()
+        : api.checkStable()
     case 'download':
       return api.download()
     case 'download-full-installer':

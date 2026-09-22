@@ -40,3 +40,19 @@ export interface ResolvedV2Release {
   releaseBaseUrl: URL
   manualInstallerUrl: URL
 }
+
+export type AnyResolvedRelease = ResolvedRelease | ResolvedV2Release
+
+export interface V2UpdateSource {
+  resolve(
+    track: ReleaseUpdateChannel,
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): Promise<ResolvedV2Release>
+  v2ReleaseBaseUrl(version: string, target: Pick<UpdateTarget, 'platform' | 'arch'>): URL
+  v2ManualInstallerUrl(
+    manifest: SignedTargetManifest,
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): URL
+}
+
+export type AnyUpdateSource = UpdateSource | V2UpdateSource

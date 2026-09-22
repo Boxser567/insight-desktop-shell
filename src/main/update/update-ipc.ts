@@ -20,7 +20,7 @@ interface InvokeEvent {
 interface UpdateManagerApi {
   status(): UpdateStatus
   subscribe(listener: (status: UpdateStatus) => void): () => void
-  check(manual: boolean): Promise<void>
+  check(track: 'stable' | 'candidate', manual: boolean): Promise<void>
   download(): Promise<void>
   downloadFullInstaller(): Promise<void>
   install(): Promise<void>
@@ -30,7 +30,8 @@ interface UpdateManagerApi {
 const UPDATE_CHANNELS = [
   'updates:status',
   'updates:open',
-  'updates:check',
+  'updates:check-stable',
+  'updates:check-candidate',
   'updates:download',
   'updates:download-full-installer',
   'updates:install',
@@ -57,9 +58,13 @@ export function registerUpdateIpc(input: {
     assertBaseSender(event, input)
     await input.open()
   })
-  input.ipcMain.handle('updates:check', async (event) => {
+  input.ipcMain.handle('updates:check-stable', async (event) => {
     assertBaseSender(event, input)
-    await input.manager.check(true)
+    await input.manager.check('stable', true)
+  })
+  input.ipcMain.handle('updates:check-candidate', async (event) => {
+    assertUpdateWindowSender(event, input.updateWindow())
+    await input.manager.check('candidate', true)
   })
   input.ipcMain.handle('updates:download', async (event) => {
     assertBaseSender(event, input)

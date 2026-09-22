@@ -4,7 +4,7 @@ export interface DesktopUpdateApi {
   status(): Promise<UpdateStatus>
   subscribe(listener: (status: UpdateStatus) => void): () => void
   open(): Promise<void>
-  check(): Promise<void>
+  checkStable(): Promise<void>
   download(): Promise<void>
   downloadFullInstaller(): Promise<void>
   install(): Promise<void>
@@ -12,5 +12,6 @@ export interface DesktopUpdateApi {
 }
 
 export interface DesktopUpdateWindowApi extends DesktopUpdateApi {
+  checkCandidate(): Promise<void>
   quit(): Promise<void>
 }

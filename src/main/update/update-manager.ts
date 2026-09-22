@@ -6,12 +6,18 @@ import { release as systemRelease } from 'node:os'
 import semver from 'semver'
 import {
   readRequiredUpdatePolicy,
-  writeRequiredUpdatePolicy
+  writeRequiredUpdatePolicy,
+  writeRequiredUpdatePolicyV2
 } from './required-update-policy'
 import {
   readSkippedVersion,
   writeSkippedVersion
 } from './skipped-version'
+import {
+  createUpdatePreferenceService,
+  updatePreferencesPath,
+  type UpdatePreferenceService
+} from './update-preferences'
 import {
   AUTO_INSTALL_ON_APP_QUIT,
   UPDATE_CHECK_INTERVAL_MS,
@@ -22,10 +28,18 @@ import {
 } from './update-policy'
 import { initialUpdateStatus, reduceUpdateState } from './update-state'
 import type { UpdateExecutor, ExecutorEvent } from './update-executor'
-import type { ResolvedRelease, UpdateSource } from './update-source'
+import type {
+  AnyResolvedRelease,
+  AnyUpdateSource,
+  ResolvedV2Release,
+  UpdateSource,
+  V2UpdateSource
+} from './update-source'
 import type {
   ReleaseArtifact,
   SignedReleaseManifest,
+  SignedTargetManifest,
+  UpdateTrack,
   UpdateStatus
 } from '../../shared/update-contracts'
 import type { UpdateEnvironment, UpdateSupport } from './update-policy'
@@ -44,7 +58,8 @@ export interface UpdateManagerResumeSource {
 export interface UpdateManagerOptions {
   currentVersion: string
   environment: UpdateEnvironment
-  source: UpdateSource
+  source: AnyUpdateSource
+  preferences?: UpdatePreferenceService
   executor: UpdateExecutor
   publicKeyPem: string
   userData: string
@@ -83,12 +98,12 @@ export class UpdateManager {
   private intervalTimer?: unknown
   private removeResumeListener?: () => void
   private removeExecutorListener?: () => void
-  private activeManifest?: SignedReleaseManifest
+  private activeManifest?: SignedReleaseManifest | SignedTargetManifest
   private activeReleaseBaseUrl?: URL
   private manualInstallerUrl?: URL
   private executorVersion?: string
   private downloadCompletion?: DownloadCompletion
-  private lastCheckedAt?: number
+  private lastStableCheckedAt?: number
   private started = false
 
   constructor(private readonly options: UpdateManagerOptions) {
@@ -106,6 +121,7 @@ export class UpdateManager {
       this.publish({
         phase: 'unsupported',
         currentVersion: this.options.currentVersion,
+        track: 'stable',
         reason: this.support.reason,
         manual: false
       })
@@ -113,21 +129,23 @@ export class UpdateManager {
     }
 
     this.options.executor.configure({
-      channel: this.support.target.channel,
+      currentVersion: this.options.currentVersion,
       autoInstallOnQuit: AUTO_INSTALL_ON_APP_QUIT
     })
     this.removeExecutorListener = this.options.executor.on((event) => this.onExecutorEvent(event))
     await this.restoreRequiredPolicy()
     this.startupTimer = this.timers.setTimeout(
-      () => void this.check(false),
+      () => void this.check('stable', false),
       startupCheckDelay(this.random)
     )
     this.intervalTimer = this.timers.setInterval(
-      () => void this.check(false),
+      () => void this.check('stable', false),
       UPDATE_CHECK_INTERVAL_MS
     )
     this.removeResumeListener = this.options.resume?.subscribe(() => {
-      if (isUpdateCheckDue(this.lastCheckedAt, this.now())) void this.check(false)
+      if (isUpdateCheckDue(this.lastStableCheckedAt, this.now())) {
+        void this.check('stable', false)
+      }
     })
   }
 
@@ -154,13 +172,17 @@ export class UpdateManager {
     return () => this.listeners.delete(listener)
   }
 
-  check(manual: boolean): Promise<void> {
+  check(track: UpdateTrack, manual: boolean): Promise<void> {
     if (!this.started) return Promise.reject(new Error('更新管理器尚未启动。'))
+    if (track === 'candidate' && !manual) {
+      return Promise.reject(new Error('内测更新只能由用户手动检查。'))
+    }
     if (!this.support.supported) {
       if (manual) {
         this.publish({
           phase: 'unsupported',
           currentVersion: this.options.currentVersion,
+          track,
           reason: this.support.reason,
           manual: true
         })
@@ -170,7 +192,15 @@ export class UpdateManager {
     if (['checking', 'downloading', 'downloaded', 'installing'].includes(this.statusValue.phase)) {
       return Promise.resolve()
     }
-    return this.run(() => this.performCheck(manual))
+    return this.run(async () => {
+      if (track === 'candidate') {
+        const preferences = await this.preferences().read()
+        if (!preferences.candidateOptIn) {
+          throw new Error('请先在“关于因赛AI”中加入内测。')
+        }
+      }
+      await this.performCheck(track, manual)
+    })
   }
 
   download(): Promise<void> {
@@ -197,7 +227,9 @@ export class UpdateManager {
         throw new Error('只能跳过当前可用版本。')
       }
       if (status.required) return
-      await writeSkippedVersion(this.skippedVersionPath(), version)
+      if (status.track === 'stable') {
+        await writeSkippedVersion(this.skippedVersionPath(), version)
+      }
       this.clearActiveRelease()
       this.publish(initialUpdateStatus(this.options.currentVersion))
     })
@@ -207,20 +239,21 @@ export class UpdateManager {
     return this.run(() => this.performInstall())
   }
 
-  private async performCheck(manual: boolean): Promise<void> {
+  private async performCheck(track: UpdateTrack, manual: boolean): Promise<void> {
     if (!this.support.supported) return
     const previous = this.statusValue
     const cachedRequired = isRequiredStatus(previous)
+    if (cachedRequired && track === 'candidate') {
+      throw new Error('必须先完成正式强制更新。')
+    }
     let verifiedContext: ReturnType<typeof versionContext> | undefined
     if (!cachedRequired) this.clearActiveRelease()
-    this.publish(reduceUpdateState(previous, { type: 'check', manual }))
+    this.publish(reduceUpdateState(previous, { type: 'check', track, manual }))
     try {
-      const release = await this.options.source.resolve(
-        this.support.target.channel,
-        this.support.target
-      )
-      this.lastCheckedAt = this.now()
-      if (!semver.gt(release.manifest.version, this.options.currentVersion)) {
+      const release = await this.options.source.resolve(track, this.support.target)
+      if (track === 'stable') this.lastStableCheckedAt = this.now()
+      const version = releaseVersion(release)
+      if (!semver.gt(version, this.options.currentVersion)) {
         if (cachedRequired) {
           throw new Error('可信发布记录不能解除尚未满足的强制更新。')
         }
@@ -234,7 +267,10 @@ export class UpdateManager {
         if (!currentSystem || semver.lt(currentSystem, release.minimumSystemVersion)) {
           this.clearActiveRelease()
           this.publish({
-            phase: 'unsupported', currentVersion: this.options.currentVersion, manual,
+            phase: 'unsupported',
+            currentVersion: this.options.currentVersion,
+            track,
+            manual,
             reason: this.support.target.platform === 'darwin' && release.minimumSystemVersion === '22.0.0'
               ? '此更新需要 macOS 13 或更高版本，请先升级 macOS。'
               : `此更新需要系统内核版本 ${release.minimumSystemVersion} 或更高版本。`
@@ -243,55 +279,72 @@ export class UpdateManager {
         }
       }
 
-      const manifestRequiresUpdate = release.manifest.policy.mode === 'required' && semver.lt(
+      const policy = releasePolicy(release)
+      const manifestRequiresUpdate = track === 'stable' && policy.mode === 'required' && semver.lt(
         this.options.currentVersion,
-        release.manifest.policy.minimumSupportedVersion
+        policy.minimumSupportedVersion
       )
       const required = cachedRequired || manifestRequiresUpdate
       if (shouldSuppressSkippedUpdate({
-        availableVersion: release.manifest.version,
+        availableVersion: version,
         skippedVersion: await readSkippedVersion(this.skippedVersionPath()),
-        manual,
+        manual: manual || track === 'candidate',
         required
       })) {
         this.clearActiveRelease()
         this.publish(initialUpdateStatus(
           this.options.currentVersion,
-          new Date(this.lastCheckedAt).toISOString()
+          new Date(this.lastStableCheckedAt ?? this.now()).toISOString()
         ))
         return
       }
 
       verifiedContext = {
-        version: release.manifest.version,
+        version,
         required,
         manual
       }
       this.bindRelease(release)
       if (manifestRequiresUpdate) {
-        await writeRequiredUpdatePolicy({
-          path: this.requiredPolicyPath(),
-          manifestBytes: release.manifestBytes,
-          signatureBytes: release.signatureBytes,
-          publicKeyPem: this.options.publicKeyPem,
-          target: this.support.target
-        })
-      } else if (!cachedRequired) {
+        if (isV2Release(release)) {
+          if (!release.releaseIndexBytes || !release.releaseIndexSignatureBytes) {
+            throw new Error('Stable 更新缺少完整 Release Index 可信链。')
+          }
+          await writeRequiredUpdatePolicyV2({
+            path: this.requiredPolicyPath(),
+            rolloutEnvelopeBytes: release.rolloutEnvelopeBytes,
+            releaseIndexBytes: release.releaseIndexBytes,
+            releaseIndexSignatureBytes: release.releaseIndexSignatureBytes,
+            targetManifestBytes: release.manifestBytes,
+            targetManifestSignatureBytes: release.signatureBytes,
+            publicKeyPem: this.options.publicKeyPem,
+            target: { ...this.support.target, channel: 'stable' }
+          })
+        } else {
+          await writeRequiredUpdatePolicy({
+            path: this.requiredPolicyPath(),
+            manifestBytes: release.manifestBytes,
+            signatureBytes: release.signatureBytes,
+            publicKeyPem: this.options.publicKeyPem,
+            target: { ...this.support.target, channel: 'stable' }
+          })
+        }
+      } else if (!cachedRequired && track === 'stable') {
         await rm(this.requiredPolicyPath(), { force: true })
       }
       const executorUpdate = await this.options.executor.check()
-      if (executorUpdate?.version !== release.manifest.version) {
+      if (executorUpdate?.version !== version) {
         throw new Error('平台更新器版本与可信发布记录不一致。')
       }
       this.executorVersion = executorUpdate.version
       this.publish(reduceUpdateState(this.statusValue, {
         type: 'available',
-        version: release.manifest.version,
+        version,
         required,
         manual
       }))
     } catch (error) {
-      this.lastCheckedAt = this.now()
+      if (track === 'stable') this.lastStableCheckedAt = this.now()
       this.fail(error, previous, verifiedContext)
     }
   }
@@ -410,24 +463,39 @@ export class UpdateManager {
     const cached = await readRequiredUpdatePolicy({
       path: this.requiredPolicyPath(),
       publicKeyPem: this.options.publicKeyPem,
-      target: this.support.target,
+      target: { ...this.support.target, channel: 'stable' },
       currentVersion: this.options.currentVersion
     })
     if (!cached) return
-    // v2 required policies are restored by the track-aware manager wiring.
-    if (cached.schema !== 1) return
     this.activeManifest = cached.manifest
-    this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
-      cached.manifest.channel,
-      cached.manifest.version
-    )
-    this.manualInstallerUrl = this.options.source.manualInstallerUrl(
-      cached.manifest,
-      this.support.target
-    )
+    if (cached.schema === 1) {
+      if (!isV1Source(this.options.source)) return
+      this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
+        cached.manifest.channel,
+        cached.manifest.version
+      )
+      this.manualInstallerUrl = this.options.source.manualInstallerUrl(
+        cached.manifest,
+        this.support.target
+      )
+    } else {
+      if (!isV2Source(this.options.source)) return
+      this.activeReleaseBaseUrl = this.options.source.v2ReleaseBaseUrl(
+        cached.manifest.version,
+        this.support.target
+      )
+      this.manualInstallerUrl = this.options.source.v2ManualInstallerUrl(
+        cached.manifest,
+        this.support.target
+      )
+    }
     this.options.executor.useRelease(this.activeReleaseBaseUrl)
     this.publish(reduceUpdateState(
-      reduceUpdateState(this.statusValue, { type: 'check', manual: false }),
+      reduceUpdateState(this.statusValue, {
+        type: 'check',
+        track: 'stable',
+        manual: false
+      }),
       {
         type: 'available',
         version: cached.manifest.version,
@@ -472,7 +540,7 @@ export class UpdateManager {
     for (const listener of this.listeners) listener(status)
   }
 
-  private bindRelease(release: ResolvedRelease): void {
+  private bindRelease(release: AnyResolvedRelease): void {
     this.activeManifest = release.manifest
     this.activeReleaseBaseUrl = release.releaseBaseUrl
     this.manualInstallerUrl = release.manualInstallerUrl
@@ -494,6 +562,12 @@ export class UpdateManager {
   private requiredPolicyPath(): string {
     return join(this.options.userData, 'updates', 'required-policy.json')
   }
+
+  private preferences(): UpdatePreferenceService {
+    return this.options.preferences ?? createUpdatePreferenceService(
+      updatePreferencesPath(this.options.userData)
+    )
+  }
 }
 
 async function verifyFile(path: string, artifact: ReleaseArtifact): Promise<void> {
@@ -509,7 +583,7 @@ async function verifyFile(path: string, artifact: ReleaseArtifact): Promise<void
 }
 
 function downloadedArtifact(
-  manifest: SignedReleaseManifest,
+  manifest: SignedReleaseManifest | SignedTargetManifest,
   platform: string,
   arch: string
 ): ReleaseArtifact {
@@ -561,6 +635,29 @@ function versionContext(status: UpdateStatus): {
     return { required: false, manual: status.manual }
   }
   return { required: false, manual: false }
+}
+
+function isV2Release(release: AnyResolvedRelease): release is ResolvedV2Release {
+  return 'rollout' in release
+}
+
+function releaseVersion(release: AnyResolvedRelease): string {
+  return release.manifest.version
+}
+
+function releasePolicy(release: AnyResolvedRelease): {
+  mode: 'optional' | 'required'
+  minimumSupportedVersion: string
+} {
+  return isV2Release(release) ? release.rollout.policy : release.manifest.policy
+}
+
+function isV1Source(source: AnyUpdateSource): source is UpdateSource {
+  return 'releaseBaseUrl' in source
+}
+
+function isV2Source(source: AnyUpdateSource): source is V2UpdateSource {
+  return 'v2ReleaseBaseUrl' in source
 }
 
 function deferred(): DownloadCompletion {

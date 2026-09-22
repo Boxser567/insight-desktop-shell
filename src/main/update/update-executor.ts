@@ -5,7 +5,7 @@ import type {
   UpdateDownloadedEvent,
   UpdateInfo
 } from 'electron-updater'
-import type { ReleaseUpdateChannel } from '../../shared/update-contracts'
+import semver from 'semver'
 
 export interface ExecutorUpdate {
   version: string
@@ -20,7 +20,7 @@ export type ExecutorEvent =
 
 export interface UpdateExecutor {
   configure(options: {
-    channel: ReleaseUpdateChannel
+    currentVersion: string
     autoInstallOnQuit: false
   }): void
   useRelease(baseUrl: URL): void
@@ -57,12 +57,15 @@ export class ElectronUpdateExecutor implements UpdateExecutor {
   }
 
   configure(options: {
-    channel: ReleaseUpdateChannel
+    currentVersion: string
     autoInstallOnQuit: false
   }): void {
+    if (semver.valid(options.currentVersion) !== options.currentVersion) {
+      throw new Error('当前客户端版本不是合法语义版本。')
+    }
     this.updater.autoDownload = false
     this.updater.autoInstallOnAppQuit = options.autoInstallOnQuit
-    this.updater.allowPrerelease = options.channel === 'candidate'
+    this.updater.allowPrerelease = semver.prerelease(options.currentVersion) !== null
     this.updater.allowDowngrade = false
   }
 

@@ -9,7 +9,7 @@ import type {
   UpdateTrack
 } from '../../shared/update-contracts'
 import type { UpdateDistribution } from './update-environment'
-import type { ResolvedV2Release } from './update-source'
+import type { ResolvedV2Release, V2UpdateSource } from './update-source'
 import { UPDATE_SOURCE_REQUEST_TIMEOUT_MS } from './generic-release-source'
 import {
   updateTargetId,
@@ -34,7 +34,7 @@ export interface V2ReleaseSourceOptions {
   fetch?: FetchImplementation
 }
 
-export class V2ReleaseSource {
+export class V2ReleaseSource implements V2UpdateSource {
   readonly #distribution: UpdateDistribution
   readonly #publicKeyPem: string
   readonly #fetch: FetchImplementation
@@ -145,6 +145,26 @@ export class V2ReleaseSource {
       releaseBaseUrl,
       manualInstallerUrl: this.manualInstallerUrl(manifest, targetId)
     }
+  }
+
+  v2ReleaseBaseUrl(
+    version: string,
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): URL {
+    return this.#distribution.v2TargetBaseUrl(
+      version,
+      updateTargetId(target.platform, target.arch)
+    )
+  }
+
+  v2ManualInstallerUrl(
+    manifest: SignedTargetManifest,
+    target: Pick<UpdateTarget, 'platform' | 'arch'>
+  ): URL {
+    return this.manualInstallerUrl(
+      manifest,
+      updateTargetId(target.platform, target.arch)
+    )
   }
 
   manualInstallerUrl(manifest: SignedTargetManifest, target: UpdateTargetId): URL {

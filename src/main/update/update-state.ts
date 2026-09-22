@@ -1,7 +1,7 @@
-import type { UpdateStatus } from '../../shared/update-contracts'
+import type { UpdateStatus, UpdateTrack } from '../../shared/update-contracts'
 
 export type UpdateStateEvent =
-  | { type: 'check'; manual: boolean }
+  | { type: 'check'; track: UpdateTrack; manual: boolean }
   | { type: 'available'; version: string; required: boolean; manual: boolean }
   | { type: 'progress'; version: string; required: boolean; percent: number; manual: boolean }
   | { type: 'downloaded'; version: string; required: boolean; manual: boolean }
@@ -29,35 +29,45 @@ export function reduceUpdateState(
   switch (event.type) {
     case 'check':
       assertPhase(state, event.type, ['idle', 'available', 'up-to-date', 'unsupported', 'error'])
-      return { phase: 'checking', currentVersion: state.currentVersion, manual: event.manual }
+      return {
+        phase: 'checking',
+        currentVersion: state.currentVersion,
+        track: event.track,
+        manual: event.manual
+      }
     case 'available':
       assertPhase(state, event.type, ['checking'])
       requireVersion(event.version)
       assertManual(state, event.manual)
-      return updateVersionStatus('available', state.currentVersion, event)
+      return updateVersionStatus('available', state.currentVersion, state.track, event)
     case 'progress':
       assertPhase(state, event.type, ['available', 'downloading'])
       requireVersion(event.version)
       assertUpdateContext(state, event)
       if (!Number.isFinite(event.percent)) throw new Error('更新下载进度必须是有限数字。')
       return {
-        ...updateVersionStatus('downloading', state.currentVersion, event),
+        ...updateVersionStatus('downloading', state.currentVersion, state.track, event),
         percent: Math.min(100, Math.max(0, event.percent))
       }
     case 'downloaded':
       assertPhase(state, event.type, ['available', 'downloading'])
       requireVersion(event.version)
       assertUpdateContext(state, event)
-      return updateVersionStatus('downloaded', state.currentVersion, event)
+      return updateVersionStatus('downloaded', state.currentVersion, state.track, event)
     case 'installing':
       assertPhase(state, event.type, ['downloaded'])
       requireVersion(event.version)
       assertUpdateContext(state, event)
-      return updateVersionStatus('installing', state.currentVersion, event)
+      return updateVersionStatus('installing', state.currentVersion, state.track, event)
     case 'up-to-date':
       assertPhase(state, event.type, ['checking'])
       return state.manual
-        ? { phase: 'up-to-date', currentVersion: state.currentVersion, manual: true }
+        ? {
+            phase: 'up-to-date',
+            currentVersion: state.currentVersion,
+            track: state.track,
+            manual: true
+          }
         : initialUpdateStatus(state.currentVersion)
     case 'unsupported':
       assertPhase(state, event.type, ['checking'])
@@ -65,6 +75,7 @@ export function reduceUpdateState(
       return {
         phase: 'unsupported',
         currentVersion: state.currentVersion,
+        track: state.track,
         reason: event.reason,
         manual: event.manual
       }
@@ -80,6 +91,7 @@ export function reduceUpdateState(
       const base = {
         phase: 'error' as const,
         currentVersion: state.currentVersion,
+        track: state.track,
         required: event.required,
         message: event.message,
         manual: event.manual,
@@ -102,18 +114,21 @@ interface VersionEvent {
 function updateVersionStatus<Phase extends 'available' | 'downloading' | 'downloaded' | 'installing'>(
   phase: Phase,
   currentVersion: string,
+  track: UpdateTrack,
   event: VersionEvent
 ): {
   phase: Phase
   currentVersion: string
   availableVersion: string
   required: boolean
+  track: UpdateTrack
   manual: boolean
 } {
   return {
     phase,
     currentVersion,
     availableVersion: event.version,
+    track,
     required: event.required,
     manual: event.manual
   }

@@ -13,8 +13,20 @@ export interface UpdatePreferences {
   candidateOptIn: boolean
 }
 
+export interface UpdatePreferenceService {
+  read(): Promise<UpdatePreferences>
+  setCandidateOptIn(value: boolean): Promise<void>
+}
+
 export function updatePreferencesPath(userData: string): string {
   return join(userData, 'updates', 'preferences.json')
+}
+
+export function createUpdatePreferenceService(path: string): UpdatePreferenceService {
+  return {
+    read: () => readUpdatePreferences(path),
+    setCandidateOptIn: (value) => writeCandidateOptIn(path, value)
+  }
 }
 
 export async function readUpdatePreferences(path: string): Promise<UpdatePreferences> {

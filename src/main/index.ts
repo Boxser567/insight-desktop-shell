@@ -85,13 +85,14 @@ import { HarnessWorkspaceController } from './workspace/harness-workspace-contro
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
 import { ElectronUpdateExecutor } from './update/update-executor'
-import { GenericReleaseSource } from './update/generic-release-source'
+import { V2ReleaseSource } from './update/v2-release-source'
 import { parseUpdateDistribution } from './update/update-environment'
 import { UpdateManager } from './update/update-manager'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 import { openUpdateWindowAndCheck } from './update/open-update-window'
 import {
+  createUpdatePreferenceService,
   migrateLegacyCandidatePreference,
   updatePreferencesPath
 } from './update/update-preferences'
@@ -1698,6 +1699,7 @@ async function prepareForUpdateInstall(): Promise<void> {
 async function initializeUpdates(): Promise<void> {
   const publicKeyPem = readUpdatePublicKey()
   const userData = app.getPath('userData')
+  const preferences = createUpdatePreferenceService(updatePreferencesPath(userData))
   await migrateLegacyCandidatePreference({
     path: updatePreferencesPath(userData),
     packagedChannel: desktopChannel,
@@ -1713,10 +1715,11 @@ async function initializeUpdates(): Promise<void> {
       arch: process.arch,
       executablePath: app.getPath('exe')
     },
-    source: new GenericReleaseSource({
+    source: new V2ReleaseSource({
       distribution: readUpdateDistribution(),
       publicKeyPem
     }),
+    preferences,
     executor: new ElectronUpdateExecutor(),
     publicKeyPem,
     userData,
