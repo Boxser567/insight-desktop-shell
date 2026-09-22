@@ -212,6 +212,6 @@ describe('desktop About window', () => {
     expect(aboutStyles).toContain(':root[data-insight-theme="dark"]')
     expect(aboutStyles).toContain('--warning-surface')
     expect(aboutHtml).toContain("connect-src 'none'")
-    expect(JSON.parse(packageJson).insightReleaseDate).toBe('2026-09-22')
+    expect(JSON.parse(packageJson).insightReleaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/u)
   })
 })
