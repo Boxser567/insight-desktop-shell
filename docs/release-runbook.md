@@ -2,7 +2,7 @@
 
 ## 当前发布状态
 
-截至 2026-09-14，`v1.0.0-rc.9` 已完成三平台 GitHub 构建、OIDC/STS 暂存与 Candidate 推广，`candidate/current.json` 已经中国大陆 CDN 返回 `1.0.0-rc.9` 和 60 秒缓存策略；`stable/current.json` 尚不存在。RC9 是当前唯一继续验收的全平台 Candidate，包含 Windows 旧进程清理、macOS 临时挂载拦截和更新忙碌状态防重入；它已达到统一工程基线，但 Windows 旧版到 RC9 以及 `/Applications` 中 RC7 到 RC9 的真实更新仍是 Stable 前人工阻断项。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-22，公网 Candidate 指针为 `1.0.0-rc.17`，缓存策略为 60 秒；Stable 指针尚未创建。仓库正在准备首个 `v1.0.0` Stable，版本、生产服务环境和发布策略已切换到正式渠道。正式 tag 只能在三平台构建、签名/公证、干净安装、覆盖安装、Candidate N→N+1 和同源整包兜底门禁完成后创建。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
@@ -14,7 +14,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-`v1.0.0-rc.9` 是当前已推广 Candidate：认证和模型请求继续使用测试 Gateway，更新 Origin 继续使用 `https://updates.insight-aigc.com`。RC3 到 RC4 已在 macOS Apple Silicon 完成一次应用内直接下载、安装和重启；RC5 到 RC7 也完成更新，但安装过渡体验由旧的 RC5 代码控制。Windows RC7/RC8 暴露的旧应用无法关闭和旧文件卸载错误已在 RC9 加固，尚待真实旧版本升级复验。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。生产业务域名切换留到后续一次原子客户端升级，Stable preflight 会拒绝测试业务环境。
+`v1.0.0-rc.17` 是当前已推广 Candidate，认证和模型请求使用生产 Gateway，更新 Origin 为 `https://updates.insight-aigc.com`。RC17 继续使用已发布的 `insight-runtime-v0.1.6-alpha.2-insight.2` Runtime；正式版在新的 Runtime 完成全平台发布前保持该锁，不从未发布分支取包。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。
 
 ## 必读资料
 
