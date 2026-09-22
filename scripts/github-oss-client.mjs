@@ -7,6 +7,7 @@ const expectedRepositoryId = '1344679131'
 const expectedBucket = 'insight-desktop-updates'
 const expectedRegion = 'oss-cn-guangzhou'
 const expectedEndpoint = 'oss-cn-guangzhou.aliyuncs.com'
+const transportEndpoint = 'https://oss-accelerate.aliyuncs.com'
 const expectedRef = 'refs/heads/main'
 const expectedEvent = 'workflow_dispatch'
 const expectedWorkflowRef = 'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main'
@@ -231,7 +232,8 @@ export function createGithubOssClient({
       stsToken: credentials.securityToken,
       bucket: credentials.bucket,
       region: credentials.region,
-      endpoint: `https://${credentials.endPoint}`,
+      // Acceleration changes transport only; STS scope and V4 signing stay in Guangzhou.
+      endpoint: transportEndpoint,
       secure: true,
       authorizationV4: true,
       retryMax: 0,
@@ -277,13 +279,6 @@ export function createGithubOssClient({
   }
 
   return {
-    async diagnoseUploads(id) {
-      if (!/^[a-f0-9-]{36}$/u.test(id)) throw new Error('Invalid diagnostic ID')
-      const { client } = await currentSession()
-      const { runUploadProbe } = await import('./diagnose-oss-upload.mjs')
-      return runUploadProbe(client, `desktop/diagnostics/${identity.runId}-${id}/`)
-    },
-
     async uploadReleaseObject(key, source, headers) {
       assertObjectKey(key, 'object key')
       requiredString(source, 'OSS upload source')
@@ -302,7 +297,7 @@ export function createGithubOssClient({
           const options = { headers: { ...headers }, timeout: 120_000 }
           const result = size >= 8 * 1024 * 1024
             ? await active.client.multipartUpload(key, source, {
-                ...options, checkpoint, partSize: 4 * 1024 * 1024, parallel: 1,
+                ...options, checkpoint, partSize: 1024 * 1024, parallel: 1,
                 progress: async (fraction, nextCheckpoint) => {
                   if (nextCheckpoint) checkpoint = nextCheckpoint
                   const percent = Math.floor(fraction * 100)

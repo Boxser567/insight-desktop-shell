@@ -73,6 +73,7 @@ async function main() {
     "const expectedBucket = 'insight-desktop-updates'",
     "const expectedRegion = 'oss-cn-guangzhou'",
     "const expectedEndpoint = 'oss-cn-guangzhou.aliyuncs.com'",
+    "const transportEndpoint = 'https://oss-accelerate.aliyuncs.com'",
     "const expectedWorkflowRef = 'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main'",
     "const gatewayBaseUrl = 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway'",
     "const oidcAudience = 'insight-harness-oss-upload'"
@@ -88,6 +89,7 @@ async function main() {
   requireText(client, "'SecurityTokenExpired'", 'GitHub OSS client')
   requireText(client, "'InvalidSecurityToken'", 'GitHub OSS client')
   requireText(client, 'refreshBeforeExpirationMs = 180_000', 'GitHub OSS client')
+  requireText(client, 'endpoint: transportEndpoint', 'GitHub OSS client')
 
   console.log('Desktop update publish workflow contract is valid.')
 }

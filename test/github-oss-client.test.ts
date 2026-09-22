@@ -93,7 +93,7 @@ describe('GitHub OIDC OSS client', () => {
         ossClientFactory: () => ({ multipartUpload }), wait: async () => {}, note: (line: string) => logs.push(line) })
       await client.uploadReleaseObject('desktop/releases/v1/asset.dmg', source, { 'x-oss-forbid-overwrite': 'true' })
       expect(calls).toHaveLength(2)
-      expect(calls[1]).toMatchObject({ checkpoint, partSize: 4 * 1024 * 1024, parallel: 1, timeout: 120_000,
+      expect(calls[1]).toMatchObject({ checkpoint, partSize: 1024 * 1024, parallel: 1, timeout: 120_000,
         headers: { 'x-oss-forbid-overwrite': 'true' } })
       expect(logs.join('\n')).not.toMatch(/secret|private-upload-id/)
       calls.length = 0
@@ -216,7 +216,7 @@ describe('GitHub OIDC OSS client', () => {
         expect(configuration).toMatchObject({
           bucket: 'insight-desktop-updates',
           region: 'oss-cn-guangzhou',
-          endpoint: 'https://oss-cn-guangzhou.aliyuncs.com',
+          endpoint: 'https://oss-accelerate.aliyuncs.com',
           authorizationV4: true
         })
         const value = { listV2: vi.fn(async () => ({ objects: [], isTruncated: false })) }
