@@ -18,6 +18,20 @@ export function runtimeTarget(platform = process.platform, arch = process.arch) 
   return target
 }
 
+export function requestedRuntimeTarget(
+  argv,
+  platform = process.platform,
+  arch = process.arch
+) {
+  if (argv.length === 0) return runtimeTarget(platform, arch)
+  if (argv.length !== 2 || argv[0] !== '--target') {
+    throw new Error('Usage: prepare-core-runtime.mjs [--target <darwin-arm64|darwin-x64|win32-x64>]')
+  }
+  const separator = argv[1].lastIndexOf('-')
+  if (separator <= 0) throw new Error('Core Runtime target is invalid.')
+  return runtimeTarget(argv[1].slice(0, separator), argv[1].slice(separator + 1))
+}
+
 export function selectCoreRuntime(lock, target) {
   if (lock?.schemaVersion !== 1 || typeof lock.releaseTag !== 'string') {
     throw new Error('core-runtime.lock.json is invalid.')
@@ -99,7 +113,7 @@ async function assertRuntime(directory, runtime, target) {
 
 async function main() {
   const lock = JSON.parse(await readFile(lockPath, 'utf8'))
-  const target = runtimeTarget()
+  const target = requestedRuntimeTarget(process.argv.slice(2))
   const runtime = selectCoreRuntime(lock, target)
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-'))
   try {

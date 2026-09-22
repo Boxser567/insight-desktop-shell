@@ -97,6 +97,7 @@ describe('release v2 workflow contract', () => {
     expect(workflow.match(/permissions:\n      contents: write/gu)).toHaveLength(2)
     expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(5)
     expect(workflow).toContain('npm run typecheck')
+    expect(workflow).toContain('node scripts/prepare-core-runtime.mjs --target darwin-arm64')
     expect(workflow).toContain('scripts/verify-publish-v2-workflow.mjs')
     expect(workflow).not.toContain('--clobber')
     expect(workflow).not.toContain('OSS_ACCESS_KEY')

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   moveRuntimeDirectory,
-  removeInvalidBundledNodeShim
+  removeInvalidBundledNodeShim,
+  requestedRuntimeTarget
 } from '../scripts/prepare-core-runtime.mjs'
 
 const directories = []
@@ -14,6 +15,13 @@ afterEach(async () => {
 })
 
 describe('Core Runtime preparation', () => {
+  it('supports an explicit release target on a non-release host', () => {
+    expect(requestedRuntimeTarget(['--target', 'darwin-arm64'], 'linux', 'x64'))
+      .toBe('darwin-arm64')
+    expect(() => requestedRuntimeTarget([], 'linux', 'x64')).toThrow('No Core Runtime')
+    expect(() => requestedRuntimeTarget(['--target', 'linux-x64'])).toThrow('No Core Runtime')
+  })
+
   it('copies the Runtime when moving across volumes raises EXDEV', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-test-'))
     directories.push(directory)

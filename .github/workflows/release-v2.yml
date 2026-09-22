@@ -41,6 +41,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: node scripts/prepare-core-runtime.mjs --target darwin-arm64
       - name: Verify source and workflow contracts
         run: |
           set -euo pipefail
