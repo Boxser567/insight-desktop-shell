@@ -8,7 +8,7 @@ import type { UpdateStateEvent } from '../src/main/update/update-state'
 describe('desktop update state', () => {
   it('runs the complete download and install transition sequence', () => {
     let state = initialUpdateStatus('1.0.0')
-    state = reduceUpdateState(state, { type: 'check', manual: false })
+    state = reduceUpdateState(state, { type: 'check', track: 'stable', manual: false })
     state = reduceUpdateState(state, {
       type: 'available',
       version: '1.1.0',
@@ -48,6 +48,7 @@ describe('desktop update state', () => {
       phase: 'installing',
       currentVersion: '1.0.0',
       availableVersion: '1.1.0',
+      track: 'stable',
       required: false,
       manual: false
     })
@@ -56,21 +57,27 @@ describe('desktop update state', () => {
   it('only exposes up-to-date state for a manual check', () => {
     const idle = initialUpdateStatus('1.0.0')
     const manual = reduceUpdateState(
-      reduceUpdateState(idle, { type: 'check', manual: true }),
+      reduceUpdateState(idle, { type: 'check', track: 'stable', manual: true }),
       { type: 'up-to-date' }
     )
     const automatic = reduceUpdateState(
-      reduceUpdateState(idle, { type: 'check', manual: false }),
+      reduceUpdateState(idle, { type: 'check', track: 'stable', manual: false }),
       { type: 'up-to-date' }
     )
 
-    expect(manual).toEqual({ phase: 'up-to-date', currentVersion: '1.0.0', manual: true })
+    expect(manual).toEqual({
+      phase: 'up-to-date',
+      currentVersion: '1.0.0',
+      track: 'stable',
+      manual: true
+    })
     expect(automatic).toEqual({ phase: 'idle', currentVersion: '1.0.0' })
   })
 
   it('preserves required update context when an operation fails', () => {
     const checking = reduceUpdateState(initialUpdateStatus('1.0.0'), {
       type: 'check',
+      track: 'stable',
       manual: false
     })
     const failed = reduceUpdateState(checking, {
@@ -87,6 +94,7 @@ describe('desktop update state', () => {
       phase: 'error',
       currentVersion: '1.0.0',
       availableVersion: '2.0.0',
+      track: 'stable',
       required: true,
       message: 'offline',
       retryable: true,
@@ -97,7 +105,7 @@ describe('desktop update state', () => {
 
   it('supports unsupported and reset transitions', () => {
     const unsupported = reduceUpdateState(
-      reduceUpdateState(initialUpdateStatus('1.0.0'), { type: 'check', manual: true }),
+      reduceUpdateState(initialUpdateStatus('1.0.0'), { type: 'check', track: 'stable', manual: true }),
       { type: 'unsupported', reason: 'development build', manual: true }
     )
 
@@ -111,6 +119,7 @@ describe('desktop update state', () => {
   it('rejects missing versions and invalid transitions', () => {
     const checking = reduceUpdateState(initialUpdateStatus('1.0.0'), {
       type: 'check',
+      track: 'stable',
       manual: false
     })
     const missingVersion = {
@@ -130,7 +139,7 @@ describe('desktop update state', () => {
 
   it('rejects stale events for another update', () => {
     const available = reduceUpdateState(
-      reduceUpdateState(initialUpdateStatus('1.0.0'), { type: 'check', manual: false }),
+      reduceUpdateState(initialUpdateStatus('1.0.0'), { type: 'check', track: 'stable', manual: false }),
       { type: 'available', version: '1.1.0', required: false, manual: false }
     )
 
@@ -146,6 +155,7 @@ describe('desktop update state', () => {
   it('rejects errors from another check or without the active update version', () => {
     const checking = reduceUpdateState(initialUpdateStatus('1.0.0'), {
       type: 'check',
+      track: 'stable',
       manual: true
     })
     expect(() => reduceUpdateState(checking, {

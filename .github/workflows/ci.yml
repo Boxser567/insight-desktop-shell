@@ -1,0 +1,46 @@
+name: Desktop CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify desktop source and release contracts
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prepare:core-runtime
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build desktop bundles
+        run: |
+          set -euo pipefail
+          npm run build:desktop-integration
+          npx electron-vite build
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
+      - name: Verify release workflow contracts
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-workflow.mjs .github/workflows/release.yml package.json
+          node scripts/verify-publish-workflow.mjs .github/workflows/publish-update.yml scripts/github-oss-client.mjs
+          node scripts/verify-release-v2-workflow.mjs .github/workflows/release-v2.yml
+          node scripts/verify-publish-v2-workflow.mjs .github/workflows/publish-update-v2.yml
+          git diff --check

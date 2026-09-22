@@ -94,7 +94,7 @@ const updates: DesktopUpdateApi = Object.freeze({
     return () => ipcRenderer.removeListener('updates:status-changed', handler)
   },
   open: (): Promise<void> => ipcRenderer.invoke('updates:open'),
-  check: (): Promise<void> => ipcRenderer.invoke('updates:check'),
+  checkStable: (): Promise<void> => ipcRenderer.invoke('updates:check-stable'),
   download: (): Promise<void> => ipcRenderer.invoke('updates:download'),
   downloadFullInstaller: (): Promise<void> => ipcRenderer.invoke('updates:download-full-installer'),
   install: (): Promise<void> => ipcRenderer.invoke('updates:install'),

@@ -76,7 +76,8 @@ describe('desktop update IPC', () => {
       currentVersion: '1.0.0'
     })
     await fixture.handlers.get('updates:open')?.(event(fixture.harness))
-    await fixture.handlers.get('updates:check')?.(event(fixture.update))
+    await fixture.handlers.get('updates:check-stable')?.(event(fixture.update))
+    await fixture.handlers.get('updates:check-candidate')?.(event(fixture.update))
     await fixture.handlers.get('updates:download')?.(event(fixture.shell))
     await fixture.handlers.get('updates:download-full-installer')?.(
       event(fixture.shell),
@@ -86,7 +87,8 @@ describe('desktop update IPC', () => {
     await fixture.handlers.get('updates:skip')?.(event(fixture.update), '1.1.0')
 
     expect(fixture.open).toHaveBeenCalledOnce()
-    expect(fixture.manager.check).toHaveBeenCalledWith(true)
+    expect(fixture.manager.check).toHaveBeenNthCalledWith(1, 'stable', true)
+    expect(fixture.manager.check).toHaveBeenNthCalledWith(2, 'candidate', true)
     expect(fixture.manager.download).toHaveBeenCalledOnce()
     expect(fixture.manager.downloadFullInstaller).toHaveBeenCalledWith()
     expect(fixture.manager.install).toHaveBeenCalledOnce()
@@ -101,7 +103,7 @@ describe('desktop update IPC', () => {
 
     for (const channel of [
       'updates:open',
-      'updates:check',
+      'updates:check-stable',
       'updates:download',
       'updates:download-full-installer',
       'updates:install',
@@ -112,6 +114,12 @@ describe('desktop update IPC', () => {
       await expect(Promise.resolve().then(() => fixture.handlers.get(channel)?.(childFrame, '1.1.0')))
         .rejects.toThrow('main frame')
     }
+    await expect(Promise.resolve().then(() =>
+      fixture.handlers.get('updates:check-candidate')?.(attacker)
+    )).rejects.toThrow('update window')
+    await expect(Promise.resolve().then(() =>
+      fixture.handlers.get('updates:check-candidate')?.(event(fixture.shell))
+    )).rejects.toThrow('update window')
   })
 
   it('allows ordinary quit only from the update window main frame', async () => {
@@ -134,6 +142,7 @@ describe('desktop update IPC', () => {
       phase: 'available',
       currentVersion: '1.0.0',
       availableVersion: '1.1.0',
+      track: 'stable',
       required: false,
       manual: false
     }

@@ -14,6 +14,7 @@ export default defineConfig({
           harness: resolve('src/preload/harness.ts'),
           shell: resolve('src/preload/shell.ts'),
           update: resolve('src/preload/update.ts'),
+          about: resolve('src/preload/about.ts'),
           'secondary-theme': resolve('src/preload/secondary-theme.ts'),
           'windows-menu': resolve('src/preload/windows-menu.ts')
         },

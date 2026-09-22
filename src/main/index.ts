@@ -85,12 +85,18 @@ import { HarnessWorkspaceController } from './workspace/harness-workspace-contro
 import { WorkspaceLifecycle } from './workspace/workspace-lifecycle'
 import { registerHarnessAccountIpc } from './workspace/harness-account-ipc'
 import { ElectronUpdateExecutor } from './update/update-executor'
-import { GenericReleaseSource } from './update/generic-release-source'
+import { V2ReleaseSource } from './update/v2-release-source'
+import { createRolloutHistoryService, rolloutHistoryPath } from './update/rollout-history'
 import { parseUpdateDistribution } from './update/update-environment'
 import { UpdateManager } from './update/update-manager'
 import { registerUpdateIpc } from './update/update-ipc'
 import { UpdateWindowController, updateWindowOptions } from './update/update-window'
 import { openUpdateWindowAndCheck } from './update/open-update-window'
+import {
+  createUpdatePreferenceService,
+  migrateLegacyCandidatePreference,
+  updatePreferencesPath
+} from './update/update-preferences'
 import { StartupTracker } from './startup/startup-tracker'
 import { registerStartupIpc } from './startup/startup-ipc'
 import {
@@ -99,6 +105,7 @@ import {
   isTrustedAboutUrl,
   type AboutMetadata
 } from './about-window'
+import { registerAboutUpdateIpc } from './about-update-ipc'
 import packageJson from '../../package.json'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
@@ -374,7 +381,7 @@ function createAboutWindowController(): AboutWindowController<BrowserWindow> {
       const window = new BrowserWindow(aboutWindowOptions({
         parent,
         icon: desktopIconPath(),
-        preload: join(import.meta.dirname, '../preload/secondary-theme.cjs'),
+        preload: join(import.meta.dirname, '../preload/about.cjs'),
         backgroundColor: resolvedHarnessThemeDark ? '#202024' : '#f7f7f8'
       }))
       suppressWindowsSecondaryMenu(window)
@@ -412,6 +419,22 @@ function checkForUpdatesFromMenu(): Promise<void> {
     throw new Error('The update manager is unavailable.')
   }
   return openUpdateWindowAndCheck(updateManager, updateWindowController)
+}
+
+async function confirmCandidateOptIn(): Promise<boolean> {
+  const about = aboutWindowController?.window()
+  if (!about || about.isDestroyed()) throw new Error('The About window is unavailable.')
+  const confirmation = await dialog.showMessageBox(about, {
+    type: 'warning',
+    title: '加入内测更新？',
+    message: '内测版本可能不稳定，甚至无法正常启动。',
+    detail: '关闭内测不会自动降级；如遇问题，可使用正式版完整安装包覆盖恢复，用户数据不会被删除。',
+    buttons: ['取消', '加入内测'],
+    cancelId: 0,
+    defaultId: 0,
+    noLink: true
+  })
+  return confirmation.response === 1
 }
 
 function createHarnessWebContentsView(window: BrowserWindow, scope: string): WebContentsView {
@@ -1164,6 +1187,19 @@ function assertTrustedSecondaryWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
+function assertTrustedAboutEvent(event: IpcMainInvokeEvent): BrowserWindow {
+  const about = aboutWindowController?.window()
+  if (
+    !about ||
+    about.isDestroyed() ||
+    event.sender !== about.webContents ||
+    event.senderFrame !== about.webContents.mainFrame
+  ) {
+    throw new Error('This action is only available from the About window.')
+  }
+  return about
+}
+
 function assertTrustedHarnessEvent(event: IpcMainInvokeEvent): void {
   if (!workspaceController?.isTrustedSender(event.sender, event.senderFrame)) {
     throw new Error('This action is only available from the authenticated Harness view.')
@@ -1693,6 +1729,13 @@ async function prepareForUpdateInstall(): Promise<void> {
 
 async function initializeUpdates(): Promise<void> {
   const publicKeyPem = readUpdatePublicKey()
+  const userData = app.getPath('userData')
+  const preferences = createUpdatePreferenceService(updatePreferencesPath(userData))
+  await migrateLegacyCandidatePreference({
+    path: updatePreferencesPath(userData),
+    packagedChannel: desktopChannel,
+    currentVersion: app.getVersion()
+  })
   updateWindowController = createUpdateWindowController()
   updateManager = new UpdateManager({
     currentVersion: app.getVersion(),
@@ -1703,13 +1746,15 @@ async function initializeUpdates(): Promise<void> {
       arch: process.arch,
       executablePath: app.getPath('exe')
     },
-    source: new GenericReleaseSource({
+    source: new V2ReleaseSource({
       distribution: readUpdateDistribution(),
-      publicKeyPem
+      publicKeyPem,
+      rolloutHistory: createRolloutHistoryService(rolloutHistoryPath(userData))
     }),
+    preferences,
     executor: new ElectronUpdateExecutor(),
     publicKeyPem,
-    userData: app.getPath('userData'),
+    userData,
     prepareToInstall: prepareForUpdateInstall,
     openExternal: (url) => shell.openExternal(url),
     resume: {
@@ -1730,6 +1775,18 @@ async function initializeUpdates(): Promise<void> {
       return updateWindowController.open()
     },
     quit: () => app.quit()
+  })
+  registerAboutUpdateIpc({
+    ipcMain,
+    preferences,
+    assertTrusted: assertTrustedAboutEvent,
+    confirmCandidateOptIn,
+    openCandidateCheck: async () => {
+      if (!updateManager || !updateWindowController) {
+        throw new Error('The update manager is unavailable.')
+      }
+      await openUpdateWindowAndCheck(updateManager, updateWindowController, 'candidate')
+    }
   })
   await updateManager.start()
 }

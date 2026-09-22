@@ -86,14 +86,42 @@ function validatePolicy(value, version, channel) {
 }
 
 function validateCompatibility(value) {
-  const keys = [
+  const legacyKeys = [
     'profileSchema',
     'accountStorageSchema',
     'minimumReadableDataSchema',
     'maximumReadableDataSchema'
   ]
-  assertExactKeys(value, keys, 'Update compatibility')
-  if (keys.some((key) => !Number.isSafeInteger(value[key]) || value[key] < 0)) {
+  const v2Keys = [
+    'profileSchema',
+    'accountStorageSchema',
+    'readsDataSchema',
+    'writesDataSchema'
+  ]
+  const actual = Object.keys(value ?? {}).sort().join(',')
+  if (actual === [...v2Keys].sort().join(',')) {
+    const values = [
+      value.profileSchema,
+      value.accountStorageSchema,
+      value.readsDataSchema?.minimum,
+      value.readsDataSchema?.maximum,
+      value.writesDataSchema
+    ]
+    if (values.some((entry) => !Number.isSafeInteger(entry) || entry < 0)) {
+      throw new Error('Update compatibility schemas must be non-negative safe integers.')
+    }
+    if (value.readsDataSchema.minimum > value.readsDataSchema.maximum) {
+      throw new Error('Update compatibility readable schema range is invalid.')
+    }
+    return {
+      profileSchema: value.profileSchema,
+      accountStorageSchema: value.accountStorageSchema,
+      minimumReadableDataSchema: value.readsDataSchema.minimum,
+      maximumReadableDataSchema: value.readsDataSchema.maximum
+    }
+  }
+  assertExactKeys(value, legacyKeys, 'Update compatibility')
+  if (legacyKeys.some((key) => !Number.isSafeInteger(value[key]) || value[key] < 0)) {
     throw new Error('Update compatibility schemas must be non-negative safe integers.')
   }
   if (value.minimumReadableDataSchema > value.maximumReadableDataSchema) {

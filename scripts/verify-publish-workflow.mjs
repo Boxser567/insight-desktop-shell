@@ -62,7 +62,10 @@ async function main() {
     'OSS_SESSION_TOKEN',
     'ossutil',
     'pull_request_target:',
-    'secrets.'
+    'secrets.',
+    'stage-target',
+    'candidate-v2/',
+    'publish-update-v2-to-oss.mjs'
   ]) {
     if (workflow.includes(forbidden)) throw new Error(`Publish workflow contains ${forbidden}.`)
   }
@@ -74,7 +77,9 @@ async function main() {
     "const expectedRegion = 'oss-cn-guangzhou'",
     "const expectedEndpoint = 'oss-cn-guangzhou.aliyuncs.com'",
     "const transportEndpoint = 'https://oss-accelerate.aliyuncs.com'",
-    "const expectedWorkflowRef = 'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main'",
+    'const expectedWorkflowRefs = new Set([',
+    "'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main'",
+    "'Boxser567/insight-desktop-shell/.github/workflows/publish-update-v2.yml@refs/heads/main'",
     "const gatewayBaseUrl = 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway'",
     "const oidcAudience = 'insight-harness-oss-upload'"
   ]) {

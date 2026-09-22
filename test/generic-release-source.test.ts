@@ -193,9 +193,12 @@ describe('update source request deadlines', () => {
       signal = init?.signal ?? undefined
       const stalled = () => new Promise<never>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
       if (stage === 'headers') return stalled()
-      const reply = response(distribution.currentPointerUrl('stable').href, '')
-      reply.json = stalled
-      return reply
+      const body = new ReadableStream({
+        start(controller) {
+          signal!.addEventListener('abort', () => controller.error(signal!.reason), { once: true })
+        }
+      })
+      return response(distribution.currentPointerUrl('stable').href, body)
     })
     try {
       const source = new GenericReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
@@ -205,5 +208,17 @@ describe('update source request deadlines', () => {
       expect(signal?.aborted).toBe(true)
       expect(vi.getTimerCount()).toBe(0)
     } finally { vi.useRealTimers() }
+  })
+
+  it('rejects oversized legacy metadata before buffering it', async () => {
+    const pointerUrl = distribution.currentPointerUrl('stable').href
+    const fetchMock = vi.fn(async () => {
+      const reply = response(pointerUrl, '{}')
+      reply.headers.set('content-length', String(4 * 1024 * 1024 + 1))
+      return reply
+    })
+    const source = new GenericReleaseSource({ distribution, publicKeyPem, fetch: fetchMock })
+
+    await expect(source.resolve('stable', stableTarget)).rejects.toThrow('超过允许大小')
   })
 })

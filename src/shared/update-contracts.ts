@@ -2,6 +2,10 @@ export type UpdateChannel = 'development' | 'candidate' | 'stable'
 
 export type ReleaseUpdateChannel = Exclude<UpdateChannel, 'development'>
 
+export type UpdateTrack = ReleaseUpdateChannel
+
+export type UpdateTargetId = 'darwin-arm64' | 'darwin-x64' | 'win32-x64'
+
 export type UpdatePlatform = 'darwin' | 'win32'
 
 export type UpdateArch = 'arm64' | 'x64'
@@ -51,13 +55,73 @@ export interface SignedReleaseManifest {
   artifacts: ReleaseArtifact[]
 }
 
+export interface UpdateDataCompatibility {
+  profileSchema: number
+  accountStorageSchema: number
+  readsDataSchema: {
+    minimum: number
+    maximum: number
+  }
+  writesDataSchema: number
+}
+
+export interface SignedTargetManifest {
+  schema: 'insight-desktop-target/v2'
+  version: string
+  target: {
+    platform: UpdatePlatform
+    arch: UpdateArch
+  }
+  shellCommit: string
+  coreRuntime: {
+    tag: string
+    commit: string
+  }
+  compatibility: UpdateDataCompatibility
+  artifacts: ReleaseArtifact[]
+}
+
+export interface SignedReleaseIndex {
+  schema: 'insight-desktop-release/v2'
+  version: string
+  shellCommit: string
+  coreRuntime: {
+    tag: string
+    commit: string
+  }
+  targets: Array<{
+    id: UpdateTargetId
+    manifestSha512: string
+  }>
+}
+
+export interface RolloutPayload {
+  schema: 'insight-desktop-rollout/v2'
+  state: 'active' | 'rejected'
+  track: UpdateTrack
+  version: string
+  target?: UpdateTargetId
+  referencedSha512: string
+  policy: {
+    mode: 'optional' | 'required'
+    minimumSupportedVersion: string
+  }
+  publishedAt: string
+}
+
+export interface SignedRolloutEnvelope {
+  schema: 'insight-desktop-rollout-envelope/v2'
+  payloadBase64: string
+  signatureBase64: string
+}
+
 export type UpdateStatus =
   | { phase: 'idle'; currentVersion: string; lastCheckedAt?: string }
-  | { phase: 'checking'; currentVersion: string; manual: boolean }
-  | { phase: 'available'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
-  | { phase: 'downloading'; currentVersion: string; availableVersion: string; required: boolean; percent: number; manual: boolean }
-  | { phase: 'downloaded'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
-  | { phase: 'installing'; currentVersion: string; availableVersion: string; required: boolean; manual: boolean }
-  | { phase: 'up-to-date'; currentVersion: string; manual: true }
-  | { phase: 'unsupported'; currentVersion: string; reason: string; manual: boolean }
-  | { phase: 'error'; currentVersion: string; availableVersion?: string; required: boolean; message: string; manual: boolean; retryable: boolean; manualInstallerAvailable: boolean }
+  | { phase: 'checking'; currentVersion: string; track: UpdateTrack; manual: boolean }
+  | { phase: 'available'; currentVersion: string; availableVersion: string; track: UpdateTrack; required: boolean; manual: boolean }
+  | { phase: 'downloading'; currentVersion: string; availableVersion: string; track: UpdateTrack; required: boolean; percent: number; manual: boolean }
+  | { phase: 'downloaded'; currentVersion: string; availableVersion: string; track: UpdateTrack; required: boolean; manual: boolean }
+  | { phase: 'installing'; currentVersion: string; availableVersion: string; track: UpdateTrack; required: boolean; manual: boolean }
+  | { phase: 'up-to-date'; currentVersion: string; track: UpdateTrack; manual: true; promotedFromCandidate?: boolean }
+  | { phase: 'unsupported'; currentVersion: string; track: UpdateTrack; reason: string; manual: boolean }
+  | { phase: 'error'; currentVersion: string; availableVersion?: string; track: UpdateTrack; required: boolean; message: string; manual: boolean; retryable: boolean; manualInstallerAvailable: boolean }

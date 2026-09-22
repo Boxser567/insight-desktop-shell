@@ -102,34 +102,42 @@ describe('desktop update window', () => {
   it('projects every update phase without paths, URLs or credentials', () => {
     expect(updateViewModel({ phase: 'idle', currentVersion: '1.0.0' }).primary).toBe('check')
     expect(updateViewModel({
-      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
+      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, manual: true
     })).toMatchObject({
       primary: 'download',
       secondary: 'skip',
       recovery: 'download-full-installer'
     })
     expect(updateViewModel({
-      phase: 'downloading', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, percent: 42, manual: true
+      phase: 'downloading', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, percent: 42, manual: true
     }).detail).toContain('42%')
     expect(updateViewModel({
-      phase: 'downloaded', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
+      phase: 'downloaded', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, manual: true
     })).toMatchObject({
       title: '正在启动安装…',
       busy: true
     })
     expect(updateViewModel({
-      phase: 'installing', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: true
+      phase: 'installing', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, manual: true
     })).toMatchObject({
       title: '正在准备安装…',
       detail: '正在安全关闭当前工作区并准备安装文件。完成后因赛AI 将自动退出并重新打开。',
       busy: true
     })
     expect(updateViewModel({
-      phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', required: true, message: 'offline', manual: true, retryable: true, manualInstallerAvailable: true
+      phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: true, message: 'offline', manual: true, retryable: true, manualInstallerAvailable: true
     })).toMatchObject({ primary: 'retry', secondary: 'quit', recovery: 'download-full-installer' })
     expect(updateViewModel({
-      phase: 'unsupported', currentVersion: '1.0.0', reason: 'development build', manual: true
+      phase: 'unsupported', currentVersion: '1.0.0', track: 'stable', reason: 'development build', manual: true
     }).detail).toContain('development build')
+    expect(updateViewModel({
+      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'candidate', required: false, manual: true
+    })).toMatchObject({
+      badge: '内测版本',
+      warning: expect.stringContaining('不会自动降级'),
+      primary: 'download',
+      secondary: 'skip'
+    })
   })
 
   it('renders checking as indeterminate progress without a fake cancel action', async () => {
@@ -138,6 +146,7 @@ describe('desktop update window', () => {
     const checking = updateViewModel({
       phase: 'checking',
       currentVersion: '1.0.0',
+      track: 'stable',
       manual: true
     })
 
@@ -146,6 +155,7 @@ describe('desktop update window', () => {
     expect(source).toContain('className="update-content"')
     expect(source).toContain('className="update-recovery"')
     expect(source).toContain("download: '下载更新'")
+    expect(source).toContain("'下载正式版完整安装包'")
     expect(source).not.toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
     expect(source).toContain("status.phase === 'checking' || status.phase === 'installing'")
@@ -161,16 +171,19 @@ describe('desktop update window', () => {
     expect(shouldShowUpdateEntry(undefined)).toBe(false)
     expect(shouldShowUpdateEntry({ phase: 'idle', currentVersion: '1.0.0' })).toBe(false)
     expect(shouldShowUpdateEntry({
-      phase: 'checking', currentVersion: '1.0.0', manual: false
+      phase: 'checking', currentVersion: '1.0.0', track: 'stable', manual: false
     })).toBe(false)
     expect(shouldShowUpdateEntry({
-      phase: 'error', currentVersion: '1.0.0', required: false, message: 'bad signature', manual: false, retryable: true, manualInstallerAvailable: false
+      phase: 'error', currentVersion: '1.0.0', track: 'stable', required: false, message: 'bad signature', manual: false, retryable: true, manualInstallerAvailable: false
     })).toBe(false)
     expect(shouldShowUpdateEntry({
-      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, manual: false
+      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, manual: false
     })).toBe(true)
     expect(shouldShowUpdateEntry({
-      phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', required: false, message: 'download failed', manual: false, retryable: true, manualInstallerAvailable: true
+      phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: false, message: 'download failed', manual: false, retryable: true, manualInstallerAvailable: true
     })).toBe(true)
+    expect(shouldShowUpdateEntry({
+      phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'candidate', required: false, manual: true
+    })).toBe(false)
   })
 })

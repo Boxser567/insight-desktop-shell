@@ -17,7 +17,9 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
   switch (action) {
     case 'check':
     case 'retry':
-      return api.check()
+      return 'track' in status && status.track === 'candidate'
+        ? api.checkCandidate()
+        : api.checkStable()
     case 'download':
       return api.download()
     case 'download-full-installer':
@@ -29,6 +31,13 @@ function runAction(api: DesktopUpdateWindowApi, action: UpdateViewAction, status
     case 'quit':
       return api.quit()
   }
+}
+
+function actionLabel(action: UpdateViewAction, status: UpdateStatus): string {
+  return action === 'download-full-installer' &&
+    'track' in status && status.track === 'candidate'
+    ? '下载正式版完整安装包'
+    : actionLabels[action]
 }
 
 export function UpdateApp(): React.JSX.Element {
@@ -65,12 +74,16 @@ export function UpdateApp(): React.JSX.Element {
           <img src={brandMark} alt="" />
         </span>
         <div className="update-content">
-          <h1>{model.title}</h1>
+          <div className="update-title-row">
+            <h1>{model.title}</h1>
+            {model.badge && <span className="update-track-badge">{model.badge}</span>}
+          </div>
           <p>{model.detail}</p>
+          {model.warning && <p className="update-warning">{model.warning}</p>}
           {commandError && <p className="update-error">{commandError}</p>}
           {model.recovery && (
             <button type="button" className="update-recovery" onClick={() => execute(model.recovery!)}>
-              {actionLabels[model.recovery]}
+              {actionLabel(model.recovery, status)}
             </button>
           )}
           {(status.phase === 'checking' || status.phase === 'installing') && (
@@ -89,7 +102,7 @@ export function UpdateApp(): React.JSX.Element {
       <footer className="update-actions">
         {model.secondary && (
           <button type="button" className="secondary" onClick={() => execute(model.secondary!)}>
-            {actionLabels[model.secondary]}
+            {actionLabel(model.secondary, status)}
           </button>
         )}
         <span />
@@ -98,7 +111,7 @@ export function UpdateApp(): React.JSX.Element {
         )}
         {model.primary && (
           <button type="button" className="primary" onClick={() => execute(model.primary!)}>
-            {actionLabels[model.primary]}
+            {actionLabel(model.primary, status)}
           </button>
         )}
       </footer>

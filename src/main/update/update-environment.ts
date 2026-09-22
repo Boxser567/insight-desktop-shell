@@ -1,6 +1,10 @@
 import semver from 'semver'
 import { z } from 'zod'
-import type { ReleaseUpdateChannel } from '../../shared/update-contracts'
+import type {
+  ReleaseUpdateChannel,
+  UpdateTargetId,
+  UpdateTrack
+} from '../../shared/update-contracts'
 
 const distributionSchema = z.object({
   schema: z.literal(1),
@@ -14,6 +18,11 @@ export interface UpdateDistribution {
   currentPointerUrl(channel: ReleaseUpdateChannel): URL
   releaseBaseUrl(channel: ReleaseUpdateChannel, version: string): URL
   artifactUrl(channel: ReleaseUpdateChannel, version: string, name: string): URL
+  v2PointerUrl(track: UpdateTrack, target?: UpdateTargetId): URL
+  v2ReleaseBaseUrl(version: string): URL
+  v2TargetBaseUrl(version: string, target: UpdateTargetId): URL
+  v2ReleaseArtifactUrl(version: string, name: string): URL
+  v2TargetArtifactUrl(version: string, target: UpdateTargetId, name: string): URL
 }
 
 export function parseUpdateDistribution(value: unknown): UpdateDistribution {
@@ -37,6 +46,40 @@ export function parseUpdateDistribution(value: unknown): UpdateDistribution {
     artifactUrl(channel, version, name) {
       assertArtifactName(name)
       return new URL(name, releaseBaseUrl(channel, version))
+    },
+    v2PointerUrl(track, target) {
+      if (track === 'stable') {
+        if (target !== undefined) throw new Error('Stable 更新指针不能指定单一目标。')
+        return new URL('desktop/stable/current.json', updateOrigin)
+      }
+      if (track !== 'candidate' || target === undefined) {
+        throw new Error('Candidate 更新指针必须指定目标。')
+      }
+      assertTargetId(target)
+      return new URL(`desktop/candidate-v2/${target}/current.json`, updateOrigin)
+    },
+    v2ReleaseBaseUrl(version) {
+      assertFinalReleaseVersion(version)
+      return new URL(`desktop/releases/v${version}/`, updateOrigin)
+    },
+    v2TargetBaseUrl(version, target) {
+      assertFinalReleaseVersion(version)
+      assertTargetId(target)
+      return new URL(`desktop/releases/v${version}/targets/${target}/`, updateOrigin)
+    },
+    v2ReleaseArtifactUrl(version, name) {
+      assertArtifactName(name)
+      assertFinalReleaseVersion(version)
+      return new URL(name, new URL(`desktop/releases/v${version}/`, updateOrigin))
+    },
+    v2TargetArtifactUrl(version, target, name) {
+      assertArtifactName(name)
+      assertFinalReleaseVersion(version)
+      assertTargetId(target)
+      return new URL(
+        name,
+        new URL(`desktop/releases/v${version}/targets/${target}/`, updateOrigin)
+      )
     }
   }
 }
@@ -80,5 +123,23 @@ function assertReleaseVersion(channel: ReleaseUpdateChannel, version: string): v
 function assertArtifactName(name: string): void {
   if (!artifactNamePattern.test(name) || name === '.' || name === '..') {
     throw new Error('更新产物文件名无效。')
+  }
+}
+
+function assertFinalReleaseVersion(version: string): void {
+  const parsed = semver.parse(version)
+  if (
+    semver.valid(version) !== version ||
+    !parsed ||
+    parsed.prerelease.length > 0 ||
+    parsed.build.length > 0
+  ) {
+    throw new Error('v2 更新版本必须是最终语义版本。')
+  }
+}
+
+function assertTargetId(target: string): asserts target is UpdateTargetId {
+  if (!['darwin-arm64', 'darwin-x64', 'win32-x64'].includes(target)) {
+    throw new Error('v2 更新目标无效。')
   }
 }

@@ -17,6 +17,7 @@ type FetchImplementation = (
 ) => Promise<Response>
 
 export const UPDATE_SOURCE_REQUEST_TIMEOUT_MS = 30_000
+const MAX_UPDATE_METADATA_BYTES = 4 * 1024 * 1024
 
 const pointerSchema = z.object({
   schemaVersion: z.literal(1),
@@ -50,10 +51,11 @@ export class GenericReleaseSource implements UpdateSource {
     }
 
     const pointerUrl = this.#distribution.currentPointerUrl(channel)
-    const pointer = pointerSchema.parse(await this.#read(pointerUrl, '渠道指针', response => response.json(), {
+    const pointerBytes = await this.#download(pointerUrl, '渠道指针', {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache' }
-    }))
+    })
+    const pointer = pointerSchema.parse(JSON.parse(Buffer.from(pointerBytes).toString('utf8')))
     if (pointer.channel !== channel) {
       throw new Error('更新指针渠道与当前客户端不一致。')
     }
@@ -119,22 +121,78 @@ export class GenericReleaseSource implements UpdateSource {
     )
   }
 
-  async #download(url: URL, label: string): Promise<Uint8Array> {
-    return this.#read(url, label, async response => new Uint8Array(await response.arrayBuffer()))
-  }
-
-  async #read<T>(url: URL, label: string, consume: (response: Response) => Promise<T>, init?: RequestInit): Promise<T> {
+  async #download(url: URL, label: string, init?: RequestInit): Promise<Uint8Array> {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(new Error(`${label}请求超时，请稍后重试。`)), UPDATE_SOURCE_REQUEST_TIMEOUT_MS)
+    let rejectDeadline!: (error: Error) => void
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject
+    })
+    const timeout = setTimeout(() => {
+      const error = new Error(`${label}请求超时，请稍后重试。`)
+      controller.abort(error)
+      rejectDeadline(error)
+    }, UPDATE_SOURCE_REQUEST_TIMEOUT_MS)
     try {
-      const response = await this.#fetch(url, { ...init, redirect: 'follow', signal: controller.signal })
+      const response = await Promise.race([
+        this.#fetch(url, { ...init, redirect: 'follow', signal: controller.signal }),
+        deadline
+      ])
       assertTrustedResponse(response, url, label)
-      // Keep the deadline active through body consumption, not just headers.
-      return await consume(response)
+      return await Promise.race([
+        readBoundedResponse(response, label, controller.signal),
+        deadline
+      ])
     } finally {
       clearTimeout(timeout)
     }
   }
+}
+
+async function readBoundedResponse(
+  response: Response,
+  label: string,
+  signal: AbortSignal
+): Promise<Uint8Array> {
+  const contentLength = response.headers.get('content-length')
+  if (
+    contentLength !== null &&
+    (!/^\d+$/u.test(contentLength) || Number(contentLength) > MAX_UPDATE_METADATA_BYTES)
+  ) throw new Error(`${label}响应超过允许大小。`)
+  if (!response.body) return new Uint8Array()
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await readChunk(reader, signal)
+    if (done) break
+    total += value.byteLength
+    if (total > MAX_UPDATE_METADATA_BYTES) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error(`${label}响应超过允许大小。`)
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    reader.read().then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
 }
 
 function assertTrustedResponse(response: Response, expected: URL, label: string): void {

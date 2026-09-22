@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UPDATE_CHECK_INTERVAL_MS } from '../src/main/update/update-policy'
 import { readRequiredUpdatePolicy } from '../src/main/update/required-update-policy'
 import { writeSkippedVersion } from '../src/main/update/skipped-version'
+import { writeCandidateOptIn } from '../src/main/update/update-preferences'
+import { candidateInstallPath, readCandidateInstall } from '../src/main/update/candidate-install'
 import {
   UpdateManager,
   type UpdateManagerResumeSource,
@@ -20,6 +22,7 @@ import type {
   ResolvedRelease,
   UpdateSource
 } from '../src/main/update/update-source'
+import { StablePointerNotFoundError } from '../src/main/update/update-source'
 import type { SignedReleaseManifest, UpdateTarget } from '../src/shared/update-contracts'
 
 const temporaryDirectories: string[] = []
@@ -213,7 +216,7 @@ describe('desktop update manager', () => {
     const release = { ...resolvedRelease({ mode: 'required', minimumSupportedVersion: '1.1.0' }), minimumSystemVersion: '22.0.0' }
     const { manager, executor } = await setup({ release, systemRelease: () => version })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
     expect(manager.status()).toMatchObject({ phase: 'unsupported', manual: true, reason: expect.stringContaining('macOS 13') })
     expect(executor.check).not.toHaveBeenCalled()
     expect(executor.useRelease).not.toHaveBeenCalled()
@@ -224,7 +227,7 @@ describe('desktop update manager', () => {
   it('allows the minimum supported kernel', async () => {
     const { manager } = await setup({ release: { ...resolvedRelease(), minimumSystemVersion: '22.0.0' }, systemRelease: () => '22.0.0' })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
     expect(manager.status().phase).toBe('available')
     await manager.stop()
   })
@@ -240,7 +243,10 @@ describe('desktop update manager', () => {
 
     await manager.start()
 
-    expect(executor.configure).toHaveBeenCalledWith({ channel: 'stable', autoInstallOnQuit: false })
+    expect(executor.configure).toHaveBeenCalledWith({
+      currentVersion: '1.0.0',
+      autoInstallOnQuit: false
+    })
     expect([...timers.timeouts.values()].map(({ delay }) => delay)).toEqual([15_000])
     expect([...timers.intervals.values()].map(({ delay }) => delay)).toEqual([UPDATE_CHECK_INTERVAL_MS])
     expect(resume.listener).toBeTypeOf('function')
@@ -249,6 +255,47 @@ describe('desktop update manager', () => {
     expect(timers.intervals).toHaveLength(0)
     expect(resume.listener).toBeUndefined()
     expect(executor.listeners).toHaveLength(0)
+  })
+
+  it('schedules Stable checks only and never schedules Candidate', async () => {
+    const { manager, source, timers } = await setup()
+    await manager.start()
+
+    timers.timeouts.values().next().value?.handler()
+    await vi.waitFor(() => expect(source.resolve).toHaveBeenCalledOnce())
+
+    expect(source.resolve).toHaveBeenCalledWith('stable', target)
+    expect(source.resolve).not.toHaveBeenCalledWith('candidate', expect.anything())
+    await manager.stop()
+  })
+
+  it('requires explicit opt-in and a manual action for Candidate checks', async () => {
+    const disabled = await setup()
+    await disabled.manager.start()
+    await expect(disabled.manager.check('candidate', true)).rejects.toThrow('加入内测')
+    expect(disabled.source.resolve).not.toHaveBeenCalled()
+    await expect(disabled.manager.check('candidate', false)).rejects.toThrow('手动检查')
+
+    const enabled = await setup({
+      currentVersion: '1.0.0-rc.18',
+      release: resolvedRelease({ version: '1.0.0' })
+    })
+    await writeCandidateOptIn(
+      join(enabled.userData, 'updates', 'preferences.json'),
+      true
+    )
+    await enabled.manager.start()
+    await enabled.manager.check('candidate', true)
+
+    expect(enabled.source.resolve).toHaveBeenCalledWith('candidate', target)
+    expect(enabled.manager.status()).toMatchObject({
+      phase: 'available',
+      track: 'candidate',
+      currentVersion: '1.0.0-rc.18',
+      availableVersion: '1.0.0',
+      required: false,
+      manual: true
+    })
   })
 
   it('coalesces concurrent checks into one authenticated source and executor operation', async () => {
@@ -261,8 +308,8 @@ describe('desktop update manager', () => {
     const { manager, executor } = await setup({ release, source })
     await manager.start()
 
-    const first = manager.check(true)
-    const second = manager.check(true)
+    const first = manager.check('stable', true)
+    const second = manager.check('stable', true)
     await Promise.resolve()
     expect(source.resolve).toHaveBeenCalledOnce()
     finish?.(release)
@@ -287,7 +334,7 @@ describe('desktop update manager', () => {
       executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
     })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
     await manager.download()
     await manager.install()
     vi.mocked(source.resolve).mockClear()
@@ -313,12 +360,12 @@ describe('desktop update manager', () => {
       executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
     })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
     await manager.download()
     await manager.install()
     vi.mocked(source.resolve).mockClear()
 
-    await manager.check(true)
+    await manager.check('stable', true)
 
     expect(source.resolve).not.toHaveBeenCalled()
     expect(manager.status()).toMatchObject({
@@ -335,7 +382,7 @@ describe('desktop update manager', () => {
     const { manager, executor, openExternal } = await setup({ source })
     await manager.start()
 
-    await manager.check(true)
+    await manager.check('stable', true)
 
     expect(executor.check).not.toHaveBeenCalled()
     expect(manager.status()).toMatchObject({
@@ -357,7 +404,7 @@ describe('desktop update manager', () => {
     const { manager, openExternal } = await setup({ release, executor })
     await manager.start()
 
-    await manager.check(false)
+    await manager.check('stable', false)
 
     expect(manager.status()).toMatchObject({
       phase: 'error',
@@ -373,10 +420,23 @@ describe('desktop update manager', () => {
     const { manager, executor } = await setup({ release: resolvedRelease({ version }) })
     await manager.start()
 
-    await manager.check(true)
+    await manager.check('stable', true)
 
     expect(executor.check).not.toHaveBeenCalled()
     expect(manager.status().phase).toBe('up-to-date')
+  })
+
+  it('treats an unpublished first Stable pointer as no available update', async () => {
+    const release = resolvedRelease()
+    const source = fakeSource(release)
+    vi.mocked(source.resolve).mockRejectedValue(new StablePointerNotFoundError('not published'))
+    const { manager, executor } = await setup({ source })
+    await manager.start()
+
+    await manager.check('stable', true)
+
+    expect(manager.status().phase).toBe('up-to-date')
+    expect(executor.check).not.toHaveBeenCalled()
   })
 
   it('suppresses a skipped optional version automatically but shows it manually', async () => {
@@ -384,10 +444,10 @@ describe('desktop update manager', () => {
     await writeSkippedVersion(join(userData, 'updates', 'skipped-version.json'), '1.1.0')
     await manager.start()
 
-    await manager.check(false)
+    await manager.check('stable', false)
     expect(manager.status().phase).toBe('idle')
     expect(executor.check).not.toHaveBeenCalled()
-    await manager.check(true)
+    await manager.check('stable', true)
     expect(manager.status().phase).toBe('available')
     expect(executor.check).toHaveBeenCalledOnce()
   })
@@ -395,7 +455,7 @@ describe('desktop update manager', () => {
   it('persists an optional skip request and ignores a skip request for a required update', async () => {
     const optional = await setup()
     await optional.manager.start()
-    await optional.manager.check(true)
+    await optional.manager.check('stable', true)
     await optional.manager.skip('1.1.0')
     expect(optional.manager.status().phase).toBe('idle')
     await expect(readFile(
@@ -407,7 +467,7 @@ describe('desktop update manager', () => {
       release: resolvedRelease({ mode: 'required', minimumSupportedVersion: '1.1.0' })
     })
     await required.manager.start()
-    await required.manager.check(true)
+    await required.manager.check('stable', true)
     await required.manager.skip('1.1.0')
     expect(required.manager.status()).toMatchObject({ phase: 'available', required: true })
     await expect(readFile(
@@ -419,7 +479,7 @@ describe('desktop update manager', () => {
     const release = resolvedRelease({ mode: 'required', minimumSupportedVersion: '1.1.0' })
     const first = await setup({ release })
     await first.manager.start()
-    await first.manager.check(false)
+    await first.manager.check('stable', false)
 
     expect(first.manager.status()).toMatchObject({ phase: 'available', required: true })
     await expect(readRequiredUpdatePolicy({
@@ -451,7 +511,7 @@ describe('desktop update manager', () => {
       mode: 'optional'
     }))
     first.executor.check.mockResolvedValue({ version: '1.2.0' })
-    await restarted.check(true)
+    await restarted.check('stable', true)
     expect(restarted.status()).toMatchObject({
       phase: 'available',
       availableVersion: '1.2.0',
@@ -464,7 +524,7 @@ describe('desktop update manager', () => {
     const release = resolvedRelease({ mode: 'required', minimumSupportedVersion: '1.0.0' })
     const { manager, userData } = await setup({ release })
     await manager.start()
-    await manager.check(false)
+    await manager.check('stable', false)
 
     expect(manager.status()).toMatchObject({ phase: 'available', required: false })
     await expect(readFile(join(userData, 'updates', 'required-policy.json'))).rejects.toMatchObject({ code: 'ENOENT' })
@@ -473,7 +533,7 @@ describe('desktop update manager', () => {
   it('never starts a download while merely checking and offering an update', async () => {
     const { manager, executor } = await setup()
     await manager.start()
-    await manager.check(false)
+    await manager.check('stable', false)
 
     expect(executor.download).not.toHaveBeenCalled()
   })
@@ -484,7 +544,7 @@ describe('desktop update manager', () => {
     executor.download.mockRejectedValue(new Error('automatic download failed'))
     const { manager, openExternal } = await setup({ release, executor })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
 
     await manager.downloadFullInstaller()
     expect(openExternal).toHaveBeenCalledWith(release.manualInstallerUrl.href)
@@ -510,7 +570,7 @@ describe('desktop update manager', () => {
       executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
     })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
 
     await manager.download()
 
@@ -518,6 +578,33 @@ describe('desktop update manager', () => {
     expect(prepareToInstall).toHaveBeenCalledOnce()
     expect(executor.quitAndInstall).toHaveBeenCalledOnce()
     await expect(readFile(downloadedFile)).resolves.toEqual(downloadedBytes)
+  })
+
+  it('records only a Candidate version handed to the native installer', async () => {
+    const downloadedBytes = Buffer.from('verified installer')
+    const release = resolvedRelease({ downloadedBytes })
+    const executor = new FakeExecutor(release.manifest.version)
+    const result = await setup({
+      release,
+      executor,
+      currentVersion: '1.0.0-rc.19'
+    })
+    await writeCandidateOptIn(
+      join(result.userData, 'updates', 'preferences.json'),
+      true
+    )
+    const downloadedFile = join(result.userData, 'app.zip')
+    await writeFile(downloadedFile, downloadedBytes)
+    executor.download.mockImplementation(async () => {
+      executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
+    })
+    await result.manager.start()
+    await result.manager.check('candidate', true)
+    await result.manager.download()
+
+    await expect(readCandidateInstall(candidateInstallPath(result.userData)))
+      .resolves.toBe('1.1.0')
+    expect(executor.quitAndInstall).toHaveBeenCalledOnce()
   })
 
   it('deletes only a mismatched downloaded installer and preserves sibling data', async () => {
@@ -532,7 +619,7 @@ describe('desktop update manager', () => {
       executor.emit({ type: 'downloaded', version: '1.1.0', downloadedFile })
     })
     await manager.start()
-    await manager.check(true)
+    await manager.check('stable', true)
 
     await manager.download()
 
@@ -544,7 +631,7 @@ describe('desktop update manager', () => {
   it('prepares once before one install and never installs when preparation fails', async () => {
     const success = await setup()
     await success.manager.start()
-    await success.manager.check(true)
+    await success.manager.check('stable', true)
     const file = join(success.userData, 'app.zip')
     await writeFile(file, 'verified installer')
     success.executor.download.mockImplementation(async () => {
@@ -559,7 +646,7 @@ describe('desktop update manager', () => {
     const prepareToInstall = vi.fn().mockRejectedValue(new Error('workspace stop failed'))
     const failure = await setup({ prepareToInstall })
     await failure.manager.start()
-    await failure.manager.check(true)
+    await failure.manager.check('stable', true)
     const failedFile = join(failure.userData, 'app.zip')
     await writeFile(failedFile, 'verified installer')
     failure.executor.download.mockImplementation(async () => {
@@ -574,7 +661,7 @@ describe('desktop update manager', () => {
   it('publishes a recoverable error when the native updater fails while installing', async () => {
     const result = await setup()
     await result.manager.start()
-    await result.manager.check(true)
+    await result.manager.check('stable', true)
     const file = join(result.userData, 'app.zip')
     await writeFile(file, 'verified installer')
     result.executor.download.mockImplementation(async () => {
@@ -599,7 +686,7 @@ describe('desktop update manager', () => {
     let now = 1_000
     const { manager, source, resume } = await setup({ now: () => now })
     await manager.start()
-    await manager.check(false)
+    await manager.check('stable', false)
     vi.mocked(source.resolve).mockClear()
 
     now += UPDATE_CHECK_INTERVAL_MS - 1
@@ -649,7 +736,7 @@ describe('desktop update manager', () => {
     const events: ExecutorEvent[] = []
     executor.on((event) => events.push(event))
 
-    executor.configure({ channel: 'candidate', autoInstallOnQuit: false })
+    executor.configure({ currentVersion: '1.0.0-rc.18', autoInstallOnQuit: false })
     executor.useRelease(new URL('https://updates.example.test/desktop/releases/v1.1.0/'))
     expect(updater).toMatchObject({
       autoDownload: false,
@@ -661,6 +748,8 @@ describe('desktop update manager', () => {
       provider: 'generic',
       url: 'https://updates.example.test/desktop/releases/v1.1.0/'
     })
+    executor.configure({ currentVersion: '1.0.0', autoInstallOnQuit: false })
+    expect(updater.allowPrerelease).toBe(false)
     await expect(executor.check()).resolves.toEqual({ version: '1.1.0' })
     await executor.download()
     executor.quitAndInstall()

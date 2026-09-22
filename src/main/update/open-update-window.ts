@@ -1,5 +1,5 @@
 interface ManualUpdateChecker {
-  check(manual: boolean): Promise<void>
+  check(track: 'stable' | 'candidate', manual: boolean): Promise<void>
 }
 
 interface UpdateWindowOpener {
@@ -9,8 +9,9 @@ interface UpdateWindowOpener {
 /** Start a manual check before the status window reads its initial state. */
 export async function openUpdateWindowAndCheck(
   manager: ManualUpdateChecker,
-  window: UpdateWindowOpener
+  window: UpdateWindowOpener,
+  track: 'stable' | 'candidate' = 'stable'
 ): Promise<void> {
-  const check = manager.check(true)
+  const check = manager.check(track, true)
   await Promise.all([check, window.open()])
 }

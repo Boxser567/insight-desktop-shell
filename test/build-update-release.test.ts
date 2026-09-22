@@ -93,6 +93,27 @@ describe('authenticated update release builder', () => {
     expect(names.every((name) => !name.includes('candidate'))).toBe(true)
   })
 
+  it('converts the shared v2 compatibility file into the legacy bridge manifest', async () => {
+    const paths = await fixture('0.1.2-rc.2', 'candidate')
+    await writeFile(paths.compatibility, JSON.stringify({
+      profileSchema: 1,
+      accountStorageSchema: 1,
+      readsDataSchema: { minimum: 1, maximum: 2 },
+      writesDataSchema: 2
+    }))
+    const result = runBuild(paths, '0.1.2-rc.2', 'candidate')
+    expect(result.status, result.stderr).toBe(0)
+    const manifest = JSON.parse(
+      await readFile(path.join(paths.releaseDir, 'insight-update.json'), 'utf8')
+    ) as { compatibility: Record<string, unknown> }
+    expect(manifest.compatibility).toEqual({
+      profileSchema: 1,
+      accountStorageSchema: 1,
+      minimumReadableDataSchema: 1,
+      maximumReadableDataSchema: 2
+    })
+  })
+
   it('builds an Apple Silicon-only Candidate manifest but rejects partial stable releases', async () => {
     const paths = await fixture('0.1.2-rc.4', 'candidate')
     const result = runBuild(paths, '0.1.2-rc.4', 'candidate', 'macos-arm64')

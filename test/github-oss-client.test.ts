@@ -149,6 +149,10 @@ describe('GitHub OIDC OSS client', () => {
       repositoryId: '1344679131',
       runId: '987654321'
     })
+    expect(assertGithubPublisherEnvironment({
+      ...baseEnvironment,
+      GITHUB_WORKFLOW_REF: 'Boxser567/insight-desktop-shell/.github/workflows/publish-update-v2.yml@refs/heads/main'
+    })).toMatchObject({ repositoryId: '1344679131' })
 
     const invalidEnvironment: Array<[string, string]> = [
       ['GITHUB_ACTIONS', 'false'],

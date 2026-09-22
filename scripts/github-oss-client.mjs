@@ -10,7 +10,10 @@ const expectedEndpoint = 'oss-cn-guangzhou.aliyuncs.com'
 const transportEndpoint = 'https://oss-accelerate.aliyuncs.com'
 const expectedRef = 'refs/heads/main'
 const expectedEvent = 'workflow_dispatch'
-const expectedWorkflowRef = 'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main'
+const expectedWorkflowRefs = new Set([
+  'Boxser567/insight-desktop-shell/.github/workflows/publish-update.yml@refs/heads/main',
+  'Boxser567/insight-desktop-shell/.github/workflows/publish-update-v2.yml@refs/heads/main'
+])
 const gatewayBaseUrl = 'https://gapi-test.insight-aigc.com/insight-harness-llm-gateway'
 const oidcAudience = 'insight-harness-oss-upload'
 const refreshBeforeExpirationMs = 180_000
@@ -85,7 +88,7 @@ export function assertGithubPublisherEnvironment(environment) {
   if (environment.GITHUB_EVENT_NAME !== expectedEvent) {
     throw new Error('OSS publishing requires workflow_dispatch.')
   }
-  if (environment.GITHUB_WORKFLOW_REF !== expectedWorkflowRef) {
+  if (!expectedWorkflowRefs.has(environment.GITHUB_WORKFLOW_REF)) {
     throw new Error('GitHub workflow is not approved for OSS publishing.')
   }
   const oidcRequestUrl = validateHttpsUrl(

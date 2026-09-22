@@ -1,4 +1,5 @@
 import type { ShellAuthApi } from '../../shared/shell-api'
+import type { AboutUpdateApi } from '../../shared/about-update-api'
 import type { DesktopUpdateApi } from '../../shared/update-api'
 import type { ShellStartupApi } from '../../shared/startup-api'
 
@@ -7,6 +8,7 @@ declare global {
     insightAuth: ShellAuthApi
     insightStartup: ShellStartupApi
     insightDesktopUpdates: DesktopUpdateApi
+    insightAboutUpdates: AboutUpdateApi
   }
 }
 

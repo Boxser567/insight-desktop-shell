@@ -6,7 +6,9 @@ describe('menu update check orchestration', () => {
   it('starts a manual check before opening the status window', async () => {
     const calls: string[] = []
     const manager = {
-      check: async (manual: boolean) => { calls.push(`check:${manual}`) }
+      check: async (track: 'stable' | 'candidate', manual: boolean) => {
+        calls.push(`check:${track}:${manual}`)
+      }
     }
     const window = {
       open: async () => { calls.push('open') }
@@ -14,7 +16,17 @@ describe('menu update check orchestration', () => {
 
     await openUpdateWindowAndCheck(manager, window)
 
-    expect(calls).toEqual(['check:true', 'open'])
+    expect(calls).toEqual(['check:stable:true', 'open'])
+  })
+
+  it('opens an explicit manual Candidate check without changing the default', async () => {
+    const check = vi.fn().mockResolvedValue(undefined)
+    await openUpdateWindowAndCheck(
+      { check },
+      { open: vi.fn().mockResolvedValue(undefined) },
+      'candidate'
+    )
+    expect(check).toHaveBeenCalledWith('candidate', true)
   })
 
   it('does not swallow check or window errors', async () => {
