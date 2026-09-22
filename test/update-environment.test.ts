@@ -18,6 +18,19 @@ describe('desktop update distribution', () => {
     expect(distribution.artifactUrl('candidate', '0.1.2-rc.2', 'insight-0.1.2-rc.2-mac-arm64.dmg').href).toBe(
       'https://updates.insight-aigc.com/desktop/releases/v0.1.2-rc.2/insight-0.1.2-rc.2-mac-arm64.dmg'
     )
+    expect(distribution.v2PointerUrl('candidate', 'darwin-x64').href).toBe(
+      'https://updates.insight-aigc.com/desktop/candidate-v2/darwin-x64/current.json'
+    )
+    expect(distribution.v2PointerUrl('stable').href).toBe(
+      'https://updates.insight-aigc.com/desktop/stable/current.json'
+    )
+    expect(distribution.v2TargetArtifactUrl(
+      '1.0.0',
+      'win32-x64',
+      'insight-1.0.0-windows-x64-setup.exe'
+    ).href).toBe(
+      'https://updates.insight-aigc.com/desktop/releases/v1.0.0/targets/win32-x64/insight-1.0.0-windows-x64-setup.exe'
+    )
   })
 
   it.each([
@@ -60,5 +73,16 @@ describe('desktop update distribution', () => {
       updateOrigin: 'https://updates.insight-aigc.com'
     })
     expect(() => distribution.artifactUrl('stable', '0.1.2', name)).toThrow()
+  })
+
+  it('requires final versions and valid target-specific v2 pointers', () => {
+    const distribution = parseUpdateDistribution({
+      schema: 1,
+      updateOrigin: 'https://updates.insight-aigc.com'
+    })
+    expect(() => distribution.v2PointerUrl('candidate')).toThrow()
+    expect(() => distribution.v2PointerUrl('stable', 'darwin-arm64')).toThrow()
+    expect(() => distribution.v2TargetBaseUrl('1.0.0-rc.18', 'darwin-arm64')).toThrow()
+    expect(() => distribution.v2TargetBaseUrl('1.0.0', 'win32-arm64' as never)).toThrow()
   })
 })

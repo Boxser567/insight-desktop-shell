@@ -414,6 +414,8 @@ export class UpdateManager {
       currentVersion: this.options.currentVersion
     })
     if (!cached) return
+    // v2 required policies are restored by the track-aware manager wiring.
+    if (cached.schema !== 1) return
     this.activeManifest = cached.manifest
     this.activeReleaseBaseUrl = this.options.source.releaseBaseUrl(
       cached.manifest.channel,
