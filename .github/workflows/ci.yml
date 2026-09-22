@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     name: Verify desktop source and release contracts
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node scripts/prepare-core-runtime.mjs --target darwin-arm64
+      - run: npm run prepare:core-runtime
       - run: npm run typecheck
       - run: npm test
       - name: Build desktop bundles

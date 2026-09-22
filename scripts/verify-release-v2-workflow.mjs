@@ -20,7 +20,7 @@ async function main() {
     'npm run package:release:mac:x64',
     'npm run package:release:win',
     'scripts/prepare-update-v2-draft.mjs',
-    'node scripts/prepare-core-runtime.mjs --target darwin-arm64',
+    'npm run prepare:core-runtime',
     'scripts/build-update-v2-target.mjs',
     'scripts/verify-update-v2-assets.mjs',
     'scripts/upload-update-v2-target.mjs',
