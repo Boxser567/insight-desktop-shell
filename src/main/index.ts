@@ -292,7 +292,10 @@ function requireCurrentDshHome(): string {
 function applyWorkspaceForCurrentSession(): void {
   if (!authManager || !authEnvironment || !workspaceLifecycle) return
   const view = authManager.current()
-  if (view.kind !== 'authenticated') startupLaunchRevision += 1
+  if (view.kind !== 'authenticated') {
+    startupLaunchRevision += 1
+    if (mainWindow && !mainWindow.isDestroyed()) applyWindowChromeTheme(mainWindow, true)
+  }
   const account = authManager.activeAccount()
   const workspaceAccount = account
     ? (() => {
@@ -553,7 +556,7 @@ function setWindowsMenuOpen(window: BrowserWindow, open: boolean, notifyRenderer
   }
 }
 
-function attachWindowsMenuView(window: BrowserWindow): void {
+function attachWindowsMenuView(window: BrowserWindow, isDark: boolean): void {
   const menuView = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -565,7 +568,7 @@ function attachWindowsMenuView(window: BrowserWindow): void {
   })
   windowsMenuView = menuView
   windowsMenuOpen = false
-  windowsMenuDark = nativeTheme.shouldUseDarkColors
+  windowsMenuDark = isDark
   menuView.setBackgroundColor('#00000000')
   menuView.webContents.setZoomFactor(1)
   menuView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -765,6 +768,7 @@ function installPluginRecoveryNavigation(window: BrowserWindow): void {
 
 function createWindow(): BrowserWindow {
   const isWindows = process.platform === 'win32'
+  const shellChromeDark = authManager?.current().kind !== 'authenticated' || nativeTheme.shouldUseDarkColors
   const window = new BrowserWindow({
     width: 1024,
     height: 720,
@@ -777,11 +781,11 @@ function createWindow(): BrowserWindow {
     ...(isWindows
       ? {
           titleBarStyle: 'hidden' as const,
-          titleBarOverlay: windowsTitleBarOverlay(nativeTheme.shouldUseDarkColors),
+          titleBarOverlay: windowsTitleBarOverlay(shellChromeDark),
           autoHideMenuBar: true
         }
       : {}),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141416' : '#f8f8f6',
+    backgroundColor: shellChromeDark ? '#141416' : '#f8f8f6',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -802,7 +806,7 @@ function createWindow(): BrowserWindow {
     window.setTitle(isWindows ? '因赛 AI' : '')
   })
   secureWebContents(window.webContents, isTrustedShellUrl)
-  installContextMenu(window, harnessLocale)
+  installContextMenu(window, harnessLocale, () => authManager?.current().kind === 'authenticated')
   installRendererRecovery(window.webContents, {
     gpuStatus: () => app.getGPUFeatureStatus(),
     isActive: () => !quitting && mainWindow === window,
@@ -821,7 +825,7 @@ function createWindow(): BrowserWindow {
     resolveSafeModeAction({ type: 'quit' })
   })
   mainWindow = window
-  if (isWindows) attachWindowsMenuView(window)
+  if (isWindows) attachWindowsMenuView(window, shellChromeDark)
   return window
 }
 
@@ -833,7 +837,10 @@ async function loadShell(window: BrowserWindow): Promise<void> {
     await window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
   }
   if (window.isDestroyed()) return
-  applyWindowChromeTheme(window, nativeTheme.shouldUseDarkColors)
+  applyWindowChromeTheme(
+    window,
+    authManager?.current().kind !== 'authenticated' || nativeTheme.shouldUseDarkColors
+  )
   raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
 }
 

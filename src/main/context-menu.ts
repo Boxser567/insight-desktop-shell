@@ -3,18 +3,24 @@ import { buildContextMenuTemplate } from './context-menu-template'
 
 export function installContextMenu(
   window: BrowserWindow,
-  locale: () => 'en' | 'zh'
+  locale: () => 'en' | 'zh',
+  isEnabled: () => boolean = () => true
 ): void {
-  installWebContentsContextMenu(window.webContents, window, locale)
+  installWebContentsContextMenu(window.webContents, window, locale, isEnabled)
 }
 
 /** Install the application context menu for a window-owned renderer. */
 export function installWebContentsContextMenu(
   contents: WebContents,
   window: BrowserWindow,
-  locale: () => 'en' | 'zh'
+  locale: () => 'en' | 'zh',
+  isEnabled: () => boolean = () => true
 ): void {
-  contents.on('context-menu', (_event, params) => {
+  contents.on('context-menu', (event, params) => {
+    if (!isEnabled()) {
+      event.preventDefault()
+      return
+    }
     const template = buildContextMenuTemplate(params, locale(), {
       openLink: (url) => {
         void shell.openExternal(url)

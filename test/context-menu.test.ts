@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildContextMenuTemplate,
@@ -33,6 +34,19 @@ function actions(): ContextMenuActions {
 }
 
 describe('conversation context menu', () => {
+  it('suppresses the Shell context menu until the session is authenticated', async () => {
+    const [main, installer] = await Promise.all([
+      readFile('src/main/index.ts', 'utf8'),
+      readFile('src/main/context-menu.ts', 'utf8')
+    ])
+
+    expect(main).toContain(
+      "installContextMenu(window, harnessLocale, () => authManager?.current().kind === 'authenticated')"
+    )
+    expect(installer).toContain('if (!isEnabled()) {')
+    expect(installer).toContain('event.preventDefault()')
+  })
+
   it('offers copy for selected conversation text', () => {
     const template = buildContextMenuTemplate(
       state({ selectionText: '选中的回答' }),
