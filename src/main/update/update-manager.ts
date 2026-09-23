@@ -197,6 +197,13 @@ export class UpdateManager {
       }
       return Promise.resolve()
     }
+    if (
+      track === 'candidate' && manual &&
+      this.statusValue.phase === 'checking' && this.statusValue.track === 'stable' &&
+      this.operation
+    ) {
+      return this.operation.then(() => this.check(track, manual))
+    }
     if (['checking', 'downloading', 'downloaded', 'installing'].includes(this.statusValue.phase)) {
       return Promise.resolve()
     }
@@ -249,6 +256,7 @@ export class UpdateManager {
 
   private async performCheck(track: UpdateTrack, manual: boolean): Promise<void> {
     if (!this.support.supported) return
+    const target = this.support.target
     const previous = this.statusValue
     const cachedRequired = isRequiredStatus(previous)
     if (cachedRequired && track === 'candidate') {
@@ -258,7 +266,9 @@ export class UpdateManager {
     if (!cachedRequired) this.clearActiveRelease()
     this.publish(reduceUpdateState(previous, { type: 'check', track, manual }))
     try {
-      const release = await this.options.source.resolve(track, this.support.target)
+      const release = await retryTransientUpdateError<AnyResolvedRelease>(
+        () => this.options.source.resolve(track, target)
+      )
       if (track === 'stable') this.lastStableCheckedAt = this.now()
       const version = releaseVersion(release)
       if (!semver.gt(version, this.options.currentVersion)) {
@@ -361,7 +371,9 @@ export class UpdateManager {
       } else if (!cachedRequired && track === 'stable') {
         await rm(this.requiredPolicyPath(), { force: true })
       }
-      const executorUpdate = await this.options.executor.check()
+      const executorUpdate = await retryTransientUpdateError(
+        () => this.options.executor.check()
+      )
       if (executorUpdate?.version !== version) {
         throw new Error('平台更新器版本与可信发布记录不一致。')
       }
@@ -563,7 +575,9 @@ export class UpdateManager {
     previous: UpdateStatus,
     verifiedContext?: ReturnType<typeof versionContext>
   ): void {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = isTransientUpdateError(error)
+      ? '网络暂时不稳定，已自动重试，请稍后再试。'
+      : error instanceof Error ? error.message : String(error)
     const context = verifiedContext ?? versionContext(previous)
     const manual = this.statusValue.phase === 'checking'
       ? this.statusValue.manual
@@ -624,6 +638,23 @@ export class UpdateManager {
     return this.options.preferences ?? createUpdatePreferenceService(
       updatePreferencesPath(this.options.userData)
     )
+  }
+}
+
+function isTransientUpdateError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error instanceof TypeError && /fetch failed|network|timeout/i.test(error.message)) return true
+  return /请求超时|\bHTTP (?:408|429|500|502|503|504)\b|\b(?:ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|ERR_INTERNET_DISCONNECTED)\b|net::ERR_/i.test(error.message)
+}
+
+async function retryTransientUpdateError<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (attempt >= 2 || !isTransientUpdateError(error)) throw error
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)))
+    }
   }
 }
 

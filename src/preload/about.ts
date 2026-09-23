@@ -1,5 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { AboutUpdateApi, UpdatePreferences } from '../shared/about-update-api'
+import { ipcRenderer } from 'electron'
 
 function applyTheme(isDark: boolean): void {
   document.documentElement.dataset.insightTheme = isDark ? 'dark' : 'light'
@@ -33,14 +32,3 @@ function mountTheme(): void {
 }
 
 mountTheme()
-
-const updates: AboutUpdateApi = Object.freeze({
-  preference: (): Promise<UpdatePreferences> =>
-    ipcRenderer.invoke('about-updates:preference'),
-  setCandidateOptIn: (value: boolean): Promise<UpdatePreferences> =>
-    ipcRenderer.invoke('about-updates:set-candidate-opt-in', value),
-  openCandidateCheck: (): Promise<void> =>
-    ipcRenderer.invoke('about-updates:open-candidate-check')
-})
-
-contextBridge.exposeInMainWorld('insightAboutUpdates', updates)

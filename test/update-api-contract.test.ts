@@ -37,6 +37,7 @@ function setup() {
   const harness = windowStub()
   const update = windowStub()
   const open = vi.fn().mockResolvedValue(undefined)
+  const checkCandidate = vi.fn().mockResolvedValue(undefined)
   const quit = vi.fn()
   const dispose = registerUpdateIpc({
     ipcMain: ipcMain as never,
@@ -45,6 +46,7 @@ function setup() {
     harnessWebContents: () => harness.webContents,
     updateWindow: () => update,
     open,
+    checkCandidate,
     quit
   })
   return {
@@ -54,6 +56,7 @@ function setup() {
     harness,
     update,
     open,
+    checkCandidate,
     quit,
     dispose,
     publish(value: UpdateStatus) {
@@ -88,7 +91,8 @@ describe('desktop update IPC', () => {
 
     expect(fixture.open).toHaveBeenCalledOnce()
     expect(fixture.manager.check).toHaveBeenNthCalledWith(1, 'stable', true)
-    expect(fixture.manager.check).toHaveBeenNthCalledWith(2, 'candidate', true)
+    expect(fixture.checkCandidate).toHaveBeenCalledOnce()
+    expect(fixture.manager.check).toHaveBeenCalledTimes(1)
     expect(fixture.manager.download).toHaveBeenCalledOnce()
     expect(fixture.manager.downloadFullInstaller).toHaveBeenCalledWith()
     expect(fixture.manager.install).toHaveBeenCalledOnce()

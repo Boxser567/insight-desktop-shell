@@ -105,7 +105,6 @@ import {
   isTrustedAboutUrl,
   type AboutMetadata
 } from './about-window'
-import { registerAboutUpdateIpc } from './about-update-ipc'
 import packageJson from '../../package.json'
 
 type PluginRecoveryAction = 'uninstall' | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode'
@@ -421,15 +420,15 @@ function checkForUpdatesFromMenu(): Promise<void> {
   return openUpdateWindowAndCheck(updateManager, updateWindowController)
 }
 
-async function confirmCandidateOptIn(): Promise<boolean> {
-  const about = aboutWindowController?.window()
-  if (!about || about.isDestroyed()) throw new Error('The About window is unavailable.')
-  const confirmation = await dialog.showMessageBox(about, {
+async function confirmCandidateCheck(): Promise<boolean> {
+  const update = updateWindowController?.window()
+  if (!update || update.isDestroyed()) throw new Error('The update window is unavailable.')
+  const confirmation = await dialog.showMessageBox(update, {
     type: 'warning',
-    title: '加入内测更新？',
+    title: '检查内测更新？',
     message: '内测版本可能不稳定，甚至无法正常启动。',
-    detail: '关闭内测不会自动降级；如遇问题，可使用正式版完整安装包覆盖恢复，用户数据不会被删除。',
-    buttons: ['取消', '加入内测'],
+    detail: '内测更新仅在你手动触发时检查；如遇问题，可使用正式版完整安装包覆盖恢复，用户数据不会被删除。',
+    buttons: ['取消', '检查内测更新'],
     cancelId: 0,
     defaultId: 0,
     noLink: true
@@ -1187,19 +1186,6 @@ function assertTrustedSecondaryWindowEvent(event: IpcMainInvokeEvent): void {
   }
 }
 
-function assertTrustedAboutEvent(event: IpcMainInvokeEvent): BrowserWindow {
-  const about = aboutWindowController?.window()
-  if (
-    !about ||
-    about.isDestroyed() ||
-    event.sender !== about.webContents ||
-    event.senderFrame !== about.webContents.mainFrame
-  ) {
-    throw new Error('This action is only available from the About window.')
-  }
-  return about
-}
-
 function assertTrustedHarnessEvent(event: IpcMainInvokeEvent): void {
   if (!workspaceController?.isTrustedSender(event.sender, event.senderFrame)) {
     throw new Error('This action is only available from the authenticated Harness view.')
@@ -1737,7 +1723,7 @@ async function initializeUpdates(): Promise<void> {
     currentVersion: app.getVersion()
   })
   updateWindowController = createUpdateWindowController()
-  updateManager = new UpdateManager({
+  const manager = new UpdateManager({
     currentVersion: app.getVersion(),
     environment: {
       packaged: app.isPackaged,
@@ -1764,9 +1750,10 @@ async function initializeUpdates(): Promise<void> {
       }
     }
   })
+  updateManager = manager
   disposeUpdateIpc = registerUpdateIpc({
     ipcMain,
-    manager: updateManager,
+    manager,
     shellWindow: () => mainWindow,
     harnessWebContents: () => harnessWorkspaceView.webContents(),
     updateWindow: () => updateWindowController?.window(),
@@ -1774,21 +1761,14 @@ async function initializeUpdates(): Promise<void> {
       if (!updateWindowController) throw new Error('The update window is unavailable.')
       return updateWindowController.open()
     },
+    checkCandidate: async () => {
+      if (!(await confirmCandidateCheck())) return
+      await preferences.setCandidateOptIn(true)
+      await manager.check('candidate', true)
+    },
     quit: () => app.quit()
   })
-  registerAboutUpdateIpc({
-    ipcMain,
-    preferences,
-    assertTrusted: assertTrustedAboutEvent,
-    confirmCandidateOptIn,
-    openCandidateCheck: async () => {
-      if (!updateManager || !updateWindowController) {
-        throw new Error('The update manager is unavailable.')
-      }
-      await openUpdateWindowAndCheck(updateManager, updateWindowController, 'candidate')
-    }
-  })
-  await updateManager.start()
+  await manager.start()
 }
 
 function installMenu(): void {

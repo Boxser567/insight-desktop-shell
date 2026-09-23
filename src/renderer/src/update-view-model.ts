@@ -6,7 +6,6 @@ export interface UpdateViewModel {
   title: string
   detail: string
   badge?: string
-  warning?: string
   primary?: UpdateViewAction
   secondary?: UpdateViewAction
   recovery?: 'download-full-installer'
@@ -18,8 +17,7 @@ export function updateViewModel(status: UpdateStatus): UpdateViewModel {
   return 'track' in status && status.track === 'candidate'
     ? {
         ...model,
-        badge: '内测版本',
-        warning: '内测版本可能不稳定；关闭内测不会自动降级。'
+        badge: '内测版本'
       }
     : model
 }
@@ -84,8 +82,10 @@ function baseUpdateViewModel(status: UpdateStatus): UpdateViewModel {
       }
     case 'error':
       return {
-        title: status.required ? '必须更新后才能继续' : '更新暂时失败',
-        detail: status.message,
+        title: status.required
+          ? '必须更新后才能继续'
+          : status.availableVersion ? '更新暂时中断' : '暂时未能完成更新检查',
+        detail: status.required ? status.message : '请稍后重试；若持续出现，请联系支持。',
         primary: status.retryable ? 'retry' : undefined,
         secondary: status.required ? 'quit' : undefined,
         recovery: status.manualInstallerAvailable ? 'download-full-installer' : undefined,

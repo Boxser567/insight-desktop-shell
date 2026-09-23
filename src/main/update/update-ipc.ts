@@ -46,6 +46,7 @@ export function registerUpdateIpc(input: {
   harnessWebContents(): TrustedWebContents | undefined
   updateWindow(): TrustedWindow | undefined
   open(): Promise<void>
+  checkCandidate(): Promise<void>
   quit(): void
 }): () => void {
   for (const channel of UPDATE_CHANNELS) input.ipcMain.removeHandler(channel)
@@ -64,7 +65,7 @@ export function registerUpdateIpc(input: {
   })
   input.ipcMain.handle('updates:check-candidate', async (event) => {
     assertUpdateWindowSender(event, input.updateWindow())
-    await input.manager.check('candidate', true)
+    await input.checkCandidate()
   })
   input.ipcMain.handle('updates:download', async (event) => {
     assertBaseSender(event, input)
