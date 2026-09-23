@@ -169,5 +169,8 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain('attachWindowsMenuView(window, shellChromeDark)')
     expect(main).toContain("if (view.kind !== 'authenticated') {")
     expect(main).toContain('applyWindowChromeTheme(mainWindow, true)')
+    expect(main).toMatch(
+      /async function loadShell[\s\S]*?applyWindowChromeTheme\(\s*window,\s*authManager\?\.current\(\)\.kind !== 'authenticated' \|\| nativeTheme\.shouldUseDarkColors\s*\)/
+    )
   })
 })

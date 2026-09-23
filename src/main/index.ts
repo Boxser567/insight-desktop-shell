@@ -837,7 +837,10 @@ async function loadShell(window: BrowserWindow): Promise<void> {
     await window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
   }
   if (window.isDestroyed()) return
-  applyWindowChromeTheme(window, nativeTheme.shouldUseDarkColors)
+  applyWindowChromeTheme(
+    window,
+    authManager?.current().kind !== 'authenticated' || nativeTheme.shouldUseDarkColors
+  )
   raiseWindowWithoutStealingFocus(window, process.platform, () => app.isActive())
 }
 
