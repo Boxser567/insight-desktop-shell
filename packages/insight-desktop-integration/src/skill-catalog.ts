@@ -24,29 +24,48 @@ export interface SkillCatalog {
   subscribe(sessionId: SessionId, listener: () => void): () => void
 }
 
-/** Adapt alpha.2's Session-addressed Remote catalog to the picker contract. */
+interface NativeSkill extends InsightSkill {
+  readonly path?: string
+}
+
+interface SharedSkillCatalog {
+  list(sessionId: SessionId): Promise<readonly NativeSkill[]>
+  subscribe(sessionId: SessionId, listener: () => void): () => void
+}
+
+/** Adapt the Core shared catalog, retaining an alpha.2 Remote fallback. */
 export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
+  const shared = typeof ctx.get === 'function'
+    ? ctx.get('skillCatalog') as SharedSkillCatalog | undefined
+    : undefined
   const listeners = new Map<SessionId, Set<() => void>>()
-  ctx.on('connection/reset', () => {
-    for (const sessionListeners of listeners.values()) {
-      for (const listener of sessionListeners) listener()
-    }
-  })
+  if (!shared) {
+    ctx.on('connection/reset', () => {
+      for (const sessionListeners of listeners.values()) {
+        for (const listener of sessionListeners) listener()
+      }
+    })
+  }
   return {
     async list(sessionId) {
-      const result = await ctx.remote.skills.list({ sessionId })
-      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-      return Promise.all(result.value.skills.map(async (skill, order) => ({
+      const skills = shared
+        ? await shared.list(sessionId)
+        : await ctx.remote.skills.list({ sessionId }).then(result => {
+            if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+            return result.value.skills as readonly NativeSkill[]
+          })
+      return Promise.all(skills.map(async (skill, order) => ({
         name: skill.name,
         description: skill.description,
         ...bundledSkillPresentation(skill.name, skill.path),
         ...await readSkillPresentation(ctx, sessionId, skill.path),
-        order,
+        order: skill.order ?? order,
         bundled: isBundledSkill(skill.name, skill.path),
-        pickerVisible: true
+        pickerVisible: skill.pickerVisible ?? true
       })))
     },
     subscribe(sessionId, listener) {
+      if (shared) return shared.subscribe(sessionId, listener)
       const sessionListeners = listeners.get(sessionId) ?? new Set<() => void>()
       sessionListeners.add(listener)
       listeners.set(sessionId, sessionListeners)
@@ -77,14 +96,6 @@ async function readSkillPresentation(ctx: ClientContext, sessionId: SessionId, p
 /** Visible native gestures in the draft; paths and embedded substrings do not match. */
 export function selectedSkillNames(draft: string): readonly string[] {
   return [...new Set([...draft.matchAll(/(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g)].map(match => match[2]!))]
-}
-
-/** Add or remove one native slash skill using the alpha.2 public draft API. */
-export function toggleSkillDraft(draft: string, name: string): string {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const token = new RegExp(`(^|\\s)\\/${escaped}(?=\\s|$)`)
-  if (token.test(draft)) return draft.replace(token, '$1').replace(/^\s+/, '')
-  return `${draft.trimEnd()}${draft.trim() ? ' ' : ''}/${name} `
 }
 
 /** Only winning bundled skills enter this product shortcut menu. */
