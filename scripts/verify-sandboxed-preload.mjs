@@ -13,7 +13,10 @@ const unsupported = [...new Set(dependencies.filter((name) => name !== 'electron
 if (unsupported.length > 0) {
   throw new Error(`Sandboxed preload contains external runtime dependencies: ${unsupported.join(', ')}`)
 }
-if (!source.includes('contextBridge') || !source.includes('desktop-secondary-theme:get')) {
+if (
+  !source.includes('ipcRenderer.invoke("desktop-secondary-theme:get")') ||
+  !source.includes('desktop-secondary-theme:changed')
+) {
   throw new Error('Sandboxed About preload bundle is incomplete.')
 }
 console.log('Sandboxed About preload bundle is self-contained.')
