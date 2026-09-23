@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 const runtimeTypesRoot = 'build/core-runtime/node_modules/@deepseek-ai'
 const generatedProfileRoot = 'build/bundled-profile/web'
 const productSlots = [
+  'sidebar.brand.control',
   'sidebar.brand.mark',
-  'sidebar.brand.name',
   'sidebar.footer.action',
   'settings.trigger',
   'settings.section',

@@ -14,6 +14,11 @@ import brandMark from '../../../../build/brand-mark.svg'
 import type { InsightDesktopKey } from './locales'
 
 type ProductLocaleProps = PropsLocale<'insightDesktop'>
+const INSIGHT_DESKTOP_WEBSITE = 'https://desktop.insight-aigc.com/'
+
+function openProductWebsite(): void {
+  window.open(INSIGHT_DESKTOP_WEBSITE, '_blank', 'noopener,noreferrer')
+}
 
 export interface AccountFooterActions {
   openSettings(): void
@@ -59,11 +64,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Render the product mark in the brand mark seat. */
-export function BrandMark({ size }: PropsRuntime<'sidebar.brand.mark'>) {
+export function BrandMark({ size }: { size: number }) {
   return (
     <span data-insight-desktop-brand-mark style={{ width: size, height: size }}>
       <img src={brandMark} alt="" />
     </span>
+  )
+}
+
+/** Render the accessible product link that replaces the expanded brand shortcut. */
+export function SidebarBrandControl({ size }: PropsRuntime<'sidebar.brand.control'>) {
+  return (
+    <button type="button" data-insight-desktop-sidebar-brand aria-label="打开因赛AI官网"
+      title="打开因赛AI官网" onClick={openProductWebsite}>
+      <BrandMark size={size} />
+      <BrandName />
+    </button>
   )
 }
 

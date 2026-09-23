@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { createSkillCatalog, filterSkills, toggleSkillDraft } from '../packages/insight-desktop-integration/src/skill-catalog'
+import { createSkillCatalog, filterSkills } from '../packages/insight-desktop-integration/src/skill-catalog'
 import { BUNDLED_SKILL_PRESENTATIONS } from '../packages/insight-desktop-integration/src/bundled-skill-presentations'
 import { parseSkillPresentation, skillDisplayName, skillShortDescription } from '../packages/insight-desktop-integration/src/skill-presentation'
 import { en, zh } from '../packages/insight-desktop-integration/src/client/locales'
@@ -96,7 +96,6 @@ describe('native catalog presentation adapter', () => {
     expect(skill).toMatchObject({ name: native.name, description: native.description, ...presentation })
     expect(skillDisplayName(skill!)).toBe(presentation.displayName)
     expect(skillShortDescription(skill!)).toBe(presentation.shortDescription)
-    expect(toggleSkillDraft('', skill!.name)).toBe('/creator-recommendation ')
     // External metadata remains available, but never enters the product picker.
     for (const query of ['达人推荐', '筛选', native.name, 'model-facing']) expect(filterSkills([skill!], query)).toEqual([])
   })

@@ -37,6 +37,27 @@ const stylesheet = `
   height: 68%;
   object-fit: contain;
 }
+[data-insight-desktop-sidebar-brand] {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+[data-insight-desktop-sidebar-brand]:focus-visible {
+  outline: 2px solid var(--insight-primary);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
 [data-insight-desktop-hero-title] {
   text-align: center;
   text-wrap: balance;

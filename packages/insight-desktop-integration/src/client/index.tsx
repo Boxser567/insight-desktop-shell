@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { accountMenuActions } from './account-menu-model'
-import { AccountFooter, BrandMark, BrandName, HeroTitle, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, UpdateButton } from './components'
+import { AccountFooter, BrandMark, HeroTitle, ClientSettings, HiddenSettingsTrigger, MacDragOverlay, SidebarBrandControl, UpdateButton } from './components'
 import { en, zh } from './locales'
 import { installStyles } from './styles'
 import { SkillPicker } from './SkillPicker'
@@ -44,10 +44,10 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.hero.brand.title', () => ctx.slots.register({
     name: 'conversation.hero.brand.title'
   }, HeroTitle))
-  ctx.slots.inject('sidebar.brand.mark', () =>
-    ctx.slots.inject('sidebar.brand.name', function* () {
+  ctx.slots.inject('sidebar.brand.control', () =>
+    ctx.slots.inject('sidebar.brand.mark', function* () {
+      yield ctx.slots.register({ name: 'sidebar.brand.control' }, SidebarBrandControl)
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, BrandMark)
-      yield ctx.slots.register({ name: 'sidebar.brand.name' }, BrandName)
     }))
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',

@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { filterSkills, selectedSkillNames, toggleSkillDraft, type InsightSkill, type SkillCatalog } from '../skill-catalog'
+import { filterSkills, selectedSkillNames, type InsightSkill, type SkillCatalog } from '../skill-catalog'
 import { skillDisplayName, skillShortDescription } from '../skill-presentation'
 
 type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'insightDesktop'> & {
@@ -38,7 +38,7 @@ export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: S
   }, [catalog, sessionId])
   return <SkillPickerMenu key={sessionId} skills={state.sessionId === sessionId ? state.skills : []}
     catalogAvailable={state.sessionId === sessionId && state.available} selected={selectedSkillNames(draft)}
-    disabled={locked} onSelect={name => inputActions.setDraft(toggleSkillDraft(draft, name))} t={t} />
+    disabled={locked} onSelect={name => inputActions.toggleSkill(name)} t={t} />
 }
 
 type MenuProps = PropsLocale<'insightDesktop'> & {
