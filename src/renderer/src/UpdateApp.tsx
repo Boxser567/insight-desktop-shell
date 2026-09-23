@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import brandMark from '../../../build/brand-mark.svg'
 import { updateViewModel, type UpdateViewAction } from './update-view-model'
 import type { DesktopUpdateWindowApi } from '../../shared/update-api'
@@ -44,6 +44,7 @@ export function UpdateApp(): React.JSX.Element {
   const api = window.insightDesktopUpdates as DesktopUpdateWindowApi
   const [status, setStatus] = useState<UpdateStatus>({ phase: 'idle', currentVersion: '—' })
   const [commandError, setCommandError] = useState<string>()
+  const logoClicks = useRef({ count: 0, startedAt: 0, pending: false })
 
   useEffect(() => {
     let active = true
@@ -67,19 +68,36 @@ export function UpdateApp(): React.JSX.Element {
     })
   }
 
+  const clickLogo = (): void => {
+    const clicks = logoClicks.current
+    if (clicks.pending) return
+    const now = Date.now()
+    if (now - clicks.startedAt > 3_000) {
+      clicks.count = 0
+      clicks.startedAt = now
+    }
+    clicks.count += 1
+    if (clicks.count < 5) return
+    clicks.count = 0
+    clicks.pending = true
+    setCommandError(undefined)
+    void api.checkCandidate().catch((error: unknown) => {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }).finally(() => { clicks.pending = false })
+  }
+
   return (
     <main className="update-page">
       <section className="update-summary" aria-live="polite">
-        <span className={model.busy ? 'update-logo update-logo--busy' : 'update-logo'}>
+        <button type="button" className={model.busy ? 'update-logo update-logo--busy' : 'update-logo'} onClick={clickLogo} aria-label="因赛AI 标志">
           <img src={brandMark} alt="" />
-        </span>
+        </button>
         <div className="update-content">
           <div className="update-title-row">
             <h1>{model.title}</h1>
             {model.badge && <span className="update-track-badge">{model.badge}</span>}
           </div>
           <p>{model.detail}</p>
-          {model.warning && <p className="update-warning">{model.warning}</p>}
           {commandError && <p className="update-error">{commandError}</p>}
           {model.recovery && (
             <button type="button" className="update-recovery" onClick={() => execute(model.recovery!)}>

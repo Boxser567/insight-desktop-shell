@@ -2,13 +2,13 @@
 
 ## 当前发布状态
 
-截至 2026-09-23，公网 legacy Candidate 指针为 `1.0.0-rc.18`，缓存策略为 60 秒；Stable 指针尚未创建。rc.18 已完成构建和投放，但其沙箱 About preload 在打包后引用拆分模块，导致内测入口不可用，因此不能作为最终桥接基线。下一步必须发布并三平台验收 `v1.0.0-rc.19`，验收通过后把 legacy Candidate 指针永久冻结在 rc.19，再开始首个 `v1.0.0` v2 Candidate/Stable 流程。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
+截至 2026-09-23，公网 legacy Candidate 指针为 `1.0.0-rc.18`，缓存策略为 60 秒；Stable 指针尚未创建。rc.18 已完成构建和投放，但其沙箱 About preload 在打包后引用拆分模块，导致内测入口不可用；rc.19 已构建为 Draft，尚未通过 CDN 和安装升级门禁。下一步发布并三平台验收 `v1.0.0-rc.20`，验收通过后把 legacy Candidate 指针永久冻结在 rc.20，再开始首个 `v1.0.0` v2 Candidate/Stable 流程。已批准的生产更新机制仍是自有 HTTPS 域名后的 OSS/CDN，客户端不以 GitHub Releases 作为自动更新源。
 
 客户端 Phase A 已完成：生产运行时只读取 `https://updates.insight-aigc.com` 的渠道指针与已签名版本目录，动态绑定 Generic Provider；模拟更新源已经删除。登录前和登录后的下载入口仅在发现真实可信更新后显示，更新窗口展示真实目标版本，并可从已验证 Manifest 打开同源完整 DMG/NSIS。
 
 > 1.0 首发更新流程已经切换到 [Desktop Update v2 操作清单](releases/update-v2-operator-checklist.md)。
 > `.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 仅负责
-> `v1.0.0-rc.19` legacy 桥接；日常最终 SemVer Candidate 使用 `release-v2.yml`，按目标
+> `v1.0.0-rc.20` legacy 桥接；日常最终 SemVer Candidate 使用 `release-v2.yml`，按目标
 > `stage-target → publish-candidate → accept-target`，三个目标完成后再以
 > `promote-stable` 转正，期间不重新构建已验收字节。
 
@@ -20,7 +20,7 @@
 - 独立 `Publish desktop updates` workflow 从 Draft 下载并复验同一批字节，通过 GitHub OIDC 向测试 Gateway 换取目录级 STS；`stage` 只写不可变版本目录，`promote` 才公开 GitHub Release 并最后提交 `current.json`；
 - 版本化安装资产、YAML、blockmap、产品 Manifest、签名、CDN HEAD/Range/缓存/摘要验证和渠道指针单调性均已有自动门禁。
 
-`v1.0.0-rc.17` 是当前已推广 Candidate，认证和模型请求使用生产 Gateway，更新 Origin 为 `https://updates.insight-aigc.com`。RC17 继续使用已发布的 `insight-runtime-v0.1.6-alpha.2-insight.2` Runtime；正式版在新的 Runtime 完成全平台发布前保持该锁，不从未发布分支取包。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。
+`v1.0.0-rc.18` 是当前已推广 Candidate；rc.17 仍是已验证的跨平台升级起点。认证和模型请求使用生产 Gateway，更新 Origin 为 `https://updates.insight-aigc.com`。正式版在新的 Runtime 完成全平台发布前保持已发布 Runtime 锁，不从未发布分支取包。本地 DEV 只能验证界面、菜单、插件策略与隔离身份，不能证明已签名、公证制品的自动更新安装。
 
 ## 必读资料
 
@@ -187,7 +187,7 @@ CI 成功只证明 workflow 对应 job 完成并生成了产物，不能证明�
 移动任一 `desktop/candidate-v2/<target>/current.json` 前，发布器和客户端都会校验
 Candidate 的 `writesDataSchema` 是否落在恢复基线的 `readsDataSchema` 范围内。已有
 Stable 时，恢复基线只能来自完整签名链验证后的 Stable 目标；首个 Stable 尚未发布时，
-只能使用版本精确为 `v1.0.0-rc.19` 的已签名桥接包。Stable 指针存在但签名、Index、
+只能使用版本精确为 `v1.0.0-rc.20` 的已签名桥接包。Stable 指针存在但签名、Index、
 Manifest 或摘要损坏时必须停止，禁止静默退回桥接包。
 发布 Candidate 前还必须从 OSS 和 CDN 校验当前目标恢复 DMG/NSIS 的存在、HEAD 长度、Range
 响应与 SHA-512；

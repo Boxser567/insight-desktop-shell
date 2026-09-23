@@ -90,6 +90,9 @@ function expectedContentTypes(name) {
 }
 
 function assertHeaders(response, name, size) {
+  if (response.headers.has('content-encoding')) {
+    throw new Error(`Distribution Content-Encoding must be absent: ${name}`)
+  }
   const contentLength = Number(response.headers.get('content-length'))
   if (!Number.isSafeInteger(contentLength) || contentLength !== size) {
     throw new Error(`Distribution Content-Length is invalid: ${name}`)
@@ -165,6 +168,16 @@ async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
     { delay }
   )
   assertHeaders(head, name, localStat.size)
+
+  const { response: compressedRequestHead } = await request(
+    fetchImpl,
+    url,
+    { method: 'HEAD', headers: { 'Accept-Encoding': 'gzip, deflate, br' } },
+    200,
+    `Compressed-request HEAD ${name}`,
+    { delay }
+  )
+  assertHeaders(compressedRequestHead, name, localStat.size)
 
   const { bytes: remoteBytes } = await request(
     fetchImpl,

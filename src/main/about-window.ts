@@ -23,8 +23,8 @@ export function aboutWindowOptions(input: {
 }): BrowserWindowConstructorOptions {
   const platform = input.platform ?? process.platform
   return {
-    width: 440,
-    height: 430,
+    width: 380,
+    height: 312,
     resizable: false,
     maximizable: false,
     minimizable: false,

@@ -25,7 +25,7 @@ async function fixture(version = '1.0.1') {
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString()
   const bridgeManifest = Buffer.from(JSON.stringify({
     schema: 'insight-desktop-update/v1',
-    version: '1.0.0-rc.19',
+    version: '1.0.0-rc.20',
     channel: 'candidate'
   }))
   await Promise.all([
@@ -34,10 +34,10 @@ async function fixture(version = '1.0.1') {
   ])
   const floorResponses = new Map<string, Buffer>([
     ['https://updates.insight-aigc.com/desktop/candidate/current.json', Buffer.from(JSON.stringify({
-      schemaVersion: 1, channel: 'candidate', version: '1.0.0-rc.19'
+      schemaVersion: 1, channel: 'candidate', version: '1.0.0-rc.20'
     }))],
-    ['https://updates.insight-aigc.com/desktop/releases/v1.0.0-rc.19/insight-update.json', bridgeManifest],
-    ['https://updates.insight-aigc.com/desktop/releases/v1.0.0-rc.19/insight-update.json.sig', sign(null, bridgeManifest, privateKey)]
+    ['https://updates.insight-aigc.com/desktop/releases/v1.0.0-rc.20/insight-update.json', bridgeManifest],
+    ['https://updates.insight-aigc.com/desktop/releases/v1.0.0-rc.20/insight-update.json.sig', sign(null, bridgeManifest, privateKey)]
   ])
   return { root, packagePath, publicKeyPath, privateKey, floorResponses }
 }
@@ -54,7 +54,7 @@ function signedCandidateFloor(
     version,
     target,
     referencedSha512: Buffer.alloc(64, 3).toString('base64'),
-    policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.19' },
+    policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.20' },
     publishedAt: '2026-09-22T12:00:00.000Z'
   }))
   return jsonResponse({
@@ -138,7 +138,7 @@ describe('release v2 workflow contract', () => {
       tag: 'v1.0.1',
       commit,
       releaseId: 42,
-      versionFloor: '1.0.0-rc.19',
+      versionFloor: '1.0.0-rc.20',
       createdTag: true,
       createdDraft: true
     })
@@ -214,7 +214,7 @@ describe('release v2 workflow contract', () => {
       publicKeyPath: files.publicKeyPath,
       floorUrls: ['https://updates.insight-aigc.com/desktop/candidate/current.json'],
       fetch
-    })).rejects.toThrow('exactly the signed rc.19 bridge')
+    })).rejects.toThrow('exactly the signed rc.20 bridge')
   })
 
   it('continues an existing version from its pinned Tag after main advances', async () => {
@@ -250,7 +250,7 @@ describe('release v2 workflow contract', () => {
       tag: 'v1.0.1',
       commit: pinnedCommit,
       releaseId: 42,
-      versionFloor: '1.0.0-rc.19',
+      versionFloor: '1.0.0-rc.20',
       createdTag: false,
       createdDraft: false
     })

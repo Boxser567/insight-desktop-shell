@@ -1,6 +1,6 @@
 # Desktop Update v2 操作清单
 
-本清单用于 `v1.0.0-rc.19` 桥接、按目标测试最终版本、拒绝失败版本，以及把同一批
+本清单用于 `v1.0.0-rc.20` 桥接、按目标测试最终版本、拒绝失败版本，以及把同一批
 已验收字节转为 Stable。任何签名、摘要、身份、兼容或 CDN 门禁失败都必须停止，禁止
 覆盖 tag、Release Asset 或 OSS 不可变对象。
 
@@ -16,25 +16,27 @@
 - [ ] `node scripts/verify-publish-v2-workflow.mjs .github/workflows/publish-update-v2.yml`
 - [ ] `git diff --check`
 
-## 1. 发布 rc.19 桥接包
+## 1. 发布 rc.20 桥接包
 
-rc.18 因打包后的沙箱 About preload 引用拆分模块而被拒绝。旧
-`.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 在 rc.19 后只用于
+rc.18 因打包后的沙箱 About preload 引用拆分模块而被拒绝；rc.19 已构建为 Draft，
+但尚未完成 CDN 和安装升级门禁。旧
+`.github/workflows/release.yml` 与 `.github/workflows/publish-update.yml` 在 rc.20 后只用于
 桥接维护，不再创建新的日常 Candidate。
 
 - [ ] 从已审核提交创建短期分支，设置 `package.json` / lock / policy 为
-  `1.0.0-rc.19`、`candidate`、`optional`。
-- [ ] 运行 `Release desktop installers`：`candidate_tag=v1.0.0-rc.19`，`target=all`。
+  `1.0.0-rc.20`、`candidate`、`optional`。
+- [ ] 运行 `Release desktop installers`：`candidate_tag=v1.0.0-rc.20`，`target=all`。
 - [ ] 核对三端签名/公证、Runtime 测试、Manifest 和 Draft 资产。
-- [ ] 运行 `Publish desktop updates` 的 `stage`，然后以精确版本确认执行 `promote`。
+- [ ] 运行 `Publish desktop updates` 的 `stage`，核对 OSS/CDN 的 HEAD、Range、长度、
+  SHA-512 与压缩响应；仅在门禁和三平台升级验收通过后以精确版本执行 `promote`。
 - [ ] 在 rc.17 的 macOS arm64、macOS x64、Windows x64 实机验证自动发现、下载、安装、
   重启和 userData 连续性。
-- [ ] 确认 rc.19 首次启动写入 `candidateOptIn=true`，但启动、六小时和恢复定时任务只检查
-  Stable；Candidate 只在用户点击“检查内测更新”后执行。
-- [ ] 从 rc.17 三平台验证自动发现 rc.19；已安装 rc.18 的内部测试机因只执行 Stable 后台
-  检查，必须人工安装 rc.19，不能把它计为自动升级通过。
-- [ ] 冻结 `desktop/candidate/current.json` 在 rc.19。失败时废弃 rc.19 并使用更高 legacy
-  RC，禁止替换 rc.19 字节。
+- [ ] 确认启动、六小时和恢复定时任务只检查 Stable；在更新窗口连续点击 Logo 五次、
+  经二次确认后才手动检查 Candidate，不出现内测开关或额外提示。
+- [ ] 从 rc.17 三平台验证自动发现 rc.20；已安装 rc.18/rc.19 的内部测试机因只执行
+  Stable 后台检查，必须人工安装或显式触发内测检查，不能把它计为自动升级通过。
+- [ ] 冻结 `desktop/candidate/current.json` 在 rc.20。失败时废弃 rc.20 并使用更高 legacy
+  RC，禁止替换 rc.20 字节。
 
 ## 2. 初始化最终版本并按目标构建
 
@@ -61,7 +63,7 @@ rc.18 因打包后的沙箱 About preload 引用拆分模块而被拒绝。旧
    不改变客户端指针。
 2. `command=publish-candidate`，填写相同版本和目标。此动作校验恢复基线兼容性，然后只更新：
    `desktop/candidate-v2/<target>/current.json`。
-3. 测试者在“关于因赛AI”中显式开启“接收内测更新”，点击“检查内测更新”。Candidate
+3. 测试者在更新窗口连续点击 Logo 五次，经二次确认后检查内测更新。Candidate
    不应产生红点、后台检查或主动通知。
 4. 完成干净安装、覆盖安装、上一接受版本到当前版本、连续三次重启、主题、完整安装包恢复、
    userData、账号、会话、工作区、设置和插件验证。
@@ -79,7 +81,7 @@ SemVer。
 - [ ] 三个 Candidate 指针均指向相同版本。
 - [ ] 三个不可变验收记录均存在且摘要匹配。
 - [ ] 三个 Target Manifest 的 Shell commit、Runtime、兼容声明和版本完全一致。
-- [ ] Candidate `writesDataSchema` 可由当前 Stable 读取；首个 Stable 前由签名 rc.19 桥接包读取。
+- [ ] Candidate `writesDataSchema` 可由当前 Stable 读取；首个 Stable 前由签名 rc.20 桥接包读取。
 - [ ] 对应目标的恢复 DMG/NSIS 已从 OSS 与 CDN 按 Manifest 长度和 SHA-512 校验通过。
 - [ ] 运行 `Publish desktop v2 updates`：`command=promote-stable`、`target=none`、
   `version=<精确版本>`、`confirm_version=<精确版本>`。
@@ -103,6 +105,6 @@ SemVer。
 - [ ] 安装资产支持 HTTPS、HEAD 和 Range，无重定向或字节改写。
 - [ ] CDN 下载摘要与 Target Manifest 完全一致。
 - [ ] 报告中不包含更新私钥、OIDC Token、STS 凭证、用户路径或完整异常响应。
-- [ ] rc.17 仍能通过冻结的 legacy Candidate 指针到达 rc.19。
+- [ ] rc.17 仍能通过冻结的 legacy Candidate 指针到达 rc.20。
 
 只有以上证据齐全后才清理不再被 legacy 或 v2 指针引用的旧 Draft/Release；不得先删除再验证。

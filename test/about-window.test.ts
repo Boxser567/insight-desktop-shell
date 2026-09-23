@@ -5,7 +5,6 @@ import {
   aboutWindowOptions,
   isTrustedAboutUrl
 } from '../src/main/about-window'
-import { registerAboutUpdateIpc } from '../src/main/about-update-ipc'
 import { createAboutViewModel } from '../src/renderer/src/about-view-model'
 
 function fakeWindow() {
@@ -59,8 +58,8 @@ describe('desktop About window', () => {
       preload: '/app/secondary-theme.cjs',
       platform: 'win32'
     })).toMatchObject({
-      width: 440,
-      height: 430,
+      width: 380,
+      height: 312,
       resizable: false,
       maximizable: false,
       minimizable: false,
@@ -85,51 +84,6 @@ describe('desktop About window', () => {
       preload: '/app/secondary-theme.cjs',
       platform: 'darwin'
     })).not.toHaveProperty('autoHideMenuBar')
-  })
-
-  it('keeps Candidate preference and checks behind the trusted About main frame', async () => {
-    const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    const ipcMain = {
-      removeHandler: vi.fn((channel: string) => handlers.delete(channel)),
-      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
-        handlers.set(channel, handler)
-      })
-    }
-    const trusted = { sender: {}, senderFrame: {} }
-    let candidateOptIn = false
-    const preferences = {
-      read: vi.fn(async () => ({ candidateOptIn })),
-      setCandidateOptIn: vi.fn(async (value: boolean) => { candidateOptIn = value })
-    }
-    const confirmCandidateOptIn = vi.fn().mockResolvedValue(false)
-    const openCandidateCheck = vi.fn().mockResolvedValue(undefined)
-    registerAboutUpdateIpc({
-      ipcMain: ipcMain as never,
-      preferences,
-      assertTrusted: (event) => {
-        if (event !== trusted) throw new Error('untrusted About sender')
-      },
-      confirmCandidateOptIn,
-      openCandidateCheck
-    })
-
-    await expect(handlers.get('about-updates:preference')?.(trusted)).resolves.toEqual({
-      candidateOptIn: false
-    })
-    await expect(handlers.get('about-updates:set-candidate-opt-in')?.(trusted, true))
-      .resolves.toEqual({ candidateOptIn: false })
-    expect(preferences.setCandidateOptIn).not.toHaveBeenCalled()
-
-    confirmCandidateOptIn.mockResolvedValue(true)
-    await expect(handlers.get('about-updates:set-candidate-opt-in')?.(trusted, true))
-      .resolves.toEqual({ candidateOptIn: true })
-    expect(preferences.setCandidateOptIn).toHaveBeenCalledWith(true)
-    await handlers.get('about-updates:open-candidate-check')?.(trusted)
-    expect(openCandidateCheck).toHaveBeenCalledOnce()
-
-    await expect(Promise.resolve().then(() =>
-      handlers.get('about-updates:set-candidate-opt-in')?.({ sender: {}, senderFrame: {} }, false)
-    )).rejects.toThrow('untrusted')
   })
 
   it('accepts only the packaged or configured development About page', () => {
@@ -206,11 +160,11 @@ describe('desktop About window', () => {
     expect(vite).toContain("about: resolve('src/renderer/about.html')")
     expect(vite).toContain("about: resolve('src/preload/about.ts')")
     expect(creation).toContain("preload: join(import.meta.dirname, '../preload/about.cjs')")
-    expect(aboutApp).toContain('接收内测更新')
-    expect(aboutApp).toContain('检查内测更新')
+    expect(aboutApp).not.toContain('接收内测更新')
+    expect(aboutApp).not.toContain('checkbox')
+    expect(aboutApp).toContain('model.copyright')
     expect(aboutStyles).toContain(':root[data-insight-theme="light"]')
     expect(aboutStyles).toContain(':root[data-insight-theme="dark"]')
-    expect(aboutStyles).toContain('--warning-surface')
     expect(aboutHtml).toContain("connect-src 'none'")
     expect(JSON.parse(packageJson).insightReleaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/u)
   })

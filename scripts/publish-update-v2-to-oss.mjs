@@ -406,8 +406,8 @@ async function readAuthenticatedPointer(input, key, { allowLegacy = false } = {}
       value.channel !== expectedChannel ||
       Object.keys(value).sort().join(',') !== 'channel,schemaVersion,version'
     ) throw new Error(`Legacy update pointer is invalid: ${key}`)
-    if (key !== 'desktop/candidate/current.json' || value.version !== '1.0.0-rc.19') {
-      throw new Error('Legacy update pointer must be the signed rc.19 recovery bridge.')
+    if (key !== 'desktop/candidate/current.json' || value.version !== '1.0.0-rc.20') {
+      throw new Error('Legacy update pointer must be the signed rc.20 recovery bridge.')
     }
     return { ...object, version: value.version, legacy: true, value }
   }
@@ -496,8 +496,8 @@ async function verifyRecoveryInstaller(input, prefix, manifest, target) {
 }
 
 async function legacyRecoveryReads(input, pointer, channel) {
-  if (channel === 'candidate' && pointer.version !== '1.0.0-rc.19') {
-    throw new Error('The recovery bridge must be exactly v1.0.0-rc.19.')
+  if (channel === 'candidate' && pointer.version !== '1.0.0-rc.20') {
+    throw new Error('The recovery bridge must be exactly v1.0.0-rc.20.')
   }
   const prefix = `desktop/releases/v${pointer.version}/`
   const [manifestBytes, signatureBytes, publicKeyPem] = await Promise.all([
@@ -563,7 +563,7 @@ async function recoveryReads(input, pointers) {
     return manifest.compatibility.readsDataSchema
   }
   const bridge = pointers.find((pointer) => pointer.name === 'legacy-candidate')
-  if (!bridge?.legacy) throw new Error('The validated rc.19 recovery bridge is unavailable.')
+  if (!bridge?.legacy) throw new Error('The validated rc.20 recovery bridge is unavailable.')
   return legacyRecoveryReads(input, bridge, 'candidate')
 }
 

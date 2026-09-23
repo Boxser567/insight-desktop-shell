@@ -60,6 +60,7 @@ async function origin(
     noRange?: string
     wrongCache?: string
     redirect?: string
+    compressedHead?: string
   } = {}
 ) {
   const server = createServer((request, response) => {
@@ -85,6 +86,18 @@ async function origin(
         ? 'public,max-age=60'
         : 'public,max-age=31536000,immutable',
       'Content-Type': contentType(name)
+    }
+    if (
+      behavior.compressedHead === name &&
+      request.method === 'HEAD' &&
+      request.headers['accept-encoding']?.includes('br')
+    ) {
+      response.writeHead(200, {
+        ...headers,
+        'Content-Encoding': 'gzip',
+        'Content-Length': String(bytes.length)
+      }).end()
+      return
     }
     if (request.headers.range === 'bytes=0-0' && behavior.noRange !== name) {
       response.writeHead(206, {
@@ -181,6 +194,14 @@ describe('final distribution verifier', () => {
       redirected,
       await origin(redirected.files, { redirect: 'latest-mac.yml' })
     )).rejects.toThrow('redirected or has an unexpected status')
+  })
+
+  it('rejects CDN compression when a browser advertises gzip or Brotli', async () => {
+    const value = await fixture()
+    await expect(verify(
+      value,
+      await origin(value.files, { compressedHead: 'insight-update.json' })
+    )).rejects.toThrow('Content-Encoding must be absent: insight-update.json')
   })
 
   it('rejects non-HTTPS non-loopback and path-bearing origins', async () => {

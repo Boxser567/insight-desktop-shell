@@ -157,7 +157,7 @@ function fixture(options: {
     referencedSha512,
     policy: {
       mode: options.requiredCandidate ? 'required' : 'optional',
-      minimumSupportedVersion: '1.0.0-rc.19'
+      minimumSupportedVersion: '1.0.0-rc.20'
     },
     publishedAt: '2026-09-22T08:00:00.000Z'
   }
@@ -242,9 +242,9 @@ describe('v2 release source', () => {
     })
   })
 
-  it('uses only the signed rc.19 bridge before the first Stable pointer exists', async () => {
+  it('uses only the signed rc.20 bridge before the first Stable pointer exists', async () => {
     const target = targetValues['darwin-x64']
-    const version = '1.0.0-rc.19'
+    const version = '1.0.0-rc.20'
     const metadata = Buffer.from(`version: ${version}\nminimumSystemVersion: 22.0.0\n`)
     const legacyManifest = {
       schema: 'insight-desktop-update/v1',

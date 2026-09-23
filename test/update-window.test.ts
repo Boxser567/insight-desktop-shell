@@ -94,6 +94,8 @@ describe('desktop update window', () => {
     )?.groups?.body
 
     expect(creation).toContain('suppressWindowsSecondaryMenu(window)')
+    expect(source).toContain('dialog.showMessageBox(update, {')
+    expect(source).toContain('await preferences.setCandidateOptIn(true)')
     expect(preparation).toContain('await workspaceLifecycle?.stop()')
     expect(preparation).not.toContain('updateWindowController?.close()')
     expect(preparation).toContain('aboutWindowController?.close()')
@@ -128,13 +130,15 @@ describe('desktop update window', () => {
       phase: 'error', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'stable', required: true, message: 'offline', manual: true, retryable: true, manualInstallerAvailable: true
     })).toMatchObject({ primary: 'retry', secondary: 'quit', recovery: 'download-full-installer' })
     expect(updateViewModel({
+      phase: 'error', currentVersion: '1.0.0', track: 'stable', required: false, message: 'fetch failed', manual: true, retryable: true, manualInstallerAvailable: false
+    })).toMatchObject({ title: '暂时未能完成更新检查', detail: expect.not.stringContaining('fetch failed') })
+    expect(updateViewModel({
       phase: 'unsupported', currentVersion: '1.0.0', track: 'stable', reason: 'development build', manual: true
     }).detail).toContain('development build')
     expect(updateViewModel({
       phase: 'available', currentVersion: '1.0.0', availableVersion: '1.1.0', track: 'candidate', required: false, manual: true
     })).toMatchObject({
       badge: '内测版本',
-      warning: expect.stringContaining('不会自动降级'),
       primary: 'download',
       secondary: 'skip'
     })
@@ -159,7 +163,10 @@ describe('desktop update window', () => {
     expect(source).not.toContain("install: '安装并重启'")
     expect(source).toContain("status.phase === 'checking'")
     expect(source).toContain("status.phase === 'checking' || status.phase === 'installing'")
-    expect(source).toContain("model.busy ? 'update-logo update-logo--busy' : 'update-logo'")
+    expect(source).toContain('onClick={clickLogo}')
+    expect(source).toContain('clicks.count < 5')
+    expect(source).toContain('api.checkCandidate()')
+    expect(source).not.toContain('model.warning')
     expect(source).toContain('className="update-progress update-progress--checking"')
     expect(source).toContain("'正在准备安装' : '正在检查更新'")
     expect(source).not.toMatch(/取消检查|>取消</u)

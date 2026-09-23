@@ -298,6 +298,27 @@ describe('desktop update manager', () => {
     })
   })
 
+  it('runs a confirmed Candidate check after an in-progress Stable check', async () => {
+    const release = resolvedRelease()
+    const source = fakeSource(release)
+    let finishStable!: (value: ResolvedRelease) => void
+    vi.mocked(source.resolve).mockImplementationOnce(() => new Promise((resolve) => {
+      finishStable = resolve
+    }))
+    const { manager, userData } = await setup({ source })
+    await writeCandidateOptIn(join(userData, 'updates', 'preferences.json'), true)
+    await manager.start()
+
+    const stableCheck = manager.check('stable', true)
+    const candidateCheck = manager.check('candidate', true)
+    expect(source.resolve).toHaveBeenCalledTimes(1)
+    finishStable(release)
+    await Promise.all([stableCheck, candidateCheck])
+
+    expect(source.resolve).toHaveBeenNthCalledWith(2, 'candidate', target)
+    expect(manager.status()).toMatchObject({ phase: 'available', track: 'candidate' })
+  })
+
   it('coalesces concurrent checks into one authenticated source and executor operation', async () => {
     let finish: ((release: ResolvedRelease) => void) | undefined
     const release = resolvedRelease()
@@ -437,6 +458,45 @@ describe('desktop update manager', () => {
 
     expect(manager.status().phase).toBe('up-to-date')
     expect(executor.check).not.toHaveBeenCalled()
+  })
+
+  it('retries transient discovery failures before showing an update', async () => {
+    const release = resolvedRelease()
+    const source = fakeSource(release)
+    vi.mocked(source.resolve)
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new Error('更新投放信封请求失败：HTTP 503。'))
+    const { manager } = await setup({ source })
+    await manager.start()
+
+    await manager.check('stable', true)
+
+    expect(source.resolve).toHaveBeenCalledTimes(3)
+    expect(manager.status().phase).toBe('available')
+  })
+
+  it('does not retry an invalid signed release', async () => {
+    const source = fakeSource(resolvedRelease())
+    vi.mocked(source.resolve).mockRejectedValue(new Error('更新 Manifest 签名无效。'))
+    const { manager } = await setup({ source })
+    await manager.start()
+
+    await manager.check('stable', true)
+
+    expect(source.resolve).toHaveBeenCalledOnce()
+    expect(manager.status()).toMatchObject({ phase: 'error', retryable: true })
+  })
+
+  it('retries a transient platform updater check without losing the verified release', async () => {
+    const executor = new FakeExecutor()
+    executor.check.mockRejectedValueOnce(new TypeError('fetch failed'))
+    const { manager } = await setup({ executor })
+    await manager.start()
+
+    await manager.check('stable', true)
+
+    expect(executor.check).toHaveBeenCalledTimes(2)
+    expect(manager.status().phase).toBe('available')
   })
 
   it('suppresses a skipped optional version automatically but shows it manually', async () => {
