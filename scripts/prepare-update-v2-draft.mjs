@@ -86,8 +86,8 @@ async function readPointerVersion(input, rawUrl, publicKeyPem) {
     value.channel === 'candidate' && semver.valid(value.version) === value.version &&
     Object.keys(value).sort().join(',') === 'channel,schemaVersion,version'
   ) {
-    if (value.version !== '1.0.0-rc.19') {
-      throw new Error('Legacy version floor must be exactly the signed rc.19 bridge.')
+    if (value.version !== '1.0.0-rc.20') {
+      throw new Error('Legacy version floor must be exactly the signed rc.20 bridge.')
     }
     const releaseUrl = new URL(`/desktop/releases/v${value.version}/insight-update.json`, url)
     const signatureUrl = new URL(`${releaseUrl.pathname}.sig`, url)
@@ -96,20 +96,20 @@ async function readPointerVersion(input, rawUrl, publicKeyPem) {
       input.fetch(signatureUrl, { redirect: 'error', signal: AbortSignal.timeout(30_000) })
     ])
     if (!manifestResponse.ok || !signatureResponse.ok) {
-      throw new Error('Signed rc.19 recovery bridge is unavailable.')
+      throw new Error('Signed rc.20 recovery bridge is unavailable.')
     }
     const [manifestBytes, signatureBytes] = await Promise.all([
-      readBoundedResponse(manifestResponse, 'rc.19 recovery Manifest'),
-      readBoundedResponse(signatureResponse, 'rc.19 recovery signature')
+      readBoundedResponse(manifestResponse, 'rc.20 recovery Manifest'),
+      readBoundedResponse(signatureResponse, 'rc.20 recovery signature')
     ])
     if (!verify(null, manifestBytes, publicKeyPem, signatureBytes)) {
-      throw new Error('Signed rc.19 recovery bridge is invalid.')
+      throw new Error('Signed rc.20 recovery bridge is invalid.')
     }
     const manifest = JSON.parse(manifestBytes.toString('utf8'))
     if (
       manifest?.schema !== 'insight-desktop-update/v1' ||
       manifest.version !== value.version || manifest.channel !== 'candidate'
-    ) throw new Error('Signed rc.19 recovery bridge identity is invalid.')
+    ) throw new Error('Signed rc.20 recovery bridge identity is invalid.')
     return value.version
   }
   const authenticated = parseCanonicalV2Envelope(bytes)

@@ -60,7 +60,7 @@ async function installBridgeBaseline(
   fixture: Awaited<ReturnType<typeof releaseFixture>>,
   oss: MemoryOss
 ) {
-  const version = '1.0.0-rc.19'
+  const version = '1.0.0-rc.20'
   const installers = [
     { platform: 'darwin', arch: 'arm64', kind: 'dmg', name: 'bridge-arm64.dmg', bytes: Buffer.from('arm64 bridge') },
     { platform: 'darwin', arch: 'x64', kind: 'dmg', name: 'bridge-x64.dmg', bytes: Buffer.from('x64 bridge') },
@@ -109,7 +109,7 @@ async function installCandidateFloor(
     version,
     target,
     referencedSha512: Buffer.alloc(64, 4).toString('base64'),
-    policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.19' },
+    policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.20' },
     publishedAt: '2026-09-22T12:00:00.000Z'
   }))
   const privateKey = await readFile(fixture.paths.privateKey, 'utf8')
@@ -137,7 +137,7 @@ async function releaseFixture(version = '1.0.1') {
     releaseVersion: version,
     channel: 'stable',
     mode: 'optional',
-    minimumSupportedVersion: '1.0.0-rc.19'
+    minimumSupportedVersion: '1.0.0-rc.20'
   }))
   return { root, paths, version }
 }

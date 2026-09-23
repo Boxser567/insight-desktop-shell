@@ -94,7 +94,7 @@ function releaseFixture() {
       referencedSha512: track === 'candidate'
         ? digest(authenticatedManifest.bytes)
         : digest(authenticatedIndex.bytes),
-      policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.19' },
+      policy: { mode: 'optional', minimumSupportedVersion: '1.0.0-rc.20' },
       publishedAt: '2026-09-22T12:00:00.000Z'
     }
     return {
@@ -143,10 +143,10 @@ function sourceFixture(release: ReturnType<typeof releaseFixture>): V2UpdateSour
   return {
     resolve: vi.fn(async (track) => release.resolved(track)),
     resolveRecoveryBaseline: vi.fn(async () => ({
-      version: '1.0.0-rc.19',
+      version: '1.0.0-rc.20',
       source: 'bridge' as const,
       readsDataSchema: { minimum: 1, maximum: 1 },
-      manualInstallerUrl: new URL('https://updates.example.test/desktop/releases/v1.0.0-rc.19/bridge.dmg')
+      manualInstallerUrl: new URL('https://updates.example.test/desktop/releases/v1.0.0-rc.20/bridge.dmg')
     })),
     v2ReleaseBaseUrl: vi.fn(() => release.resolved('stable').releaseBaseUrl),
     v2ManualInstallerUrl: vi.fn(() => release.resolved('stable').manualInstallerUrl),
@@ -179,9 +179,9 @@ async function manager(input: {
   return value
 }
 
-describe('rc.19 bridge to v2 Stable integration', () => {
-  it('moves rc.17 through rc.19 into the same Candidate and Stable 1.0.0 bytes', async () => {
-    expect(semver.gt('1.0.0-rc.19', '1.0.0-rc.17')).toBe(true)
+describe('rc.20 bridge to v2 Stable integration', () => {
+  it('moves rc.17 through rc.20 into the same Candidate and Stable 1.0.0 bytes', async () => {
+    expect(semver.gt('1.0.0-rc.20', '1.0.0-rc.17')).toBe(true)
     const nativeUpdater = {
       autoDownload: true,
       autoInstallOnAppQuit: true,
@@ -210,7 +210,7 @@ describe('rc.19 bridge to v2 Stable integration', () => {
     const candidateTimers = new Timers()
     const candidateExecutor = new Executor()
     const candidate = await manager({
-      currentVersion: '1.0.0-rc.19', userData, source,
+      currentVersion: '1.0.0-rc.20', userData, source,
       timers: candidateTimers, executor: candidateExecutor
     })
     expect(candidateTimers.timeouts).toHaveLength(1)
@@ -288,7 +288,7 @@ describe('rc.19 bridge to v2 Stable integration', () => {
       path,
       publicKeyPem,
       target: { channel: 'stable', platform: 'darwin', arch: 'arm64' },
-      currentVersion: '1.0.0-rc.19'
+      currentVersion: '1.0.0-rc.20'
     })).resolves.toMatchObject({ schema: 2, manifest: { version: '1.0.0' } })
   })
 
@@ -329,7 +329,7 @@ describe('rc.19 bridge to v2 Stable integration', () => {
     const source = sourceFixture(release)
     const executor = new Executor()
     const value = await manager({
-      currentVersion: '1.0.0-rc.19',
+      currentVersion: '1.0.0-rc.20',
       userData,
       source,
       timers: new Timers(),
@@ -350,7 +350,7 @@ describe('rc.19 bridge to v2 Stable integration', () => {
   it('keeps Candidate availability outside the global badge contract', () => {
     const status: UpdateStatus = {
       phase: 'available',
-      currentVersion: '1.0.0-rc.19',
+      currentVersion: '1.0.0-rc.20',
       availableVersion: '1.0.0',
       track: 'candidate',
       required: false,

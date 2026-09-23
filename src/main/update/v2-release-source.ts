@@ -38,7 +38,7 @@ const RELEASE_INDEX_NAME = 'insight-release.json'
 const RELEASE_INDEX_SIGNATURE_NAME = 'insight-release.json.sig'
 const TARGET_MANIFEST_NAME = 'insight-target.json'
 const TARGET_MANIFEST_SIGNATURE_NAME = 'insight-target.json.sig'
-const LEGACY_BRIDGE_VERSION = '1.0.0-rc.19'
+const LEGACY_BRIDGE_VERSION = '1.0.0-rc.20'
 const MAX_UPDATE_METADATA_BYTES = 4 * 1024 * 1024
 
 export interface V2ReleaseSourceOptions {
@@ -221,7 +221,7 @@ export class V2ReleaseSource implements V2UpdateSource {
     const bridgeTarget: UpdateTarget = { ...target, channel: 'candidate' }
     const bridge = await this.#legacySource.resolve('candidate', bridgeTarget)
     if (bridge.manifest.version !== LEGACY_BRIDGE_VERSION) {
-      throw new Error('首个正式版发布前只能使用已验证的 rc.19 桥接包作为恢复基线。')
+      throw new Error('首个正式版发布前只能使用已验证的 rc.20 桥接包作为恢复基线。')
     }
     return {
       version: bridge.manifest.version,
