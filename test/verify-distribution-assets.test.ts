@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { brotliCompressSync, gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 // @ts-expect-error Production scripts are plain ESM and expose runtime-tested helpers.
 import { verifyDistributionAssets } from '../scripts/verify-distribution-assets.mjs'
@@ -60,7 +61,10 @@ async function origin(
     noRange?: string
     wrongCache?: string
     redirect?: string
-    compressedHead?: string
+    compressed?: string
+    compressionEncoding?: 'gzip' | 'br'
+    compressedWithoutVary?: boolean
+    corruptCompressed?: string
   } = {}
 ) {
   const server = createServer((request, response) => {
@@ -87,16 +91,24 @@ async function origin(
         : 'public,max-age=31536000,immutable',
       'Content-Type': contentType(name)
     }
+    const compressionEncoding = behavior.compressionEncoding ?? 'gzip'
     if (
-      behavior.compressedHead === name &&
-      request.method === 'HEAD' &&
-      request.headers['accept-encoding']?.includes('br')
+      behavior.compressed === name &&
+      request.headers['accept-encoding']?.includes(compressionEncoding)
     ) {
+      const compressedSource = behavior.corruptCompressed === name
+        ? Buffer.concat([bytes, Buffer.from('corrupt')])
+        : bytes
+      const compressed = compressionEncoding === 'br'
+        ? brotliCompressSync(compressedSource)
+        : gzipSync(compressedSource)
       response.writeHead(200, {
         ...headers,
-        'Content-Encoding': 'gzip',
-        'Content-Length': String(bytes.length)
-      }).end()
+        'Content-Encoding': compressionEncoding,
+        'Content-Length': String(compressed.length),
+        ...(behavior.compressedWithoutVary ? {} : { Vary: 'Accept-Encoding' })
+      })
+      response.end(request.method === 'HEAD' ? undefined : compressed)
       return
     }
     if (request.headers.range === 'bytes=0-0' && behavior.noRange !== name) {
@@ -196,12 +208,45 @@ describe('final distribution verifier', () => {
     )).rejects.toThrow('redirected or has an unexpected status')
   })
 
-  it('rejects CDN compression when a browser advertises gzip or Brotli', async () => {
-    const value = await fixture()
+  it.each(['gzip', 'br'] as const)(
+    'accepts %s compression only for the signed release Manifest',
+    async (compressionEncoding) => {
+      const value = await fixture()
+      const result = await verify(
+        value,
+        await origin(value.files, {
+          compressed: 'insight-update.json',
+          compressionEncoding
+        })
+      )
+      expect(result.version).toBe('0.1.2')
+    }
+  )
+
+  it('rejects compression for non-Manifest assets and unsafe cache variants', async () => {
+    const compressedAsset = await fixture()
     await expect(verify(
-      value,
-      await origin(value.files, { compressedHead: 'insight-update.json' })
-    )).rejects.toThrow('Content-Encoding must be absent: insight-update.json')
+      compressedAsset,
+      await origin(compressedAsset.files, { compressed: 'latest.yml' })
+    )).rejects.toThrow('Content-Encoding must be absent: latest.yml')
+
+    const missingVary = await fixture()
+    await expect(verify(
+      missingVary,
+      await origin(missingVary.files, {
+        compressed: 'insight-update.json',
+        compressedWithoutVary: true
+      })
+    )).rejects.toThrow('missing Vary: Accept-Encoding')
+
+    const corruptCompressed = await fixture()
+    await expect(verify(
+      corruptCompressed,
+      await origin(corruptCompressed.files, {
+        compressed: 'insight-update.json',
+        corruptCompressed: 'insight-update.json'
+      })
+    )).rejects.toThrow('decoded response exceeds the verified asset size')
   })
 
   it('rejects non-HTTPS non-loopback and path-bearing origins', async () => {
