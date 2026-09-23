@@ -158,4 +158,16 @@ describe('Windows titlebar menu', () => {
     expect(harnessPreload).toContain('else mountHarnessThemeSync(themeOptions)')
     expect(main).toContain('assertTrustedHarnessEvent(event)')
   })
+
+  it('keeps the unauthenticated Windows shell chrome dark', async () => {
+    const main = await readFile('src/main/index.ts', 'utf8')
+
+    expect(main).toContain(
+      "const shellChromeDark = authManager?.current().kind !== 'authenticated' || nativeTheme.shouldUseDarkColors"
+    )
+    expect(main).toContain('titleBarOverlay: windowsTitleBarOverlay(shellChromeDark)')
+    expect(main).toContain('attachWindowsMenuView(window, shellChromeDark)')
+    expect(main).toContain("if (view.kind !== 'authenticated') {")
+    expect(main).toContain('applyWindowChromeTheme(mainWindow, true)')
+  })
 })
