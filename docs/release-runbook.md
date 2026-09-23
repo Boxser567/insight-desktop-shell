@@ -94,7 +94,7 @@ Candidate 从 `main` 手动触发，填写尚未使用的 `candidate_tag=vX.Y.Z-
 4. Gateway 实际 AssumeRole 的 RAM 角色需要 Bucket 级 `oss:ListObjects`，以及 `insight-desktop-updates/desktop/*` 的 `oss:GetObject`、`oss:PutObject`。发布 workflow 不需要删除对象、列举全部 Bucket 或修改 Bucket/ACL/CDN。
 5. 在 `upload_oss_test` 最新 `main` 上重新运行 `Test GitHub OIDC STS`。只有 `{}` 获取 STS 成功、上传者自行生成 object key、真实 `PutObject` 返回 HTTP 200 且日志脱敏后，才允许桌面仓库首次真实 `stage`。
 6. GitHub 仓库级 Actions Secrets 保存 macOS 构建所需的六个 Apple 签名/公证凭据；`desktop-release` Environment 只保存 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`，并作为两个 workflow 最终发布 job 的人工保护门禁。Environment 必须配置必要的审批规则，不配置任何 OSS 长期 AccessKey Secret。
-7. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`/desktop/releases/*` 不压缩、不改写、不重定向并支持 HEAD/Range；缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
+7. CDN 加速域名固定为 `https://updates.insight-aigc.com`，源站为私有 OSS Bucket 并启用私有 Bucket 回源鉴权。`insight-update.json` 可使用 gzip/Brotli 传输，但 `identity` 表示必须保持原始长度、Range 和摘要，压缩表示解码后必须与已签名原文一致并返回 `Vary: Accept-Encoding`；其他 `/desktop/releases/*` 资产不压缩、不改写、不重定向并支持 HEAD/Range。缓存遵守源站的一年 immutable。`/desktop/*/current.json` 遵守 60 秒缓存和重新验证。不得启用会拦截 Electron 主进程无 Referer 请求的防盗链。
 
 Gateway 临时会话的最小 OSS Policy 如下；`Resource` 不得扩大到其他 Bucket：
 

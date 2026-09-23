@@ -10,6 +10,8 @@ import {
 import { verifyReleaseAssets } from './verify-release-assets.mjs'
 
 const immutableCacheDirectives = ['public', 'max-age=31536000', 'immutable']
+const compressibleSignedMetadata = new Set(['insight-update.json'])
+const supportedContentEncodings = new Set(['gzip', 'br'])
 const networkAttempts = 3
 const retryDelayMs = 5_000
 
@@ -89,23 +91,13 @@ function expectedContentTypes(name) {
   return new Set(['application/octet-stream'])
 }
 
-function assertHeaders(response, name, size) {
-  if (response.headers.has('content-encoding')) {
-    throw new Error(`Distribution Content-Encoding must be absent: ${name}`)
-  }
-  const contentLength = Number(response.headers.get('content-length'))
-  if (!Number.isSafeInteger(contentLength) || contentLength !== size) {
-    throw new Error(`Distribution Content-Length is invalid: ${name}`)
-  }
+function assertCacheAndContentType(response, name) {
   const cacheControl = (response.headers.get('cache-control') ?? '')
     .toLowerCase()
     .split(',')
     .map((value) => value.trim())
   if (immutableCacheDirectives.some((directive) => !cacheControl.includes(directive))) {
     throw new Error(`Distribution cache policy is invalid: ${name}`)
-  }
-  if ((response.headers.get('accept-ranges') ?? '').toLowerCase() !== 'bytes') {
-    throw new Error(`Distribution byte ranges are unavailable: ${name}`)
   }
   const contentType = (response.headers.get('content-type') ?? '')
     .split(';', 1)[0]
@@ -114,6 +106,47 @@ function assertHeaders(response, name, size) {
   if (!expectedContentTypes(name).has(contentType)) {
     throw new Error(`Distribution Content-Type is invalid: ${name}`)
   }
+}
+
+function assertIdentityHeaders(response, name, size) {
+  if (response.headers.has('content-encoding')) {
+    throw new Error(`Distribution Content-Encoding must be absent: ${name}`)
+  }
+  const contentLength = Number(response.headers.get('content-length'))
+  if (!Number.isSafeInteger(contentLength) || contentLength !== size) {
+    throw new Error(`Distribution Content-Length is invalid: ${name}`)
+  }
+  if ((response.headers.get('accept-ranges') ?? '').toLowerCase() !== 'bytes') {
+    throw new Error(`Distribution byte ranges are unavailable: ${name}`)
+  }
+  assertCacheAndContentType(response, name)
+}
+
+function assertAdvertisedEncodingHeaders(response, name, size) {
+  const encoding = (response.headers.get('content-encoding') ?? '').trim().toLowerCase()
+  if (!encoding) {
+    assertIdentityHeaders(response, name, size)
+    return
+  }
+  if (!compressibleSignedMetadata.has(name) || !supportedContentEncodings.has(encoding)) {
+    throw new Error(`Distribution Content-Encoding must be absent: ${name}`)
+  }
+  const contentLength = response.headers.get('content-length')
+  const encodedSize = contentLength === null ? undefined : Number(contentLength)
+  if (
+    encodedSize !== undefined &&
+    (!/^\d+$/u.test(contentLength) || !Number.isSafeInteger(encodedSize) || encodedSize <= 0)
+  ) {
+    throw new Error(`Distribution compressed Content-Length is invalid: ${name}`)
+  }
+  const vary = (response.headers.get('vary') ?? '')
+    .toLowerCase()
+    .split(',')
+    .map((value) => value.trim())
+  if (!vary.includes('accept-encoding')) {
+    throw new Error(`Distribution compressed response is missing Vary: Accept-Encoding: ${name}`)
+  }
+  assertCacheAndContentType(response, name)
 }
 
 function assertExactResponse(response, expectedUrl, status, label) {
@@ -129,6 +162,7 @@ function isRetryableNetworkError(error) {
 
 async function request(fetchImpl, url, init, status, label, {
   readBody = false,
+  maximumBytes,
   delay = wait
 } = {}) {
   const fullDownload = init.method === 'GET' && !init.headers?.Range
@@ -142,7 +176,9 @@ async function request(fetchImpl, url, init, status, label, {
       assertExactResponse(response, url, status, label)
       return {
         response,
-        bytes: readBody ? Buffer.from(await response.arrayBuffer()) : undefined
+        bytes: readBody
+          ? await readResponseBytes(response, maximumBytes, label)
+          : undefined
       }
     } catch (error) {
       if (!isRetryableNetworkError(error) || attempt === networkAttempts) throw error
@@ -150,6 +186,25 @@ async function request(fetchImpl, url, init, status, label, {
     }
   }
   throw new Error(`${label} network retry state is invalid.`)
+}
+
+async function readResponseBytes(response, maximumBytes, label) {
+  if (maximumBytes === undefined) return Buffer.from(await response.arrayBuffer())
+  if (!response.body) return Buffer.alloc(0)
+  const reader = response.body.getReader()
+  const chunks = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > maximumBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error(`${label} decoded response exceeds the verified asset size.`)
+    }
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks, total)
 }
 
 async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
@@ -162,12 +217,12 @@ async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
   const { response: head } = await request(
     fetchImpl,
     url,
-    { method: 'HEAD' },
+    { method: 'HEAD', headers: { 'Accept-Encoding': 'identity' } },
     200,
     `HEAD ${name}`,
     { delay }
   )
-  assertHeaders(head, name, localStat.size)
+  assertIdentityHeaders(head, name, localStat.size)
 
   const { response: compressedRequestHead } = await request(
     fetchImpl,
@@ -177,12 +232,12 @@ async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
     `Compressed-request HEAD ${name}`,
     { delay }
   )
-  assertHeaders(compressedRequestHead, name, localStat.size)
+  assertAdvertisedEncodingHeaders(compressedRequestHead, name, localStat.size)
 
   const { bytes: remoteBytes } = await request(
     fetchImpl,
     url,
-    { method: 'GET' },
+    { method: 'GET', headers: { 'Accept-Encoding': 'identity' } },
     200,
     `GET ${name}`,
     { readBody: true, delay }
@@ -196,12 +251,32 @@ async function verifyRemoteFile(fetchImpl, baseUrl, releaseDir, name, delay) {
     throw new Error(`Distribution bytes do not match the verified release: ${name}`)
   }
 
+  if (compressibleSignedMetadata.has(name)) {
+    const { response: compressed, bytes: decodedBytes } = await request(
+      fetchImpl,
+      url,
+      { method: 'GET', headers: { 'Accept-Encoding': 'gzip, deflate, br' } },
+      200,
+      `Compressed-request GET ${name}`,
+      { readBody: true, maximumBytes: localBytes.length, delay }
+    )
+    assertAdvertisedEncodingHeaders(compressed, name, localStat.size)
+    if (
+      decodedBytes.length !== localBytes.length ||
+      !createHash('sha512').update(decodedBytes).digest().equals(
+        createHash('sha512').update(localBytes).digest()
+      )
+    ) {
+      throw new Error(`Distribution decoded bytes do not match the verified release: ${name}`)
+    }
+  }
+
   const { response: range, bytes: rangeBytes } = await request(
     fetchImpl,
     url,
     {
       method: 'GET',
-      headers: { Range: 'bytes=0-0' }
+      headers: { Range: 'bytes=0-0', 'Accept-Encoding': 'identity' }
     },
     206,
     `Range ${name}`,
