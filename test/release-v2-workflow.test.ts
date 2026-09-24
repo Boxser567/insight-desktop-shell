@@ -95,7 +95,9 @@ describe('release v2 workflow contract', () => {
     expect(workflow).toContain('scripts/upload-update-v2-target.mjs')
     expect(workflow).toContain('permissions:\n  contents: read')
     expect(workflow.match(/permissions:\n      contents: write/gu)).toHaveLength(2)
-    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(5)
+    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(6)
+    expect(workflow).toContain('ref: ${{ github.workflow_sha }}')
+    expect(workflow).toContain('node release-tooling/scripts/upload-update-v2-target.mjs')
     expect(workflow).toContain('npm run typecheck')
     expect(workflow).toContain('npm run prepare:core-runtime')
     expect(workflow).toContain('scripts/verify-publish-v2-workflow.mjs')
@@ -119,6 +121,7 @@ describe('release v2 workflow contract', () => {
         return jsonResponse({ object: { sha: commit } })
       }
       if (url.endsWith('/releases/tags/v1.0.1')) return jsonResponse({}, 404)
+      if (url.endsWith('/releases?per_page=100&page=1')) return jsonResponse([])
       if (url.endsWith('/releases') && init?.method === 'POST') {
         return jsonResponse({ id: 42, tag_name: 'v1.0.1', draft: true })
       }
@@ -230,8 +233,9 @@ describe('release v2 workflow contract', () => {
       if (String(input).endsWith('/git/matching-refs/tags/v')) {
         return jsonResponse([{ ref: 'refs/tags/v1.0.1', object: { sha: pinnedCommit } }])
       }
-      if (String(input).endsWith('/releases/tags/v1.0.1')) {
-        return jsonResponse({ id: 42, tag_name: 'v1.0.1', draft: true })
+      if (String(input).endsWith('/releases/tags/v1.0.1')) return jsonResponse({}, 404)
+      if (String(input).endsWith('/releases?per_page=100&page=1')) {
+        return jsonResponse([{ id: 42, tag_name: 'v1.0.1', draft: true }])
       }
       return jsonResponse({ object: { sha: pinnedCommit } })
     })
@@ -293,13 +297,14 @@ describe('release v2 workflow contract', () => {
       _init?: RequestInit & { duplex?: string }
     ) => {
       const url = String(input)
-      if (url.includes('/releases/tags/')) {
-        return jsonResponse({
+      if (url.includes('/releases/tags/')) return jsonResponse({}, 404)
+      if (url.includes('/releases?per_page=100&page=1')) {
+        return jsonResponse([{
           id: 42,
           tag_name: 'v1.0.1',
           draft: true,
           upload_url: 'https://uploads.github.com/repos/owner/repo/releases/42/assets{?name,label}'
-        })
+        }])
       }
       if (url.includes('/releases/42/assets?')) return jsonResponse([])
       if (url.startsWith('https://uploads.github.com/')) return jsonResponse({ id: 7 })

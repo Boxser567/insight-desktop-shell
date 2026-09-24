@@ -414,6 +414,12 @@ jobs:
             --version "$RELEASE_VERSION" \
             --target "$RELEASE_TARGET" \
             --public-key build/update-signing-public.pem
+      - name: Check out workflow-pinned release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: release-tooling
+          persist-credentials: false
       - name: Verify Draft and append target-prefixed assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -421,7 +427,7 @@ jobs:
           RELEASE_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
-          node scripts/upload-update-v2-target.mjs \
+          node release-tooling/scripts/upload-update-v2-target.mjs \
             --repository "$GITHUB_REPOSITORY" \
             --token "$GH_TOKEN" \
             --tag "v$RELEASE_VERSION" \

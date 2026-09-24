@@ -24,13 +24,15 @@ async function main() {
     'scripts/build-update-v2-target.mjs',
     'scripts/verify-update-v2-assets.mjs',
     'scripts/upload-update-v2-target.mjs',
+    'ref: ${{ github.workflow_sha }}',
+    'node release-tooling/scripts/upload-update-v2-target.mjs',
     'scripts/verify-sandboxed-preload.mjs out/preload/about.cjs',
     'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY',
     'environment: desktop-release',
     'APPLE_API_KEY_CONTENT',
     'finalize-windows-release.mjs'
   ]) requireText(workflow, value, 'v2 release workflow')
-  if ((workflow.match(/persist-credentials: false/gu) ?? []).length !== 5) {
+  if ((workflow.match(/persist-credentials: false/gu) ?? []).length !== 6) {
     throw new Error('Every v2 release checkout must disable persisted credentials.')
   }
   requireText(workflow, 'permissions:\n  contents: read', 'v2 release workflow')
