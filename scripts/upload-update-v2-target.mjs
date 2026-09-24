@@ -37,6 +37,34 @@ async function request(input, url, init = {}) {
   return response
 }
 
+async function findReleaseByTag(input) {
+  const directUrl = `https://api.github.com/repos/${input.repository}/releases/tags/${encodeURIComponent(input.tag)}`
+  const directResponse = await input.fetch(directUrl, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${input.token}`,
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+  })
+  if (directResponse.ok) return directResponse.json()
+  if (directResponse.status !== 404) {
+    throw new Error(`GitHub request failed: ${directResponse.status}`)
+  }
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await request(
+      input,
+      `https://api.github.com/repos/${input.repository}/releases?per_page=100&page=${page}`
+    )
+    const releases = await response.json()
+    if (!Array.isArray(releases)) throw new Error('GitHub Release listing is invalid.')
+    const matches = releases.filter((release) => release?.tag_name === input.tag)
+    if (matches.length > 1) throw new Error('GitHub Release Tag is ambiguous.')
+    if (matches.length === 1) return matches[0]
+    if (releases.length < 100) break
+  }
+  throw new Error('Matching GitHub Release was not found.')
+}
+
 async function fileDigest(path) {
   const hash = createHash('sha512')
   for await (const chunk of createReadStream(path)) hash.update(chunk)
@@ -62,11 +90,7 @@ async function responseDigest(response, maximumSize) {
 export async function uploadV2Target(input) {
   if (!targets.has(input.target)) throw new Error('Update target is invalid.')
   if (!/^v\d+\.\d+\.\d+$/u.test(input.tag)) throw new Error('v2 Release Tag is invalid.')
-  const releaseResponse = await request(
-    input,
-    `https://api.github.com/repos/${input.repository}/releases/tags/${encodeURIComponent(input.tag)}`
-  )
-  const release = await releaseResponse.json()
+  const release = await findReleaseByTag(input)
   if (!release?.draft || release.tag_name !== input.tag) {
     throw new Error('Target assets may only be appended to the matching Draft Release.')
   }

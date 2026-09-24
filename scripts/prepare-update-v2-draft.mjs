@@ -58,6 +58,20 @@ async function githubRequest(input, path, init = {}) {
   return response.json()
 }
 
+async function findReleaseByTag(input, tag) {
+  const direct = await githubRequest(input, `/releases/tags/${encodeURIComponent(tag)}`)
+  if (direct) return direct
+  for (let page = 1; page <= 10; page += 1) {
+    const releases = await githubRequest(input, `/releases?per_page=100&page=${page}`)
+    if (!Array.isArray(releases)) throw new Error('GitHub Release listing is invalid.')
+    const matches = releases.filter((release) => release?.tag_name === tag)
+    if (matches.length > 1) throw new Error('GitHub Release Tag is ambiguous.')
+    if (matches.length === 1) return matches[0]
+    if (releases.length < 100) return undefined
+  }
+  throw new Error('GitHub Release lookup exceeded the pagination limit.')
+}
+
 async function readPointerVersion(input, rawUrl, publicKeyPem) {
   const url = new URL(rawUrl)
   if (
@@ -196,7 +210,7 @@ export async function prepareV2Draft(input) {
   const pinnedCommit = ref?.object?.sha
   if (!/^[0-9a-f]{40}$/u.test(pinnedCommit ?? '')) throw new Error('v2 release Tag is invalid.')
 
-  let release = await githubRequest(input, `/releases/tags/${encodeURIComponent(tag)}`)
+  let release = await findReleaseByTag(input, tag)
   let createdDraft = false
   if (!release) {
     release = await githubRequest(input, '/releases', {
