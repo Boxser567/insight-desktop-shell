@@ -45,6 +45,8 @@ const repository = 'Boxser567/insight-desktop-shell'
 const updateOrigin = 'https://updates.insight-aigc.com/'
 const immutableCache = 'public,max-age=31536000,immutable'
 const pointerCache = 'public,max-age=60,must-revalidate'
+const requestTimeoutMilliseconds = 30_000
+const recoveryInstallerDownloadTimeoutMilliseconds = 5 * 60_000
 const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target'])
 const allCommands = new Set([
   ...targetCommands,
@@ -284,7 +286,7 @@ export async function verifyCdnBytes(key, expected, {
           method: 'HEAD',
           cache: 'no-store',
           redirect: 'error',
-          signal: AbortSignal.timeout(30_000)
+          signal: AbortSignal.timeout(requestTimeoutMilliseconds)
         })
         if (head.status !== 200 || head.headers.get('content-length') !== String(expected.size)) {
           throw new Error('CDN recovery installer HEAD verification failed.')
@@ -293,7 +295,7 @@ export async function verifyCdnBytes(key, expected, {
           headers: { Range: 'bytes=0-0' },
           cache: 'no-store',
           redirect: 'error',
-          signal: AbortSignal.timeout(30_000)
+          signal: AbortSignal.timeout(requestTimeoutMilliseconds)
         })
         let rangeSize = 0
         if (range.status === 206 && range.body) {
@@ -311,7 +313,9 @@ export async function verifyCdnBytes(key, expected, {
       const response = await fetchImplementation(requestUrl, {
         cache: 'no-store',
         redirect: 'error',
-        signal: AbortSignal.timeout(30_000)
+        signal: AbortSignal.timeout(expected.requireRange
+          ? recoveryInstallerDownloadTimeoutMilliseconds
+          : requestTimeoutMilliseconds)
       })
       if (response.ok && response.body) {
         const hash = createHash('sha512')
