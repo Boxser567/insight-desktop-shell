@@ -46,7 +46,8 @@ const updateOrigin = 'https://updates.insight-aigc.com/'
 const immutableCache = 'public,max-age=31536000,immutable'
 const pointerCache = 'public,max-age=60,must-revalidate'
 const requestTimeoutMilliseconds = 30_000
-const recoveryInstallerDownloadTimeoutMilliseconds = 15 * 60_000
+const largeArtifactThresholdBytes = 64 * 1024 * 1024
+const largeArtifactDownloadTimeoutMilliseconds = 15 * 60_000
 const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target'])
 const allCommands = new Set([
   ...targetCommands,
@@ -313,8 +314,8 @@ export async function verifyCdnBytes(key, expected, {
       const response = await fetchImplementation(requestUrl, {
         cache: 'no-store',
         redirect: 'error',
-        signal: AbortSignal.timeout(expected.requireRange
-          ? recoveryInstallerDownloadTimeoutMilliseconds
+        signal: AbortSignal.timeout(expected.requireRange || expected.size >= largeArtifactThresholdBytes
+          ? largeArtifactDownloadTimeoutMilliseconds
           : requestTimeoutMilliseconds)
       })
       if (response.ok && response.body) {

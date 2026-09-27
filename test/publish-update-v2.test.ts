@@ -295,6 +295,26 @@ describe('v2 update publisher', () => {
     expect(fetch.mock.calls[2]?.[1]?.method).toBeUndefined()
   })
 
+  it('allows large target artifacts enough time for full digest verification', async () => {
+    const bytes = Buffer.alloc(64 * 1024 * 1024, 0xa5)
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    const fetch = vi.fn(async () => new Response(
+      new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      { status: 200 }
+    ))
+
+    try {
+      await expect(verifyCdnBytes('desktop/releases/installer.exe', {
+        size: bytes.length,
+        sha512: sha512(bytes),
+        requireRange: false
+      }, { fetch, attempts: 1 })).resolves.toBeUndefined()
+      expect(timeout).toHaveBeenCalledWith(15 * 60_000)
+    } finally {
+      timeout.mockRestore()
+    }
+  })
+
   it('publishes optional per-target Candidate pointers and enforces the global floor', async () => {
     const fixture = await releaseFixture()
     const oss = new MemoryOss()
