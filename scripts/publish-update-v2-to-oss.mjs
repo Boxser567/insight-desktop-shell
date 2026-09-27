@@ -46,7 +46,7 @@ const updateOrigin = 'https://updates.insight-aigc.com/'
 const immutableCache = 'public,max-age=31536000,immutable'
 const pointerCache = 'public,max-age=60,must-revalidate'
 const requestTimeoutMilliseconds = 30_000
-const recoveryInstallerDownloadTimeoutMilliseconds = 5 * 60_000
+const recoveryInstallerDownloadTimeoutMilliseconds = 15 * 60_000
 const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target'])
 const allCommands = new Set([
   ...targetCommands,
