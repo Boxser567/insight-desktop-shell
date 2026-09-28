@@ -400,6 +400,44 @@ async function downloadVerifiedTarget(input, target) {
   return { directory, manifest, manifestBytes, prefix, objects }
 }
 
+async function readVerifiedTargetManifest(input, target) {
+  const prefix = targetPrefix(input.version, target)
+  const directory = join(input.temporaryDirectory, `manifest-${target}`)
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const [manifestObject, signatureObject, objects] = await Promise.all([
+    readRemoteObject(input.oss, `${prefix}insight-target.json`, directory, 'Target Manifest'),
+    readRemoteObject(input.oss, `${prefix}insight-target.json.sig`, directory, 'Target Manifest signature'),
+    input.oss.listObjects(prefix)
+  ])
+  if (!manifestObject || !signatureObject) throw new Error(`Target has not been staged: ${target}`)
+  const publicKey = createPublicKey(await readFile(input.publicKeyPath, 'utf8'))
+  if (!verifySignature(null, manifestObject.bytes, publicKey, signatureObject.bytes)) {
+    throw new Error(`Target Manifest signature is invalid: ${target}`)
+  }
+  const manifest = parseV2TargetManifest(JSON.parse(manifestObject.bytes.toString('utf8')))
+  if (manifest.version !== input.version ||
+      `${manifest.target.platform}-${manifest.target.arch}` !== target) {
+    throw new Error(`Target Manifest version or target does not match: ${target}`)
+  }
+  const expected = new Map([
+    [`${prefix}insight-target.json`, manifestObject.bytes.length],
+    [`${prefix}insight-target.json.sig`, signatureObject.bytes.length],
+    ...manifest.artifacts.map((artifact) => [`${prefix}${artifact.name}`, artifact.size])
+  ])
+  if (
+    objects.length !== expected.size ||
+    new Set(objects.map((object) => object.key)).size !== expected.size ||
+    objects.some((object) => expected.get(object.key) !== object.size)
+  ) {
+    throw new Error(`Target prefix is incomplete or has unexpected objects: ${target}`)
+  }
+  await Promise.all([
+    writeFile(join(directory, 'insight-target.json'), manifestObject.bytes),
+    writeFile(join(directory, 'insight-target.json.sig'), signatureObject.bytes)
+  ])
+  return { directory, manifest, manifestBytes: manifestObject.bytes, prefix, objects }
+}
+
 async function readAuthenticatedPointer(input, key, { allowLegacy = false } = {}) {
   const object = await readRemoteObject(input.oss, key, input.temporaryDirectory, 'Update pointer')
   if (!object) return undefined
@@ -690,7 +728,9 @@ function parseAcceptance(bytes, version, target) {
 
 export async function acceptV2Target(input) {
   await assertVersionNotRejected(input)
-  const target = await downloadVerifiedTarget(input, input.target)
+  const target = input.manifestOnly
+    ? await readVerifiedTargetManifest(input, input.target)
+    : await downloadVerifiedTarget(input, input.target)
   const key = pointerKey('candidate', input.target)
   const pointer = await readAuthenticatedPointer(input, key)
   const manifestDigest = digest(target.manifestBytes)
@@ -699,9 +739,11 @@ export async function acceptV2Target(input) {
     pointer.value.state !== 'active' || pointer.version !== input.version ||
     pointer.value.referencedSha512 !== manifestDigest
   ) throw new Error('Candidate pointer does not reference the target being accepted.')
-  for (const object of target.objects) {
-    const localName = object.key.slice(target.prefix.length)
-    await input.verifyCdn(object.key, await fileDigest(join(target.directory, localName)))
+  if (!input.manifestOnly) {
+    for (const object of target.objects) {
+      const localName = object.key.slice(target.prefix.length)
+      await input.verifyCdn(object.key, await fileDigest(join(target.directory, localName)))
+    }
   }
   await input.verifyCdn(key, byteIdentity(pointer.bytes))
   const record = canonicalJsonBytes({
@@ -734,7 +776,7 @@ async function requireAcceptedTargets(input) {
       !pointer || pointer.value.track !== 'candidate' || pointer.value.target !== targetId ||
       pointer.value.state !== 'active' || pointer.version !== input.version
     ) throw new Error(`Stable promotion requires Candidate target ${targetId}.`)
-    const target = await downloadVerifiedTarget(input, targetId)
+    const target = await readVerifiedTargetManifest(input, targetId)
     const manifestDigest = digest(target.manifestBytes)
     if (pointer.value.referencedSha512 !== manifestDigest) {
       throw new Error(`Candidate pointer digest does not match: ${targetId}`)
@@ -903,7 +945,7 @@ export async function publishV2CandidateAll(input) {
 export async function promoteV2StableAll(input) {
   const accepted = []
   for (const target of UPDATE_V2_TARGET_IDS) {
-    accepted.push({ target, ...(await acceptV2Target({ ...input, target })) })
+    accepted.push({ target, ...(await acceptV2Target({ ...input, target, manifestOnly: true })) })
   }
   return { accepted, ...(await promoteV2Stable(input)) }
 }

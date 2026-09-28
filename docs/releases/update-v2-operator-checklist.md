@@ -71,8 +71,9 @@ Windows 构建再执行平台测试；每个目标继续独立完成安装包、
 2. 完成干净安装、覆盖安装、上一接受版本到当前版本、连续三次重启、主题、完整安装包恢复、
    userData、账号、会话、工作区、设置和插件验证。
 3. 记录三目标验收结果后，运行一次 `command=promote-stable-all`、`target=none`，填写
-   `version` 和相同的 `confirm_version`。它复验三个 Candidate 与 CDN 字节，为三个目标写入
-   不可覆盖的签名验收记录，再执行 Stable 发布。任一目标未通过时不得运行该命令。
+   `version` 和相同的 `confirm_version`。它复验三个签名 Target Manifest、Candidate 指针和
+   OSS 对象清单，为三个目标写入不可覆盖的签名验收记录，再执行 Stable 发布。安装包的完整
+   字节校验已在 Candidate 阶段完成，转正时不重复下载。任一目标未通过时不得运行该命令。
 
 任一目标失败时运行 `reject-version`，填写精确版本确认和简短原因。拒绝不会删除资产；已
 指向该版本的 Candidate 指针会原位提交同版本签名 `rejected` tombstone，GitHub Release 会

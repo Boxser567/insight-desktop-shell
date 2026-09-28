@@ -277,11 +277,26 @@ describe('v2 update publisher', () => {
     expect(candidateRetry.candidates.every((entry: { alreadyPublished: boolean }) =>
       entry.alreadyPublished)).toBe(true)
 
+    const downloadedKeys: string[] = []
+    const getObject = oss.getObject.bind(oss)
+    oss.getObject = async (key: string, destination: string) => {
+      downloadedKeys.push(key)
+      return getObject(key, destination)
+    }
+    const installerKey = [...oss.objects.keys()].find((key) =>
+      key.startsWith('desktop/releases/v1.0.1/targets/darwin-arm64/') && key.endsWith('.dmg'))!
+    const installerBytes = oss.objects.get(installerKey)!
+    oss.objects.set(installerKey, Buffer.alloc(0))
+    await expect(promoteV2StableAll(common)).rejects.toThrow('Target prefix is incomplete')
+    expect(oss.objects.has('desktop/stable/current.json')).toBe(false)
+    oss.objects.set(installerKey, installerBytes)
+    downloadedKeys.length = 0
     const promotion = await promoteV2StableAll(common)
     expect(promotion.accepted).toHaveLength(3)
     expect(promotion.pointerAfter).toMatchObject({ track: 'stable', version: fixture.version })
     expect(common.publishGithubRelease).toHaveBeenCalledOnce()
     expect(oss.objects.has('desktop/stable/current.json')).toBe(true)
+    expect(downloadedKeys.filter((key) => /\.(dmg|zip|exe|blockmap)$/u.test(key))).toEqual([])
   })
 
   it('stages immutable target bytes idempotently and rejects a conflict', async () => {
