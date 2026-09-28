@@ -26,7 +26,7 @@ from blueprint_validation import static_findings, require_static_blueprint, refe
 from audience_copy import COPY_CONTRACT
 from plan_repair import (page_contract_prompt, infeasible_lock, editable_claim_fields, page_hash,
                          apply_page_patch, claim_equivalent, PLANNING_PROTOCOL)
-from sol_common import extract_json, is_safe_asset_src, sol_response
+from sol_common import extract_json, is_safe_asset_src, planning_response as sol_response
 from stage_runtime import (
     atomic_write_json, atomic_write_text, load_validated_json_cache, prompt_fingerprint,
     write_json_cache, write_stage_metric,

@@ -5,9 +5,10 @@ DSH extracts verbatim; only SOL interprets or summarizes. Originals remain archi
 
 ## Allocation, not a character ceiling
 
-The shipped model profile is GPT-5.6 Sol: 1,050,000 context tokens and 128,000 maximum
-output tokens, per https://developers.openai.com/api/docs/models/gpt-5.6-sol . This is
-model documentation, NOT a capacity probe of the configured forwarding gateway.
+The default text model is gpt-6-sol. Per the user's confirmation that this interface
+has the same capacity as the previous model, retain the existing configuration:
+1,050,000 context tokens and 128,000 maximum output tokens. This configuration basis
+is user-confirmed interface compatibility, not a new capacity benchmark by this skill.
 Default output reserve is 128,000 and safety margin 72,000, leaving 850,000 input
 tokens for the COMPLETE request. With a 50,000-token authority/instruction envelope,
 800,000 tokens remain for evidence. This is calculated allowance, not a new 800K gate

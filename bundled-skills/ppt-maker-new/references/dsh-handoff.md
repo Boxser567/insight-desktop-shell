@@ -1,8 +1,8 @@
 # DSH verbatim handoff contract (v1)
 
 Read before any context-package task. DSH is an extraction adapter, not an editor.
-Only gpt-5.6-sol interprets evidence, resolves history, writes Brief/blueprint/SML,
-chooses assets, or judges visual quality. Never replace raw content with a DSH summary.
+Source understanding/history/Brief, planning, asset selection and page SML/repair
+all use gpt-6-sol. DSH does none of that authoring. Never replace raw content with a DSH summary.
 
 ## Extraction
 

@@ -39,7 +39,7 @@ creator-recommendation/
 
 ## 分发与更新
 
-当前 12 个内置技能同步自 Codeup `insight-desktop-skills` 的 `master` 提交 `33460a0`，都提供了 `ui.json`。其中新增 `ppt-maker-new`，移除 `call-insight-api`。现有打包配置会把整个 `bundled-skills` 目录作为外部资源分发，无需增加打包规则。
+当前 12 个内置技能同步自 Codeup `insight-desktop-skills` 的 `master` 提交 `dcc054102fe735956f755504883afe982b0db3a0`，都提供了 `ui.json`。其中新增 `ppt-maker-new`，移除 `call-insight-api`。现有打包配置会把整个 `bundled-skills` 目录作为外部资源分发，无需增加打包规则。
 
 外部技能也可随技能包一起分发 `ui.json`。修改后刷新界面或重新进入会话会重新读取；本改动不新增 `ui.json` 文件监听或自动热更新。无需更改原来的技能调用名称。
 

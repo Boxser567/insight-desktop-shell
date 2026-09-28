@@ -9,7 +9,7 @@ The skill does not read user tokens or vendor credentials. No direct-call fallba
 - Image: connection `media-generator`, POST `/v1/proxy`, task `text_to_image`.
 - Backend API: POST `/api/skill-proxy/{connection_id}`; only configured routes allowed.
 - Server keys: TX_CLOUD_API_KEY, MG_API_AK, MG_API_SK. PPT_UPSTREAM_MODEL controls
-  the text/visual model (default gpt-5.6-sol); this is independent of DeepSeek chat.
+  the text/visual model (default gpt-6-sol); this is independent of DeepSeek chat.
 - `doctor` reports local proxy prerequisites only. `server_credentials=not_checked`
   is not evidence of a working login, configured server keys or upstream availability.
 

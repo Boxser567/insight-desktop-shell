@@ -90,7 +90,7 @@ def reconcile_responses(project):
 
 
 def revise(project, numbers, instruction, *, run_id, model_fn=None):
-    from sol_common import sol
+    from sol_common import render_sol as sol
     from sol_render import _prepare_render_state, _validate_batch_candidate, _write_render_success, SML_RULES
     from blueprint_validation import static_findings
     from quality_policy import blocking

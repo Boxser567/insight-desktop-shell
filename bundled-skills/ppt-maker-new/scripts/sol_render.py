@@ -17,7 +17,7 @@ from typing import Callable
 from xml.etree import ElementTree as ET
 from PIL import Image
 
-from sol_common import extract_json, sol
+from sol_common import extract_json, render_sol as sol
 from render_checkpoint import save_draft, load_draft, distribute_grant, LOCAL_FAILURE_CODES
 from call_budget import BudgetExhausted
 from work_budget import ValidationBudgetModel, WorkBudget, feedback

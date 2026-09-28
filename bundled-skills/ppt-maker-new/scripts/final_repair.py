@@ -15,7 +15,7 @@ from call_budget import BudgetExhausted
 from delivery import read, export_best_effort, verify_working_delivery, usable_imperfect
 from quality_policy import blocking, candidate_improves
 from recovery_feedback import select_base
-from sol_common import sol
+from sol_common import render_sol as sol
 from stage_runtime import atomic_write_json, sha256_file, sha256_text
 from work_budget import WorkBudget
 

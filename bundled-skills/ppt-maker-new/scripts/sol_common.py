@@ -13,7 +13,8 @@ from typing import Any
 from ppt_proxy import image_data_url, request
 
 DEFAULT_BASE = "enterprise-proxy:ppt-text"
-DEFAULT_MODEL = "gpt-5.6-sol"
+DEFAULT_MODEL = "gpt-6-sol"
+PLAN_RENDER_MODEL = DEFAULT_MODEL
 
 
 def is_safe_asset_src(value: str) -> bool:
@@ -87,8 +88,20 @@ def sol(
     ))
 
 
-class RequestNotSubmitted(ValueError):
+class RequestNotSubmitted(RuntimeError):
     """Adapter proves it failed before opening the provider connection."""
+
+
+def planning_response(prompt: str, **kwargs):
+    """Planning adapter using the shared text-model default."""
+    kwargs['model'] = kwargs.get('model') or PLAN_RENDER_MODEL
+    return sol_response(prompt, **kwargs)
+
+
+def render_sol(prompt: str, **kwargs):
+    """Page generation and repair adapter with the same response metadata."""
+    kwargs['model'] = kwargs.get('model') or PLAN_RENDER_MODEL
+    return sol(prompt, **kwargs)
 
 
 def _prepare_sol_request(
