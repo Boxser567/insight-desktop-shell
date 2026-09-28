@@ -10,6 +10,8 @@ if (!path || process.argv.length !== 3) {
 }
 const source = (await readFile(path, 'utf8')).replaceAll('\r\n', '\n')
 for (const text of [
+  'publish-candidate-all',
+  'promote-stable-all',
   'stage-target',
   'publish-candidate',
   'accept-target',
@@ -26,7 +28,7 @@ for (const text of [
   'scripts/verify-publish-v2-workflow.mjs',
   'git show "refs/tags/v$VERSION:build/update-release-policy.json"',
   'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY',
-  "inputs.command == 'publish-candidate' || inputs.command == 'accept-target' || inputs.command == 'promote-stable' || inputs.command == 'reject-version'"
+  "inputs.command == 'publish-candidate-all' || inputs.command == 'promote-stable-all' || inputs.command == 'publish-candidate' || inputs.command == 'accept-target' || inputs.command == 'promote-stable' || inputs.command == 'reject-version'"
 ]) requireText(source, text)
 
 for (const forbidden of [

@@ -80,13 +80,14 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 describe('release v2 workflow contract', () => {
-  it('pins a final version, builds only fixed targets, and appends signed assets', async () => {
+  it('pins a final version, builds all targets in one run, and appends signed assets', async () => {
     const workflow = (await readFile(workflowPath, 'utf8')).replace(/\r\n?/gu, '\n')
     expect(workflow).toContain('group: desktop-release-v2-${{ inputs.version }}')
     expect(workflow.match(/ref: refs\/tags\/v\$\{\{ inputs\.version \}\}/gu)).toHaveLength(4)
-    expect(workflow).toContain("if: inputs.target == 'darwin-arm64'")
-    expect(workflow).toContain("if: inputs.target == 'darwin-x64'")
-    expect(workflow).toContain("if: inputs.target == 'win32-x64'")
+    expect(workflow).toContain('default: all')
+    expect(workflow).toContain("if: inputs.platform == 'all' || inputs.platform == 'mac'")
+    expect(workflow).toContain("if: inputs.platform == 'all' || inputs.platform == 'windows'")
+    expect(workflow).toContain('pattern: release-v2-*')
     expect(workflow).toContain('npm run package:release:mac:arm64')
     expect(workflow).toContain('npm run package:release:mac:x64')
     expect(workflow).toContain('npm run package:release:win')
@@ -99,6 +100,7 @@ describe('release v2 workflow contract', () => {
     expect(workflow).toContain('ref: ${{ github.workflow_sha }}')
     expect(workflow).toContain('node release-tooling/scripts/upload-update-v2-target.mjs')
     expect(workflow).toContain('npm run typecheck')
+    expect(workflow.match(/npm test/gu)).toHaveLength(2)
     expect(workflow).toContain('npm run prepare:core-runtime')
     expect(workflow).toContain('scripts/verify-publish-v2-workflow.mjs')
     expect(workflow).not.toContain('--clobber')

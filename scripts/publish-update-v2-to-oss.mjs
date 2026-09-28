@@ -51,6 +51,8 @@ const largeArtifactDownloadTimeoutMilliseconds = 15 * 60_000
 const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target'])
 const allCommands = new Set([
   ...targetCommands,
+  'publish-candidate-all',
+  'promote-stable-all',
   'promote-stable',
   'reject-version'
 ])
@@ -61,6 +63,8 @@ function usage() {
     '  publish-update-v2-to-oss.mjs stage-target --version <final-semver> --target <target>',
     '  publish-update-v2-to-oss.mjs publish-candidate --version <final-semver> --target <target>',
     '  publish-update-v2-to-oss.mjs accept-target --version <final-semver> --target <target>',
+    '  publish-update-v2-to-oss.mjs publish-candidate-all --version <final-semver>',
+    '  publish-update-v2-to-oss.mjs promote-stable-all --version <final-semver> --confirm-version <final-semver>',
     '  publish-update-v2-to-oss.mjs promote-stable --version <final-semver> --confirm-version <final-semver>',
     '  publish-update-v2-to-oss.mjs reject-version --version <final-semver> --confirm-version <final-semver> --reason <text>'
   ].join('\n')
@@ -90,7 +94,7 @@ export function parseV2PublisherArguments(argv) {
     throw new Error(`${command} does not accept a target.`)
   }
   const confirmation = values.get('--confirm-version')
-  if (command === 'promote-stable' || command === 'reject-version') {
+  if (command === 'promote-stable' || command === 'promote-stable-all' || command === 'reject-version') {
     if (confirmation !== version) throw new Error('Version confirmation does not match.')
   } else if (confirmation !== undefined) {
     throw new Error(`${command} does not accept a version confirmation.`)
@@ -883,6 +887,27 @@ export async function promoteV2Stable(input) {
   }
 }
 
+export async function publishV2CandidateAll(input) {
+  const staged = []
+  for (const target of UPDATE_V2_TARGET_IDS) {
+    const targetDir = await input.loadTarget(target)
+    staged.push({ target, ...(await stageV2Target({ ...input, target, targetDir })) })
+  }
+  const candidates = []
+  for (const target of UPDATE_V2_TARGET_IDS) {
+    candidates.push({ target, ...(await publishV2Candidate({ ...input, target })) })
+  }
+  return { staged, candidates }
+}
+
+export async function promoteV2StableAll(input) {
+  const accepted = []
+  for (const target of UPDATE_V2_TARGET_IDS) {
+    accepted.push({ target, ...(await acceptV2Target({ ...input, target })) })
+  }
+  return { accepted, ...(await promoteV2Stable(input)) }
+}
+
 export async function rejectV2Version(input) {
   const releaseState = input.githubReleaseState ?? githubReleaseState
   const state = await releaseState(input.version)
@@ -1009,12 +1034,23 @@ async function main() {
     if (options.command === 'stage-target') {
       const targetDir = await downloadGithubTarget(options.version, options.target, temporaryDirectory)
       result = await stageV2Target({ ...common, targetDir })
+    } else if (options.command === 'publish-candidate-all') {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
+      result = await publishV2CandidateAll({
+        ...common,
+        loadTarget: (target) => downloadGithubTarget(
+          options.version, target, join(temporaryDirectory, target)
+        )
+      })
     } else if (options.command === 'publish-candidate') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await publishV2Candidate(common)
     } else if (options.command === 'accept-target') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await acceptV2Target(common)
+    } else if (options.command === 'promote-stable-all') {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
+      result = await promoteV2StableAll(common)
     } else if (options.command === 'promote-stable') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await promoteV2Stable(common)

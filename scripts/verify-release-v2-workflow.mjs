@@ -12,6 +12,10 @@ async function main() {
   const workflow = (await readFile(path, 'utf8')).replaceAll('\r\n', '\n')
   for (const value of [
     'group: desktop-release-v2-${{ inputs.version }}',
+    'default: all',
+    "inputs.platform == 'all'",
+    "inputs.platform == 'mac'",
+    "inputs.platform == 'windows'",
     'ref: refs/tags/v${{ inputs.version }}',
     'darwin-arm64',
     'darwin-x64',
@@ -24,6 +28,7 @@ async function main() {
     'scripts/build-update-v2-target.mjs',
     'scripts/verify-update-v2-assets.mjs',
     'scripts/upload-update-v2-target.mjs',
+    'pattern: release-v2-*',
     'ref: ${{ github.workflow_sha }}',
     'node release-tooling/scripts/upload-update-v2-target.mjs',
     'scripts/verify-sandboxed-preload.mjs out/preload/about.cjs',
