@@ -57,6 +57,10 @@ rc.18 因打包后的沙箱 About preload 引用拆分模块而被拒绝；rc.19
 
 ## 3. 投放和验收单一 Candidate 目标
 
+发布前确认 CDN 对 `/desktop/candidate-v2/` 使用 1 分钟、权重 99 的缓存规则，
+且三个 `current.json` 公网响应的 `X-Swift-CacheTime` 为 `60`。新增规则后，
+须刷新已缓存的三个精确指针 URL；仅修改规则不会清除旧的长缓存对象。
+
 在 `Publish desktop v2 updates` 依次运行：
 
 1. `command=stage-target`，填写精确 `version` 和 `target`。此动作只写入不可变目标目录，
