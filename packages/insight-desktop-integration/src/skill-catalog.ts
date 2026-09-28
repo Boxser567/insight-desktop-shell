@@ -61,7 +61,7 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
         ...await readSkillPresentation(ctx, sessionId, skill.path),
         order: skill.order ?? order,
         bundled: isBundledSkill(skill.name, skill.path),
-        pickerVisible: skill.pickerVisible ?? skill.name !== 'media-generator'
+        pickerVisible: skill.pickerVisible
       })))
     },
     subscribe(sessionId, listener) {

@@ -94,14 +94,14 @@ describe('native catalog presentation adapter', () => {
     expect(visible.filter(skill => ['anysearch', 'notebooklm', 'unknown'].includes(skill.name))).toHaveLength(0)
   })
 
-  it('recognizes the upstream PPT skill ID and keeps the media helper out of the picker', async () => {
+  it('recognizes the upstream PPT skill ID and includes the media skill', async () => {
     const { catalog, session } = setup([
       { name: 'ppt-maker-new-new', description: 'PPT', path: 'C:\\Program Files\\因赛AI\\resources\\bundled-skills\\ppt-maker-new\\SKILL.md' },
       { name: 'media-generator', description: 'media', path: 'C:\\Program Files\\因赛AI\\resources\\bundled-skills\\media-generator\\SKILL.md' }
     ])
     const skills = await catalog.list(session)
-    expect(filterSkills(skills, '').map(skill => skill.name)).toEqual(['ppt-maker-new-new'])
-    expect(skills[1]?.pickerVisible).toBe(false)
+    expect(filterSkills(skills, '').map(skill => skill.name)).toEqual(['ppt-maker-new-new', 'media-generator'])
+    expect(skills[1]?.pickerVisible).toBeUndefined()
   })
 
   it('reads the winning path via public Remote and keeps invocation/model metadata intact', async () => {

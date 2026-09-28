@@ -11,7 +11,7 @@ const skills = roots.map(entry => {
   const data = parse(file.split('---')[1]!)
   const ui = JSON.parse(readFileSync(join('bundled-skills', entry.name, 'ui.json'), 'utf8'))
   return { name: data.name, description: data.description, ...ui,
-    pickerVisible: entry.name !== 'media-generator', bundled: true, modelInvocable: true }
+    bundled: true, modelInvocable: true }
 })
 
 describe('directory-backed product skills', () => {
@@ -25,7 +25,8 @@ describe('directory-backed product skills', () => {
     }
     expect(roots.map(root => root.name)).toContain('ppt-maker-new')
     expect(roots.map(root => root.name)).not.toContain('call-insight-api')
-    expect(filterSkills(skills, '').map(skill => skill.name)).not.toContain('media-generator')
+    expect(filterSkills(skills, '')).toHaveLength(12)
+    expect(filterSkills(skills, '').map(skill => skill.name)).toContain('media-generator')
   })
   it('uses actual discovery and accepts new bundles without updating an enumeration', () => {
     const added = { name: 'new-skill', description: 'new business', bundled: true, modelInvocable: true }
@@ -35,7 +36,8 @@ describe('directory-backed product skills', () => {
   })
   it('searches title, description and name while respecting hidden state', () => {
     expect(filterSkills(skills, '人性').map(skill => skill.name)).toContain('human-needs-insight')
-    expect(filterSkills(skills, 'media-generator')).toEqual([])
+    expect(filterSkills(skills, 'media-generator').map(skill => skill.name)).toEqual(['media-generator'])
+    expect(filterSkills([{ ...skills.find(skill => skill.name === 'media-generator')!, pickerVisible: false }], '')).toEqual([])
     expect(filterSkills(skills, 'missing-term')).toEqual([])
   })
   it('derives selected names from visible exact tokens, including manual input', () => {
