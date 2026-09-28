@@ -12,7 +12,9 @@ import { sha512, writeReleaseFixture } from './release-script-fixtures'
 const {
   acceptV2Target,
   parseV2PublisherArguments,
+  promoteV2StableAll,
   promoteV2Stable,
+  publishV2CandidateAll,
   publishV2Candidate,
   rejectV2Version,
   stageV2Target,
@@ -219,7 +221,13 @@ function commonInput(
 }
 
 describe('v2 update publisher', () => {
-  it('accepts only the five explicit release transitions', () => {
+  it('accepts guarded bulk and single-target release transitions', () => {
+    expect(parseV2PublisherArguments([
+      'publish-candidate-all', '--version', '1.0.1'
+    ])).toMatchObject({ command: 'publish-candidate-all', version: '1.0.1' })
+    expect(parseV2PublisherArguments([
+      'promote-stable-all', '--version', '1.0.1', '--confirm-version', '1.0.1'
+    ])).toMatchObject({ command: 'promote-stable-all' })
     expect(parseV2PublisherArguments([
       'stage-target', '--version', '1.0.1', '--target', 'darwin-arm64'
     ])).toMatchObject({ command: 'stage-target', version: '1.0.1', target: 'darwin-arm64' })
@@ -238,11 +246,42 @@ describe('v2 update publisher', () => {
     ])).toMatchObject({ command: 'reject-version', reason: 'failed acceptance' })
     for (const invalid of [
       ['stage-target', '--version', '1.0.1'],
+      ['publish-candidate-all', '--version', '1.0.1', '--target', 'darwin-arm64'],
+      ['promote-stable-all', '--version', '1.0.1', '--confirm-version', '1.0.2'],
       ['promote-stable', '--version', '1.0.1', '--confirm-version', '1.0.2'],
       ['reject-version', '--version', '1.0.1', '--confirm-version', '1.0.1'],
       ['publish-candidate', '--version', '1.0.1-rc.1', '--target', 'darwin-arm64'],
       ['promote-stable', '--version', '1.0.1', '--target', 'darwin-arm64']
     ]) expect(() => parseV2PublisherArguments(invalid)).toThrow()
+  })
+
+  it('runs one Candidate batch, then accepts all targets and publishes Stable once', async () => {
+    const fixture = await releaseFixture()
+    const oss = new MemoryOss()
+    await installBridgeBaseline(fixture, oss)
+    const temporaryDirectory = await operationDirectory(fixture.root, 'batch-op')
+    const common = commonInput(fixture, oss, temporaryDirectory)
+    const directories = new Map<Target, string>()
+    for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64'] as const) {
+      directories.set(target, await buildTarget(fixture, target))
+    }
+    const loadTarget = vi.fn(async (target: Target) => directories.get(target)!)
+    const candidate = await publishV2CandidateAll({ ...common, loadTarget })
+    expect(candidate.staged.map((entry: { target: Target }) => entry.target)).toEqual([
+      'darwin-arm64', 'darwin-x64', 'win32-x64'
+    ])
+    expect(candidate.candidates).toHaveLength(3)
+    expect(loadTarget).toHaveBeenCalledTimes(3)
+    expect(oss.objects.has('desktop/stable/current.json')).toBe(false)
+    const candidateRetry = await publishV2CandidateAll({ ...common, loadTarget })
+    expect(candidateRetry.candidates.every((entry: { alreadyPublished: boolean }) =>
+      entry.alreadyPublished)).toBe(true)
+
+    const promotion = await promoteV2StableAll(common)
+    expect(promotion.accepted).toHaveLength(3)
+    expect(promotion.pointerAfter).toMatchObject({ track: 'stable', version: fixture.version })
+    expect(common.publishGithubRelease).toHaveBeenCalledOnce()
+    expect(oss.objects.has('desktop/stable/current.json')).toBe(true)
   })
 
   it('stages immutable target bytes idempotently and rejects a conflict', async () => {
