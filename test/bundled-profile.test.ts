@@ -260,4 +260,22 @@ describe('bundled profile initialization', () => {
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     await expect(isProfileInstallComplete(dshHome)).resolves.toBe(true)
   })
+
+  it('refreshes the installed desktop integration client on a same-version upgrade', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template, 'old bundle\n')
+    const installedClient = join('web', 'node_modules', '@insight-ai', 'desktop-integration', 'lib', 'client.js')
+    await mkdir(join(template, 'web', 'node_modules', '@insight-ai', 'desktop-integration', 'lib'), { recursive: true })
+    await writeFile(join(template, installedClient), 'old bundle\n')
+    await initializeBundledProfile(template, dshHome)
+
+    await writeFile(join(template, 'web', 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'new bundle\n')
+    await writeFile(join(template, installedClient), 'new bundle\n')
+    await initializeBundledProfile(template, dshHome)
+
+    const profile = join(dshHome, 'profiles', 'web')
+    expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
+    expect(await readFile(join(profile, 'node_modules', '@insight-ai', 'desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
+  })
 })

@@ -3,13 +3,15 @@ import { filterSkills, selectedSkillNames } from '../packages/insight-desktop-in
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
+import { BUNDLED_SKILL_PRESENTATIONS } from '../packages/insight-desktop-integration/src/bundled-skill-presentations'
 
 const roots = readdirSync('bundled-skills', { withFileTypes: true }).filter(entry => entry.isDirectory())
 const skills = roots.map(entry => {
   const file = readFileSync(join('bundled-skills', entry.name, 'SKILL.md'), 'utf8')
   const data = parse(file.split('---')[1]!)
-  return { name: data.name, description: data.description, displayName: data.metadata?.displayName,
-    order: data.metadata?.order, pickerVisible: data.metadata?.insightPickerVisible, bundled: true, modelInvocable: true }
+  const ui = JSON.parse(readFileSync(join('bundled-skills', entry.name, 'ui.json'), 'utf8'))
+  return { name: data.name, description: data.description, ...ui,
+    pickerVisible: entry.name !== 'media-generator', bundled: true, modelInvocable: true }
 })
 
 describe('directory-backed product skills', () => {
@@ -19,8 +21,10 @@ describe('directory-backed product skills', () => {
     for (const skill of skills) {
       expect(skill.name).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       expect(skill.description).toBeTruthy()
-      expect(skill.displayName).toBeTruthy()
+      expect(BUNDLED_SKILL_PRESENTATIONS[skill.name]).toMatchObject({ displayName: skill.displayName, shortDescription: skill.shortDescription })
     }
+    expect(roots.map(root => root.name)).toContain('ppt-maker-new')
+    expect(roots.map(root => root.name)).not.toContain('call-insight-api')
     expect(filterSkills(skills, '').map(skill => skill.name)).not.toContain('media-generator')
   })
   it('uses actual discovery and accepts new bundles without updating an enumeration', () => {
@@ -41,6 +45,6 @@ describe('directory-backed product skills', () => {
   it('ships the entire skill tree as external resources', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
     expect(pkg.build.extraResources).toContainEqual(expect.objectContaining({ from: 'bundled-skills', to: 'bundled-skills' }))
-    expect(readFileSync('bundled-skills/call-insight-api/scripts/enterprise_proxy.mjs', 'utf8')).toContain('DSH_HOME')
+    expect(readFileSync('bundled-skills/ppt-maker-new/scripts/ppt.py', 'utf8')).toContain('enterprise_proxy')
   })
 })

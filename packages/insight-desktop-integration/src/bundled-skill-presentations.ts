@@ -13,17 +13,13 @@ export const BUNDLED_SKILL_PRESENTATIONS: Readonly<Record<string, SkillPresentat
     displayName: '品牌活动监测',
     shortDescription: '跟踪品牌传播与社媒舆情，识别风险并提供优化建议。'
   },
-  'call-insight-api': {
-    displayName: '因赛多模态',
-    shortDescription: '查询可用模型，生成或解析图片、视频、音频和文本。'
-  },
   'category-competitor-insight': {
     displayName: '品类与竞品洞察',
     shortDescription: '分析品类机会、竞品内容和用户需求，支持营销决策。'
   },
   'creative-generation-evaluation': {
-    displayName: '创意生成与评估',
-    shortDescription: '结合洞察和参考案例生成创意，并评估方案质量。'
+    displayName: '创意发想',
+    shortDescription: '根据brief或需求，输出若干个创意参考。'
   },
   'creator-recommendation': {
     displayName: '达人推荐',
@@ -53,9 +49,13 @@ export const BUNDLED_SKILL_PRESENTATIONS: Readonly<Record<string, SkillPresentat
     displayName: '多媒体创作',
     shortDescription: '生成或编辑图片、视频、音频，解析多媒体内容。'
   },
+  'ppt-maker-new-new': {
+    displayName: 'PPT 制作',
+    shortDescription: '根据主题、素材或已有演示文稿制作和修改 PPT。'
+  },
   'soccor-proposal': {
-    displayName: '品牌策略提案',
-    shortDescription: '梳理品牌定位、价值主张与创意概念，形成策略提案。'
+    displayName: '说可策划',
+    shortDescription: '基于说可方法论梳理品牌定位、价值主张与创意概念，形成策略提案。'
   }
 }
 
@@ -63,7 +63,8 @@ export const BUNDLED_SKILL_PRESENTATIONS: Readonly<Record<string, SkillPresentat
 export function isBundledSkill(name: string, path?: string): boolean {
   if (!path || !Object.hasOwn(BUNDLED_SKILL_PRESENTATIONS, name)) return false
   const parts = path.split(/[\\/]/u)
-  return parts.at(-3) === 'bundled-skills' && parts.at(-2) === name && parts.at(-1) === 'SKILL.md'
+  const directory = name === 'ppt-maker-new-new' ? 'ppt-maker-new' : name
+  return parts.at(-3) === 'bundled-skills' && parts.at(-2) === directory && parts.at(-1) === 'SKILL.md'
 }
 
 export function bundledSkillPresentation(name: string, path?: string): SkillPresentation {

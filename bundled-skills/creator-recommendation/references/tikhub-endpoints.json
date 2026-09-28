@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "last_updated_at": "2026-09-21",
+  "transport": "enterprise_proxy",
+  "connection_id": "tikhub",
+  "endpoints": [
+    {
+      "name": "xingtu_search_creator",
+      "path": "/api/v1/douyin/xingtu_v2/search_creator",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["keyword"],
+      "parameters": {
+        "keyword": {"location": "query"},
+        "seach_type": {
+          "location": "query",
+          "default": 3,
+          "meaning": "3=按内容/作品语义发现候选；2=按昵称，仅适用于已知账号核验"
+        },
+        "time_range_days": {"location": "query", "default": 180, "allowed": [30, 90, 180]},
+        "page": {"location": "query", "default": 1}
+      },
+      "price_usd": 0.002
+    },
+    {
+      "name": "xingtu_author_link_info",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_link_info",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["o_author_id"],
+      "parameters": {"o_author_id": {"location": "query"}},
+      "id_contract": {
+        "parameter": "o_author_id",
+        "preferred_source": "star_id",
+        "format": "19-digit string observed in live responses",
+        "two_object_canary_required": true
+      },
+      "price_usd": 0.002
+    },
+    {
+      "name": "xingtu_author_local_info",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_local_info",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["o_author_id"],
+      "parameters": {"o_author_id": {"location": "query"}},
+      "id_contract": {"parameter": "o_author_id", "preferred_source": "star_id", "two_object_canary_required": true},
+      "price_usd": 0.002
+    },
+    {
+      "name": "xingtu_author_market_fields",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_market_fields",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["o_author_id"],
+      "parameters": {"o_author_id": {"location": "query"}},
+      "id_contract": {"parameter": "o_author_id", "preferred_source": "star_id", "two_object_canary_required": true},
+      "price_usd": 0.002
+    },
+    {
+      "name": "xingtu_hot_comment_tokens",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_hot_comment_tokens",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["author_id"],
+      "parameters": {"author_id": {"location": "query"}},
+      "id_contract": {"parameter": "author_id", "preferred_source": "star_id", "two_object_canary_required": true},
+      "price_usd": 0.002
+    },
+    {
+      "name": "xingtu_audience_distribution",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_audience_distribution",
+      "method": "GET",
+      "status": "failed",
+      "last_failure_at": "2026-09-21",
+      "failure": "HTTP/business 400 for live creator and official demo parameters",
+      "required_parameters": ["o_author_id"],
+      "parameters": {"o_author_id": {"location": "query"}}
+    },
+    {
+      "name": "xingtu_author_base_info",
+      "path": "/api/v1/douyin/xingtu_v2/get_author_base_info",
+      "method": "GET",
+      "status": "failed",
+      "last_failure_at": "2026-09-21",
+      "required_parameters": ["o_author_id"],
+      "parameters": {"o_author_id": {"location": "query"}}
+    },
+    {
+      "name": "douyin_general_search_v2",
+      "path": "/api/v1/douyin/search/fetch_general_search_v2",
+      "method": "POST",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "body",
+      "required_parameters": ["keyword", "offset", "count"],
+      "parameters": {
+        "keyword": {"location": "body"},
+        "offset": {"location": "body", "default": 0},
+        "count": {"location": "body", "default": 20}
+      },
+      "price_usd": 0.002
+    },
+    {
+      "name": "xiaohongshu_search_notes_v2",
+      "path": "/api/v1/xiaohongshu/app_v2/search_notes",
+      "method": "GET",
+      "status": "live",
+      "last_verified_at": "2026-09-21",
+      "parameter_transport": "query",
+      "required_parameters": ["keyword"],
+      "parameters": {"keyword": {"location": "query"}, "page": {"location": "query", "default": 1}},
+      "price_usd": 0.002
+    }
+  ]
+}

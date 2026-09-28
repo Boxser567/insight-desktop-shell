@@ -3,7 +3,7 @@
 **用途：** 用户输入自然语言模型名称时，映射到正确的 media_id 用于 API 调用  
 **更新时间：** 2026-09-03（v3.0 - 仅保留媒体网关实测可用模型）
 
-> ⚠️ 本表只列**媒体网关(52667)实测可用**的模型。属于 `call-insight-api`(52867) 专属的模型（Seedance-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast、HappyHorse-1.0、Recraft Pro Vector、Insight z-image-turbo、indexTTS-2 等）已移除，请走 `call-insight-api` 技能。
+> ⚠️ 本表只列**媒体网关(52667)实测可用**的模型。属于 API Manager(52867) 专属的模型（Seedance-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast、HappyHorse-1.0、Recraft Pro Vector、Insight z-image-turbo、indexTTS-2 等）已移除，本技能不支持；请与用户确认可用的替代模型，不切换为厂商直连。
 
 ---
 

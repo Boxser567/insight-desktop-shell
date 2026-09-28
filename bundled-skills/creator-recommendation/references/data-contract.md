@@ -5,6 +5,15 @@
 数据工具层应返回可追溯的结构化对象；接口原始字段可变化，但输出字段保持稳定。
 
 ```yaml
+creator_recommendation_output:
+  requested_platforms: [string]
+  platform_gaps:
+    - platform: string
+      reason: string
+      failed_route: string | null
+      decision_impact: string
+  creators: [creator]
+
 creator:
   creator_key: "platform:creator_id"
   platform: string
@@ -61,11 +70,20 @@ creator:
     median_completion_rate: number | null
     median_interaction_rate: number | null
     view_range: { min: number | null, max: number | null }
+    stability_metric:
+      name: min_max_ratio | median_max_ratio
+      formula: min_views/max_views | median_views/max_views
+      value: number | null
     title_visible_commercial_density: number | null
     direct_category_density: number | null
   historical_evidence:
     brand_posts: [post_evidence]
     competitor_posts: [post_evidence]
+  asset_reuse_evidence:
+    - content_id: string
+      brand: string
+      ownership_or_license: owned | licensed | pending_verification
+      valid_until: ISO-8601 | null
   audience:
     source: xingtu | platform_model | authorized_backend | unavailable
     status: verified | modelled | authorized | unavailable
@@ -119,140 +137,18 @@ creator:
 
 ## 投放组合输出
 
-`portfolio` 和 `full_plan` 模式使用以下稳定结构：
-
-```yaml
-portfolio_plan:
-  plan_id: string
-  version: string
-  generated_at: ISO-8601
-  mode: portfolio | full_plan
-  objective: [string]
-  total_budget: { amount: number | null, currency: CNY }
-  budget_status: closed | partial | not_plannable
-  assumptions: [string]
-  selected_creators:
-    - creator_key: string
-      platform: string
-      creator_id: string
-      entity_cluster_id: string | null
-      primary_role: string
-      secondary_roles: [string]
-      assigned_scenario: string
-      content_task: string
-      capability_role_basis: [reach | audience_fit | seeding | conversion | cost_efficiency]
-      commercial_capability_score: number | null
-      commercial_evidence_coverage: number
-      creator_fee: number | null
-      selection_reason: string
-      replacement_creator_id: string | null
-      gating_checks: [string]
-  coverage:
-    roles: [{ label: string, creators: [string], status: covered | gap | overlap }]
-    audiences: [{ label: string, creators: [string], status: covered | gap | overlap }]
-    scenarios: [{ label: string, creators: [string], status: covered | gap | overlap }]
-    formats: [{ label: string, creators: [string], status: covered | gap | overlap }]
-  budget_lines:
-    - category: creator_fee | production_and_rights | paid_amplification | conversion_and_measurement | contingency
-      amount: number | null
-      status: quoted | estimated | reserved | unknown
-      note: string
-  phases:
-    - name: string
-      creators: [string]
-      release_condition: string | null
-      observation_window: string | null
-      success_rules: [decision_rule]
-      stop_rules: [decision_rule]
-  risks: [string]
-  unresolved_costs: [string]
-  monitoring_handoff: monitoring_handoff
-```
-
-`decision_rule` 至少记录指标、比较基准、方向和数据来源。缺少有依据的阈值时保留相对规则，不填造数值。
+> 📖 详见 [`references/handoff-contracts.md`](references/handoff-contracts.md)。**按需读取**。
 
 ## 投中监测交接
 
-```yaml
-monitoring_handoff:
-  handoff_id: string
-  plan_id: string
-  plan_version: string
-  generated_at: ISO-8601
-  campaign:
-    name: string | null
-    start_at: ISO-8601 | null
-    end_at: ISO-8601 | null
-    objectives: [string]
-  tracking_registry:
-    - tracking_id: string
-      platform: string
-      creator_id: string
-      creator_name: string | null
-      profile_url: string | null
-      plan_status: planned | confirmed | replaced | cancelled
-      primary_role: string
-      scenario: string
-      message_points: [string]
-      deliverables: [string]
-      planned_content_count: number | null
-      planned_publish_window: { start_at: ISO-8601 | null, end_at: ISO-8601 | null }
-      content_ids: [string]
-      content_urls: [string]
-      replacement_tracking_id: string | null
-      allocated_budget: { amount: number | null, currency: CNY }
-  kpi_definitions:
-    - kpi_id: string
-      metric: string
-      formula: string
-      numerator: string | null
-      denominator: string | null
-      source: public_api | ad_platform | ecommerce | crm | survey | other
-      observation_window: string
-      data_lag: string | null
-      target_value: number | null
-      target_direction: above | below | within | relative
-      baseline_ids: [string]
-      comparator: gt | gte | lt | lte | between | percentile | null
-      baseline_logic: all | any | mean | median | specific | null
-      relative_delta: number | null
-      relative_delta_unit: absolute | percent | percentile_point | null
-      success_action: string
-      stop_action: string
-      owner: string | null
-  baselines:
-    - baseline_id: string
-      platform: string | null
-      tracking_ids: [string]
-      metric: string
-      scope_type: creator | cohort | brand | campaign | competitor
-      scope_id: string | null
-      value: number | null
-      unit: string | null
-      sample_size: number | null
-      window: string
-      captured_at: ISO-8601 | null
-      source_ref: string
-  first_party_mapping:
-    - metric: string
-      source: string
-      join_key: string | null
-      availability: available | planned | unavailable
-  upstream_context:
-    insight_handoff_id: string | null
-    accepted_learning_return_ids: [string]
-    query_manifest: [object]
-    risk_watchlist: [object]
-    evidence_manifest: [object]
-```
-
-`tracking_id` 在计划版本间保持稳定，除非换成不同达人/账号；替补启用时新旧记录通过 `replacement_tracking_id` 关联。`kpi_definitions` 负责锁定同名指标的公式、分母、窗口和数据源，防止投中阶段重新解释“互动率”“搜索提升”或“转化”。
-
-当 `target_direction=relative` 时，`comparator`、`baseline_logic`、`baseline_ids` 与 `relative_delta` 必须共同给出；若没有有依据的相对幅度，将 `relative_delta` 保持 `null` 并把该规则标为观察规则，不得用于自动加投/停止。达人或内容基线必须通过 `tracking_ids` 关联注册表对象；跨平台时同时填写 `platform`。
+> 📖 详见 [`references/handoff-contracts.md`](references/handoff-contracts.md)。**按需读取**。
 
 ## 字段解释
 
 - `followers`：抓取时点的原始粉丝数，必须在候选横向表与逐人尽调卡展示；不可仅用“万”或“百万”模糊代替原始值。粉丝数用于判断账号规模，不能作为播放或转化表现的替代指标。
+- `platform_gaps`：用户要求的平台若没有候选，必须逐平台登记原因、失败路由和决策影响；不得静默缺失或用其他平台候选替代。
+- `stability_metric`：名称与公式必须严格配对，防止把最小/最大比误报为中位/最大比。
+- `asset_reuse_evidence`：进入“素材复用优先”的必要证据；没有既有内容及授权状态时保持空数组，并禁止使用该层级。
 - `followers_captured_at`：粉丝数的获取时间。粉丝数会变化；若该字段缺失，报告应标注“粉丝数时点未确认”。
 - `median_views`：最新 10 条有播放数据作品排序后的中位数；偶数样本取中间两项平均值。样本不足时注明有效样本数。
 - `completion_rate` / `median_completion_rate`：作品完成播放率及近 10 条中位数。记录接口原始口径；不可与不同视频时长、不同平台口径直接做绝对比较。
@@ -281,9 +177,10 @@ monitoring_handoff:
 
 ## 结论的证据等级
 
+<!-- 已按客户口径统一为一级～四级，原为 A/B/C/D -->
 |等级|含义|可使用的表述|
 |---|---|---|
-|A|接口或后台的直接数值/作品记录|“近 10 条中位播放为…”|
-|B|标题、标签、公开内容中的可见事实|“标题可见近期出现…”|
-|C|根据 A/B 得到的运营判断|“适合以…场景测试”|
-|D|尚未获取的数据|“需在签约前核验”|
+|一级|接口或后台的直接数值/作品记录|“近 10 条中位播放为…”|
+|二级|标题、标签、公开内容中的可见事实|“标题可见近期出现…”|
+|三级|根据一/二级证据得到的运营判断|“适合以…场景测试”|
+|四级|尚未获取的数据|“需在签约前核验”|

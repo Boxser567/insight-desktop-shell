@@ -11,7 +11,7 @@ describe('desktop integration client', () => {
     const bundled = Object.keys(BUNDLED_SKILL_PRESENTATIONS).map((name, index) => ({
       name,
       description: `${name} description`,
-      path: `/Applications/因赛AI.app/Contents/Resources/bundled-skills/${name}/SKILL.md`,
+      path: `/Applications/因赛AI.app/Contents/Resources/bundled-skills/${name === 'ppt-maker-new-new' ? 'ppt-maker-new' : name}/SKILL.md`,
       order: index,
       pickerVisible: name !== 'media-generator'
     }))

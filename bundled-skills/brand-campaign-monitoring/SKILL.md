@@ -1,24 +1,13 @@
 ---
 name: brand-campaign-monitoring
 description: Use when a brand needs cross-platform reputation and risk monitoring, in-flight campaign tracking, anomaly detection, or evidence-backed optimization across public social content. Not for pre-launch creator selection, direct media buying, or post-campaign attribution alone.
-metadata:
-  displayName: "品牌舆情监测"
-  order: 6
-
 ---
+
 ## 企业版数据调用
 
-本技能通过本目录 `scripts/enterprise_proxy.mjs` 调用后台的 `tikhub` 连接。请用插件提供的 `DSH_SKILL_PROXY_NODE`（内置 Node.js 绝对路径）运行，不依赖系统 node/Python；脚本路径有空格时加引号。PowerShell 用 `& $env:DSH_SKILL_PROXY_NODE "<skill>/scripts/enterprise_proxy.mjs" ...`。它使用本地企业插件桥接，不注册新的模型工具。插件自动携带登录态，后台注入 TikHub Key。
+本技能通过本目录的只读调用器和 `scripts/enterprise_proxy.mjs` 访问后台 `tikhub` 连接。企业插件自动携带当前登录态，后台注入 TikHub Key；技能不得读取用户 Token、厂商 Key、`.env`、`config.toml` 或 Shell profile，也不得直接请求 TikHub。
 
-以技能加载结果中的实际目录替换 `<skill>`，不要硬编码其他人的 home 路径。路由/参数继续参考本技能 references；以下是调用示例，不代表授权批量采集：
-
-```bash
-"$DSH_SKILL_PROXY_NODE" <skill>/scripts/enterprise_proxy.mjs tikhub POST /api/v1/douyin/search/fetch_general_search_v2 --body '{"keyword":"家居","cursor":0}'
-"$DSH_SKILL_PROXY_NODE" <skill>/scripts/enterprise_proxy.mjs tikhub GET /api/v1/xiaohongshu/app_v2/search_notes --query '{"keyword":"家居","page":1}'
-```
-
-只读查询按原技能的采样、费用授权和数据质量约束执行。不得读取本机用户 Token、Codex 配置、厂商 Key 或直接请求 TikHub。`DSH_HOME` 由客户端提供；未登录/代理不可用时请用户启动更新后的客户端并登录。`SKILL_PROXY_ROUTE_FORBIDDEN` 表示后台尚未开放路由，联系管理员，不尝试绕过。超时/断连不代表上游未执行，不自动重试。
-
+探针路由、费用授权和响应净化仍由 `scripts/tikhub_probe.py` 及 `references/` 下的平台资料执行。代理不可用或请求结果不确定时停止并保留现有证据，不自动重试付费请求或绕过代理。
 
 # 品牌口碑与战役投中监测
 
@@ -26,7 +15,7 @@ metadata:
 
 把“品牌口碑与风险雷达”和“营销战役投中监测”合并为一个连续判断流程：同一批跨平台公开内容，同时用于判断口碑、风险、声量、内容效率和投放调整。
 
-- 厂商 Key 仅由后台读取；技能不得读取或展示任何用户 Token/厂商凭据。
+本 Skill 不保存、索取、展示或写入 API Key、Cookie 或平台账号凭证；真实凭据仅由企业后台管理。
 
 ## 选择模式
 
@@ -34,7 +23,7 @@ metadata:
 - `campaign_monitor`：针对正在投放的战役、达人或内容清单，输出节奏、目标完成度、异常和可执行调整。
 - `combined`：默认模式。把自然口碑、品牌自有内容、达人内容和竞品动态放在同一时间轴上判断。
 
-如果用户要求“监控、每日检查、定时跟进或发生时通知”，使用产品提供的自动化/心跳机制；Skill 文本本身不代表已经建立定时任务。
+如果用户要求“监控、每日检查、定时跟进或发生时通知”，使用产品提供的自动化或心跳机制；Skill 文本本身不代表已经建立定时任务。
 
 ## 输入
 
@@ -44,7 +33,7 @@ metadata:
 monitoring_brief:
   mode: combined
   upstream_plan:
-    monitoring_handoff_id: 可选，来自 creator-recommendation
+    handoff_id: 可选，来自 creator-recommendation 的 monitoring_handoff.handoff_id（见其 data-contract）
     plan_id: 可选
     plan_version: 可选
     monitoring_handoff: 可选，完整交接对象
@@ -62,7 +51,7 @@ monitoring_brief:
     objectives: [声量, 搜索, 互动, 引流, 转化]
     tracked_creators: [可选]
     tracked_content_urls: [可选]
-  platforms: [抖音, 小红书, B站, 公众号, TikTok]
+  platforms: [douyin, xiaohongshu, bilibili, wechat_mp, tiktok]   # 取值必须是 references/data-contract.md 的平台 slug 枚举
   queries:
     brand_terms: []
     product_terms: []
@@ -70,7 +59,7 @@ monitoring_brief:
     risk_terms: []
     search_exclusions: []
   upstream_insight:
-    insight_handoff_id: 可选，来自 category-competitor-insight
+    handoff_id: 可选，来自 category-competitor-insight 的 insight_handoff.handoff_id（creator 契约的 upstream_context.insight_handoff_id 是同一值）
     query_manifest: [可选，完整查询对象]
     risk_watchlist: [可选，完整风险对象]
     evidence_manifest: [可选，完整证据对象]
@@ -106,7 +95,7 @@ monitoring_brief:
 
 按 [监测数据契约](references/data-contract.md) 保留原始平台标识、发布时间、采集时间和字段可用性。用内容 ID、规范化 URL、作者和时间窗去重；转发、转载和原帖保留关系，不简单合并。
 
-优先复用仍在有效期内且查询、平台、对象和时间窗一致的上游证据/缓存。补采生成新抓取记录，不覆盖投前基线；投前值与投中实际值通过 `baseline_id` 和 `tracking_id` 关联。
+优先复用仍在有效期内且查询、平台、对象和时间窗一致的上游证据/缓存。补采生成新抓取记录，不覆盖投前基线；投前值与投中实际值通过 `baseline_ids`（见 data-contract 的 `kpi_results`）和 `tracking_id` 关联。
 
 ### 4. 口碑与风险判断
 
@@ -149,6 +138,28 @@ monitoring_brief:
 - 只保留业务字段。授权头、Cookie、Token、xsec、媒体签名和短期播放地址不进入报告或长期存储。
 - 不执行投放、加热、下单、私信、删帖、评论或其他改变第三方状态的操作，除非用户在当次任务中明确授权。
 - `scripts/tikhub_probe.py` 仅用于端点验收和回归探测；运行会产生实际 API 费用，调用前必须有当次任务授权并展示估算费用。
+
+**探针集与用法**（`scripts/tikhub_probe.py`；探测会计费，跑前先确认）：
+
+```bash
+python3 <skills>/brand-campaign-monitoring/scripts/tikhub_probe.py \
+  --output /tmp/tikhub-probe.json \
+  --probes-file <skills>/brand-campaign-monitoring/references/live-fallback-probes.json
+```
+
+`--output` 为必填。现成探针集（`references/` 下，覆盖不同回归面）：
+
+| 文件 | 条数 | 覆盖 |
+|------|------|------|
+| `live-chain-probes.json` | 42 | 各平台主链路（搜索→详情→评论） |
+| `live-fallback-probes.json` | 15 | 降级路径与替代端点 |
+| `final-extra-probes.json` | 3 | 补充端点 |
+| `threads-chain-probes.json` | 2 | Threads 链路 |
+| `threads-content-probes.json` | 2 | Threads 内容 |
+
+不传 `--probes-file` 时使用脚本内置的 `SEED_PROBES`（19 条）。全部探针失败时脚本返回非零退出码；加 `--strict` 则任一失败即返回非零。
+  - 落盘内容默认走白名单：只写 `summary` 类字段与示例数据键，媒体签名和短期播放地址不进入 `--output`；传 `--include-payload` 才写入完整响应体（写前仍脱敏）。脱敏覆盖 `sign`/`sn`/`chksm`/`api_key`/`accessToken` 等 camelCase 与下划线变体，以及 `authorization`/`cookie`/`xsec_token`/`play_url`；运行结束会打印本次命中的 `redacted keys`。
+  - 退出码：默认全部探针失败返回 1；加 `--strict` 则任一探针失败即返回 1，便于上游用退出码判断。代理连接由企业插件控制，不支持本地覆盖 TikHub 基础地址。
 
 ## 边界
 

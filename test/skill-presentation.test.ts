@@ -5,6 +5,7 @@ import { createSkillCatalog, filterSkills } from '../packages/insight-desktop-in
 import { BUNDLED_SKILL_PRESENTATIONS } from '../packages/insight-desktop-integration/src/bundled-skill-presentations'
 import { parseSkillPresentation, skillDisplayName, skillShortDescription } from '../packages/insight-desktop-integration/src/skill-presentation'
 import { en, zh } from '../packages/insight-desktop-integration/src/client/locales'
+import { parse } from 'yaml'
 
 const native = { name: 'creator-recommendation', description: 'Original model-facing instructions', path: '/skills/creator-recommendation/SKILL.md' }
 const presentation = { displayName: '达人推荐', shortDescription: '发现并筛选合适达人。' }
@@ -51,11 +52,13 @@ describe('skill UI-only metadata', () => {
   it('ships valid UI sidecars for every current bundle', () => {
     for (const entry of readdirSync('bundled-skills', { withFileTypes: true }).filter(entry => entry.isDirectory())) {
       const text = readFileSync(join('bundled-skills', entry.name, 'ui.json'), 'utf8')
+      const skill = readFileSync(join('bundled-skills', entry.name, 'SKILL.md'), 'utf8')
+      const name = parse(skill.split('---')[1]!).name as string
       const ui = parseSkillPresentation(text)
       expect(ui).toEqual(JSON.parse(text))
       expect(ui.displayName).toBeTruthy()
       expect(ui.shortDescription).toBeTruthy()
-      expect(BUNDLED_SKILL_PRESENTATIONS[entry.name]).toEqual(ui)
+      expect(BUNDLED_SKILL_PRESENTATIONS[name]).toEqual(ui)
     }
   })
 })
@@ -69,6 +72,7 @@ describe('native catalog presentation adapter', () => {
     ['C:\\Users\\dev\\.agents\\skills\\creator-recommendation\\SKILL.md', false],
     ['/app/bundled-skills/another-skill/SKILL.md', false],
     ['/app/not-bundled-skills/creator-recommendation/SKILL.md', false],
+    ['/app/bundled-skills/notebooklm/SKILL.md', false],
     [undefined, false]
   ])('classifies the winning source %s as bundled=%s', async (path, bundled) => {
     const { catalog, session } = setup([{ ...native, path }])
@@ -81,12 +85,23 @@ describe('native catalog presentation adapter', () => {
     const { catalog, session } = setup([
       { ...native, path: '/app/bundled-skills/creator-recommendation/SKILL.md' },
       { name: 'anysearch', description: 'search', path: '/Users/dev/.agents/skills/anysearch/SKILL.md' },
+      { name: 'notebooklm', description: 'NotebookLM', path: 'C:\\Users\\dev\\.agents\\skills\\notebooklm\\SKILL.md' },
       { name: 'unknown', description: 'unknown', path: '/app/bundled-skills/unknown/SKILL.md' },
       { name: 'toString', description: 'prototype', path: '/app/bundled-skills/toString/SKILL.md' }
     ])
     const visible = filterSkills(await catalog.list(session), '')
     expect(visible.map(skill => skill.name)).toEqual([native.name])
-    expect(visible.filter(skill => ['anysearch', 'unknown'].includes(skill.name))).toHaveLength(0)
+    expect(visible.filter(skill => ['anysearch', 'notebooklm', 'unknown'].includes(skill.name))).toHaveLength(0)
+  })
+
+  it('recognizes the upstream PPT skill ID and keeps the media helper out of the picker', async () => {
+    const { catalog, session } = setup([
+      { name: 'ppt-maker-new-new', description: 'PPT', path: 'C:\\Program Files\\因赛AI\\resources\\bundled-skills\\ppt-maker-new\\SKILL.md' },
+      { name: 'media-generator', description: 'media', path: 'C:\\Program Files\\因赛AI\\resources\\bundled-skills\\media-generator\\SKILL.md' }
+    ])
+    const skills = await catalog.list(session)
+    expect(filterSkills(skills, '').map(skill => skill.name)).toEqual(['ppt-maker-new-new'])
+    expect(skills[1]?.pickerVisible).toBe(false)
   })
 
   it('reads the winning path via public Remote and keeps invocation/model metadata intact', async () => {

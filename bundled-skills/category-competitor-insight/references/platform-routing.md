@@ -2,7 +2,10 @@
 
 ## 使用范围
 
-本表只收录 2026-08-28 已真实通过的 TikHub 只读链路，以及为正确降级必须知道的失败路由。状态不等于各平台数据覆盖率；每次研究仍需记录查询、时间窗、返回样本量和数据新鲜度。
+> **状态词表（三种路由表共用）**：`core` 搜索与详情/评论/账号链路均实测通过 ｜ `fallback` 需固定降级版本或参数 ｜ `partial` 部分监测可用但有明确缺口 ｜ `known_object` **仅已知 URL/ID/账号可查，不作为关键词发现入口** ｜ `authorized` 目录有但 Token 权限不足 ｜ `unavailable` 已移除或实测失效。
+> 同一平台可因能力不同而给出不同状态：**发现**能力与**已知对象**能力分别评估；三张表冲突时取更保守者并在报告中注明口径。
+
+本表汇总截至 2026-09-21 已真实通过的 TikHub 只读链路，以及为正确降级必须知道的失败路由。精确方法和必填参数以 `tikhub-endpoints.json` 为执行合同；本表用于平台选择与业务解释。状态不等于各平台数据覆盖率；每次研究仍需记录查询、时间窗、返回样本量和数据新鲜度。
 
 状态：
 
@@ -17,8 +20,8 @@
 
 | 平台 | 状态 | 发现/搜索 | 详情与账号验证 | 评论/用户声音 | 品类洞察用法与限制 |
 |---|---|---|---|---|---|
-| 抖音 | `core` | `/api/v1/douyin/search/fetch_general_search_v2`；趋势 `/api/v1/douyin/index/fetch_multi_keyword_hot_trend`；热点 `/api/v1/douyin/billboard/fetch_hot_total_list` | `/api/v1/douyin/app/v3/fetch_one_video` | `/api/v1/douyin/app/v3/fetch_video_comments` | 可做趋势、热点、内容和评论；指数值与公开互动分开解释 |
-| 小红书 | `core` | `/api/v1/xiaohongshu/web_v3/fetch_search_suggest`；`/api/v1/xiaohongshu/app_v2/search_notes` | 图文 `/api/v1/xiaohongshu/app_v2/get_image_note_detail`；视频 `/api/v1/xiaohongshu/app_v2/get_video_note_detail`；账号 `/api/v1/xiaohongshu/app_v2/get_user_info` | `/api/v1/xiaohongshu/app_v2/get_note_comments` | 搜索结果先判断图文/视频类型；`web_v3/fetch_search_notes` 已知 404，不作 fallback |
+| 抖音 | `core` | `POST /api/v1/douyin/search/fetch_general_search_v2`，body=`keyword,offset,count`；趋势 `POST /api/v1/douyin/index/fetch_multi_keyword_hot_trend`，query=`keyword_list,start_date,end_date`；热点 `GET /api/v1/douyin/billboard/fetch_hot_total_list`，至少传 `type` | `/api/v1/douyin/app/v3/fetch_one_video` | `GET /api/v1/douyin/app/v3/fetch_video_comments`，`aweme_id,cursor`；单页约 20 条，不能假定 `count` 生效 | 可做趋势、热点、内容和评论；日期为 `YYYYMMDD`；热点 `type=range` 需起止日期，snapshot 未传时点可能为空 |
+| 小红书 | `core` | `/api/v1/xiaohongshu/web_v3/fetch_search_suggest`；`GET /api/v1/xiaohongshu/app_v2/search_notes`（POST 实测 405） | 图文 `/api/v1/xiaohongshu/app_v2/get_image_note_detail`；视频 `/api/v1/xiaohongshu/app_v2/get_video_note_detail`；账号 `/api/v1/xiaohongshu/app_v2/get_user_info` | `/api/v1/xiaohongshu/app_v2/get_note_comments` | 搜索结果先判断图文/视频类型；`web_v3/fetch_search_notes` 已知 404，不作 fallback |
 | B站 | `fallback` | `/api/v1/bilibili/web/fetch_general_search` | `/api/v1/bilibili/web/fetch_one_video` + `bv_id`；账号 `/api/v1/bilibili/web/fetch_user_profile` | `/api/v1/bilibili/web/fetch_video_comments` | `fetch_one_video_v3` 对真实 URL 返回 400；固定用 V1 详情 |
 | 微博 | `fallback` | `/api/v1/weibo/web/fetch_search` | `/api/v1/weibo/web/fetch_post_detail`；账号 `/api/v1/weibo/web/fetch_user_info` | `/api/v1/weibo/web/fetch_post_comments` | `web_v2` 详情、评论、用户均实测失败；固定用 `web` V1 |
 | 知乎 | `partial` | `/api/v1/zhihu/web/fetch_article_search_v3` | `/api/v1/zhihu/web/fetch_column_article_detail` | `/api/v1/zhihu/web/fetch_comment_v5` 仅适用于回答 ID | 文章搜索样本不能直接串回答评论；默认只做文章主题与主张分析 |
@@ -42,7 +45,7 @@
 ## 路由选择
 
 1. `quick_scan` 默认选择与目标市场相关的 `core/fallback` 平台；`partial/known_object` 只有在其限制不影响研究问题时加入。
-2. 每个平台先做一页小样本；同时通过 HTTP、顶层状态、嵌套业务状态和核心字段门禁后再分页扩样。
+2. 每个平台先做一页小样本；同时通过 HTTP、顶层状态、嵌套业务状态和核心字段门禁后再分页扩样。正式 `full_analysis` 的核心查询继续采集至少 3 页，或达到 Skill 定义的连续两页饱和门槛。
 3. 搜索为空时记录 `empty_valid`，再用同义词、其他平台或已知 URL/ID 交叉验证；不得写成“没有需求/竞品内容”。
 4. 评论链路不可用时，内容级评论数只能作为弱信号；`user_voice` 不得由评论数推断。
 5. 发现、详情、评论、账号各自记录路由状态；一个环节成功不代表整个平台为 `core`。
@@ -53,4 +56,3 @@
 - 跨平台综合使用主题覆盖、叙事占位、证据形式、平台内分位和标准化变化，不直接相加绝对互动量。
 - 公众号阅读、YouTube 长视频、Shorts、图文笔记和短视频分别成组；没有共同分母时 `engagement_rate=null`。
 - 平台缺失字段是 `null`，不是零；partial/fallback 样本在结论旁显示能力状态和限制。
-

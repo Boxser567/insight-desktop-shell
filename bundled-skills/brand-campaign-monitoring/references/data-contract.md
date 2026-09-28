@@ -38,7 +38,9 @@ content_record:
     saves: null
     followers: null
   metric_availability: [views, likes, comments]
-  source_status: valid | empty | degraded | unauthorized | timeout | invalid
+  source_status: valid | empty_valid | degraded | unauthorized | timeout | invalid
+  # 取值域与 category-competitor-insight 的 business_status 一致：本技能按「单条来源」记录，
+  # 该技能按「一次查询」记录；empty_valid = 查询成功但无数据，**不得当作失败**。
   source_route: API 路由标识
   raw_reference: 可选的临时原始结果索引，不放密钥或签名 URL
 ```
@@ -65,6 +67,8 @@ comment_record:
   label_confidence: 0.0-1.0
   evidence_excerpt: 最短必要证据片段
   source_status: valid | degraded
+  # 记录级子集：评论接口不可用时不得据内容级评论数伪造 comment_record；
+  # 其余状态（empty_valid/unauthorized/timeout/invalid）表示该条评论记录不存在，而非 degraded。
 ```
 
 不得在评论接口不可用时，根据内容级评论数伪造 `comment_record`。情绪、意图和风险主题只能来自实际文本样本。
@@ -183,7 +187,7 @@ learning_return:
 4. 跨平台总量保留平台分项。平台搜索覆盖率不同，不将简单总和解释为全网绝对声量。
 5. 发生补采、分页或路由降级时更新 `collected_at`、`source_route` 和 `source_status`。
 6. 同一平台优先按内容 ID 去重；跨平台转载保留多条记录并通过 `parent_content_id` 或主题聚类建立关系。
-7. 有投前交接包时，每个内容记录关联 `tracking_id`，每个 KPI 关联 `kpi_id` 和 `baseline_id`；没有稳定关联时不得生成“完成率”。
+7. 有投前交接包时，每个内容记录关联 `tracking_id`，每个 KPI 关联 `kpi_id` 和 `baseline_ids`；没有稳定关联时不得生成“完成率”。
 
 ## 置信度规则
 

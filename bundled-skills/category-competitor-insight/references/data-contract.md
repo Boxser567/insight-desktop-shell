@@ -3,6 +3,27 @@
 所有事实都应先转为可追溯记录；允许接口字段随平台变化，但不可丢失来源、时间、查询和证据等级。
 
 ```yaml
+insight_output:
+  requested_platforms: [string]
+  platform_gaps:
+    - platform: string
+      reason: string
+      failed_route: string | null
+      decision_impact: string
+  queries:
+    - query_id: string
+      platform: string
+      query: string
+      pages_collected: number
+      effective_sample_size: number
+      saturation_reached: boolean
+      new_unique_rates: [number]
+  excluded_evidence_ids: [string]
+  opportunities: [opportunity]
+  insight_handoff: object
+```
+
+```yaml
 evidence_record:
   evidence_id: string
   type: trend | content | comment | creator | ad
@@ -13,6 +34,8 @@ evidence_record:
   discovery_mode: keyword | feed | trend | account | known_url | known_id
   identifier_type: string | null
   business_status: valid | empty_valid | degraded | unauthorized | timeout | invalid
+  # 本字段描述「一次查询」的结果；brand-campaign-monitoring 的 source_status 描述「单条来源」，
+  # 两者取值域相同，空结果统一用 empty_valid（查询成功但无数据），不得当作失败。
   fallback_from: string | null
   query: string | null
   captured_at: ISO-8601
@@ -20,7 +43,7 @@ evidence_record:
   source_id: string | null
   source_url: string | null
   fact: string
-  evidence_level: A | B | C | D
+  evidence_level: 一级 | 二级 | 三级 | 四级
   relevance: high | medium | low
   limitation: string | null
 ```
@@ -124,18 +147,21 @@ insight_handoff:
 
 ## 证据等级
 
+<!-- 已按客户口径统一为一级～四级，原为 A/B/C/D -->
 |等级|含义|允许的写法|
 |---|---|---|
-|A|接口直接返回的数值、内容或评论记录|“样本中出现…”、“接口显示…”|
-|B|标题、正文、标签等公开可见事实的保守归纳|“公开内容可见…”|
-|C|由 A/B 推出的策略判断|“建议以…测试”|
-|D|尚未获得或需授权核验的信息|“待核验”|
+|一级|接口直接返回的数值、内容或评论记录|“样本中出现…”、“接口显示…”|
+|二级|标题、正文、标签等公开可见事实的保守归纳|“公开内容可见…”|
+|三级|由一/二级证据推出的策略判断|“建议以…测试”|
+|四级|尚未获得或需授权核验的信息|“待核验”|
 
-`A/B` 可以支撑事实层，`C` 必须指向对应的 `evidence_id`，`D` 不能被写作已证实结论。评论、标题和标签只能代表抽取到的公开样本；不用于推导完整情绪占比、全体用户偏好或实际购买。
+`一级/二级` 可以支撑事实层，`三级` 必须指向对应的 `evidence_id`，`四级` 不能被写作已证实结论。评论、标题和标签只能代表抽取到的公开样本；不用于推导完整情绪占比、全体用户偏好或实际购买。
 
 ## 采样与相关性
 
 - 内容先按标题、正文、话题、品牌/产品词和场景判断相关性；`low` 相关样本不得参与核心结论。
+- 正式分析的核心“平台 × 查询词”至少采集 3 页；仅当连续两页新增去重样本率均低于 10% 时可提前按饱和停止。所有查询记录 `pages_collected`、`effective_sample_size`、`saturation_reached` 和 `new_unique_rates`。
+- 用户点名的平台若没有查询证据，必须进入 `platform_gaps`；剔除的噪声进入 `excluded_evidence_ids`，禁止被机会卡再次引用。
 - 同一内容、同一查询、同一抓取周期只保留一条标准化记录；不同查询命中同一内容时合并查询来源。
 - 引用内容必须保留 `source_id`；如平台提供稳定可访问链接，同时保留 `source_url`。短期签名媒体链接、`xsec_token`、`sign`、Cookie 型字段和调试上下文一律丢弃，不得进入缓存、模型上下文或报告。
 - 缺失播放、评论或发布时间时保留 `null`，不得补造或用其他平台数据替代。

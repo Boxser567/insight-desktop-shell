@@ -1,11 +1,6 @@
 ---
 name: media-generator
 description: 多媒体内容生成技能：文生图、图生图、图像编辑、文生视频、图生视频、首尾帧/参考图生视频、文生音频(TTS)、音色克隆、文生音乐、音频参考、文本对话、文档/图片/视频解析、文生PPT、文档生PPT。当用户需要生成图片、生成视频、做PPT、生成音乐、文字转语音、克隆音色、或解析图片/视频/文档内容时使用。
-metadata:
-  displayName: "media-generator"
-  order: 12
-  insightPickerVisible: false
-
 ---
 
 # Media Generator 技能
@@ -13,8 +8,8 @@ metadata:
 基于内部多模型聚合网关（Media Generator API），统一接入即梦/Seedance、可灵 Kling、Nano Banana、GPT-Image、MJ、Flux、Qwen、MiniMax、Veo、Vidu、Wan、LTX、HappyHorse、Grok、Recraft、Suno 等十余家模型，通过一个签名鉴权接口完成生图、生视频、生音频、生音乐、生 PPT 等 18 种任务。
 
 > ## ⚠️ 网关区分（2026-09-03 实测，务必遵守）
-> 本技能走 **Media Generator 网关 `http://59.37.128.50:52667/v1/proxy`**。它与 **Insight API Manager 网关 `http://59.37.128.50:52867/v1/proxy`（即 `call-insight-api` 技能）是两个不同的服务**，模型目录不通用。
-> - 本手册/技能**仅收录媒体网关(52667)实测可用的模型**；属于 call-insight-api(52867) 专属的模型（Seedance-VIP、Seedance-2.0-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast、HappyHorse-1.0、Wan-2.6 参考等）已从媒体网关文档中剔除。这类需求请走 `call-insight-api` 技能。
+> 本技能通过后台代理访问 **Media Generator 网关 `http://59.37.128.50:52667/v1/proxy`**。它与 **Insight API Manager 网关（52867）是两个不同的服务**，模型目录不通用。
+> - 本手册/技能**仅收录媒体网关(52667)实测可用的模型**；属于 API Manager(52867) 专属的模型（Seedance-VIP、Seedance-2.0-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast、HappyHorse-1.0、Wan-2.6 参考等）已从媒体网关文档中剔除。不能通过本技能调用这些模型，也不要切换为厂商直连；请说明当前不支持，并与用户确认可用的替代模型。
 > - 媒体网关(52667) 实测可用的新增模型：即梦5.0 Pro、Recraft v4.1(文生图)、Grok Video、HappyHorse-1.1、Wan-2.7、Insight LTX-2.3、Suno 音乐。
 
 ## 企业版网络边界
@@ -93,7 +88,7 @@ python3 <skill>/generate.py <task_type> "<prompt>" [options]
 - **TTS**：`speech-2.8-hd`（高质）/ `speech-2.8-turbo`（快速）（✅ 实测可用）
 - **音乐**：`suno-music-v5_5`（文生音乐/音频参考，✅ 实测可用）
 
-> ⚠️ 属于 `call-insight-api`(52867) 的模型（Seedance-VIP、MiniMax-H3、Vidu Q3 等）已在媒体网关文档中剔除，请用 `call-insight-api` 技能调用。
+> ⚠️ API Manager(52867) 专属模型（Seedance-VIP、MiniMax-H3、Vidu Q3 等）不属于本技能的可用模型，请勿跨网关套用模型目录。
 
 ## 关键约束（必须遵守）
 
@@ -106,7 +101,7 @@ python3 <skill>/generate.py <task_type> "<prompt>" [options]
 7. **失败处理**：不自动重试付费请求；超时/断连可能已被上游接受。联系管理员排查，不切换为厂商直连。
 8. **首尾帧/图生图需要源图 URL**：`first_last_frame_to_video` 需两个 `--image-url`（首帧+末帧，按序）；`image_to_video`/`reference_image_to_video`/`image_to_image` 至少一个 `--image-url`。
 9. **媒体网关参数契约（2026-09-03 实测）+ 脚本已内置默认**：
-   - **TTS**（`speech-2.8-*`）需显式给出 `voice_id`、`language`、`emotion`、`volume`、`intonation`、`speed`；字段名是 `language`/`volume`/`intonation`（**不是** call-insight-api 的 `language_boost`/`vol`/`pitch`）。脚本已注入默认值，无需手动传。
+   - **TTS**（`speech-2.8-*`）需显式给出 `voice_id`、`language`、`emotion`、`volume`、`intonation`、`speed`；字段名是 `language`/`volume`/`intonation`（**不是** API Manager 的 `language_boost`/`vol`/`pitch`）。脚本已注入默认值，无需手动传。
    - **音乐**（`suno-music-v5_5`）需显式 `customMode`，脚本已注入（默认 True）。`--param` 传 `instrumental`/`vocalGender`/`styleWeight` 可直接覆盖。
    - 这些默认值已内置在 `generate.py`，直接跑即可（`text_to_speech`/`text_to_audio` 无需手动带参）。
 

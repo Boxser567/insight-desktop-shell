@@ -16,10 +16,6 @@ keywords:
   - 快手
   - 投流
   - 媒介策略
-metadata:
-  displayName: "达人营销全案"
-  order: 3
-
 ---
 
 ## ⚙️ DSH 环境适配说明
@@ -27,7 +23,7 @@ metadata:
 本技能原为 OpenClaw 环境编写，在 DeepSeek Harness（DSH）中使用时按以下约定适配：
 
 - **联网检索**：统一用 DSH 官方 `web_search` 工具（替代 OpenClaw 的 Tavily Search），无需外部 API Key
-- **案例/标签检索**：用 DSH 的 `inspiration-api` 技能（Dev 测试服务，编译版生产服务）
+- **案例/标签检索**：用 DSH 的 `inspiration-api` 技能（`gapi-test.idealead.com/material-server`）
 - **媒体生成**：用 DSH 的 `media-generator` 技能（网关 `http://59.37.128.50:52667/v1/proxy`）
 - **文件交付**：用 DSH 的 `artifact_save` 归入 `output/` 交付物，或用 `de_channel_send` 发送到 IM 渠道（替代 OpenClaw 的 file-uploader）
 - **输出位置**：产物写入当前工作区 `output/`（替代 OpenClaw 的 `/Users/insight/.openclaw/workspace/...`）

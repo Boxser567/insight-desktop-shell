@@ -1,24 +1,13 @@
 ---
 name: creator-recommendation
 description: Use when 品牌需要达人发现、二次背调、候选筛选，或在总预算内规划达人组合、角色分工和分阶段测试；不用于直接下单、投中监测或投后复盘。
-metadata:
-  displayName: "达人发现与筛选"
-  order: 5
-
 ---
+
 ## 企业版数据调用
 
-本技能通过本目录 `scripts/enterprise_proxy.mjs` 调用后台的 `tikhub` 连接。请用插件提供的 `DSH_SKILL_PROXY_NODE`（内置 Node.js 绝对路径）运行，不依赖系统 node/Python；脚本路径有空格时加引号。PowerShell 用 `& $env:DSH_SKILL_PROXY_NODE "<skill>/scripts/enterprise_proxy.mjs" ...`。它使用本地企业插件桥接，不注册新的模型工具。插件自动携带登录态，后台注入 TikHub Key。
+本技能通过本目录的只读调用器和 `scripts/enterprise_proxy.mjs` 访问后台 `tikhub` 连接。企业插件自动携带当前登录态，后台注入 TikHub Key；技能不得读取用户 Token、厂商 Key、`.env`、`config.toml` 或 Shell profile，也不得直接请求 TikHub。
 
-以技能加载结果中的实际目录替换 `<skill>`，不要硬编码其他人的 home 路径。路由/参数继续参考本技能 references；以下是调用示例，不代表授权批量采集：
-
-```bash
-"$DSH_SKILL_PROXY_NODE" <skill>/scripts/enterprise_proxy.mjs tikhub POST /api/v1/douyin/search/fetch_general_search_v2 --body '{"keyword":"家居","cursor":0}'
-"$DSH_SKILL_PROXY_NODE" <skill>/scripts/enterprise_proxy.mjs tikhub GET /api/v1/xiaohongshu/app_v2/search_notes --query '{"keyword":"家居","page":1}'
-```
-
-只读查询按原技能的采样、费用授权和数据质量约束执行。不得读取本机用户 Token、Codex 配置、厂商 Key 或直接请求 TikHub。`DSH_HOME` 由客户端提供；未登录/代理不可用时请用户启动更新后的客户端并登录。`SKILL_PROXY_ROUTE_FORBIDDEN` 表示后台尚未开放路由，联系管理员，不尝试绕过。超时/断连不代表上游未执行，不自动重试。
-
+接口合同、费用门禁、必填参数和响应净化仍由本技能的 `references/tikhub-endpoints.json`、`scripts/tikhub_readonly.py` 与校验脚本执行。代理不可用或请求结果不确定时停止并保留现有证据，不自动重试付费请求或绕过代理。
 
 # 达人推荐与二次背调
 
@@ -30,7 +19,7 @@ metadata:
 - 基于事实做出的判断；
 - 下单前仍须由品牌、MCN 或达人后台核验的事项。
 
-默认使用本技能的企业代理脚本访问 TikHub。Skill 不保存、索取、展示或写入任何 API Key、Cookie、达人账号密码或其他凭证。
+TikHub 取数必须走版本化接口合同 `references/tikhub-endpoints.json` 和只读调用器 `python3 scripts/tikhub_readonly.py`。调用器固定 HTTP 方法、参数语义、费用上限与响应净化；不得绕过合同临时拼接请求。Skill 不保存、索取、展示或写入任何 API Key、Cookie、达人账号密码或其他凭证。
 
 ## 输入
 
@@ -42,8 +31,9 @@ brand_brief:
   brand: 品牌名
   product: 产品/型号
   category: 品类
-  platforms: [抖音, 小红书, B站, 微博, 快手, 视频号, TikTok, Instagram, YouTube, X, Threads, Lemon8]
-  conditional_platforms: [公众号, 知乎, Reddit, LinkedIn, 西瓜视频, 皮皮虾, 今日头条]
+  # 取值必须是 references/data-contract.md 的平台 slug 枚举（下游按 slug 落库）
+  platforms: [douyin, xiaohongshu, bilibili, weibo, kuaishou, wechat_channels, tiktok, instagram, youtube, x, threads, lemon8]
+  conditional_platforms: [wechat_mp, zhihu, reddit, linkedin, xigua, pipixia, toutiao]
   objective: 种草 | 搜索提升 | 转化 | 内容资产 | 上市声量
   target_audience:
     city_tier: [一线, 新一线]
@@ -85,7 +75,11 @@ brand_brief:
 
 用户明确要求“组合、预算、投放矩阵或怎么搭配”时选择 `portfolio`；同时要求重新找达人时选择 `full_plan`。`portfolio` 或 `full_plan` 必须读取 [投放组合规划规则](references/portfolio-planning.md)。
 
-涉及平台选择、候选发现或账号背调时必须读取 [达人平台路由与字段能力](references/creator-platform-routing.md)。
+开始执行前必须读取 [数据契约](references/data-contract.md)、[评分规则](references/scoring.md) 和 [报告模板](references/report-template.md)。涉及平台选择、候选发现或账号背调时必须读取 [达人平台路由与字段能力](references/creator-platform-routing.md)。
+
+## 输入门禁
+
+任何付费调用前，必须冻结品牌/产品/品类、目标平台、投放目标、目标人群（或明确采用“泛人群探索”）、预算与单达人上限、时间窗及 `data_research_cap_usd`。缺少会改变候选池或预算组合的字段时先向用户确认；不得在等待澄清时先跑候选发现。接收品类洞察时还必须确认 `upstream_insight.handoff_id`、机会 ID 与主张护栏可解析，否则只做补充提问，不启动达人查询。
 
 ## 工作流
 
@@ -109,11 +103,17 @@ brand_brief:
 按 [达人平台路由与字段能力](references/creator-platform-routing.md) 选择每个平台已验证的“商业搜索、内容导向发现、账号搜索或 seed-only”入口。筛选条件优先级为：产品场景相关性 → 可验证的目标受众证据 → 平台内近期内容表现 → 已验证报价与预算 → 标题可见商业密度 → 竞品冲突。
 
 - 同一能力有多版接口时，选择最近实测成功且业务字段有效的路由；新版失败时使用已验证 fallback，不能仅凭 HTTP/顶层成功判定可用。
+- 抖音星图 `search_creator` 默认且必须显式使用 `seach_type=3` 做按内容/作品语义发现；`seach_type=2` 只用于用户已经给出准确昵称的账号核验。不得把昵称搜索结果当成类目候选池。
+- 用户要求的平台必须产出候选，或写入 `platform_gaps` 并说明缺失链路和决策影响；不得用抖音候选代替小红书、B站或海外平台候选。
 - 记录数据抓取日期、平台和主要筛选条件。
 - 粉丝数是**必保留、必展示**的达人规模指标；同时保留近 10 条中位播放或等价的稳定性指标。两者必须并读，不得用粉丝数替代内容表现。
 - 初筛阶段保留足够候选，不把单条爆款直接视为保量能力。
 
 视频号、LinkedIn、今日头条等 `seed_only` 平台只有用户提供已知账号/URL/ID 时进入背调，不能据此承诺“发现一批新达人”。`catalog` 路由先对一个对象做业务健康检查，成功后才能扩样。
+
+#### 双对象语义健康检查
+
+任何按达人 ID 返回画像、传播、地域、市场或商业能力的路由，在首次使用或状态变更后必须用两个已确认不同的达人执行双对象语义健康检查：核对请求 ID 来自合同指定字段（星图详情优先使用 19 位 `star_id`），验证核心字段非空，且两份净化后的业务数据不能完全相同。可运行 `python3 scripts/tikhub_guard.py canary --left <A.json> --right <B.json> --core-field <字段路径>`。若返回相同默认 payload、对象不匹配或核心字段空，立即将该路由标记为 `failed`，不得继续扩样或用于评分。
 
 ### 3. 二次背调
 
@@ -124,7 +124,7 @@ brand_brief:
 1. 最多最近 10 条有效作品：保留实际样本数、内容形态、内容年龄和接口明确返回的播放/阅读、点赞、评论、分享、收藏、完播率或互动率；只对存在且口径一致的字段计算中位数和波动范围。
 2. 达人粉丝数：记录抓取时点的原始粉丝数，并与近 10 条中位播放共同判断账号规模、内容效率和放量风险。
 3. 标题可见的商业内容密度、同品类内容密度，以及近期本品/品牌/竞品合作证据。
-4. 只有直接接口或授权后台实际返回时，才比较性别、年龄、城市级别、兴趣或人生阶段；目前已实测主来源是抖音星图 V2。
+4. 只有直接接口或授权后台实际返回时，才比较性别、年龄、城市级别、兴趣或人生阶段；截至 2026-09-21，抖音星图 V2 人群分布路由实测失败，默认保持 `unavailable`，只有新一轮双对象语义健康检查通过后才可恢复。
 5. 报价、预估播放、CPM/CPE 只有抖音星图已实测；其他平台在用户、MCN 或后台提供前保持 `null`，不估算。
 6. 只在逐条评论链路实际有效时抽查购买意向、产品疑问、负面体验和广告反感。TikTok、Instagram 等已知失败平台标记 `unavailable`，不可用评论数替代评论文本。
 7. 商业能力画像必须拆分为内容传播力、人群匹配度、种草能力、带货转化力、商业性价比，以及单列的稳定与风险。每个维度都引用原始证据并标记为公开事实、平台估算、授权实际、模型计算或缺失。
@@ -134,15 +134,17 @@ brand_brief:
 
 按 [评分规则](references/scoring.md) 在同平台、同内容形态的可比 cohort 内分别计算 `recommendation_fit_score` 与 `commercial_capability`，并同时给出 `evidence_coverage` 和 `commercial_evidence_coverage`。前者回答“是否适合本项目”，后者回答“适合承担什么商业任务”；不得合并成一个分数。跨平台组合不用一个总分机械排序。输出层级：
 
-- **优先邀约**：场景、受众、稳定性及历史证据均成立；
+- **优先邀约**：场景、直接受众证据、稳定性及历史证据均成立；受众字段缺失时禁止进入本层；
 - **小额测试**：有潜力但缺少转化/品类验证，或稳定性不足；
 - **条件型补充**：只适合细分人群、技术背书或素材资产；
-- **素材复用优先**：已有品牌内容表现好，但新拍不具备性价比或品类已饱和；
+- **素材复用优先**：必须有可引用的既有品牌素材、授权范围或历史作品证据；没有 `asset_reuse_evidence` 时禁止进入本层；
 - **淘汰/暂缓**：存在明确冲突、受众偏离或无法支撑预算。
 
 分数不能掩盖一票否决风险：有效竞品排他、明显的广告疲劳、无法接受的报价、品牌安全问题，应单独置顶。粉丝数不单独加权，避免与播放规模重复计分；它必须作为名单和单卡中的规模诊断字段展示。完播率和互动率只在口径、样本期和数据来源可比时横向比较。
 
 商业能力综合分只在五个正向维度证据完整，或覆盖率达到评分规则门槛且目标关键维度不缺失时生成。风险作为扣分或硬门槛单列；缺少 GMV、点击或转化数据时，不得从播放、点赞或评论意向反推成交能力。
+
+稳定性指标必须同时输出机器可读的名称、公式和值：`min_max_ratio = min_views/max_views` 与 `median_max_ratio = median_views/max_views` 不得混名。没有受众、报价或转化证据时不得通过重归一化制造完整高分；“泛人群探索”最多进入“优先测试/小额测试”，不能升级为“优先邀约”。
 
 同一自然人/机构的多个平台账号分别保留 `creator_key`，只有可验证互链或用户确认时才合并到 `entity_cluster_id`。组合覆盖和预算集中度同时按账号与实体查看，避免重复计算增量覆盖。
 
@@ -172,7 +174,11 @@ brand_brief:
 - 合同/排期/素材/评论运营/归因的投前清单；
 - 数据能力边界。
 
+先将结构化结果保存为 JSON，再运行 `python3 scripts/validate_creator_output.py --input <结果.json>`。校验失败时不得交付正式名单或组合方案；必须修正平台缺口、层级证据、稳定性口径或瞬时字段后重跑。
+
 `portfolio` 和 `full_plan` 还必须按 [数据契约](references/data-contract.md) 输出 `monitoring_handoff`，供 `brand-campaign-monitoring` 直接消费。交接包至少包括：计划 ID/版本、带平台的达人监测注册表、发布窗口与交付数量、角色/场景/信息点、预算分配、指标公式与阈值、逐指标基线、一方数据映射、查询/风险清单引用和计划状态。
+
+> 输出对象（投放组合、投中监测交接）的字段定义见 [`references/handoff-contracts.md`](references/handoff-contracts.md)。**按需读取**。
 
 内容 URL 在投前未知时保持空值，并以 `platform + creator_id + planned_publish_window` 作为发现任务；上线后补入内容 ID/URL。替补启用、达人取消或计划改版时递增版本并保留旧版本，不静默覆盖。
 
@@ -183,7 +189,10 @@ brand_brief:
 - 只调用完成当前问题所必需的只读接口；先检索、再对入围候选深取。
 - 研究预算被指定时，调用前按端点公开价估算，并在可能超额时停止并报告。
 - 缓存同一达人、同一时间窗口的原始结果，避免重复付费调用。
-- 厂商 Key 仅由后台读取；技能不得读取或展示任何用户 Token/厂商凭据。
+- API Key 只能由企业后台代理注入；严禁把凭证写入报告、日志、Skill、脚本或命令输出。
+- 先用 `python3 scripts/tikhub_readonly.py --dry-run ...` 检查合同方法、默认语义与单次价格，再执行真实请求。
+- 只读调用器禁止在执行脚本中读取 `.env`、`config.toml`、Shell profile、用户 Token 或任何本地厂商凭据；唯一允许的网络出口是登录态企业代理。
+- 原始响应必须先经 `scripts/tikhub_guard.py sanitize`；`cache_url`、`xsec_token`、`sign`、Cookie、认证头和短期签名媒体 URL 不得进入缓存、日志、模型上下文或报告。
 - 不调用下单、邀约、私信、登录、支付或改变第三方状态的接口，除非用户在当次请求中明确授权。
 
 ## 事实边界

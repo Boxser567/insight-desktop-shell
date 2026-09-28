@@ -4,9 +4,9 @@
 **更新时间：** 2026-09-03（v3.0，仅保留媒体网关实测可用模型）  
 **用途：** Media Generator Skill 模型选择参考。
 
-> **✅ 本手册只列媒体网关(52667)实测可用的模型。** 媒体网关与 Insight API Manager 网关（`59.37.128.50:52867`，即 `call-insight-api` 技能）是**两个不同服务**；属于 call-insight-api 专属的模型（Seedance-VIP、Seedance-2.0-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast 等）已从本手册剔除，如需调用请走 `call-insight-api` 技能。
+> **✅ 本手册只列媒体网关(52667)实测可用的模型。** 媒体网关与 Insight API Manager 网关（52867）是**两个不同服务**；属于 API Manager 专属的模型（Seedance-VIP、Seedance-2.0-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast 等）已从本手册剔除。本技能不支持这些模型，请与用户确认可用的替代模型，不切换为厂商直连。
 
-**参数名约定：** CLI 用 `--resolution/--aspect-ratio/--duration/--gen-count/--enable-audio/--voice-id/--param K=V`；脚本内部转成媒体网关契约名。**注意：** 媒体网关 TTS 字段名是 `voice_id`/`language`/`emotion`/`volume`/`intonation`/`speed`（**非** call-insight-api 的 `language_boost`/`vol`/`pitch`）。`--param` 可传任意模型参数写入 `image_params`/`video_params`/`audio_params`/`chat_params`。
+**参数名约定：** CLI 用 `--resolution/--aspect-ratio/--duration/--gen-count/--enable-audio/--voice-id/--param K=V`；脚本内部转成媒体网关契约名。**注意：** 媒体网关 TTS 字段名是 `voice_id`/`language`/`emotion`/`volume`/`intonation`/`speed`（**非** API Manager 的 `language_boost`/`vol`/`pitch`）。`--param` 可传任意模型参数写入 `image_params`/`video_params`/`audio_params`/`chat_params`。
 
 ---
 
@@ -109,4 +109,4 @@
 
 ---
 
-**备注：** 仅收录媒体网关(52667)实测可用模型。属于 Insight API Manager 网关(52867)专属的模型（Seedance-VIP、MiniMax-H3、Vidu Q3、MiniMax-Hailuo-2.3-Fast 等）不在此列，请走 `call-insight-api` 技能。
+**备注：** 仅收录媒体网关(52667)实测可用模型。Insight API Manager 网关(52867)专属模型不在本技能支持范围内。

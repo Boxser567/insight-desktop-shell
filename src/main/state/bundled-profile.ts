@@ -125,6 +125,16 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   await mkdir(dirname(destinationPackage), { recursive: true })
   await removeTree(destinationPackage)
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
+
+  // Windows installers flatten the workspace link into a separate installed copy.
+  const installedPackage = join('node_modules', ...DESKTOP_INTEGRATION_PACKAGE.split('/'))
+  const sourceInstalledPackage = join(source, installedPackage)
+  if (existsSync(sourceInstalledPackage)) {
+    const destinationInstalledPackage = join(destination, installedPackage)
+    await mkdir(dirname(destinationInstalledPackage), { recursive: true })
+    await removeTree(destinationInstalledPackage)
+    await cp(sourceInstalledPackage, destinationInstalledPackage, { recursive: true, verbatimSymlinks: true })
+  }
 }
 
 export async function refreshPromptEnhanceCompatibility(source: string, destination: string): Promise<void> {
