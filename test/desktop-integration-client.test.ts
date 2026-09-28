@@ -13,7 +13,7 @@ describe('desktop integration client', () => {
       description: `${name} description`,
       path: `/Applications/因赛AI.app/Contents/Resources/bundled-skills/${name === 'ppt-maker-new-new' ? 'ppt-maker-new' : name}/SKILL.md`,
       order: index,
-      pickerVisible: name !== 'media-generator'
+      pickerVisible: true
     }))
     let rows = bundled.slice(0, 2)
     const nativeCatalog = {
@@ -44,7 +44,7 @@ describe('desktop integration client', () => {
     for (const listener of listeners) listener()
 
     expect(refresh).toHaveBeenCalledOnce()
-    expect(filterSkills(await catalog.list(sessionId), '')).toHaveLength(11)
+    expect(filterSkills(await catalog.list(sessionId), '')).toHaveLength(12)
     expect(nativeCatalog.list).toHaveBeenCalledTimes(2)
     expect(ctx.get).toHaveBeenCalledWith('skillCatalog')
     expect(remoteList).not.toHaveBeenCalled()
