@@ -134,6 +134,19 @@ async function run() {
     assert.equal(await harness.executeJavaScript(`!!document.querySelector('[data-phase="hero"] [data-insight-desktop-brand-mark] img')`), true)
     await save('workspace-open', harness)
     console.log('CANDIDATE_WORKSPACE_OPENED')
+    if (!process.argv.includes('--safe-mode')) {
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-trigger]').click()`)
+      await until('twelve bundled skills', () => harness.executeJavaScript(`document.querySelectorAll('[data-insight-skill-list] [role="option"]').length === 12`), 20000)
+      await save('skill-picker', harness)
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]').click()`)
+      await until('native skill draft insertion', () => harness.executeJavaScript(`document.querySelector('[contenteditable="true"]').innerText.includes('/creator-recommendation')`))
+      await until('selected native skill', () => harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]')?.getAttribute('aria-selected') === 'true'`))
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]').click()`)
+      await until('native skill draft removal', () => harness.executeJavaScript(`!document.querySelector('[contenteditable="true"]').innerText.includes('/creator-recommendation')`))
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
+      console.log('CANDIDATE_SKILL_PICKER_PASSED')
+    }
     // File navigation/preview belongs to Core's session-scoped native panel.
     // Its interaction coverage lives in the Core sidebar suites; this Shell
     // smoke keeps the session blank and never sends fixture credentials to a model.

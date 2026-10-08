@@ -94,7 +94,7 @@ export function BrandName() {
 }
 
 /** Hide the redundant settings trigger while preserving the mounted settings shell. */
-export function HiddenSettingsTrigger(_props: PropsRuntime<'settings.trigger'>) {
+export function HiddenSettingsTrigger(_props: PropsRuntime<'settings.launcher'>) {
   return null
 }
 

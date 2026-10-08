@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import { resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
 import { createModelGatewayAdapter, MODEL_PROVIDER, MODEL_ID } from './model-gateway.mjs'
 import { createModelCredentialClient, parentCredentialTransport } from './model-credential-client.mjs'
@@ -57,7 +57,10 @@ const request = {
 async function collect(options = request) {
   const prepared = await adapter.prepareCall(options.provider, options.model, options.signal)
   const chunks = []
-  for await (const chunk of prepared.stream(options)) chunks.push(chunk)
+  for await (const chunk of prepared.stream(options)) {
+    if (chunk.type === 'finish' && chunk.reason.failure) throw new LlmError(chunk.reason.failure.message, chunk.reason.failure.code)
+    chunks.push(chunk)
+  }
   return chunks
 }
 try {
@@ -85,14 +88,10 @@ try {
       await collect({ ...request, model, maxTokens: 16384, reasoningEffort: 'max' })
     }
   } else if (mode === 'images') {
-    const imageBlocks = Array.from(
-      { length: resolveAdapterOptions({}).maxImagesPerRequest + 1 },
-      (_, index) => ({ type: 'image', attachment: ref, ...(index === 0 ? { offloaded: true } : {}) }))
-    const prices = adapter.imageRequestPricing(MODEL_PROVIDER, MODEL_ID).priceImages(
-      imageBlocks)
-    assert(prices.some(price => price.visualTokens === 0 && price.text.includes('/tool/normalized.png')))
-    await collect({ ...request, messages: [createUserMessage({ content: [{ type: 'image', attachment: ref }], source: { kind: 'user' } })] })
-    assert.equal(fetches, 2, 'Files rejection should fall back to inline once')
+    await collect({ ...request, messages: [createUserMessage({ content: [
+      { type: 'image', attachment: ref, offloaded: true }, { type: 'image', attachment: ref }
+    ], source: { kind: 'user' } })] })
+    assert.equal(fetches, 1, 'Chat Completions sends images inline without a Messages Files API request')
   } else if (mode === 'unavailable') {
     await assert.rejects(collect(), error => error.code === 'TRANSPORT' && !error.message.includes('test-secret'))
     assert.equal(fetches, 0)

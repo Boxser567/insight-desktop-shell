@@ -28,9 +28,11 @@ describe('desktop integration package', () => {
       { id: 'ui-brand-official', disabled: true },
       { id: 'agent-default-model', config: { provider: 'yinsai-gateway', model: 'deepseek-flash' } },
       { id: 'llm-deepseek', disabled: true },
+      { id: 'llm-deepseek-account', disabled: true },
       { id: 'llm-pi-ai', disabled: true },
       { id: 'web-search-deepseek', disabled: true },
       { id: 'ui-settings-models', disabled: true },
+      { id: 'ui-settings-account', disabled: true },
       { insert: [{ id: 'insight-desktop-integration', name: '@insight-ai/desktop-integration' }] }
     ])
   })
@@ -47,7 +49,7 @@ describe('desktop integration package', () => {
     const source = await readFile(new URL('src/model-gateway.ts', packageRoot), 'utf8')
 
     expect(source).toContain('desktopServiceEnvironment().modelBaseUrl')
-    expect(source).toContain("protocol: 'chat-completions'")
+    expect(source).toContain("api: 'openai-completions'")
     expect(source).not.toContain('gapi-test.insight-aigc.com')
     expect(source).not.toContain('gapi.insight-aigc.com')
   })

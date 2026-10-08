@@ -82,9 +82,9 @@ async function readSkillPresentation(ctx: ClientContext, sessionId: SessionId, p
   if (!path || !/[\\/]SKILL\.md$/.test(path)) return {}
   const uiPath = path.replace(/SKILL\.md$/, 'ui.json')
   try {
-    const result = await ctx.remote.workspaceFiles.readBytes(sessionId, uiPath, { offset: 0, length: SKILL_UI_MAX_BYTES + 1 })
+    const result = await ctx.remote.workspaceFiles.readBytes(sessionId, uiPath, { range: { offset: 0, length: SKILL_UI_MAX_BYTES + 1 } })
     if (!result.ok || !result.value.eof || result.value.offset !== 0 || (result.value.bytes ?? 0) > SKILL_UI_MAX_BYTES) return {}
-    const bytes = Uint8Array.from(atob(result.value.data), character => character.charCodeAt(0))
+    const bytes = result.value.data
     if (bytes.length > SKILL_UI_MAX_BYTES) return {}
     return parseSkillPresentation(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
   } catch {

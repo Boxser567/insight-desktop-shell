@@ -151,7 +151,8 @@ export async function refreshPromptEnhanceCompatibility(source: string, destinat
   const client = await readFile(join(source, clientPath), 'utf8')
   if (
     !client.includes('const imageCount = useInput((state) => state.attachmentIds.length);') ||
-    !client.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel')
+    !client.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel') ||
+    !client.includes('settingsCtx.configForms.get(NS)') || client.includes('settingsScope')
   ) {
     throw new Error('The bundled prompt-enhance composer compatibility patch is missing.')
   }

@@ -3,8 +3,33 @@ import { describe, expect, it, vi } from 'vitest'
 import { accountMenuActions } from '../packages/insight-desktop-integration/src/client/account-menu-model'
 import { createSkillCatalog, filterSkills } from '../packages/insight-desktop-integration/src/skill-catalog'
 import { BUNDLED_SKILL_PRESENTATIONS } from '../packages/insight-desktop-integration/src/bundled-skill-presentations'
+import { SKILL_UI_MAX_BYTES } from '../packages/insight-desktop-integration/src/skill-presentation'
 
 describe('desktop integration client', () => {
+  it('reads bounded raw-byte skill presentation metadata from the current workspace API', async () => {
+    const sessionId = 'session-test' as Parameters<ReturnType<typeof createSkillCatalog>['list']>[0]
+    const data = new TextEncoder().encode(JSON.stringify({ displayName: '自定义技能', shortDescription: '侧边展示' }))
+    const readBytes = vi.fn().mockResolvedValue({ ok: true, value: { data, offset: 0, bytes: data.length, eof: true } })
+    const ctx = {
+      get: () => ({ list: async () => [{ name: 'custom', description: 'native', path: '/skills/custom/SKILL.md' }] }),
+      remote: { workspaceFiles: { readBytes } }
+    }
+    const catalog = createSkillCatalog(ctx as unknown as Parameters<typeof createSkillCatalog>[0])
+    expect(await catalog.list(sessionId)).toEqual([expect.objectContaining({
+      name: 'custom', description: 'native', displayName: '自定义技能', shortDescription: '侧边展示'
+    })])
+    expect(readBytes).toHaveBeenCalledWith(sessionId, '/skills/custom/ui.json', { range: { offset: 0, length: SKILL_UI_MAX_BYTES + 1 } })
+    for (const value of [
+      { data, offset: 0, bytes: data.length, eof: false },
+      { data, offset: 1, bytes: data.length, eof: true },
+      { data: new Uint8Array(SKILL_UI_MAX_BYTES + 1), offset: 0, bytes: SKILL_UI_MAX_BYTES + 1, eof: true },
+      { data: Uint8Array.of(0xff), offset: 0, bytes: 1, eof: true }
+    ]) {
+      readBytes.mockResolvedValue({ ok: true, value })
+      expect((await catalog.list(sessionId))[0]?.displayName).toBeUndefined()
+    }
+  })
+
   it('uses the shared skill catalog so incomplete new-session results refresh to the full bundle', async () => {
     const sessionId = 'session-test' as Parameters<ReturnType<typeof createSkillCatalog>['list']>[0]
     const listeners = new Set<() => void>()
@@ -70,11 +95,11 @@ describe('desktop integration client', () => {
       'sidebar.brand.control',
       'sidebar.brand.mark',
       'sidebar.footer.action',
-      'settings.trigger',
+      'settings.launcher',
       'settings.section',
       'shell.overlay'
     ]) expect(source).toContain(`ctx.slots.inject('${slot}'`)
-    expect(source).toContain("name: 'settings.trigger'")
+    expect(source).toContain("name: 'settings.launcher'")
     expect(source).toContain('priority: -100')
     expect(source).toContain('HiddenSettingsTrigger')
     expect(source).toContain('UpdateButton')

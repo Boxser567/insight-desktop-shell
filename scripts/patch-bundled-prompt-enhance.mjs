@@ -12,6 +12,18 @@ export function adaptPromptEnhanceClient(source) {
     adapted = adapted.replace(before, after)
   }
 
+  if (adapted.includes('settingsScope')) {
+    for (const [legacy, current] of [
+      ['var inject = ["slots", "settingsScope", "locale"];', 'var inject = ["slots", "configForms", "locale"];'],
+      ['ctx.inject(["settingsScope"], (settingsCtx) => {', 'ctx.inject(["configForms"], (settingsCtx) => {'],
+      ['const scope = settingsCtx.settingsScope.bind({ namespace: NS, decode: decodeClientSettings });', 'const scope = settingsCtx.configForms.get(NS);'],
+      ['setClientSettings(scope.getSnapshot().value ?? decodeClientSettings(void 0));', 'setClientSettings(decodeClientSettings(scope.getSnapshot().value));']
+    ]) {
+      if (adapted.split(legacy).length !== 2) throw new Error('Review the pinned prompt-enhance settings integration before building.')
+      adapted = adapted.replace(legacy, current)
+    }
+  }
+
   const mediaOpening = '@media (prefers-color-scheme: light) {\n  .dsh-pe-panel {'
   const scopedOpening = 'body:not([data-ds-dark-theme]) .dsh-pe-panel {'
   if (!adapted.includes(scopedOpening)) {
@@ -35,6 +47,9 @@ export async function patchBundledPromptEnhance(profile) {
   const adapted = adaptPromptEnhanceClient(await readFile(client, 'utf8'))
   if (!adapted.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel')) {
     throw new Error('Review the pinned prompt-enhance theme integration before building.')
+  }
+  if (!adapted.includes('settingsCtx.configForms.get(NS)') || adapted.includes('settingsScope')) {
+    throw new Error('Review the pinned prompt-enhance settings integration before building.')
   }
   await writeFile(client, adapted)
 }

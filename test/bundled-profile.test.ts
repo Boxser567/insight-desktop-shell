@@ -58,7 +58,7 @@ describe('bundled profile initialization', () => {
     await mkdir(join(profile, 'node_modules', 'dsh-memory-evolve', 'lib'), { recursive: true })
     await writeFile(
       join(profile, 'node_modules', 'dsh-prompt-enhance', 'lib', 'client.js'),
-      'const imageCount = useInput((state) => state.attachmentIds.length);\nbody:not([data-ds-dark-theme]) .dsh-pe-panel {\n  color: black;\n}\n',
+      'const imageCount = useInput((state) => state.attachmentIds.length);\nconst scope = settingsCtx.configForms.get(NS);\nbody:not([data-ds-dark-theme]) .dsh-pe-panel {\n  color: black;\n}\n',
       'utf8'
     )
     await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')

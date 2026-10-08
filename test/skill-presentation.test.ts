@@ -11,7 +11,7 @@ const native = { name: 'creator-recommendation', description: 'Original model-fa
 const presentation = { displayName: '达人推荐', shortDescription: '发现并筛选合适达人。' }
 const windowOf = (text: string) => ({ ok: true, value: {
   absolutePath: '/skills/creator-recommendation/ui.json', version: '1', offset: 0,
-  eof: true, bytes: Buffer.byteLength(text), data: Buffer.from(text).toString('base64')
+  eof: true, bytes: Buffer.byteLength(text), data: new TextEncoder().encode(text)
 } })
 
 function setup(entries: { name: string; description: string; path?: string }[] = [native]) {
@@ -107,7 +107,7 @@ describe('native catalog presentation adapter', () => {
   it('reads the winning path via public Remote and keeps invocation/model metadata intact', async () => {
     const { readBytes, catalog, session } = setup()
     const [skill] = await catalog.list(session)
-    expect(readBytes).toHaveBeenCalledWith(session, '/skills/creator-recommendation/ui.json', { offset: 0, length: 8193 })
+    expect(readBytes).toHaveBeenCalledWith(session, '/skills/creator-recommendation/ui.json', { range: { offset: 0, length: 8193 } })
     expect(skill).toMatchObject({ name: native.name, description: native.description, ...presentation })
     expect(skillDisplayName(skill!)).toBe(presentation.displayName)
     expect(skillShortDescription(skill!)).toBe(presentation.shortDescription)
@@ -118,7 +118,7 @@ describe('native catalog presentation adapter', () => {
   it('handles Windows paths and does not use metadata from a shadowed bundle', async () => {
     const { readBytes, catalog, session } = setup([{ ...native, path: 'C:\\Users\\user\\skills\\creator-recommendation\\SKILL.md' }])
     await catalog.list(session)
-    expect(readBytes).toHaveBeenCalledExactlyOnceWith(session, 'C:\\Users\\user\\skills\\creator-recommendation\\ui.json', { offset: 0, length: 8193 })
+    expect(readBytes).toHaveBeenCalledExactlyOnceWith(session, 'C:\\Users\\user\\skills\\creator-recommendation\\ui.json', { range: { offset: 0, length: 8193 } })
   })
 
   it('skips pathless and flat-file skills', async () => {
@@ -149,7 +149,7 @@ describe('native catalog presentation adapter', () => {
     expect(filterSkills([skill!], '达人推荐')).toEqual([skill])
   })
 
-  it('rejects unsuccessful, partial, oversized, malformed base64 and invalid UTF-8 responses', async () => {
+  it('rejects unsuccessful, partial, oversized, malformed JSON and invalid UTF-8 responses', async () => {
     const { readBytes, catalog, session } = setup()
     const valid = windowOf(JSON.stringify(presentation))
     for (const response of [
@@ -157,9 +157,9 @@ describe('native catalog presentation adapter', () => {
       { ...valid, value: { ...valid.value, eof: false } },
       { ...valid, value: { ...valid.value, offset: 1 } },
       { ...valid, value: { ...valid.value, bytes: 8193 } },
-      { ...valid, value: { ...valid.value, bytes: undefined, data: Buffer.alloc(8193).toString('base64') } },
-      { ...valid, value: { ...valid.value, data: '!!!' } },
-      { ...valid, value: { ...valid.value, data: Buffer.from([0xff]).toString('base64') } }
+      { ...valid, value: { ...valid.value, bytes: undefined, data: new Uint8Array(8193) } },
+      { ...valid, value: { ...valid.value, data: new TextEncoder().encode('!!!') } },
+      { ...valid, value: { ...valid.value, data: Uint8Array.of(0xff) } }
     ]) {
       readBytes.mockResolvedValueOnce(response)
       expect((await catalog.list(session))[0]?.displayName).toBeUndefined()

@@ -9,7 +9,7 @@ const productSlots = [
   'sidebar.brand.control',
   'sidebar.brand.mark',
   'sidebar.footer.action',
-  'settings.trigger',
+  'settings.launcher',
   'settings.section',
   'shell.overlay'
 ] as const
