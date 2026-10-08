@@ -135,6 +135,28 @@ export function createHarnessSmokeRpc(url, launchToken) {
   }
 }
 
+/** The HTTP session API can become ready before the desktop adapter finishes registration. */
+export async function waitForDesktopModelCatalog(rpc) {
+  const deadline = Date.now() + 30_000
+  let catalog
+  do {
+    catalog = await rpc.invoke('session.modelCatalog', {})
+    const routes = catalog.routableProviders
+    if (catalog.default?.provider === 'yinsai-gateway' && catalog.default?.model === 'deepseek-flash' &&
+        routes.includes('yinsai-gateway') && !routes.some(provider => ['deepseek', 'pi-ai'].includes(provider)) &&
+        catalog.groups.some(group => group.id === 'yinsai-gateway' && group.models.some(model => model.id === 'deepseek-flash'))) {
+      return catalog
+    }
+    if (Date.now() >= deadline) break
+    await sleep(500)
+  } while (Date.now() <= deadline)
+  throw new Error(`Packaged Harness desktop model Gateway did not become ready: ${JSON.stringify({
+    default: catalog?.default,
+    routableProviders: catalog?.routableProviders,
+    failures: catalog?.failures?.map(failure => failure.id)
+  })}`)
+}
+
 async function stopProcess(child) {
   if (child.exitCode !== null) return
   const exited = new Promise(resolveExit => child.once('exit', resolveExit))
@@ -232,7 +254,7 @@ export async function smokePackagedHarness(resourceRoot) {
         PNPM_CONFIG_SIDE_EFFECTS_CACHE: 'false'
       },
       afterReady: async (_url, rpc) => {
-        const catalog = await rpc.invoke(rpc.modern ? 'session.modelCatalog' : 'llm.models', {})
+        const catalog = rpc.modern ? await waitForDesktopModelCatalog(rpc) : await rpc.invoke('llm.models', {})
         const host = rpc.modern ? catalog.default : await rpc.invoke('host.describe', {})
         if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-flash') {
           throw new Error('Packaged Harness did not select the desktop Gateway as its default model route.')

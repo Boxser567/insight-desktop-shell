@@ -91,6 +91,21 @@ jobs:
           npm exec -- electron-vite build
           node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
           npm run prepare:bundled-profile
+      - name: Smoke prepared Runtime before packaging
+        run: |
+          node --input-type=module <<'NODE'
+          import { copyFile, mkdtemp, rm, symlink } from 'node:fs/promises'
+          import { tmpdir } from 'node:os'
+          import { join, resolve } from 'node:path'
+          import { smokePackagedHarness } from './scripts/smoke-packaged-harness.mjs'
+          const root = await mkdtemp(join(tmpdir(), 'insight-internal-preflight-'))
+          try {
+            await symlink(resolve('build/core-runtime'), join(root, 'runtime'), 'junction')
+            await symlink(resolve('build/bundled-profile'), join(root, 'bundled-profile'), 'junction')
+            for (const file of ['harness-node-entry.mjs', 'dsh-desktop.patch.yml']) await copyFile(join('build', file), join(root, file))
+            await smokePackagedHarness(root)
+          } finally { await rm(root, { recursive: true, force: true }) }
+          NODE
       - name: Package internal installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

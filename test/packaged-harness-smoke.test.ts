@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 // @ts-expect-error The build script is JavaScript and has no declaration file.
-import { buildPackagedHarnessArguments, createHarnessSmokeRpc, resolvePackagedHarnessPaths } from '../scripts/smoke-packaged-harness.mjs'
+import { buildPackagedHarnessArguments, createHarnessSmokeRpc, resolvePackagedHarnessPaths, waitForDesktopModelCatalog } from '../scripts/smoke-packaged-harness.mjs'
 
 describe('packaged Harness smoke test', () => {
   const runtimeMetadata = {
@@ -40,6 +40,40 @@ describe('packaged Harness smoke test', () => {
         { platform: 'darwin', arch: 'arm64' }
       )
     ).toThrow('win32-x64, not darwin-arm64')
+  })
+})
+
+describe('desktop model startup readiness', () => {
+  const ready = {
+    default: { provider: 'yinsai-gateway', model: 'deepseek-flash' },
+    routableProviders: ['yinsai-gateway'],
+    groups: [{ id: 'yinsai-gateway', models: [{ id: 'deepseek-flash' }] }],
+    failures: []
+  }
+
+  it('waits for the desktop adapter after the session API is already ready', async () => {
+    vi.useFakeTimers()
+    try {
+      const invoke = vi.fn().mockResolvedValueOnce({ ...ready, routableProviders: [], groups: [] }).mockResolvedValue(ready)
+      const pending = waitForDesktopModelCatalog({ invoke })
+      await vi.advanceTimersByTimeAsync(500)
+      expect(await pending).toEqual(ready)
+      expect(invoke).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each([
+    { ...ready, routableProviders: [], groups: [], failures: [{ id: 'yinsai-gateway' }] },
+    { ...ready, routableProviders: ['yinsai-gateway', 'pi-ai'] },
+    { ...ready, default: { provider: 'deepseek', model: 'deepseek-flash' } }
+  ])('still rejects an unavailable or incorrect route after the readiness deadline', async catalog => {
+    vi.useFakeTimers()
+    try {
+      const rejection = expect(waitForDesktopModelCatalog({ invoke: vi.fn().mockResolvedValue(catalog) }))
+        .rejects.toThrow('desktop model Gateway did not become ready')
+      await vi.advanceTimersByTimeAsync(30_000)
+      await rejection
+    } finally { vi.useRealTimers() }
   })
 })
 
