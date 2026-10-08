@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectLocalRuntime } from './dev-local.mjs'
 import { removeInvalidBundledNodeShim } from './prepare-core-runtime.mjs'
@@ -28,7 +28,10 @@ export async function prepareInternalRuntime(archiveDirectory, projectDirectory 
   const temporary = await mkdtemp(join(tmpdir(), 'insight-internal-runtime-'))
   try {
     await new Promise((resolvePromise, reject) => {
-      const child = spawn('tar', ['-xzf', archive, '-C', temporary], { stdio: 'inherit', windowsHide: true })
+      // GNU tar treats a Windows drive prefix in -f as a remote host. Keep the archive name relative.
+      const child = spawn('tar', ['-xzf', basename(archive), '-C', temporary], {
+        cwd: dirname(archive), stdio: 'inherit', windowsHide: true
+      })
       child.once('error', reject)
       child.once('exit', code => code === 0 ? resolvePromise() : reject(new Error(`Runtime extraction exited with ${code}.`)))
     })

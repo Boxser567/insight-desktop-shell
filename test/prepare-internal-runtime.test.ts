@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, expect, it } from 'vitest'
 // @ts-expect-error Packaging entry is JavaScript.
@@ -10,9 +10,11 @@ import { prepareInternalRuntime } from '../scripts/prepare-internal-runtime.mjs'
 const directories: string[] = []
 afterEach(async () => { await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))) })
 
-async function fixture() {
-  const project = await mkdtemp(join(tmpdir(), 'insight-internal-test-'))
-  directories.push(project)
+async function fixture(nested = false) {
+  const directory = await mkdtemp(join(tmpdir(), 'insight-internal-test-'))
+  directories.push(directory)
+  const project = nested ? join(directory, 'archive directory with spaces') : directory
+  await mkdir(project, { recursive: true })
   const source = join(project, 'source')
   const metadata = {
     schemaVersion: 1,
@@ -28,7 +30,7 @@ async function fixture() {
   await writeFile(join(source, 'runtime.json'), JSON.stringify(metadata))
   const target = `${process.platform}-${process.arch}`
   const archive = join(project, `insight-harness-runtime-${metadata.core.version}-${target}.tar.gz`)
-  const packed = spawnSync('tar', ['-czf', archive, '-C', source, '.'], { encoding: 'utf8' })
+  const packed = spawnSync('tar', ['-czf', basename(archive), '-C', source, '.'], { cwd: project, encoding: 'utf8' })
   expect(packed.status, packed.stderr).toBe(0)
   const lock = {
     schemaVersion: 1, source: { repository: metadata.core.repository, workflowRun: 123 }, core: { ...metadata.core },
@@ -49,6 +51,12 @@ it('prepares verified bytes with the CI source identity and leaves the public re
   const manifest = JSON.parse(await readFile(join(f.project, 'build/runtime-manifest.json'), 'utf8'))
   expect(manifest.core).toEqual({ ...f.metadata.core, source: 'local', releaseTag: 'internal-run-123' })
   expect(manifest.checksums.archiveSha256).toBe(f.lock.targets[f.target]?.sha256)
+  expect(await readFile(join(f.project, 'core-runtime.lock.json'), 'utf8')).toBe('public-lock-unchanged')
+})
+
+it('extracts a Runtime from an archive directory containing spaces', async () => {
+  const f = await fixture(true)
+  expect(await prepareInternalRuntime(f.project, f.project)).toEqual(f.metadata)
   expect(await readFile(join(f.project, 'core-runtime.lock.json'), 'utf8')).toBe('public-lock-unchanged')
 })
 
