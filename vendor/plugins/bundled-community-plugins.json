@@ -12,12 +12,12 @@
     },
     {
       "packageName": "dsh-prompt-enhance",
-      "version": "0.2.1",
-      "artifact": "vendor/plugins/dsh-prompt-enhance-0.2.1.tgz",
-      "sha256": "2bd468e243143ee7b5dc86c3d180667743c71dfc1a1cbb2a5de9780f3189c694",
+      "version": "0.2.7",
+      "artifact": "vendor/plugins/dsh-prompt-enhance-0.2.7.tgz",
+      "sha256": "31b54b6239354c1c6cbda571ffb5dde3e092d1ee7fdebd440df839d107af7b5e",
       "sourceRepository": "https://github.com/rongxingda/dsh-prompt-enhance",
-      "sourceRef": "v0.2.1",
-      "sourceCommit": "42c8f137937a406a1035a75f270d895ea5b0d3c1"
+      "sourceRef": "v0.2.7",
+      "sourceCommit": "4dc6a140d2b6c59305edb8c74aaed639b71d7291"
     }
   ]
 }

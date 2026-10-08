@@ -9,7 +9,7 @@ Archive hashes prove that builds consume the reviewed bytes. They do not restric
 | Package | Source | License | Compressed | Unpacked | Files | SHA-256 |
 | --- | --- | --- | ---: | ---: | ---: | --- |
 | `dsh-memory-evolve@0.1.0` | `v26091501` / `c337dc1af7b5c8a5578e03150bf5c4d6133f66f9` | MIT | 1,8 MB | 6,7 MB | 77 | `88fc21d567b7500f8f753fdf88c66241ef7e25541d807a654e96626130940906` |
-| `dsh-prompt-enhance@0.2.1` | `v0.2.1` / `42c8f137937a406a1035a75f270d895ea5b0d3c1` | Apache-2.0 | 130,805 B | 483,328 B | 34 | `2bd468e243143ee7b5dc86c3d180667743c71dfc1a1cbb2a5de9780f3189c694` |
+| `dsh-prompt-enhance@0.2.7` | `v0.2.7` / `4dc6a140d2b6c59305edb8c74aaed639b71d7291` | Apache-2.0 | 821,372 B | 1,144,130 B | 40 | `31b54b6239354c1c6cbda571ffb5dde3e092d1ee7fdebd440df839d107af7b5e` |
 
 Source repositories:
 
@@ -83,3 +83,5 @@ npm pack --pack-destination <shell-root>/vendor/plugins
 Result: 132 tests passed; typecheck and build completed.
 
 After packing, verify the package manifest and required entries with `tar`, compare the measured digest with `bundled-community-plugins.json`, and run `git diff --check`. Runtime admission remains a separate step: each package must install and boot by itself in a disposable Profile before `prepare-bundled-profile.mjs` combines them.
+
+The 0.2.7 Prompt Enhance archive is the upstream npm release, verified against npm SHA-512 and SHA-1 and its matching `v0.2.7` Git commit. Its Host reads the current Core default route through `agentDefaultModel.currentSelection()`. The Shell retains a narrowly checked client adaptation for `attachmentIds`, `configForms`, and the resolved Harness theme. Runtime and browser enhancement checks are recorded in `docs/analysis/2026-10-08-prompt-enhance-upgrade.md`.

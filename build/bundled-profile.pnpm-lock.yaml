@@ -15,8 +15,8 @@ importers:
         specifier: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
         version: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
       dsh-prompt-enhance:
-        specifier: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz
-        version: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz
+        specifier: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz
+        version: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz
 
   packages/insight-desktop-integration: {}
 
@@ -32,12 +32,17 @@ packages:
     resolution: {integrity: sha512-0ejPX0dImic1/ji5djIuhGCACzoAzR3hFte7RJeYBGe+/DjvcGpBirB6xNEke/5HILDTQw+fUtsV30xogXjXlA==, tarball: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz}
     version: 0.1.0
 
-  dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz:
-    resolution: {integrity: sha512-rpAhtXMvA40GQRa5FTifrKra4GKEfnYctWf/DvqpaB1Bb7Rp8f2WQGw9Ur0/hDgk8sYErWVVmLNfNv1Y4ng2wA==, tarball: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz}
-    version: 0.2.1
+  dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz:
+    resolution: {integrity: sha512-4lsQEB9Kg8OpTmt3ndABr5/UfRnyH5uMFKTL8bmcnzkUhb5KqrNDHQ9CHeZR+48QrmSvp0/B1TzXvi893HGiJg==, tarball: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz}
+    version: 0.2.7
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
+      '@deepseek-ai/dsh-llm': '>=0.1.1-rc.2'
       react: ^18.2.0
+      react-dom: ^18.2.0
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-llm':
+        optional: true
 
   schemastery@3.18.0:
     resolution: {integrity: sha512-Jw2uxjoyyqc/yeurmChUEc/jbi8GsrdXV/KmqRUDZXJAXAmrJiPsz8vKa17l/VckyzljHZ9oGaul443CQiXxtA==}
@@ -50,7 +55,7 @@ snapshots:
 
   dsh-memory-evolve@file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz: {}
 
-  dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz:
+  dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz:
     dependencies:
       schemastery: 3.18.0
 
