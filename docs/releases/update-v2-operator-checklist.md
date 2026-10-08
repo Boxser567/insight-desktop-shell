@@ -54,6 +54,31 @@ Windows 构建再执行平台测试；每个目标继续独立完成安装包、
 
 单平台故障可用 `mac` 或 `windows` 补齐；Stable 转正前要求三个目标全部完成。
 
+### 数据格式升级：先建立恢复基线
+
+当新版本写入的整体 Data Schema 超出当前 Stable 的读取范围时，普通 Candidate 发布继续拒绝。
+不能扩大旧 Manifest 的读取声明，也不能修改已发布 tag。此类版本先作为正式 App ID 的恢复基线包
+进行线下覆盖安装验收；它不进入 Candidate 指针。
+
+1. 构建全部三目标 Draft。每个实际包执行启动冒烟、真实历史 v3→v4 迁移和恢复续写检查；
+   `release-proof-<target>` 制品保留 Core 身份、归档摘要和会话结果。校验是自动证据，不能代替实机验收。
+2. 用 `stage-target` 分别上传三目标不可变资产；保存 OSS/CDN 的安装器长度、SHA-512、HEAD/Range 证据。
+3. 三平台分别完成干净安装、从当前 Stable 覆盖安装、三次重启、真实账号/模型请求、工作区、
+   会话、主题、提示词增强与内置插件验收。任何问题都不能填写通过记录。
+4. 对每个实际通过的目标运行 `accept-recovery-baseline-target`，填写 `version`、目标和相同的
+   `confirm_version`。发布器检查完整签名链与安装器，要求新包能读旧 Stable 写入的数据和自身数据，
+   Profile/账号 Schema 不变，并要求确实需要向前升级数据格式。记录在独立的签名
+   `recovery-baseline-acceptance/<target>.json` 中，绑定验收时 Stable 信封摘要与新 Target 摘要。
+5. 三目标记录齐全后才运行 `promote-recovery-baseline`，填写相同版本确认。该命令要求三份记录
+   引用同一个、仍未变化的 Stable 基线；复核全局版本下限与统一 Shell/Core/兼容身份。
+   沿用既有 Release Index 签名与不可变资产发布，最后更新 Stable 指针；Candidate 指针保持不变。
+6. 公开新 Stable 的三目标签名 Manifest 已确认能读新数据后，更高版本才按普通
+   `publish-candidate-all` 路线发布。恢复目标是这个新基线，不是旧 Core。
+
+本次采用 `1.0.4` 新 Core 恢复基线→`1.0.5` Candidate。若二者 Core 相同，恢复安装不能修复
+其共享的 Core 缺陷；恢复基线的真实模型与插件验收必须独立完成。正常兼容版本仍使用普通
+Candidate→Stable 路线，不能借此入口跳过 Candidate。
+
 ## 3. 投放和验收单一 Candidate 目标
 
 发布前确认 CDN 对 `/desktop/candidate-v2/` 使用 1 分钟、权重 99 的缓存规则，

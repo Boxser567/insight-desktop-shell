@@ -48,12 +48,13 @@ const pointerCache = 'public,max-age=60,must-revalidate'
 const requestTimeoutMilliseconds = 30_000
 const largeArtifactThresholdBytes = 64 * 1024 * 1024
 const largeArtifactDownloadTimeoutMilliseconds = 15 * 60_000
-const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target'])
+const targetCommands = new Set(['stage-target', 'publish-candidate', 'accept-target', 'accept-recovery-baseline-target'])
 const allCommands = new Set([
   ...targetCommands,
   'publish-candidate-all',
   'promote-stable-all',
   'promote-stable',
+  'promote-recovery-baseline',
   'reject-version'
 ])
 
@@ -63,6 +64,8 @@ function usage() {
     '  publish-update-v2-to-oss.mjs stage-target --version <final-semver> --target <target>',
     '  publish-update-v2-to-oss.mjs publish-candidate --version <final-semver> --target <target>',
     '  publish-update-v2-to-oss.mjs accept-target --version <final-semver> --target <target>',
+    '  publish-update-v2-to-oss.mjs accept-recovery-baseline-target --version <final-semver> --target <target> --confirm-version <final-semver>',
+    '  publish-update-v2-to-oss.mjs promote-recovery-baseline --version <final-semver> --confirm-version <final-semver>',
     '  publish-update-v2-to-oss.mjs publish-candidate-all --version <final-semver>',
     '  publish-update-v2-to-oss.mjs promote-stable-all --version <final-semver> --confirm-version <final-semver>',
     '  publish-update-v2-to-oss.mjs promote-stable --version <final-semver> --confirm-version <final-semver>',
@@ -94,7 +97,7 @@ export function parseV2PublisherArguments(argv) {
     throw new Error(`${command} does not accept a target.`)
   }
   const confirmation = values.get('--confirm-version')
-  if (command === 'promote-stable' || command === 'promote-stable-all' || command === 'reject-version') {
+  if (['promote-stable', 'promote-stable-all', 'reject-version', 'accept-recovery-baseline-target', 'promote-recovery-baseline'].includes(command)) {
     if (confirmation !== version) throw new Error('Version confirmation does not match.')
   } else if (confirmation !== undefined) {
     throw new Error(`${command} does not accept a version confirmation.`)
@@ -118,8 +121,8 @@ function pointerKey(track, target) {
     : `desktop/candidate-v2/${target}/current.json`
 }
 
-function acceptanceKey(version, target) {
-  return `desktop/releases/v${version}/acceptance/${target}.json`
+function acceptanceKey(version, target, baseline = false) {
+  return `desktop/releases/v${version}/${baseline ? 'recovery-baseline-acceptance' : 'acceptance'}/${target}.json`
 }
 
 function rejectionKey(version) {
@@ -571,44 +574,46 @@ async function legacyRecoveryReads(input, pointer, channel) {
   }
 }
 
+async function readStableRecoveryManifest(input, stable) {
+  const releasePrefix = `desktop/releases/v${stable.version}/`
+  const [indexBytes, indexSignature, publicKeyPem] = await Promise.all([
+    requiredRemoteBytes(input, `${releasePrefix}insight-release.json`, 'Stable Release Index'),
+    requiredRemoteBytes(input, `${releasePrefix}insight-release.json.sig`, 'Stable Release Index signature'),
+    readFile(input.publicKeyPath, 'utf8')
+  ])
+  const publicKey = createPublicKey(publicKeyPem)
+  if (
+    digest(indexBytes) !== stable.value.referencedSha512 ||
+    !verifySignature(null, indexBytes, publicKey, indexSignature)
+  ) throw new Error('Stable Release Index trust chain is invalid.')
+  const index = parseV2ReleaseIndex(JSON.parse(indexBytes.toString('utf8')))
+  if (index.version !== stable.version) throw new Error('Stable Release Index version is invalid.')
+  const reference = index.targets.find(({ id }) => id === input.target)
+  if (!reference) throw new Error('Stable Release Index is missing the Candidate target.')
+  const targetPrefixValue = targetPrefix(stable.version, input.target)
+  const [manifestBytes, manifestSignature] = await Promise.all([
+    requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json`, 'Stable Target Manifest'),
+    requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json.sig`, 'Stable Target signature')
+  ])
+  if (
+    digest(manifestBytes) !== reference.manifestSha512 ||
+    !verifySignature(null, manifestBytes, publicKey, manifestSignature)
+  ) throw new Error('Stable Target Manifest trust chain is invalid.')
+  const manifest = parseV2TargetManifest(JSON.parse(manifestBytes.toString('utf8')))
+  if (
+    manifest.version !== stable.version ||
+    `${manifest.target.platform}-${manifest.target.arch}` !== input.target ||
+    manifest.shellCommit !== index.shellCommit ||
+    manifest.coreRuntime.tag !== index.coreRuntime.tag ||
+    manifest.coreRuntime.commit !== index.coreRuntime.commit
+  ) throw new Error('Stable Target Manifest identity is invalid.')
+  await verifyRecoveryInstaller(input, targetPrefixValue, manifest, input.target)
+  return manifest
+}
+
 async function recoveryReads(input, pointers) {
   const stable = pointers.find((pointer) => pointer.name === 'stable')
-  if (stable) {
-    const releasePrefix = `desktop/releases/v${stable.version}/`
-    const [indexBytes, indexSignature, publicKeyPem] = await Promise.all([
-      requiredRemoteBytes(input, `${releasePrefix}insight-release.json`, 'Stable Release Index'),
-      requiredRemoteBytes(input, `${releasePrefix}insight-release.json.sig`, 'Stable Release Index signature'),
-      readFile(input.publicKeyPath, 'utf8')
-    ])
-    const publicKey = createPublicKey(publicKeyPem)
-    if (
-      digest(indexBytes) !== stable.value.referencedSha512 ||
-      !verifySignature(null, indexBytes, publicKey, indexSignature)
-    ) throw new Error('Stable Release Index trust chain is invalid.')
-    const index = parseV2ReleaseIndex(JSON.parse(indexBytes.toString('utf8')))
-    if (index.version !== stable.version) throw new Error('Stable Release Index version is invalid.')
-    const reference = index.targets.find(({ id }) => id === input.target)
-    if (!reference) throw new Error('Stable Release Index is missing the Candidate target.')
-    const targetPrefixValue = targetPrefix(stable.version, input.target)
-    const [manifestBytes, manifestSignature] = await Promise.all([
-      requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json`, 'Stable Target Manifest'),
-      requiredRemoteBytes(input, `${targetPrefixValue}insight-target.json.sig`, 'Stable Target signature')
-    ])
-    if (
-      digest(manifestBytes) !== reference.manifestSha512 ||
-      !verifySignature(null, manifestBytes, publicKey, manifestSignature)
-    ) throw new Error('Stable Target Manifest trust chain is invalid.')
-    const manifest = parseV2TargetManifest(JSON.parse(manifestBytes.toString('utf8')))
-    if (
-      manifest.version !== stable.version ||
-      `${manifest.target.platform}-${manifest.target.arch}` !== input.target ||
-      manifest.shellCommit !== index.shellCommit ||
-      manifest.coreRuntime.tag !== index.coreRuntime.tag ||
-      manifest.coreRuntime.commit !== index.coreRuntime.commit
-    ) throw new Error('Stable Target Manifest identity is invalid.')
-    await verifyRecoveryInstaller(input, targetPrefixValue, manifest, input.target)
-    return manifest.compatibility.readsDataSchema
-  }
+  if (stable) return (await readStableRecoveryManifest(input, stable)).compatibility.readsDataSchema
   const bridge = pointers.find((pointer) => pointer.name === 'legacy-candidate')
   if (!bridge?.legacy) throw new Error('The validated rc.20 recovery bridge is unavailable.')
   return legacyRecoveryReads(input, bridge, 'candidate')
@@ -711,19 +716,104 @@ export async function publishV2Candidate(input) {
   }
 }
 
-function parseAcceptance(bytes, version, target) {
+function parseAcceptance(bytes, version, target, baseline = false) {
   const value = JSON.parse(bytes.toString('utf8'))
   const keys = Object.keys(value).sort().join(',')
   if (
-    keys !== 'acceptedAt,actor,manifestSha512,schema,target,version,workflowRun' ||
-    value.schema !== 'insight-desktop-acceptance/v1' ||
+    keys !== (baseline
+      ? 'acceptedAt,actor,manifestSha512,previousStableSha512,previousStableVersion,schema,target,version,workflowRun'
+      : 'acceptedAt,actor,manifestSha512,schema,target,version,workflowRun') ||
+    value.schema !== (baseline ? 'insight-desktop-recovery-baseline-acceptance/v1' : 'insight-desktop-acceptance/v1') ||
     value.version !== version || value.target !== target ||
     !/^[A-Za-z0-9+/]{86}==$/u.test(value.manifestSha512) ||
     typeof value.actor !== 'string' || value.actor.length === 0 ||
     !/^\d+$/u.test(value.workflowRun) ||
     !Number.isFinite(Date.parse(value.acceptedAt))
   ) throw new Error(`Target acceptance record is invalid: ${target}`)
+  if (baseline && (
+    semver.valid(value.previousStableVersion) !== value.previousStableVersion ||
+    !semver.lt(value.previousStableVersion, version) ||
+    !/^[A-Za-z0-9+/]{86}==$/u.test(value.previousStableSha512)
+  )) throw new Error(`Recovery baseline acceptance is invalid: ${target}`)
   return value
+}
+
+/** Record explicit manual acceptance of a forward-format Stable baseline, never a Candidate exemption. */
+export async function acceptV2RecoveryBaselineTarget(input) {
+  await assertVersionNotRejected(input)
+  const pointers = await authoritativePointers(input)
+  assertVersionAtGlobalFloor(input.version, pointers)
+  const stable = pointers.find(pointer => pointer.name === 'stable')
+  if (!stable || stable.legacy || stable.value.state !== 'active' || !semver.gt(input.version, stable.version)) {
+    throw new Error('Recovery baseline requires an older active v2 Stable release.')
+  }
+  const target = await downloadVerifiedTarget(input, input.target)
+  const prior = await readStableRecoveryManifest(input, stable)
+  const next = target.manifest.compatibility
+  if (next.writesDataSchema <= prior.compatibility.readsDataSchema.maximum) {
+    throw new Error('Recovery baseline transition is only for a forward data-schema upgrade; use Candidate.')
+  }
+  if (next.profileSchema !== prior.compatibility.profileSchema ||
+      next.accountStorageSchema !== prior.compatibility.accountStorageSchema ||
+      next.readsDataSchema.minimum > prior.compatibility.writesDataSchema ||
+      next.readsDataSchema.maximum < Math.max(prior.compatibility.writesDataSchema, next.writesDataSchema)) {
+    throw new Error('Recovery baseline must read both prior Stable and its own data without changing profile/account schemas.')
+  }
+  const installers = new Set(target.manifest.artifacts.filter(artifact => ['dmg', 'nsis'].includes(artifact.kind)).map(artifact => artifact.name))
+  for (const object of target.objects) {
+    const name = object.key.slice(target.prefix.length)
+    await input.verifyCdn(object.key, {
+      ...(await fileDigest(join(target.directory, name))),
+      ...(installers.has(name) ? { requireRange: true } : {})
+    })
+  }
+  const current = await readAuthenticatedPointer(input, pointerKey('stable'))
+  if (!current?.bytes.equals(stable.bytes)) throw new Error('Stable baseline changed during acceptance.')
+  const manifestDigest = digest(target.manifestBytes)
+  const recordKey = acceptanceKey(input.version, input.target, true)
+  const existing = await readSignedAuditRecord(input, recordKey, 'Recovery baseline acceptance record')
+  if (existing) {
+    const acceptance = parseAcceptance(existing, input.version, input.target, true)
+    if (acceptance.manifestSha512 !== manifestDigest || acceptance.previousStableSha512 !== digest(stable.bytes)) {
+      throw new Error('Recovery baseline acceptance conflicts with the current Stable or target.')
+    }
+    return { acceptance, alreadyAccepted: true }
+  }
+  const record = canonicalJsonBytes({
+    schema: 'insight-desktop-recovery-baseline-acceptance/v1',
+    version: input.version, target: input.target, manifestSha512: manifestDigest,
+    previousStableVersion: stable.version, previousStableSha512: digest(stable.bytes),
+    actor: input.actor, workflowRun: input.workflowRun, acceptedAt: input.now().toISOString()
+  })
+  const acceptance = parseAcceptance(record, input.version, input.target, true)
+  await putSignedAuditRecord(input, recordKey, record)
+  return { acceptance, alreadyAccepted: false }
+}
+
+/** Promote all independently accepted schema-upgrade targets; Candidate pointers remain untouched. */
+export async function promoteV2RecoveryBaseline(input) {
+  await assertVersionNotRejected(input)
+  const pointers = await authoritativePointers(input)
+  assertVersionAtGlobalFloor(input.version, pointers)
+  const stable = pointers.find(pointer => pointer.name === 'stable')
+  if (!stable || stable.legacy || stable.value.state !== 'active') throw new Error('An active v2 Stable baseline is required.')
+  const targets = []
+  let previous
+  for (const targetId of UPDATE_V2_TARGET_IDS) {
+    const bytes = await readSignedAuditRecord(input, acceptanceKey(input.version, targetId, true), 'Recovery baseline acceptance record')
+    if (!bytes) throw new Error(`Recovery baseline requires acceptance: ${targetId}`)
+    const acceptance = parseAcceptance(bytes, input.version, targetId, true)
+    const binding = `${acceptance.previousStableVersion}:${acceptance.previousStableSha512}`
+    if (previous !== undefined && binding !== previous) throw new Error('Recovery baseline acceptances reference different Stable baselines.')
+    previous = binding
+    if (stable.version !== input.version && (stable.version !== acceptance.previousStableVersion || digest(stable.bytes) !== acceptance.previousStableSha512)) {
+      throw new Error('Stable baseline changed after recovery acceptance.')
+    }
+    const target = await readVerifiedTargetManifest(input, targetId)
+    if (acceptance.manifestSha512 !== digest(target.manifestBytes)) throw new Error(`Recovery baseline acceptance digest does not match: ${targetId}`)
+    targets.push({ id: targetId, target, acceptance })
+  }
+  return promoteAcceptedTargets(input, targets, stable)
 }
 
 export async function acceptV2Target(input) {
@@ -853,6 +943,10 @@ async function publishGithubRelease(version) {
 export async function promoteV2Stable(input) {
   await assertVersionNotRejected(input)
   const targets = await requireAcceptedTargets(input)
+  return promoteAcceptedTargets(input, targets)
+}
+
+async function promoteAcceptedTargets(input, targets, expectedStable) {
   const releaseRoot = join(input.temporaryDirectory, `release-v${input.version}`)
   await mkdir(join(releaseRoot, 'targets'), { recursive: true, mode: 0o700 })
   for (const entry of targets) {
@@ -880,6 +974,7 @@ export async function promoteV2Stable(input) {
 
   const key = pointerKey('stable')
   const current = await readAuthenticatedPointer(input, key)
+  if (expectedStable && !current?.bytes.equals(expectedStable.bytes)) throw new Error('Stable baseline changed during promotion.')
   if (current?.version === input.version) {
     if (current.legacy || current.value.referencedSha512 !== digest(indexBytes)) {
       throw new Error('Stable pointer already uses this version with different bytes.')
@@ -1090,6 +1185,12 @@ async function main() {
     } else if (options.command === 'accept-target') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await acceptV2Target(common)
+    } else if (options.command === 'accept-recovery-baseline-target') {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
+      result = await acceptV2RecoveryBaselineTarget(common)
+    } else if (options.command === 'promote-recovery-baseline') {
+      if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
+      result = await promoteV2RecoveryBaseline(common)
     } else if (options.command === 'promote-stable-all') {
       if (!common.privateKeyPath) throw new Error('Product update signing key is required.')
       result = await promoteV2StableAll(common)

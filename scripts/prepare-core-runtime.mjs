@@ -102,8 +102,9 @@ async function assertRuntime(directory, runtime, target) {
   }
 }
 
-async function main() {
-  const lock = JSON.parse(await readFile(lockPath, 'utf8'))
+/** Prepare a pinned native Runtime; a separate destination supports historical migration checks in CI. */
+export async function prepareLockedCoreRuntime({ runtimeLockPath = lockPath, destination = outputDirectory } = {}) {
+  const lock = JSON.parse(await readFile(runtimeLockPath, 'utf8'))
   const target = runtimeTarget()
   const runtime = selectCoreRuntime(lock, target)
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-'))
@@ -119,12 +120,12 @@ async function main() {
     await extractRuntimeArchive(archive, extracted)
     await assertRuntime(extracted, runtime, target)
     await removeInvalidBundledNodeShim(extracted)
-    await rm(outputDirectory, { recursive: true, force: true })
-    await moveRuntimeDirectory(extracted, outputDirectory)
+    await rm(destination, { recursive: true, force: true })
+    await moveRuntimeDirectory(extracted, destination)
     console.log(`Prepared locked Core Runtime: ${target}`)
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true })
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main()
+if (process.argv[1] === fileURLToPath(import.meta.url)) await prepareLockedCoreRuntime()

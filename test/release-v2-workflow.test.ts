@@ -103,6 +103,13 @@ describe('release v2 workflow contract', () => {
     expect(workflow.match(/npm test/gu)).toHaveLength(2)
     expect(workflow).toContain('npm run prepare:core-runtime')
     expect(workflow).toContain('scripts/verify-publish-v2-workflow.mjs')
+    expect(workflow.match(/node-version: 24/gu)).toHaveLength(5)
+    expect(workflow.match(/node scripts\/verify-packaged-recovery.mjs/gu)).toHaveLength(3)
+    expect(workflow.match(/runtimeLockPath: 'core-runtime.previous.lock.json'/gu)).toHaveLength(3)
+    for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64']) {
+      expect(workflow).toContain(`name: release-proof-${target}`)
+      expect(workflow).toContain(`release-proofs/${target}/session-recovery.json`)
+    }
     expect(workflow).not.toContain('--clobber')
     expect(workflow).not.toContain('OSS_ACCESS_KEY')
     expect(workflow).not.toContain('package:candidate:')

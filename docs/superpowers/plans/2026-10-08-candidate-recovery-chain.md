@@ -27,7 +27,7 @@
 
 **路径 B（保留旧 Core Stable）：** 先交付写 Schema 1 的 Shell 桥接版，使客户端识别 Candidate 中受签名绑定的独立恢复包引用；恢复包必须使用能读 v4 的 Core。发布器验证恢复 Manifest 的签名、目标、版本、摘要、安装器和读取范围；客户端重复相同验证，默认缺失引用继续拒绝。不得借用未验证 URL、仅检查 GitHub prerelease 标记或修改旧 Stable 签名记录。需要扩展 `src/shared/update-contracts.ts`、客户端及脚本协议、恢复源解析、发布器与完整签名/降级攻击测试，不能在旧客户端上静默启用。
 
-2026-10-08 已向用户提交两条路径选择；该决定影响正式版本分配与生产投放，回答前只执行共用验证和构建缺陷修复。
+2026-10-08 用户已选择路径 A，并明确同意先完成新 Core 1.0.4 恢复基线的三平台验收，再发布 1.0.5 Candidate。路径 B 保留作分析记录，不实施。
 
 ### Task 1: 真实 Session 恢复演练
 
@@ -82,16 +82,19 @@ npm run typecheck
 
 **Files:** `core-runtime.lock.json`、`.github/workflows/release-v2.yml`、发布说明与操作清单。
 
-- [ ] 为固定 Core 提交创建不可变 Runtime tag，通过 `runtime-release.yml` 构建三目标；先以 workflow artifacts 验证，发布时采用经过摘要复核的同一来源。
-- [ ] 更新公开 lock 的三个 URL/摘要、Core 提交和工具链，确保不再回到旧 `0.1.6-alpha.2` Runtime；本地不下载。
-- [ ] 正式构建改用与内测一致的 Node 24，保留正式 App ID、签名、公证和 immutable Tag/Draft 检查。
-- [ ] 三目标最终包内先运行 `smoke-packaged-harness.mjs`，再运行恢复演练；保存报告，不把测试报告当作更新器安装产物。
+- [x] 为固定 Core 提交创建不可变 Runtime tag `insight-runtime-v0.2.1-alpha.1-insight.1`，构建 `37793858141` 三目标全部通过并发布归档。
+- [x] 更新公开 lock 的三个 URL/摘要、Core 提交和工具链，确保不再回到旧 `0.1.6-alpha.2` Runtime；本地不下载。
+- [x] 正式构建改用与内测一致的 Node 24，保留正式 App ID、签名、公证和 immutable Tag/Draft 检查。
+- [x] 配置三目标最终包内身份/文件校验、`smoke-packaged-harness.mjs` 与恢复演练；保存独立报告，不把测试报告当作更新器安装产物。原生实际执行结果随正式安装器构建记录。
 - [ ] 按现有 `release-v2.yml` 从主分支构建 `1.0.4` 全平台 Draft；真实覆盖 `1.0.3` 时验收迁移、重启、账号、插件和模型请求。
-- [ ] 写入三个真实 `accept-target` 验收记录；准备可审核的 `promote-stable-all` 结果后才投放 `1.0.4` 恢复基线。
+- [ ] 用 `stage-target` 上传三个不可变目标。真实验收通过后，用 `accept-recovery-baseline-target` 写入三个独立签名记录，再以 `promote-recovery-baseline` 建立新 Stable 基线。
 - [ ] 复核公网签名链已指向新基线且三目标读 Schema 2；分配更高最终语义版本 `1.0.5`，构建/投放 Candidate，验证客户端得到新 Stable 完整恢复安装器。
 - [ ] 使用正式 App ID 的测试用户数据，完成 Candidate→恢复基线覆盖安装→Candidate 再安装；不能删除 userData 来使验收通过。
 
-发布操作继续使用现有 workflow 的 `version`、`platform=all`、`publish-candidate-all`、`accept-target` 与 `promote-stable-all` 输入；不通过新增脚本直接写生产指针。
+首次格式升级需要独立基线入口：旧 Stable 不可读新数据时，现有 Candidate→Stable 路径形成循环依赖。
+新入口只处理超出旧 Stable 读取范围的数据格式升级，绑定旧 Stable 信封摘要与三目标人工验收，
+仍使用现有发布 workflow、签名/不可变对象/CDN/版本下限与最后提交 Stable 指针的事务。
+普通 Candidate 的客户端与服务端检查不变；后续 1.0.5 仍使用 `publish-candidate-all`。
 
 ### Task 4: 路径 B 的签名独立恢复协议（选择该路径后执行）
 

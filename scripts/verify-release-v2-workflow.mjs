@@ -37,6 +37,9 @@ async function main() {
     'APPLE_API_KEY_CONTENT',
     'finalize-windows-release.mjs'
   ]) requireText(workflow, value, 'v2 release workflow')
+  if ((workflow.match(/node-version: 24/gu) ?? []).length !== 5) throw new Error('Every v2 build/tooling job must use Node 24.')
+  if ((workflow.match(/node scripts\/verify-packaged-recovery.mjs/gu) ?? []).length !== 3) throw new Error('Every native target must verify its actual packaged Runtime and recovery.')
+  if ((workflow.match(/runtimeLockPath: 'core-runtime.previous.lock.json'/gu) ?? []).length !== 3) throw new Error('Every native target must prepare the pinned historical Runtime separately.')
   if ((workflow.match(/persist-credentials: false/gu) ?? []).length !== 6) {
     throw new Error('Every v2 release checkout must disable persisted credentials.')
   }
