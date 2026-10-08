@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "Boxser567/insight-harness-core",
+    "workflowRun": 37752148518
+  },
+  "core": {
+    "repository": "Boxser567/insight-harness-core",
+    "version": "0.2.1-alpha.1",
+    "commit": "25a49c53c4e0c003a8469ee243aa5d1365df80cd"
+  },
+  "targets": {
+    "darwin-arm64": {
+      "sha256": "40a859c4e6c2fa0907ca71db960dd2c7c3860fe173861a313bfdbcfbe5c58370",
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
+    },
+    "darwin-x64": {
+      "sha256": "c550e0e428f0bfef663075b97f47bc06cd90b4c02374074f16a58e6a139ca449",
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
+    },
+    "win32-x64": {
+      "sha256": "c988df2d51b757c55148b8ffcd0ab72715b3985f1b8c9214b0517802c00457c0",
+      "node": {
+        "version": "24.9.0"
+      },
+      "pnpm": {
+        "version": "11.7.0"
+      }
+    }
+  }
+}

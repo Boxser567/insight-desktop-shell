@@ -26,9 +26,9 @@ const COMMUNITY_PLUGIN_SPECS = {
   },
   prompt: {
     packageName: 'dsh-prompt-enhance',
-    current: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz',
-    legacy: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.1.9.tgz',
-    managedVersions: ['0.1.9', '0.2.1']
+    current: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz',
+    legacy: ['file:.insight-bundled-plugins/dsh-prompt-enhance-0.1.9.tgz', 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz'],
+    managedVersions: ['0.1.9', '0.2.1', '0.2.7']
   }
 } as const
 
@@ -146,12 +146,13 @@ export async function refreshPromptEnhanceCompatibility(source: string, destinat
     !(COMMUNITY_PLUGIN_SPECS.prompt.managedVersions as readonly string[]).includes(installed.version)
   ) return
   const bundled = await readPackageManifest(join(source, packagePath, 'package.json'))
-  if (bundled?.version !== '0.2.1') throw new Error('The bundled prompt-enhance compatibility version is invalid.')
+  if (bundled?.version !== '0.2.7') throw new Error('The bundled prompt-enhance compatibility version is invalid.')
   const clientPath = join(packagePath, 'lib', 'client.js')
   const client = await readFile(join(source, clientPath), 'utf8')
   if (
-    !client.includes('const imageCount = useInput((state) => state.attachmentIds.length);') ||
-    !client.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel')
+    !client.includes('const imageCount = useInput((state) => countOf(state.attachmentIds));') ||
+    !client.includes('body:not([data-ds-dark-theme]) .dsh-pe-panel') ||
+    !client.includes('settingsCtx.configForms.get(NS)') || client.includes('settingsScope')
   ) {
     throw new Error('The bundled prompt-enhance composer compatibility patch is missing.')
   }
@@ -205,7 +206,7 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
     const managed = (installed?.version !== undefined &&
       (plugin.managedVersions as readonly string[]).includes(installed.version)) ||
       dependency === plugin.current ||
-      ('legacy' in plugin && dependency === plugin.legacy)
+      ('legacy' in plugin && typeof dependency === 'string' && (plugin.legacy as readonly string[]).includes(dependency))
     if (!managed) continue
 
     const archiveName = basename(plugin.current)
@@ -278,7 +279,7 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     }
   }
   const promptDependency = manifest.dependencies[COMMUNITY_PLUGIN_SPECS.prompt.packageName]
-  if (promptDependency === COMMUNITY_PLUGIN_SPECS.prompt.legacy) {
+  if (promptDependency !== undefined && (COMMUNITY_PLUGIN_SPECS.prompt.legacy as readonly string[]).includes(promptDependency)) {
     manifest.dependencies[COMMUNITY_PLUGIN_SPECS.prompt.packageName] = COMMUNITY_PLUGIN_SPECS.prompt.current
     changed = true
   }

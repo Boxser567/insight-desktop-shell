@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -77,6 +77,11 @@ function run(command, args, cwd) {
   })
 }
 
+/** Keep Windows drive prefixes out of GNU tar's archive argument (its remote-host syntax). */
+export async function extractRuntimeArchive(archive, destination, execute = run) {
+  await execute('tar', ['-xzf', basename(archive), '-C', destination], dirname(archive))
+}
+
 async function assertRuntime(directory, runtime, target) {
   const metadata = JSON.parse(await readFile(join(directory, 'runtime.json'), 'utf8'))
   const [platform, arch] = target.split('-')
@@ -97,8 +102,9 @@ async function assertRuntime(directory, runtime, target) {
   }
 }
 
-async function main() {
-  const lock = JSON.parse(await readFile(lockPath, 'utf8'))
+/** Prepare a pinned native Runtime; a separate destination supports historical migration checks in CI. */
+export async function prepareLockedCoreRuntime({ runtimeLockPath = lockPath, destination = outputDirectory } = {}) {
+  const lock = JSON.parse(await readFile(runtimeLockPath, 'utf8'))
   const target = runtimeTarget()
   const runtime = selectCoreRuntime(lock, target)
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-'))
@@ -111,15 +117,15 @@ async function main() {
     await writeFile(archive, body)
     const extracted = join(temporaryDirectory, 'runtime')
     await mkdir(extracted)
-    await run('tar', ['-xzf', archive, '-C', extracted], projectRoot)
+    await extractRuntimeArchive(archive, extracted)
     await assertRuntime(extracted, runtime, target)
     await removeInvalidBundledNodeShim(extracted)
-    await rm(outputDirectory, { recursive: true, force: true })
-    await moveRuntimeDirectory(extracted, outputDirectory)
+    await rm(destination, { recursive: true, force: true })
+    await moveRuntimeDirectory(extracted, destination)
     console.log(`Prepared locked Core Runtime: ${target}`)
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true })
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main()
+if (process.argv[1] === fileURLToPath(import.meta.url)) await prepareLockedCoreRuntime()

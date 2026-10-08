@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: write
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,9 +39,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci
       - run: npm run prepare:core-runtime
       - name: Verify source and workflow contracts
         run: |
@@ -89,9 +89,20 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
+      - name: Prepare historical Runtime for migration checks
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          import { prepareLockedCoreRuntime } from './scripts/prepare-core-runtime.mjs'
+          const destination = join(process.env.RUNNER_TEMP, 'previous-core-runtime')
+          await prepareLockedCoreRuntime({ runtimeLockPath: 'core-runtime.previous.lock.json', destination })
+          appendFileSync(process.env.GITHUB_ENV, `INSIGHT_PREVIOUS_CORE_RUNTIME=${destination}\n`)
+          NODE
       - name: Validate Apple release credentials
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
@@ -161,6 +172,14 @@ jobs:
           mkdir release-assets
           cp "$dmg_path" "dist/$base.zip" "dist/$base.zip.blockmap" release-assets/
           cp dist/latest-mac.yml release-assets/latest-mac.yml
+      - name: Verify actual package startup and session recovery
+        shell: bash
+        run: node scripts/verify-packaged-recovery.mjs 'dist/mac-arm64/因赛AI.app/Contents/Resources' "$INSIGHT_PREVIOUS_CORE_RUNTIME" 'release-proofs/darwin-arm64/session-recovery.json'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-proof-darwin-arm64
+          path: release-proofs/darwin-arm64/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: release-v2-darwin-arm64
@@ -197,9 +216,20 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
+      - name: Prepare historical Runtime for migration checks
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          import { prepareLockedCoreRuntime } from './scripts/prepare-core-runtime.mjs'
+          const destination = join(process.env.RUNNER_TEMP, 'previous-core-runtime')
+          await prepareLockedCoreRuntime({ runtimeLockPath: 'core-runtime.previous.lock.json', destination })
+          appendFileSync(process.env.GITHUB_ENV, `INSIGHT_PREVIOUS_CORE_RUNTIME=${destination}\n`)
+          NODE
       - name: Validate Apple release credentials
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
@@ -269,6 +299,14 @@ jobs:
           mkdir release-assets
           cp "$dmg_path" "dist/$base.zip" "dist/$base.zip.blockmap" release-assets/
           cp dist/latest-mac.yml release-assets/latest-mac.yml
+      - name: Verify actual package startup and session recovery
+        shell: bash
+        run: node scripts/verify-packaged-recovery.mjs 'dist/mac/因赛AI.app/Contents/Resources' "$INSIGHT_PREVIOUS_CORE_RUNTIME" 'release-proofs/darwin-x64/session-recovery.json'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-proof-darwin-x64
+          path: release-proofs/darwin-x64/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: release-v2-darwin-x64
@@ -305,9 +343,20 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
+      - name: Prepare historical Runtime for migration checks
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          import { prepareLockedCoreRuntime } from './scripts/prepare-core-runtime.mjs'
+          const destination = join(process.env.RUNNER_TEMP, 'previous-core-runtime')
+          await prepareLockedCoreRuntime({ runtimeLockPath: 'core-runtime.previous.lock.json', destination })
+          appendFileSync(process.env.GITHUB_ENV, `INSIGHT_PREVIOUS_CORE_RUNTIME=${destination}\n`)
+          NODE
       - name: Build and verify Windows package
         shell: pwsh
         env:
@@ -329,6 +378,14 @@ jobs:
           Copy-Item (Join-Path dist 'latest.yml') release-assets
       - name: Test Windows Runtime
         run: npm test
+      - name: Verify actual package startup and session recovery
+        shell: bash
+        run: node scripts/verify-packaged-recovery.mjs 'dist/win-unpacked/resources' "$INSIGHT_PREVIOUS_CORE_RUNTIME" 'release-proofs/win32-x64/session-recovery.json'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-proof-win32-x64
+          path: release-proofs/win32-x64/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: release-v2-win32-x64
@@ -363,7 +420,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@v4

@@ -1,0 +1,171 @@
+name: Build isolated internal installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'codex/internal-release-*'
+    paths-ignore:
+      - 'docs/**'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: desktop-internal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: darwin-arm64
+            platform: darwin
+            arch: arm64
+            runner: macos-15
+            arguments: --mac dmg zip --arm64
+            resources: dist-internal/mac-arm64/因赛AI Dev.app/Contents/Resources
+          - target: darwin-x64
+            platform: darwin
+            arch: x64
+            runner: macos-15-intel
+            arguments: --mac dmg zip --x64
+            resources: dist-internal/mac/因赛AI Dev.app/Contents/Resources
+          - target: win32-x64
+            platform: win32
+            arch: x64
+            runner: windows-2022
+            arguments: --win --x64
+            resources: dist-internal/win-unpacked/resources
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify native Runtime archive handling
+        run: npm exec -- vitest run test/prepare-internal-runtime.test.ts
+      - name: Read pinned source identity
+        id: source
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs'
+          const lock = JSON.parse(readFileSync('core-runtime.internal.lock.json'))
+          const pkg = JSON.parse(readFileSync('package.json'))
+          if (!Number.isSafeInteger(lock.source.workflowRun) || lock.source.workflowRun <= 0) throw new Error('Invalid Runtime run')
+          appendFileSync(process.env.GITHUB_OUTPUT, `run-id=${lock.source.workflowRun}\nversion=${pkg.version}\n`)
+          NODE
+      - uses: actions/download-artifact@v4
+        with:
+          repository: Boxser567/insight-harness-core
+          run-id: ${{ steps.source.outputs.run-id }}
+          github-token: ${{ github.token }}
+          name: runtime-${{ matrix.target }}
+          path: runtime-artifacts
+      - name: Prepare and verify native Runtime
+        run: |
+          node scripts/verify-target.mjs '${{ matrix.platform }}' '${{ matrix.arch }}'
+          node scripts/prepare-internal-runtime.mjs runtime-artifacts
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          appendFileSync(process.env.GITHUB_ENV, `INSIGHT_TEST_CORE_RUNTIME=${join(process.cwd(), 'build/core-runtime')}\n`)
+          NODE
+      - name: Verify and build isolated desktop
+        run: |
+          npm run typecheck
+          npm test
+          npm run build:desktop-integration
+          npm exec -- electron-vite build
+          node scripts/verify-sandboxed-preload.mjs out/preload/about.cjs
+          npm run prepare:bundled-profile
+      - name: Smoke prepared Runtime before packaging
+        run: |
+          node --input-type=module <<'NODE'
+          import { copyFile, mkdtemp, rm, symlink } from 'node:fs/promises'
+          import { tmpdir } from 'node:os'
+          import { join, resolve } from 'node:path'
+          import { smokePackagedHarness } from './scripts/smoke-packaged-harness.mjs'
+          const root = await mkdtemp(join(tmpdir(), 'insight-internal-preflight-'))
+          try {
+            await symlink(resolve('build/core-runtime'), join(root, 'runtime'), 'junction')
+            await symlink(resolve('build/bundled-profile'), join(root, 'bundled-profile'), 'junction')
+            for (const file of ['harness-node-entry.mjs', 'dsh-desktop.patch.yml', 'windows-hidden-console.mjs', 'windows-child-process-hide.mjs']) await copyFile(join('build', file), join(root, file))
+            await smokePackagedHarness(root)
+          } finally { await rm(root, { recursive: true, force: true }) }
+          NODE
+      - name: Package internal installers
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm exec -- electron-builder ${{ matrix.arguments }} --publish never \
+            --config electron-builder.dev.cjs \
+            --config.directories.output=dist-internal \
+            --config.artifactName='insight-internal-${version}-${os}-${arch}.${ext}' \
+            --config.nsis.artifactName='insight-internal-${version}-windows-${arch}-setup.${ext}'
+      - name: Verify packaged identity and record checksums
+        env:
+          INTERNAL_RESOURCES: ${{ matrix.resources }}
+          INTERNAL_TARGET: ${{ matrix.target }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { lstatSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          import { createHash } from 'node:crypto'
+          const read = file => JSON.parse(readFileSync(file))
+          const resources = process.env.INTERNAL_RESOURCES
+          const lock = read('core-runtime.internal.lock.json')
+          const pkg = read(join(resources, 'app/package.json'))
+          const runtime = read(join(resources, 'runtime/runtime.json'))
+          const manifest = read(join(resources, 'runtime-manifest.json'))
+          assert.equal(pkg.insightDesktopAppId, 'com.insight-aigc.desktop.dev')
+          assert.equal(pkg.insightDesktopChannel, 'development')
+          assert.equal(pkg.version, read('package.json').version)
+          assert.deepEqual(runtime.core, lock.core)
+          assert.equal(manifest.checksums.archiveSha256, lock.targets[process.env.INTERNAL_TARGET].sha256)
+          assert.equal(read(join(resources, 'bundled-profile/web/node_modules/dsh-prompt-enhance/package.json')).version, '0.2.7')
+          assert.ok(!lstatSync(join(resources, 'bundled-profile/web/node_modules/@insight-ai/desktop-integration')).isSymbolicLink(), 'Desktop integration must be portable files, not a build-machine link')
+          for (const file of ['package.json', 'cordis.patch.yml', 'lib/index.js', 'lib/client.js']) {
+            const expected = createHash('sha256').update(readFileSync(join('packages/insight-desktop-integration', file))).digest('hex')
+            for (const directory of ['packages/insight-desktop-integration', 'node_modules/@insight-ai/desktop-integration']) {
+              const actual = createHash('sha256').update(readFileSync(join(resources, 'bundled-profile/web', directory, file))).digest('hex')
+              assert.equal(actual, expected, `Packaged desktop integration mismatch: ${directory}/${file}`)
+            }
+          }
+          const files = readdirSync('dist-internal').filter(name => /\.(dmg|zip|exe|blockmap)$/.test(name))
+          assert.ok(files.length > 0)
+          const checksums = files.map(name => `${createHash('sha256').update(readFileSync(join('dist-internal', name))).digest('hex')}  ${name}`)
+          writeFileSync('dist-internal/checksums.sha256', checksums.join('\n') + '\n')
+          writeFileSync('dist-internal/build-info.json', JSON.stringify({ version: pkg.version, shellCommit: process.env.GITHUB_SHA, core: runtime.core, runtimeSource: lock.source, target: process.env.INTERNAL_TARGET, appId: pkg.insightDesktopAppId, isolated: true, signed: false, notarized: false, promptEnhanceVersion: '0.2.7', files }, null, 2) + '\n')
+          NODE
+          node scripts/smoke-packaged-harness.mjs '${{ matrix.resources }}'
+      - name: Verify macOS installer containers
+        if: matrix.platform == 'darwin'
+        run: |
+          hdiutil verify 'dist-internal/insight-internal-${{ steps.source.outputs.version }}-mac-${{ matrix.arch }}.dmg'
+          unzip -t 'dist-internal/insight-internal-${{ steps.source.outputs.version }}-mac-${{ matrix.arch }}.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insight-internal-${{ steps.source.outputs.version }}-${{ matrix.target }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            dist-internal/*.dmg
+            dist-internal/*.zip
+            dist-internal/*.exe
+            dist-internal/*.blockmap
+            dist-internal/checksums.sha256
+            dist-internal/build-info.json

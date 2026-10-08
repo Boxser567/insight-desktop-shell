@@ -15,6 +15,8 @@ for (const text of [
   'stage-target',
   'publish-candidate',
   'accept-target',
+  'accept-recovery-baseline-target',
+  'promote-recovery-baseline',
   'promote-stable',
   'reject-version',
   'darwin-arm64',
@@ -28,7 +30,9 @@ for (const text of [
   'scripts/verify-publish-v2-workflow.mjs',
   'git show "refs/tags/v$VERSION:build/update-release-policy.json"',
   'secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY',
-  "inputs.command == 'publish-candidate-all' || inputs.command == 'promote-stable-all' || inputs.command == 'publish-candidate' || inputs.command == 'accept-target' || inputs.command == 'promote-stable' || inputs.command == 'reject-version'"
+  "if: inputs.command != 'stage-target'",
+  'args+=(--target "$TARGET" --confirm-version "$CONFIRM_VERSION")',
+  'promote-stable-all|promote-stable|promote-recovery-baseline)'
 ]) requireText(source, text)
 
 for (const forbidden of [

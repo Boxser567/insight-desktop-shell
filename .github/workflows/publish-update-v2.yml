@@ -13,6 +13,8 @@ on:
           - stage-target
           - publish-candidate
           - accept-target
+          - accept-recovery-baseline-target
+          - promote-recovery-baseline
           - promote-stable
           - reject-version
       version:
@@ -30,7 +32,7 @@ on:
           - darwin-x64
           - win32-x64
       confirm_version:
-        description: Exact version confirmation for promote-stable-all, promote-stable or reject-version
+        description: Exact version confirmation for promotion, recovery-baseline acceptance or rejection
         required: false
         default: ''
         type: string
@@ -61,7 +63,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - name: Validate trusted invocation
         env:
@@ -73,10 +75,10 @@ jobs:
           test "$GITHUB_REF" = 'refs/heads/main'
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           case "$COMMAND" in
-            stage-target|publish-candidate|accept-target)
+            stage-target|publish-candidate|accept-target|accept-recovery-baseline-target)
               test "$TARGET" != 'none'
               ;;
-            publish-candidate-all|promote-stable-all|promote-stable|reject-version)
+            publish-candidate-all|promote-stable-all|promote-stable|promote-recovery-baseline|reject-version)
               test "$TARGET" = 'none'
               ;;
             *) exit 1 ;;
@@ -89,7 +91,7 @@ jobs:
           node --check scripts/publish-update-v2-to-oss.mjs
           node --check scripts/github-oss-client.mjs
       - name: Prepare product update signing key
-        if: inputs.command == 'publish-candidate-all' || inputs.command == 'promote-stable-all' || inputs.command == 'publish-candidate' || inputs.command == 'accept-target' || inputs.command == 'promote-stable' || inputs.command == 'reject-version'
+        if: inputs.command != 'stage-target'
         env:
           DESKTOP_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_PRIVATE_KEY }}
         run: |
@@ -117,7 +119,10 @@ jobs:
             stage-target|publish-candidate|accept-target)
               args+=(--target "$TARGET")
               ;;
-            promote-stable-all|promote-stable)
+            accept-recovery-baseline-target)
+              args+=(--target "$TARGET" --confirm-version "$CONFIRM_VERSION")
+              ;;
+            promote-stable-all|promote-stable|promote-recovery-baseline)
               args+=(--confirm-version "$CONFIRM_VERSION")
               ;;
             reject-version)

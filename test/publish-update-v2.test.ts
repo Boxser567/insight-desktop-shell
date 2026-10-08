@@ -10,10 +10,12 @@ import * as publisher from '../scripts/publish-update-v2-to-oss.mjs'
 import { sha512, writeReleaseFixture } from './release-script-fixtures'
 
 const {
+  acceptV2RecoveryBaselineTarget,
   acceptV2Target,
   parseV2PublisherArguments,
   promoteV2StableAll,
   promoteV2Stable,
+  promoteV2RecoveryBaseline,
   publishV2CandidateAll,
   publishV2Candidate,
   rejectV2Version,
@@ -221,6 +223,102 @@ function commonInput(
 }
 
 describe('v2 update publisher', () => {
+  it.each([
+    [{ profileSchema: 1, accountStorageSchema: 1, readsDataSchema: { minimum: 1, maximum: 1 }, writesDataSchema: 1 }, 'only for a forward'],
+    [{ profileSchema: 1, accountStorageSchema: 1, readsDataSchema: { minimum: 2, maximum: 2 }, writesDataSchema: 2 }, 'must read both'],
+    [{ profileSchema: 2, accountStorageSchema: 1, readsDataSchema: { minimum: 1, maximum: 2 }, writesDataSchema: 2 }, 'must read both']
+  ])('refuses an unsafe or unnecessary recovery-baseline declaration %#', async (compatibility, message) => {
+    const old = await releaseFixture('1.0.3')
+    const oss = new MemoryOss()
+    const oldCommon = commonInput(old, oss, await operationDirectory(old.root, 'prior-stable'))
+    await installBridgeBaseline(old, oss)
+    const dirs = new Map<Target, string>()
+    for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64'] as const) dirs.set(target, await buildTarget(old, target))
+    await publishV2CandidateAll({ ...oldCommon, loadTarget: async (target: Target) => dirs.get(target)! })
+    await promoteV2StableAll(oldCommon)
+    const prior = oss.objects.get('desktop/stable/current.json')!
+    const next = await releaseFixture('1.0.4')
+    await writeFile(next.paths.privateKey, await readFile(old.paths.privateKey))
+    await writeFile(next.paths.publicKey, await readFile(old.paths.publicKey))
+    await writeFile(next.paths.compatibility, JSON.stringify(compatibility))
+    const common = commonInput(next, oss, await operationDirectory(next.root, 'unsafe-baseline'))
+    await stageV2Target({ ...common, target: 'darwin-arm64', targetDir: await buildTarget(next, 'darwin-arm64') })
+    await expect(acceptV2RecoveryBaselineTarget({ ...common, target: 'darwin-arm64' })).rejects.toThrow(String(message))
+    expect(oss.objects.get('desktop/stable/current.json')).toEqual(prior)
+    expect([...oss.objects.keys()].filter(key => key.includes('recovery-baseline-acceptance'))).toEqual([])
+  }, 20000)
+
+  it('refuses recovery-baseline acceptance without an authenticated current Stable', async () => {
+    const fixture = await releaseFixture('1.0.4')
+    const oss = new MemoryOss()
+    const common = commonInput(fixture, oss, await operationDirectory(fixture.root, 'no-stable'))
+    await installBridgeBaseline(fixture, oss)
+    await expect(acceptV2RecoveryBaselineTarget({ ...common, target: 'darwin-arm64' })).rejects.toThrow('older active v2 Stable')
+    await expect(promoteV2RecoveryBaseline(common)).rejects.toThrow('active v2 Stable')
+    expect(oss.objects.has('desktop/stable/current.json')).toBe(false)
+  })
+
+  it('requires explicit version confirmation for recovery-baseline acceptance and promotion', () => {
+    expect(parseV2PublisherArguments([
+      'accept-recovery-baseline-target', '--version', '1.0.4', '--target', 'darwin-arm64', '--confirm-version', '1.0.4'
+    ])).toMatchObject({ command: 'accept-recovery-baseline-target', target: 'darwin-arm64' })
+    expect(parseV2PublisherArguments([
+      'promote-recovery-baseline', '--version', '1.0.4', '--confirm-version', '1.0.4'
+    ])).toMatchObject({ command: 'promote-recovery-baseline' })
+    for (const command of ['accept-recovery-baseline-target', 'promote-recovery-baseline']) {
+      expect(() => parseV2PublisherArguments([command, '--version', '1.0.4', ...(command.startsWith('accept') ? ['--target', 'darwin-arm64'] : [])])).toThrow()
+    }
+  })
+
+  it('establishes a schema-upgrade recovery baseline only after three signed acceptances, without publishing Candidate', async () => {
+    const old = await releaseFixture('1.0.3')
+    const oss = new MemoryOss()
+    const oldCommon = commonInput(old, oss, await operationDirectory(old.root, 'old-baseline'))
+    await installBridgeBaseline(old, oss)
+    const oldDirs = new Map<Target, string>()
+    for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64'] as const) oldDirs.set(target, await buildTarget(old, target))
+    await publishV2CandidateAll({ ...oldCommon, loadTarget: async (target: Target) => oldDirs.get(target)! })
+    await promoteV2StableAll(oldCommon)
+    const pointerBefore = oss.objects.get('desktop/stable/current.json')!
+    const candidateBefore = new Map([...oss.objects].filter(([key]) => key.startsWith('desktop/candidate-v2/')))
+
+    const next = await releaseFixture('1.0.4')
+    await writeFile(next.paths.privateKey, await readFile(old.paths.privateKey))
+    await writeFile(next.paths.publicKey, await readFile(old.paths.publicKey))
+    await writeFile(next.paths.compatibility, JSON.stringify({ profileSchema: 1, accountStorageSchema: 1, readsDataSchema: { minimum: 1, maximum: 2 }, writesDataSchema: 2 }))
+    const common = commonInput(next, oss, await operationDirectory(next.root, 'new-baseline'))
+    for (const target of ['darwin-arm64', 'darwin-x64', 'win32-x64'] as const) {
+      await stageV2Target({ ...common, target, targetDir: await buildTarget(next, target) })
+    }
+    await expect(publishV2Candidate({ ...common, target: 'darwin-arm64' })).rejects.toThrow('current Stable baseline')
+    await acceptV2RecoveryBaselineTarget({ ...common, target: 'darwin-arm64' })
+    await expect(promoteV2RecoveryBaseline(common)).rejects.toThrow('acceptance: darwin-x64')
+    expect(oss.objects.get('desktop/stable/current.json')).toEqual(pointerBefore)
+    for (const target of ['darwin-x64', 'win32-x64'] as const) await acceptV2RecoveryBaselineTarget({ ...common, target })
+
+    const key = 'desktop/releases/v1.0.4/recovery-baseline-acceptance/darwin-arm64.json'
+    const acceptedBytes = oss.objects.get(key)!
+    const accepted = JSON.parse(acceptedBytes.toString())
+    expect(accepted).toMatchObject({ previousStableVersion: '1.0.3', previousStableSha512: sha512(pointerBefore) })
+    oss.objects.set(key, Buffer.from(JSON.stringify({ ...accepted, previousStableSha512: Buffer.alloc(64, 8).toString('base64') })))
+    await expect(promoteV2RecoveryBaseline(common)).rejects.toThrow('signature is invalid')
+    oss.objects.set(key, acceptedBytes)
+
+    const oldEnvelope = JSON.parse(pointerBefore.toString())
+    const oldPayload = JSON.parse(Buffer.from(oldEnvelope.payloadBase64, 'base64').toString())
+    const changedPayload = Buffer.from(JSON.stringify({ ...oldPayload, publishedAt: '2026-09-23T12:00:00.000Z' }))
+    oss.objects.set('desktop/stable/current.json', Buffer.from(JSON.stringify({ ...oldEnvelope, payloadBase64: changedPayload.toString('base64'), signatureBase64: sign(null, changedPayload, await readFile(old.paths.privateKey)).toString('base64') })))
+    await expect(promoteV2RecoveryBaseline(common)).rejects.toThrow('Stable baseline changed')
+    oss.objects.set('desktop/stable/current.json', pointerBefore)
+
+    const promoted = await promoteV2RecoveryBaseline(common)
+    expect(promoted.pointerAfter).toMatchObject({ version: '1.0.4', track: 'stable' })
+    expect(new Map([...oss.objects].filter(([objectKey]) => objectKey.startsWith('desktop/candidate-v2/')))).toEqual(candidateBefore)
+    expect(common.publishGithubRelease).toHaveBeenCalledOnce()
+    const retry = commonInput(next, oss, await operationDirectory(next.root, 'baseline-retry'))
+    await expect(promoteV2RecoveryBaseline(retry)).resolves.toMatchObject({ alreadyPromoted: true })
+  }, 20000)
+
   it('accepts guarded bulk and single-target release transitions', () => {
     expect(parseV2PublisherArguments([
       'publish-candidate-all', '--version', '1.0.1'
@@ -297,7 +395,7 @@ describe('v2 update publisher', () => {
     expect(common.publishGithubRelease).toHaveBeenCalledOnce()
     expect(oss.objects.has('desktop/stable/current.json')).toBe(true)
     expect(downloadedKeys.filter((key) => /\.(dmg|zip|exe|blockmap)$/u.test(key))).toEqual([])
-  })
+  }, 20_000)
 
   it('stages immutable target bytes idempotently and rejects a conflict', async () => {
     const fixture = await releaseFixture()

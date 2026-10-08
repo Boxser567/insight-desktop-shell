@@ -56,8 +56,8 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => actions
   }, AccountFooter))
-  ctx.slots.inject('settings.trigger', () => ctx.slots.register({
-    name: 'settings.trigger',
+  ctx.slots.inject('settings.launcher', () => ctx.slots.register({
+    name: 'settings.launcher',
     priority: -100
   }, HiddenSettingsTrigger))
   ctx.slots.inject('settings.section', () => ctx.slots.register({

@@ -696,17 +696,8 @@ function harnessThemePreference(dshHome = currentDshHome()): DesktopThemePrefere
   }
 }
 
-function nativeThemeSourceForResolvedTheme(
-  persisted: DesktopThemePreference,
-  nativeIsDark: boolean,
-  rendererIsDark: boolean
-): DesktopThemePreference {
-  if (persisted === 'system' && nativeIsDark === rendererIsDark) return 'system'
-  return rendererIsDark ? 'dark' : 'light'
-}
-
 function applyNativeThemePreference(preference: DesktopThemePreference): void {
-  nativeTheme.themeSource = preference
+  if (nativeTheme.themeSource !== preference) nativeTheme.themeSource = preference
   const isDark = nativeTheme.shouldUseDarkColors
   if (mainWindow && !mainWindow.isDestroyed()) applyWindowChromeTheme(mainWindow, isDark)
   else resolvedHarnessThemeDark = isDark
@@ -1121,16 +1112,19 @@ function registerHarnessHandlers(): void {
   })
 
   ipcMain.removeHandler('desktop-titlebar:set-theme')
-  ipcMain.handle('desktop-titlebar:set-theme', (event, isDark: unknown) => {
+  ipcMain.handle('desktop-titlebar:set-theme', (event, isDark: unknown, themeSource: unknown) => {
     assertTrustedHarnessEvent(event)
     if (typeof isDark !== 'boolean') {
       throw new Error('The DSH Desktop titlebar theme must be a boolean.')
     }
-    nativeTheme.themeSource = nativeThemeSourceForResolvedTheme(
-      harnessThemePreference(),
-      nativeTheme.shouldUseDarkColors,
-      isDark
-    )
+    if (themeSource !== undefined && themeSource !== 'light' && themeSource !== 'dark' && themeSource !== 'system') {
+      throw new Error('The DSH Desktop theme source must be light, dark, or system.')
+    }
+    // Core publishes the preference separately from its resolved palette.
+    // Inferring "system" from matching colors feeds native theme changes back
+    // through prefers-color-scheme and makes macOS window chrome oscillate.
+    const preference = themeSource ?? harnessThemePreference()
+    if (nativeTheme.themeSource !== preference) nativeTheme.themeSource = preference
     if (mainWindow) applyWindowChromeTheme(mainWindow, isDark)
     else resolvedHarnessThemeDark = isDark
     return { ok: true }

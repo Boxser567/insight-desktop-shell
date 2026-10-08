@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process'
 import { gte } from 'semver'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms))
 
@@ -135,6 +136,28 @@ export function createHarnessSmokeRpc(url, launchToken) {
   }
 }
 
+/** The HTTP session API can become ready before the desktop adapter finishes registration. */
+export async function waitForDesktopModelCatalog(rpc) {
+  const deadline = Date.now() + 30_000
+  let catalog
+  do {
+    catalog = await rpc.invoke('session.modelCatalog', {})
+    const routes = catalog.routableProviders
+    if (catalog.default?.provider === 'yinsai-gateway' && catalog.default?.model === 'deepseek-flash' &&
+        routes.includes('yinsai-gateway') && !routes.some(provider => ['deepseek', 'pi-ai'].includes(provider)) &&
+        catalog.groups.some(group => group.id === 'yinsai-gateway' && group.models.some(model => model.id === 'deepseek-flash'))) {
+      return catalog
+    }
+    if (Date.now() >= deadline) break
+    await sleep(500)
+  } while (Date.now() <= deadline)
+  throw new Error(`Packaged Harness desktop model Gateway did not become ready: ${JSON.stringify({
+    default: catalog?.default,
+    routableProviders: catalog?.routableProviders,
+    failures: catalog?.failures?.map(failure => failure.id)
+  })}`)
+}
+
 async function stopProcess(child) {
   if (child.exitCode !== null) return
   const exited = new Promise(resolveExit => child.once('exit', resolveExit))
@@ -187,7 +210,8 @@ export async function probePackagedHarness({
     }
     return { stdout: redactLaunchTokens(stdout), stderr: redactLaunchTokens(stderr) }
   } catch (error) {
-    throw new Error(redactLaunchTokens(error instanceof Error ? error.message : String(error)))
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(redactLaunchTokens(`${message}\n${output()}`))
   } finally {
     await stopProcess(child)
   }
@@ -213,15 +237,36 @@ export async function smokePackagedHarness(resourceRoot) {
       verbatimSymlinks: true
     })
     await mkdir(workspacePath)
+    // Cordis retains import errors in its logger instead of writing them to stderr.
+    // Attach an error sink only in this isolated verification process, before boot.
+    const diagnostics = join(temporaryRoot, 'startup-diagnostics.mjs')
+    const cordis = createRequire(paths.dshEntry).resolve('@deepseek-ai/cordis')
+    await writeFile(diagnostics, `
+      import { LoggerService } from ${JSON.stringify(pathToFileURL(cordis).href)}
+      import { inspect } from 'node:util'
+      const registered = new WeakSet()
+      const original = LoggerService.prototype.exporter
+      LoggerService.prototype.exporter = function (exporter) {
+        const dispose = original.call(this, exporter)
+        if (!registered.has(this.exporters)) {
+          registered.add(this.exporters)
+          original.call(this, { export: message => {
+            if (message.type === 'error') process.stderr.write('[smoke startup] ' + message.name + ': ' + inspect(message.args, { depth: 6, colors: false }) + '\\n')
+          } })
+        }
+        return dispose
+      }
+    `)
 
     await probePackagedHarness({
       nodeExecutable: paths.nodeExecutable,
       requiresLaunchToken: gte(runtimeMetadata.core.version, '0.1.2-alpha.1'),
-      buildArguments: (port) => buildPackagedHarnessArguments(paths, port),
+      buildArguments: (port) => ['--import', pathToFileURL(diagnostics).href, ...buildPackagedHarnessArguments(paths, port)],
       workingDirectory: workspacePath,
       environment: {
         ...process.env,
         DSH_HOME: dshHome,
+        INSIGHT_BUNDLED_NODE_PATH: paths.nodeExecutable,
         NO_COLOR: '1',
         PNPM_MAX_WORKERS: '1',
         npm_config_child_concurrency: '1',
@@ -232,7 +277,7 @@ export async function smokePackagedHarness(resourceRoot) {
         PNPM_CONFIG_SIDE_EFFECTS_CACHE: 'false'
       },
       afterReady: async (_url, rpc) => {
-        const catalog = await rpc.invoke(rpc.modern ? 'session.modelCatalog' : 'llm.models', {})
+        const catalog = rpc.modern ? await waitForDesktopModelCatalog(rpc) : await rpc.invoke('llm.models', {})
         const host = rpc.modern ? catalog.default : await rpc.invoke('host.describe', {})
         if (host.provider !== 'yinsai-gateway' || host.model !== 'deepseek-flash') {
           throw new Error('Packaged Harness did not select the desktop Gateway as its default model route.')

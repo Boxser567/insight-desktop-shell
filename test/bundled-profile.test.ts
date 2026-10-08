@@ -6,7 +6,7 @@ import { isProfileInstallComplete } from '../src/main/state/profile-install-mark
 
 const communityPlugins = [
   { name: 'dsh-memory-evolve', version: '0.1.0', archive: 'dsh-memory-evolve-0.1.0.tgz' },
-  { name: 'dsh-prompt-enhance', version: '0.2.1', archive: 'dsh-prompt-enhance-0.2.1.tgz' }
+  { name: 'dsh-prompt-enhance', version: '0.2.7', archive: 'dsh-prompt-enhance-0.2.7.tgz' }
 ] as const
 
 describe('bundled profile initialization', () => {
@@ -58,7 +58,7 @@ describe('bundled profile initialization', () => {
     await mkdir(join(profile, 'node_modules', 'dsh-memory-evolve', 'lib'), { recursive: true })
     await writeFile(
       join(profile, 'node_modules', 'dsh-prompt-enhance', 'lib', 'client.js'),
-      'const imageCount = useInput((state) => state.attachmentIds.length);\nbody:not([data-ds-dark-theme]) .dsh-pe-panel {\n  color: black;\n}\n',
+      'const imageCount = useInput((state) => countOf(state.attachmentIds));\nconst scope = settingsCtx.configForms.get(NS);\nbody:not([data-ds-dark-theme]) .dsh-pe-panel {\n  color: black;\n}\n',
       'utf8'
     )
     await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')
@@ -161,25 +161,25 @@ describe('bundled profile initialization', () => {
     expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
     expect(manifest.dsh.profile.bundles).not.toContain('@changfenhuang/dsh-genui')
     expect(manifest.dsh.profile.bundles).toContain('dsh-user-plugin')
-    expect(manifest.dependencies['dsh-prompt-enhance']).toBe('file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz')
+    expect(manifest.dependencies['dsh-prompt-enhance']).toBe('file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz')
     expect(await readFile(join(profile, 'node_modules', 'dsh-memory-evolve', 'lib', 'client.js'), 'utf8')).toBe('new memory\n')
-    expect(await readFile(join(profile, 'node_modules', 'dsh-prompt-enhance', 'package.json'), 'utf8')).toContain('0.2.1')
+    expect(await readFile(join(profile, 'node_modules', 'dsh-prompt-enhance', 'package.json'), 'utf8')).toContain('0.2.7')
     expect(await readFile(join(profile, '.insight-bundled-plugins', 'dsh-memory-evolve-0.1.0.tgz'), 'utf8')).toBe('dsh-memory-evolve')
-    expect(await readFile(join(profile, '.insight-bundled-plugins', 'dsh-prompt-enhance-0.2.1.tgz'), 'utf8')).toBe('dsh-prompt-enhance')
+    expect(await readFile(join(profile, '.insight-bundled-plugins', 'dsh-prompt-enhance-0.2.7.tgz'), 'utf8')).toBe('dsh-prompt-enhance')
     await expect(readFile(join(profile, 'node_modules', 'dshmarket', 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(profile, 'node_modules', '@changfenhuang', 'dsh-genui', 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
     expect(await isProfileInstallComplete(dshHome)).toBe(false)
   })
 
-  it('repairs missing managed archives in an already migrated profile', async () => {
+  it.each([7, 8])('upgrades managed prompt-enhance 0.2.1 in Profile generation %s', async (version) => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     await writeCurrentTemplate(template)
     const profile = await writeLegacyProfile(dshHome)
     const manifestPath = join(profile, 'package.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    manifest.insightDesktop.defaultProfileVersion = 7
+    manifest.insightDesktop.defaultProfileVersion = version
     manifest.dependencies['dsh-prompt-enhance'] = 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz'
     await writeFile(manifestPath, JSON.stringify(manifest), 'utf8')
     await writeFile(join(profile, 'node_modules', 'dsh-prompt-enhance', 'package.json'), JSON.stringify({
@@ -187,8 +187,12 @@ describe('bundled profile initialization', () => {
     }), 'utf8')
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    expect(JSON.parse(await readFile(manifestPath, 'utf8')).dependencies['dsh-prompt-enhance'])
+      .toBe('file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz')
+    expect(JSON.parse(await readFile(join(profile, 'node_modules', 'dsh-prompt-enhance', 'package.json'), 'utf8')).version)
+      .toBe('0.2.7')
     await expect(readFile(join(profile, '.insight-bundled-plugins', 'dsh-memory-evolve-0.1.0.tgz'), 'utf8')).resolves.toBe('dsh-memory-evolve')
-    await expect(readFile(join(profile, '.insight-bundled-plugins', 'dsh-prompt-enhance-0.2.1.tgz'), 'utf8')).resolves.toBe('dsh-prompt-enhance')
+    await expect(readFile(join(profile, '.insight-bundled-plugins', 'dsh-prompt-enhance-0.2.7.tgz'), 'utf8')).resolves.toBe('dsh-prompt-enhance')
     await expect(isProfileInstallComplete(dshHome)).resolves.toBe(false)
   })
 

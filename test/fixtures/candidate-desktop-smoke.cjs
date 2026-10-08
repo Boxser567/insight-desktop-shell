@@ -3,11 +3,20 @@ const assert = require('node:assert/strict')
 const { mkdirSync, writeFileSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, Menu, nativeTheme, session, webContents } = require('electron')
+const { app, BrowserWindow, dialog, Menu, nativeTheme, session, webContents, utilityProcess } = require('electron')
 const root = process.env.INSIGHT_SMOKE_ROOT
 const output = process.env.INSIGHT_SMOKE_OUTPUT
 if (!root || !output) throw new Error('INSIGHT_SMOKE_ROOT and INSIGHT_SMOKE_OUTPUT are required')
 for (const directory of ['app-data', 'logs']) mkdirSync(join(output, directory), { recursive: true })
+if (process.env.INSIGHT_SMOKE_PROMPT_ENHANCE === '1') {
+  writeFileSync(join(output, 'prompt-enhance-mode'), 'success')
+  const fork = utilityProcess.fork.bind(utilityProcess)
+  utilityProcess.fork = (entry, args, options) => entry.endsWith('harness-node-entry.mjs')
+    ? fork(join(__dirname, 'prompt-enhance-harness.mjs'), args, {
+        ...options, env: { ...options.env, INSIGHT_SMOKE_OUTPUT: output, INSIGHT_SMOKE_HARNESS_ENTRY: entry }
+      })
+    : fork(entry, args, options)
+}
 app.getAppPath = () => root
 app.getVersion = () => require(join(root, 'package.json')).version
 app.setPath('appData', join(output, 'app-data'))
@@ -115,6 +124,44 @@ async function run() {
   assert.notEqual(updateState.background, 'rgb(32, 32, 36)')
   await save('update-light', update)
   console.log('CANDIDATE_SECONDARY_THEME_PASSED')
+  if (process.env.INSIGHT_SMOKE_THEME_STABILITY === '1') {
+    const observations = []
+    const nativeChanges = []
+    const recordNativeChange = () => nativeChanges.push({ source: nativeTheme.themeSource, dark: nativeTheme.shouldUseDarkColors })
+    nativeTheme.on('updated', recordNativeChange)
+    try {
+      await harness.executeJavaScript(`document.querySelector('[data-insight-desktop-account] button').click()`)
+      await until('account menu for theme regression', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-account-menu]')`))
+      await harness.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(x=>x.textContent==='设置').click()`)
+      await until('settings for theme regression', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-client-settings]')`))
+      await harness.executeJavaScript(`[...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='通用设置')?.click()`)
+      await until('appearance for theme regression', () => harness.executeJavaScript(`[...document.querySelectorAll('button')].some(x=>x.textContent?.trim()==='浅色')`))
+      for (const [source, label] of [['light', '浅色'], ['dark', '深色'], ['system', '跟随系统'], ['light', '浅色']]) {
+        await harness.executeJavaScript(`[...document.querySelectorAll('button')].find(x=>x.textContent?.trim()===${JSON.stringify(label)}).click()`)
+        await until(`native ${source} preference`, () => nativeTheme.themeSource === source)
+        await sleep(1000)
+        const expected = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+        await until(`${source} secondary windows`, async () => (await inspect(about)).theme === expected && (await inspect(update)).theme === expected)
+        const before = nativeChanges.length
+        for (let i = 0; i < 30; i++) {
+          assert.equal(nativeTheme.themeSource, source)
+          assert.equal((await inspect(about)).theme, expected)
+          assert.equal((await inspect(update)).theme, expected)
+          assert.equal(await harness.executeJavaScript(`document.body.hasAttribute('data-ds-dark-theme')`), expected === 'dark')
+          await sleep(100)
+        }
+        const idleNativeChanges = nativeChanges.length - before
+        assert.equal(idleNativeChanges, 0, `${source} theme must remain stable while idle`)
+        observations.push({ source, palette: expected, samples: 30, idleNativeChanges })
+      }
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
+      writeFileSync(join(output, 'theme-stability.json'), JSON.stringify(observations, null, 2))
+      console.log('CANDIDATE_THEME_STABILITY_PASSED', JSON.stringify(observations))
+    } finally {
+      nativeTheme.removeListener('updated', recordNativeChange)
+    }
+  }
   const catalog = await harness.executeJavaScript(`fetch('/api/session/modelCatalog', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session/modelCatalog',payload:{args:{}}})}).then(r=>r.json())`)
   assert.equal(catalog.result.ok, true)
   assert.equal(catalog.result.value.default.provider, 'yinsai-gateway')
@@ -134,6 +181,64 @@ async function run() {
     assert.equal(await harness.executeJavaScript(`!!document.querySelector('[data-phase="hero"] [data-insight-desktop-brand-mark] img')`), true)
     await save('workspace-open', harness)
     console.log('CANDIDATE_WORKSPACE_OPENED')
+    if (!process.argv.includes('--safe-mode')) {
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-trigger]').click()`)
+      await until('twelve bundled skills', () => harness.executeJavaScript(`document.querySelectorAll('[data-insight-skill-list] [role="option"]').length === 12`), 20000)
+      await save('skill-picker', harness)
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]').click()`)
+      await until('native skill draft insertion', () => harness.executeJavaScript(`document.querySelector('[contenteditable="true"]').innerText.includes('/creator-recommendation')`))
+      await until('selected native skill', () => harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]')?.getAttribute('aria-selected') === 'true'`))
+      await harness.executeJavaScript(`document.querySelector('[data-insight-skill-list] [id$="-creator-recommendation"]').click()`)
+      await until('native skill draft removal', () => harness.executeJavaScript(`!document.querySelector('[contenteditable="true"]').innerText.includes('/creator-recommendation')`))
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
+      console.log('CANDIDATE_SKILL_PICKER_PASSED')
+    }
+    if (process.env.INSIGHT_SMOKE_PROMPT_ENHANCE === '1') {
+      const original = '请帮我写三条产品发布文案'
+      const enhanced = '请为产品发布撰写三条文案，突出目标用户、核心价值与行动建议。'
+      BrowserWindow.fromWebContents(about)?.close()
+      BrowserWindow.fromWebContents(update)?.close()
+      const main = BrowserWindow.fromWebContents(shell)
+      main.show()
+      main.focus()
+      harness.focus()
+      await harness.executeJavaScript(`document.querySelector('[contenteditable="true"]').focus()`)
+      await harness.insertText(original)
+      const draft = () => harness.executeJavaScript(`document.querySelector('[contenteditable="true"]').innerText.trim()`)
+      await until('prompt enhancement draft', async () => (await draft()) === original, 10000)
+      const enhance = () => harness.executeJavaScript(`document.querySelector('button[aria-label="提示词增强（重写为结构化提示词）"]').click()`)
+      const panelButton = label => harness.executeJavaScript(`[...document.querySelectorAll('.dsh-pe-panel button')].find(x=>x.textContent.trim()===${JSON.stringify(label)}).click()`)
+      await enhance()
+      await until('prompt enhancement result', () => harness.executeJavaScript(`!!document.querySelector('.dsh-pe-body') && document.querySelector('.dsh-pe-panel').textContent.includes(${JSON.stringify(enhanced)})`), 15000)
+      assert.equal(await draft(), original, 'Enhancement preview must preserve the draft')
+      await save('prompt-enhance-result', harness)
+      await panelButton('回填到输入框')
+      await until('enhancement applied', async () => (await draft()) === enhanced)
+      await harness.executeJavaScript(`[...document.querySelectorAll('.dsh-pe-undo button')].find(x=>x.textContent.trim()==='撤销').click()`)
+      await until('enhancement undone', async () => (await draft()) === original)
+      writeFileSync(join(output, 'prompt-enhance-mode'), 'error')
+      await enhance()
+      await until('prompt enhancement failure', () => harness.executeJavaScript(`!!document.querySelector('.dsh-pe-error')`), 15000)
+      assert.equal(await draft(), original)
+      await save('prompt-enhance-error', harness)
+      writeFileSync(join(output, 'prompt-enhance-mode'), 'success')
+      await panelButton('重试')
+      await until('prompt enhancement retry result', () => harness.executeJavaScript(`!!document.querySelector('.dsh-pe-body')`), 15000)
+      await harness.executeJavaScript(`document.querySelector('.dsh-pe-close').click()`)
+      writeFileSync(join(output, 'prompt-enhance-mode'), 'cancel')
+      await enhance()
+      await until('in-flight enhancement', () => JSON.parse(readFileSync(join(output, 'prompt-enhance-requests.json'), 'utf8')).at(-1)?.mode === 'cancel')
+      await panelButton('取消')
+      await until('upstream enhancement aborted', () => require('node:fs').existsSync(join(output, 'prompt-enhance-aborted')), 10000)
+      assert.equal(await draft(), original)
+      await until('enhancement dialog closed', () => harness.executeJavaScript(`!document.querySelector('.dsh-pe-panel')`))
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'A', modifiers: ['meta'] })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'A', modifiers: ['meta'] })
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'BACKSPACE' })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'BACKSPACE' })
+      console.log('CANDIDATE_PROMPT_ENHANCE_PASSED')
+    }
     // File navigation/preview belongs to Core's session-scoped native panel.
     // Its interaction coverage lives in the Core sidebar suites; this Shell
     // smoke keeps the session blank and never sends fixture credentials to a model.
