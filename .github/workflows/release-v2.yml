@@ -347,16 +347,19 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Prepare historical Runtime for migration checks
-        shell: bash
+        shell: pwsh
         run: |
-          node --input-type=module <<'NODE'
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:PATH = "$env:WINDIR\System32;$env:PATH"
+          @'
           import { appendFileSync } from 'node:fs'
           import { join } from 'node:path'
           import { prepareLockedCoreRuntime } from './scripts/prepare-core-runtime.mjs'
           const destination = join(process.env.RUNNER_TEMP, 'previous-core-runtime')
           await prepareLockedCoreRuntime({ runtimeLockPath: 'core-runtime.previous.lock.json', destination })
           appendFileSync(process.env.GITHUB_ENV, `INSIGHT_PREVIOUS_CORE_RUNTIME=${destination}\n`)
-          NODE
+          '@ | node --input-type=module
       - name: Build and verify Windows package
         shell: pwsh
         env:
