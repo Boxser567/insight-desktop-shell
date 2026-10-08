@@ -32,15 +32,32 @@ export function mountHarnessThemeSync(options: TitlebarLayoutMountOptions): void
   const { document, ipcRenderer } = options
   if (!document.body) return
 
-  syncTheme(document, ipcRenderer)
-  const themeObserver = new MutationObserver(() => syncTheme(document, ipcRenderer))
+  let lastIsDark: boolean | undefined
+  let lastSource: string | undefined
+  const syncTheme = (): void => {
+    const isDark = documentIsDark(document)
+    const source = document.documentElement.getAttribute('data-ds-theme-source')
+    const themeSource = source === 'light' || source === 'dark' || source === 'system'
+      ? source
+      : undefined
+    if (isDark === lastIsDark && themeSource === lastSource) return
+    lastIsDark = isDark
+    lastSource = themeSource
+    void ipcRenderer.invoke('desktop-titlebar:set-theme', isDark, themeSource).catch((error: unknown) => {
+      console.warn('[desktop-titlebar] unable to synchronize native theme', error)
+    })
+  }
+  syncTheme()
+  const themeObserver = new MutationObserver(syncTheme)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-ds-theme-source']
+  })
   themeObserver.observe(document.body, {
     attributes: true,
     attributeFilter: ['data-ds-dark-theme', 'class', 'style']
   })
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    syncTheme(document, ipcRenderer)
-  })
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme)
 }
 
 function installLayout(document: Document): void {
@@ -128,13 +145,6 @@ function trackSidebarLayout(document: Document): void {
   const observer = new MutationObserver(sync)
   observer.observe(document.documentElement, { childList: true, subtree: true })
   sync()
-}
-
-function syncTheme(document: Document, ipcRenderer: Pick<IpcRenderer, 'invoke'>): void {
-  const isDark = documentIsDark(document)
-  void ipcRenderer.invoke('desktop-titlebar:set-theme', isDark).catch((error: unknown) => {
-    console.warn('[desktop-titlebar] unable to synchronize native theme', error)
-  })
 }
 
 export function documentIsDark(document: Document): boolean {

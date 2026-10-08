@@ -153,7 +153,7 @@ describe('Windows titlebar menu', () => {
     expect(main).toContain('return { isDark: resolvedHarnessThemeDark }')
     expect(main).toContain("windowsMenuView.webContents.send('desktop-titlebar:theme-changed', isDark)")
     expect(preload).toContain("attributeFilter: ['data-ds-dark-theme', 'class', 'style']")
-    expect(preload).toContain("ipcRenderer.invoke('desktop-titlebar:set-theme', isDark)")
+    expect(preload).toContain("ipcRenderer.invoke('desktop-titlebar:set-theme', isDark, themeSource)")
     expect(harnessPreload).toContain("if (process.platform === 'win32') mountWindowsTitlebarLayout")
     expect(harnessPreload).toContain('else mountHarnessThemeSync(themeOptions)')
     expect(main).toContain('assertTrustedHarnessEvent(event)')

@@ -115,6 +115,44 @@ async function run() {
   assert.notEqual(updateState.background, 'rgb(32, 32, 36)')
   await save('update-light', update)
   console.log('CANDIDATE_SECONDARY_THEME_PASSED')
+  if (process.env.INSIGHT_SMOKE_THEME_STABILITY === '1') {
+    const observations = []
+    const nativeChanges = []
+    const recordNativeChange = () => nativeChanges.push({ source: nativeTheme.themeSource, dark: nativeTheme.shouldUseDarkColors })
+    nativeTheme.on('updated', recordNativeChange)
+    try {
+      await harness.executeJavaScript(`document.querySelector('[data-insight-desktop-account] button').click()`)
+      await until('account menu for theme regression', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-account-menu]')`))
+      await harness.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(x=>x.textContent==='设置').click()`)
+      await until('settings for theme regression', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-client-settings]')`))
+      await harness.executeJavaScript(`[...document.querySelectorAll('button')].find(x=>x.textContent?.trim()==='通用设置')?.click()`)
+      await until('appearance for theme regression', () => harness.executeJavaScript(`[...document.querySelectorAll('button')].some(x=>x.textContent?.trim()==='浅色')`))
+      for (const [source, label] of [['light', '浅色'], ['dark', '深色'], ['system', '跟随系统'], ['light', '浅色']]) {
+        await harness.executeJavaScript(`[...document.querySelectorAll('button')].find(x=>x.textContent?.trim()===${JSON.stringify(label)}).click()`)
+        await until(`native ${source} preference`, () => nativeTheme.themeSource === source)
+        await sleep(1000)
+        const expected = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+        await until(`${source} secondary windows`, async () => (await inspect(about)).theme === expected && (await inspect(update)).theme === expected)
+        const before = nativeChanges.length
+        for (let i = 0; i < 30; i++) {
+          assert.equal(nativeTheme.themeSource, source)
+          assert.equal((await inspect(about)).theme, expected)
+          assert.equal((await inspect(update)).theme, expected)
+          assert.equal(await harness.executeJavaScript(`document.body.hasAttribute('data-ds-dark-theme')`), expected === 'dark')
+          await sleep(100)
+        }
+        const idleNativeChanges = nativeChanges.length - before
+        assert.equal(idleNativeChanges, 0, `${source} theme must remain stable while idle`)
+        observations.push({ source, palette: expected, samples: 30, idleNativeChanges })
+      }
+      harness.sendInputEvent({ type: 'keyDown', keyCode: 'ESC' })
+      harness.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
+      writeFileSync(join(output, 'theme-stability.json'), JSON.stringify(observations, null, 2))
+      console.log('CANDIDATE_THEME_STABILITY_PASSED', JSON.stringify(observations))
+    } finally {
+      nativeTheme.removeListener('updated', recordNativeChange)
+    }
+  }
   const catalog = await harness.executeJavaScript(`fetch('/api/session/modelCatalog', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session/modelCatalog',payload:{args:{}}})}).then(r=>r.json())`)
   assert.equal(catalog.result.ok, true)
   assert.equal(catalog.result.value.default.provider, 'yinsai-gateway')
