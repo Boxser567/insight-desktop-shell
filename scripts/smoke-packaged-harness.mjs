@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process'
 import { gte } from 'semver'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms))
 
@@ -236,15 +237,36 @@ export async function smokePackagedHarness(resourceRoot) {
       verbatimSymlinks: true
     })
     await mkdir(workspacePath)
+    // Cordis retains import errors in its logger instead of writing them to stderr.
+    // Attach an error sink only in this isolated verification process, before boot.
+    const diagnostics = join(temporaryRoot, 'startup-diagnostics.mjs')
+    const cordis = createRequire(paths.dshEntry).resolve('@deepseek-ai/cordis')
+    await writeFile(diagnostics, `
+      import { LoggerService } from ${JSON.stringify(pathToFileURL(cordis).href)}
+      import { inspect } from 'node:util'
+      const registered = new WeakSet()
+      const original = LoggerService.prototype.exporter
+      LoggerService.prototype.exporter = function (exporter) {
+        const dispose = original.call(this, exporter)
+        if (!registered.has(this)) {
+          registered.add(this)
+          original.call(this, { export: message => {
+            if (message.type === 'error') process.stderr.write('[smoke startup] ' + message.name + ': ' + inspect(message.args, { depth: 6, colors: false }) + '\\n')
+          } })
+        }
+        return dispose
+      }
+    `)
 
     await probePackagedHarness({
       nodeExecutable: paths.nodeExecutable,
       requiresLaunchToken: gte(runtimeMetadata.core.version, '0.1.2-alpha.1'),
-      buildArguments: (port) => buildPackagedHarnessArguments(paths, port),
+      buildArguments: (port) => ['--import', diagnostics, ...buildPackagedHarnessArguments(paths, port)],
       workingDirectory: workspacePath,
       environment: {
         ...process.env,
         DSH_HOME: dshHome,
+        INSIGHT_BUNDLED_NODE_PATH: paths.nodeExecutable,
         NO_COLOR: '1',
         PNPM_MAX_WORKERS: '1',
         npm_config_child_concurrency: '1',
