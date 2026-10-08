@@ -113,4 +113,6 @@ npm run typecheck
 - `/private/tmp/insight-candidate-recovery-roundtrip-20261008.json`：两个实际 Runtime 目录间的 v4 恢复续写，及真实 v3 历史迁移/保留。
 - 新建历史测试只在明确提供旧 Runtime 时运行；未提供时不能声称 CI 覆盖了历史迁移。
 - 本地六个针对性测试文件、34 项测试通过（含明确指定的旧 Runtime）；桌面类型检查通过。未声称完成原生三平台正式构建或人工覆盖安装。
-- 当前尚未更新公开 lock、合并主分支、创建正式桌面 tag 或改动生产 Candidate/Stable 指针。
+- 公开 Runtime lock 已更新，PR #19 已合入主分支；不可变桌面 tag `v1.0.4` 固定 `1c443ea3ee2eb7d1f8eee9e0f8205271d1a44713`。生产 Candidate/Stable 指针尚未改动。
+- 首轮正式构建 `37797536655` 在 Windows 历史 Runtime 解压时失败，整轮已取消。PR #20 只修复执行环境，改用 PowerShell/System32 tar；定向 9 项测试、类型检查及 PR CI 通过，未移动桌面 tag。
+- 全平台重试 `37799146046` 整轮成功，三平台实际包的历史迁移/恢复续写/重启读取与两种 macOS 签名公证全部通过。三目标 OSS 上传及 CDN 完整长度/摘要/安装器 HEAD/Range 校验通过，生产四个签名指针的完整字节未变；人工验收仍待完成。结果见 [1.0.4 恢复基线验收记录](../../releases/1.0.4-recovery-acceptance.md)。
