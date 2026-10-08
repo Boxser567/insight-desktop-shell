@@ -102,7 +102,7 @@ jobs:
           try {
             await symlink(resolve('build/core-runtime'), join(root, 'runtime'), 'junction')
             await symlink(resolve('build/bundled-profile'), join(root, 'bundled-profile'), 'junction')
-            for (const file of ['harness-node-entry.mjs', 'dsh-desktop.patch.yml']) await copyFile(join('build', file), join(root, file))
+            for (const file of ['harness-node-entry.mjs', 'dsh-desktop.patch.yml', 'windows-hidden-console.mjs', 'windows-child-process-hide.mjs']) await copyFile(join('build', file), join(root, file))
             await smokePackagedHarness(root)
           } finally { await rm(root, { recursive: true, force: true }) }
           NODE
