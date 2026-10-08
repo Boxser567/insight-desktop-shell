@@ -248,8 +248,8 @@ export async function smokePackagedHarness(resourceRoot) {
       const original = LoggerService.prototype.exporter
       LoggerService.prototype.exporter = function (exporter) {
         const dispose = original.call(this, exporter)
-        if (!registered.has(this)) {
-          registered.add(this)
+        if (!registered.has(this.exporters)) {
+          registered.add(this.exporters)
           original.call(this, { export: message => {
             if (message.type === 'error') process.stderr.write('[smoke startup] ' + message.name + ': ' + inspect(message.args, { depth: 6, colors: false }) + '\\n')
           } })
@@ -261,7 +261,7 @@ export async function smokePackagedHarness(resourceRoot) {
     await probePackagedHarness({
       nodeExecutable: paths.nodeExecutable,
       requiresLaunchToken: gte(runtimeMetadata.core.version, '0.1.2-alpha.1'),
-      buildArguments: (port) => ['--import', diagnostics, ...buildPackagedHarnessArguments(paths, port)],
+      buildArguments: (port) => ['--import', pathToFileURL(diagnostics).href, ...buildPackagedHarnessArguments(paths, port)],
       workingDirectory: workspacePath,
       environment: {
         ...process.env,

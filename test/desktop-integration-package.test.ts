@@ -18,7 +18,12 @@ describe('desktop integration package', () => {
       '@deepseek-ai/dsh-api-workspace-files'
     ]))
     expect(manifest.publishConfig).toBeUndefined()
-    expect(manifest.peerDependencies).toBeUndefined()
+    expect(manifest.peerDependencies).toEqual({
+      '@deepseek-ai/dsh-llm': '0.2.1-alpha.1',
+      '@deepseek-ai/dsh-llm-deepseek': '0.2.1-alpha.1',
+      '@deepseek-ai/dsh-llm-pi-ai': '0.2.1-alpha.1',
+      '@deepseek-ai/dsh-web-search-deepseek': '0.2.1-alpha.1'
+    })
   })
 
   it('replaces the official brand and inserts one product integration row', async () => {

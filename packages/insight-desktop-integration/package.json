@@ -9,6 +9,12 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-llm-deepseek": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-web-search-deepseek": "0.2.1-alpha.1"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

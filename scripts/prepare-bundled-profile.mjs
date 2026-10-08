@@ -320,3 +320,11 @@ if (await templateIsReady(communityPlugins)) {
     await rm(temporaryDirectory, { recursive: true, force: true })
   }
 }
+
+// Windows junctions retain absolute targets when electron-builder copies them.
+// Ship the workspace bundle as files so installed profiles do not refer to the build machine.
+const desktopIntegrationModules = join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE)
+await rm(desktopIntegrationModules, { recursive: true, force: true })
+await cp(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration'), desktopIntegrationModules, {
+  recursive: true
+})
