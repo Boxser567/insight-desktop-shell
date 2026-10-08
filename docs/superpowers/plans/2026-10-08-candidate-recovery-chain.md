@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 公网 Stable `1.0.3` 三目标读取整体 Data Schema `1..1`；旧 Core `5f668026071a5c2f2a0796aff1900be62b0aebe4` 写 Session v3。
+- 调研起点公网 Stable `1.0.3` 三目标读取整体 Data Schema `1..1`；旧 Core `5f668026071a5c2f2a0796aff1900be62b0aebe4` 写 Session v3。
 - 新 Core `25a49c53c4e0c003a8469ee243aa5d1365df80cd` / `0.2.1-alpha.1` 写 Session v4；本组合整体 Data Schema 为 2。
 - Schema 2 不是 Session 格式号 4；Profile Schema、账号 Schema 仍为 1。
 - 不修改已发布格式，不覆盖或删除已提交的 v3 generation，不将保留的旧 generation 当作自动降级入口。
@@ -94,9 +94,9 @@ npm run typecheck
 - [x] 正式构建改用与内测一致的 Node 24，保留正式 App ID、签名、公证和 immutable Tag/Draft 检查。
 - [x] 配置三目标最终包内身份/文件校验、`smoke-packaged-harness.mjs` 与恢复演练；保存独立报告，不把测试报告当作更新器安装产物。原生实际执行结果随正式安装器构建记录。
 - [x] 按现有 `release-v2.yml` 从主分支构建 `1.0.4` 全平台 Draft，三平台实际包历史迁移/恢复/重启读取全部通过；按 2026-10-09 操作者新决定，不追加人工实测。
-- [ ] 用 `stage-target` 上传三个不可变目标。真实验收通过后，用 `accept-recovery-baseline-target` 写入三个独立签名记录，再以 `promote-recovery-baseline` 建立新 Stable 基线。
-- [ ] 复核公网签名链已指向新基线且三目标读 Schema 2；分配更高最终语义版本 `1.0.5`，构建/投放 Candidate，验证客户端得到新 Stable 完整恢复安装器。
-- [ ] 使用正式 App ID 的测试用户数据，完成 Candidate→恢复基线覆盖安装→Candidate 再安装；不能删除 userData 来使验收通过。
+- [x] 三个不可变目标已上传；按本轮操作者接受现有证据的决定，三个 `accept-recovery-baseline-target` 均成功，`promote-recovery-baseline` 已建立 Stable 1.0.4。公网签名链和三目标读 Schema 1..2 已验证。
+- [x] 1.0.5 tag 固定 `53fd15e`，三平台原生构建及签名清单整轮成功；Candidate 投放重试成功，三指针 active 1.0.5，Stable 1.0.4 字节未变。实际客户端三目标公网解析及恢复兼容检查均通过。
+- 本轮按操作者决定不追加正式 App ID 的人工覆盖安装往返实测；使用三平台真实 Runtime 的历史迁移→恢复续写→再次读取与现有 Dev 实测作为接受依据。没有把人工覆盖安装记为通过。
 
 首次格式升级需要独立基线入口：旧 Stable 不可读新数据时，现有 Candidate→Stable 路径形成循环依赖。
 新入口只处理超出旧 Stable 读取范围的数据格式升级，绑定旧 Stable 信封摘要与三目标人工验收，
@@ -120,6 +120,8 @@ npm run typecheck
 - `/private/tmp/insight-candidate-recovery-roundtrip-20261008.json`：两个实际 Runtime 目录间的 v4 恢复续写，及真实 v3 历史迁移/保留。
 - 新建历史测试只在明确提供旧 Runtime 时运行；未提供时不能声称 CI 覆盖了历史迁移。
 - 本地六个针对性测试文件、34 项测试通过（含明确指定的旧 Runtime）；桌面类型检查通过。未声称完成原生三平台正式构建或人工覆盖安装。
-- 公开 Runtime lock 已更新，PR #19 已合入主分支；不可变桌面 tag `v1.0.4` 固定 `1c443ea3ee2eb7d1f8eee9e0f8205271d1a44713`。生产 Candidate/Stable 指针尚未改动。
+- 公开 Runtime lock 已更新，PR #19 已合入主分支；不可变桌面 tag `v1.0.4` 固定 `1c443ea3ee2eb7d1f8eee9e0f8205271d1a44713`。当时生产 Candidate/Stable 指针尚未改动。
 - 首轮正式构建 `37797536655` 在 Windows 历史 Runtime 解压时失败，整轮已取消。PR #20 只修复执行环境，改用 PowerShell/System32 tar；定向 9 项测试、类型检查及 PR CI 通过，未移动桌面 tag。
-- 全平台重试 `37799146046` 整轮成功，三平台实际包的历史迁移/恢复续写/重启读取与两种 macOS 签名公证全部通过。三目标 OSS 上传及 CDN 完整长度/摘要/安装器 HEAD/Range 校验通过，生产四个签名指针的完整字节未变；人工验收仍待完成。结果见 [1.0.4 恢复基线验收记录](../../releases/1.0.4-recovery-acceptance.md)。
+- 全平台重试 `37799146046` 整轮成功，三平台实际包的历史迁移/恢复续写/重启读取与两种 macOS 签名公证全部通过。三目标 OSS 上传及 CDN 完整长度/摘要/安装器 HEAD/Range 校验通过，该次上传结束时生产四个签名指针的完整字节未变。2026-10-09 按操作者接受现有证据的决定，三目标签名接受及基线推广均成功，Stable 已为 1.0.4；本轮不追加人工实测。结果见 [1.0.4 恢复基线验收记录](../../releases/1.0.4-recovery-acceptance.md)。
+
+- 1.0.5 三平台构建 `37811109175` 第三次执行成功，Candidate 发布 `37818900436` 第二次执行成功；实际客户端公网解析得到三个对应 Stable 1.0.4 恢复安装器。结果见 [1.0.5 Candidate 发布记录](../../releases/1.0.5.md)。
