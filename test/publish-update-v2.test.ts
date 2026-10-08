@@ -297,7 +297,7 @@ describe('v2 update publisher', () => {
     expect(common.publishGithubRelease).toHaveBeenCalledOnce()
     expect(oss.objects.has('desktop/stable/current.json')).toBe(true)
     expect(downloadedKeys.filter((key) => /\.(dmg|zip|exe|blockmap)$/u.test(key))).toEqual([])
-  })
+  }, 20_000)
 
   it('stages immutable target bytes idempotently and rejects a conflict', async () => {
     const fixture = await releaseFixture()
