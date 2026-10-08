@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { parse } from 'yaml'
 import { prepareV2Draft } from '../scripts/prepare-update-v2-draft.mjs'
 import { uploadV2Target } from '../scripts/upload-update-v2-target.mjs'
 
@@ -113,6 +114,17 @@ describe('release v2 workflow contract', () => {
     expect(workflow).not.toContain('--clobber')
     expect(workflow).not.toContain('OSS_ACCESS_KEY')
     expect(workflow).not.toContain('package:candidate:')
+  })
+
+  it('uses native Windows tar for historical Runtime extraction', async () => {
+    const workflow = parse(await readFile(workflowPath, 'utf8'))
+    const step = workflow.jobs['win32-x64'].steps.find((step: { name?: string }) =>
+      step.name === 'Prepare historical Runtime for migration checks'
+    )
+    expect(step.shell).toBe('pwsh')
+    expect(step.run).toContain('$env:PATH = "$env:WINDIR\\System32;$env:PATH"')
+    expect(step.run).toContain('$PSNativeCommandUseErrorActionPreference = $true')
+    expect(step.run).toContain("'@ | node --input-type=module")
   })
 
   it('creates the immutable Tag and Draft once above the authoritative floor', async () => {
