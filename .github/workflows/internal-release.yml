@@ -137,6 +137,13 @@ jobs:
           assert.deepEqual(runtime.core, lock.core)
           assert.equal(manifest.checksums.archiveSha256, lock.targets[process.env.INTERNAL_TARGET].sha256)
           assert.equal(read(join(resources, 'bundled-profile/web/node_modules/dsh-prompt-enhance/package.json')).version, '0.2.7')
+          for (const file of ['package.json', 'cordis.patch.yml', 'lib/index.js', 'lib/client.js']) {
+            const expected = createHash('sha256').update(readFileSync(join('packages/insight-desktop-integration', file))).digest('hex')
+            for (const directory of ['packages/insight-desktop-integration', 'node_modules/@insight-ai/desktop-integration']) {
+              const actual = createHash('sha256').update(readFileSync(join(resources, 'bundled-profile/web', directory, file))).digest('hex')
+              assert.equal(actual, expected, `Packaged desktop integration mismatch: ${directory}/${file}`)
+            }
+          }
           const files = readdirSync('dist-internal').filter(name => /\.(dmg|zip|exe|blockmap)$/.test(name))
           assert.ok(files.length > 0)
           const checksums = files.map(name => `${createHash('sha256').update(readFileSync(join('dist-internal', name))).digest('hex')}  ${name}`)

@@ -209,7 +209,8 @@ export async function probePackagedHarness({
     }
     return { stdout: redactLaunchTokens(stdout), stderr: redactLaunchTokens(stderr) }
   } catch (error) {
-    throw new Error(redactLaunchTokens(error instanceof Error ? error.message : String(error)))
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(redactLaunchTokens(`${message}\n${output()}`))
   } finally {
     await stopProcess(child)
   }
