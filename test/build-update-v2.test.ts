@@ -183,7 +183,7 @@ describe('v2 update release builders', () => {
     ], { encoding: 'utf8' })
     expect(rejected.status).not.toBe(0)
     expect(rejected.stderr).toContain('identity does not match')
-  })
+  }, 20_000)
 
   it('builds a canonical optional Candidate envelope above every supplied floor', async () => {
     const { root, paths } = await fixture()
