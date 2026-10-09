@@ -10,7 +10,8 @@ type SkillPickerProps = PropsRuntime<'conversation.input.left'> & PropsLocale<'i
 }
 
 /** Selection is derived from the visible draft, never retained after sending. */
-export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: SkillPickerProps) {
+export function SkillPicker({ sessionId, useSession, useInput, inputActions, catalog, t }: SkillPickerProps) {
+  const historyFailed = useSession(session => session.openState === 'error')
   const draft = useInput((input: InputState) => {
     let text = input.draft
     // Reference labels can contain slash text; only editable text selects skills.
@@ -36,9 +37,9 @@ export function SkillPicker({ sessionId, useInput, inputActions, catalog, t }: S
     refresh()
     return () => { alive = false; off() }
   }, [catalog, sessionId])
-  return <SkillPickerMenu key={sessionId} skills={state.sessionId === sessionId ? state.skills : []}
-    catalogAvailable={state.sessionId === sessionId && state.available} selected={selectedSkillNames(draft)}
-    disabled={locked} onSelect={name => inputActions.toggleSkill(name)} t={t} />
+  return <SkillPickerMenu key={sessionId} skills={!historyFailed && state.sessionId === sessionId ? state.skills : []}
+    catalogAvailable={!historyFailed && state.sessionId === sessionId && state.available} selected={selectedSkillNames(draft)}
+    historyFailed={historyFailed} disabled={locked} onSelect={name => inputActions.toggleSkill(name)} t={t} />
 }
 
 type MenuProps = PropsLocale<'insightDesktop'> & {
@@ -46,11 +47,12 @@ type MenuProps = PropsLocale<'insightDesktop'> & {
   catalogAvailable: boolean
   selected: readonly string[]
   disabled?: boolean
+  historyFailed?: boolean
   onSelect(id: string): void
 }
 
 /** Searchable draft-backed multiselect, using native skill names. */
-export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, onSelect, t }: MenuProps) {
+export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, historyFailed, onSelect, t }: MenuProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -122,9 +124,9 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
   return <>
     <button ref={trigger} type="button" data-insight-skill-trigger aria-haspopup="dialog" aria-expanded={open}
       aria-controls={open ? `${id}-panel` : undefined} disabled={disabled}
-      title={t('skill.title')} onClick={toggle}>
+      title={t(historyFailed ? 'skill.historyUnavailable' : 'skill.title')} onClick={toggle}>
       <span data-insight-skill-icon aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 9.8 6.2 14.5 8 9.8 9.8 8 14.5 6.2 9.8 1.5 8 6.2 6.2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
-      <span data-insight-skill-label>{selectedCount ? `${t('skill.selected')} ${selectedCount}` : t('skill.placeholder')}</span>
+      <span data-insight-skill-label>{historyFailed ? t('skill.unavailableLabel') : selectedCount ? `${t('skill.selected')} ${selectedCount}` : t('skill.placeholder')}</span>
       <span data-insight-skill-chevron aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.25 7 9.25 11 5.25" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg></span>
     </button>
     {open && createPortal(<div ref={panel} id={`${id}-panel`} role="dialog" aria-label={t('skill.title')}
@@ -153,7 +155,7 @@ export function SkillPickerMenu({ skills, catalogAvailable, selected, disabled, 
           <div id={`${id}-${skill.name}-description`} data-insight-skill-description title={skillShortDescription(skill)}>{skillShortDescription(skill)}</div>
         </div>)}
       </div>
-      {(!catalogAvailable || items.length === 0) && <div role="status" data-insight-skill-empty>{t(catalogAvailable ? 'skill.empty' : 'skill.unavailable')}</div>}
+      {(!catalogAvailable || items.length === 0) && <div role="status" data-insight-skill-empty>{t(historyFailed ? 'skill.historyUnavailable' : catalogAvailable ? 'skill.empty' : 'skill.unavailable')}</div>}
     </div>, document.body)}
   </>
 }

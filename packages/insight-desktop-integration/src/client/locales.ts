@@ -6,6 +6,8 @@ export type InsightDesktopKey =
   | 'skill.search'
   | 'skill.empty'
   | 'skill.unavailable'
+  | 'skill.historyUnavailable'
+  | 'skill.unavailableLabel'
   | 'account.settings'
   | 'account.signOut'
   | 'account.unavailable'
@@ -27,6 +29,8 @@ export const zh: Record<InsightDesktopKey, string> = {
   'skill.search': '搜索技能',
   'skill.empty': '没有匹配的技能',
   'skill.unavailable': '技能目录暂不可用',
+  'skill.historyUnavailable': '会话历史未成功加载，专家技能暂不可用；技能文件未被删除。',
+  'skill.unavailableLabel': '专家技能（暂不可用）',
   'account.settings': '设置',
   'account.signOut': '退出登录',
   'account.unavailable': '账号信息不可用',
@@ -49,6 +53,8 @@ export const en: Record<InsightDesktopKey, string> = {
   'skill.search': 'Search skills',
   'skill.empty': 'No matching skills',
   'skill.unavailable': 'Skill catalog unavailable',
+  'skill.historyUnavailable': 'Session history failed to load, so expert skills are unavailable. Skill files have not been deleted.',
+  'skill.unavailableLabel': 'Expert Skills (unavailable)',
   'account.settings': 'Settings',
   'account.signOut': 'Sign Out',
   'account.unavailable': 'Account unavailable',
