@@ -78,6 +78,7 @@
     }
   },
   "include": [
-    "src"
+    "src",
+    "tests"
   ]
 }

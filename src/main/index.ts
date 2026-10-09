@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { historyExportText, readHistoryExport, saveHistoryExport } from './session-history-export'
 import { appendFileSync, existsSync, readFileSync, unwatchFile, watchFile } from 'node:fs'
 import { parse } from 'yaml'
 import { mkdir } from 'node:fs/promises'
@@ -1230,6 +1232,9 @@ async function executeDesktopMenuCommand(command: DesktopMenuCommand): Promise<n
     case 'show-harness-log':
       shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
       break
+    case 'export-session-history':
+      await exportSessionHistory()
+      break
     case 'show-about':
       await openAboutWindow()
       break
@@ -1773,6 +1778,31 @@ async function initializeUpdates(): Promise<void> {
   await manager.start()
 }
 
+async function exportSessionHistory(): Promise<void> {
+  const isChinese = harnessLocale() === 'zh'
+  const selected = await dialog.showOpenDialog({
+    title: isChinese ? '选择历史日志（只读）' : 'Select history log (read only)',
+    defaultPath: join(requireCurrentDshHome(), 'sessions'), properties: ['openFile'],
+    filters: [{ name: 'Session JSONL / Zstandard', extensions: ['jsonl', 'zstd'] }],
+  })
+  const source = selected.filePaths[0]
+  if (selected.canceled || !source) return
+  const history = await readHistoryExport(source)
+  const saved = await dialog.showSaveDialog({
+    title: isChinese ? '导出历史副本（请使用新文件名）' : 'Export history copy (use a new filename)',
+    defaultPath: join(app.getPath('documents'), 'session-history-export.txt'),
+    filters: [{ name: isChinese ? '消息文本' : 'Message text', extensions: ['txt'] }, { name: 'JSONL', extensions: ['jsonl'] }],
+  })
+  if (saved.canceled || !saved.filePath) return
+  let contents = history.jsonl
+  if (!saved.filePath.endsWith('.jsonl')) {
+    const catalogs = await import(pathToFileURL(join(coreRuntime().root, 'node_modules', '@deepseek-ai', 'dsh-session-format-catalog', 'lib', 'index.js')).href)
+    contents = historyExportText(history, Number(history.header['version']) <= 3 ? catalogs.historicalSessionFormatCatalog : catalogs.sessionFormatCatalog)
+  }
+  await saveHistoryExport(source, saved.filePath, contents)
+  shell.showItemInFolder(saved.filePath)
+}
+
 function installMenu(): void {
   const isChinese = harnessLocale() === 'zh'
   const authenticated = authManager?.current().kind === 'authenticated'
@@ -1824,6 +1854,11 @@ function installMenu(): void {
         {
           label: isChinese ? '查看 Harness 日志' : 'Show Harness Log',
           click: () => shell.showItemInFolder(join(app.getPath('logs'), 'harness.log'))
+        },
+        {
+          label: isChinese ? '只读导出会话历史…' : 'Export Session History (read only)…',
+          enabled: authenticated,
+          click: () => void exportSessionHistory().catch(showUnexpectedError)
         },
         ...(process.platform === 'darwin'
           ? []

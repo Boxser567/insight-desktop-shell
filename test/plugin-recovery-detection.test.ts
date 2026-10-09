@@ -41,6 +41,30 @@ describe('plugin recovery detection', () => {
     await rm(testDir, { recursive: true, force: true })
   })
 
+  it('attributes a rejected Core dependency to the installed plugin that brought it into the profile', async () => {
+    await writeFile(join(pluginDir, 'package.json'), JSON.stringify({
+      dependencies: { '@deepseek-ai/dsh-tools': '0.1.6-alpha.2' }
+    }))
+    const detection = await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: [
+        '[stderr] dsh: disabling profile plugin row "tools": Plugin @deepseek-ai/dsh-tools@0.1.6-alpha.2 is incompatible with dsh 0.2.1-alpha.1: peerDependencies {}.',
+        '[stderr] dsh: startup failed: 1 required plugin did not activate'
+      ]
+    })
+    expect(detection.plugins).toEqual(['conflicting-plugin'])
+  })
+
+  it('does not offer removal of a Core package without a configured third-party owner', async () => {
+    const detection = await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: [
+        '[stderr] dsh: disabling profile plugin row "tools": Plugin @deepseek-ai/dsh-tools@0.1.6-alpha.2 is incompatible with dsh 0.2.1-alpha.1: peerDependencies {}.'
+      ]
+    })
+    expect(detection.plugins).toEqual([])
+  })
+
   it('attributes a missing local archive in profile repair to its declared plugin', async () => {
     const archive = join(testDir, 'deleted-source.tgz')
     await writeFile(profilePackageJsonPath(testDir), JSON.stringify({

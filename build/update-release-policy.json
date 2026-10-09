@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "releaseVersion": "1.0.5",
+  "releaseVersion": "1.0.6",
   "channel": "stable",
   "mode": "optional",
   "minimumSupportedVersion": "1.0.0-rc.1"
