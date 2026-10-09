@@ -78,6 +78,7 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(bundledClient).toBe(builtClient)
+    expect(existsSync(`${generatedProfileRoot}/packages/insight-desktop-integration/tests`)).toBe(false)
     expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(false)
     expect(manifest.dependencies).not.toHaveProperty('dsh-at-file')
     expect(manifest.dsh.profile.bundles).not.toContain('dsh-at-file')

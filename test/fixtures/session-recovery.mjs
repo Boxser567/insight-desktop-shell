@@ -10,10 +10,11 @@ const { Context } = await load('cordis')
 const { default: Persistence } = await load('dsh-session-persistence-jsonl')
 const { SESSION_FORMAT_VERSION: version } = await load('dsh-session')
 const ctx = new Context()
-const ids = withPrevious === 'true' ? ['migrated-recovery', 'native-recovery'] : ['native-recovery']
+const historicalIds = ['migrated-recovery', 'failed-tool-recovery']
+const ids = withPrevious === 'true' ? [...historicalIds, 'native-recovery'] : ['native-recovery']
 const expectedPath = join(root, 'expected.json')
 
-function turn(start, number, { tools = false, developer = false } = {}) {
+function turn(start, number, { tools = false, developer = false, schedulerFailure = false } = {}) {
   const rows = []
   const add = (type, data, surface = false) => rows.push({
     type, seq: start + rows.length, time: 1000 + start + rows.length, data,
@@ -37,17 +38,20 @@ function turn(start, number, { tools = false, developer = false } = {}) {
     const callId = `call-${number}`
     add('assistant/message', { ...step, stream: [], message: {
       id: `assistant-${number}`, role: 'assistant', source: { kind: 'model', provider: 'recovery-fixture', model: 'recovery-fixture' },
-      content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }]
+      content: [callId, ...(schedulerFailure ? [`advertised-${number}`] : [])]
+        .map(id => ({ type: 'tool-call', id, name: 'read', arguments: '{}' }))
     } }, true)
     add('tool/call', { ...step, callId, name: 'read', arguments: '{}' })
     const content = [{ type: 'text', text: '工具结果：必须完整保留' }]
-    add('tool/result', { ...step, message: {
+    if (!schedulerFailure) add('tool/result', { ...step, message: {
       id: `tool-${number}`, role: version === 3 ? 'user' : 'tool', source: { kind: 'tool', callId },
       ...(version === 3 ? { content: [{ type: 'tool-result', toolCallId: callId, content }] } : { toolCallId: callId, content })
     }, meta: { fixture: 'preserve-tool-card' } }, true)
   }
   add('step/end', step)
-  add('turn/end', { turn: number, reason: { kind: 'completed' } })
+  add('turn/end', { turn: number, reason: schedulerFailure
+    ? { kind: 'error', error: { code: 'UNKNOWN', message: "Cannot read properties of undefined (reading 'prepare')" } }
+    : { kind: 'completed' } })
   return rows
 }
 
@@ -68,14 +72,20 @@ try {
   if (phase === 'previous') {
     assert.equal(version, 3, 'Historical probe requires a real v3 writer')
     await append('migrated-recovery', turn(0, 1, { tools: true }), true)
-    await read('migrated-recovery')
+    await append('failed-tool-recovery', turn(0, 1, { tools: true, schedulerFailure: true }), true)
+    for (const id of historicalIds) await read(id)
   } else {
     if (phase === 'candidate') assert.equal(version, 4, 'Candidate probe requires a real v4 writer')
     const expected = phase === 'candidate' ? {} : JSON.parse(await readFile(expectedPath, 'utf8'))
     for (const id of ids) {
       if (phase === 'candidate') {
-        const inherited = id === 'migrated-recovery' ? await read(id) : []
-        if (inherited.length) {
+        const inherited = historicalIds.includes(id) ? await read(id) : []
+        if (id === 'failed-tool-recovery') {
+          const results = inherited.filter(event => event.type === 'tool/result')
+          assert.deepEqual(results.map(event => event.data.error.code), ['HISTORICAL_TOOL_RESULT_MISSING', 'TOOL_NOT_STARTED'])
+          assert.ok(results.every(event => event.data.message.role === 'tool' && event.data.message.isError === true))
+          assert.match(results[0].data.message.content[0].text, /outcome is unknown/)
+        } else if (inherited.length) {
           const result = inherited.find(event => event.type === 'tool/result')
           assert.equal(result.data.message.role, 'tool')
           assert.equal(result.data.message.content[0].text, '工具结果：必须完整保留')
@@ -96,7 +106,7 @@ try {
     await writeFile(expectedPath, JSON.stringify(expected))
   }
   const sessions = []
-  for (const id of phase === 'previous' ? ['migrated-recovery'] : ids) {
+  for (const id of phase === 'previous' ? historicalIds : ids) {
     const rows = await read(id)
     sessions.push({ id, events: rows.length, toolResults: rows.filter(row => row.type === 'tool/result').length,
       developerMessages: rows.filter(row => row.type === 'developer/message').length,

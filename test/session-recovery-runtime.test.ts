@@ -33,6 +33,9 @@ describe.skipIf(!available)('real Candidate session recovery', () => {
     expect(report.phases.at(-1)?.sessions).toContainEqual(
       expect.objectContaining({ id: 'migrated-recovery', toolResults: 2, developerMessages: 1, turns: 3 })
     )
+    expect(report.phases.at(-1)?.sessions).toContainEqual(
+      expect.objectContaining({ id: 'failed-tool-recovery', toolResults: 3, developerMessages: 1, turns: 3 })
+    )
   }, 30000)
 
   it.runIf(Boolean(previous))('rejects the actual old Core when it tries to recover Candidate v4 data', async () => {

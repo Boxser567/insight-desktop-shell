@@ -246,6 +246,7 @@ async function configureDefaultProfile(directory) {
   await cp(desktopIntegrationSource, packageDestination, {
     recursive: true,
     filter: (source) => !source.includes(`${join('insight-desktop-integration', 'src')}`) &&
+      !source.includes(`${join('insight-desktop-integration', 'tests')}`) &&
       !source.includes(`${join('insight-desktop-integration', 'tsconfig.json')}`)
   })
 

@@ -19,12 +19,16 @@ async function inspect(runtime) {
 }
 
 async function historicalHashes(root) {
-  const directory = join(root, 'sessions/_no-cwd/migrated-recovery')
-  const files = (await readdir(directory)).filter(name => name.startsWith('session.v3.')).sort()
-  assert.ok(files.length > 0, 'Previous writer must persist a v3 generation')
-  return Object.fromEntries(await Promise.all(files.map(async name => [name,
-    createHash('sha256').update(await readFile(join(directory, name))).digest('hex')
-  ])))
+  const entries = []
+  for (const id of ['migrated-recovery', 'failed-tool-recovery']) {
+    const directory = join(root, 'sessions/_no-cwd', id)
+    const files = (await readdir(directory)).filter(name => name.startsWith('session.v3.')).sort()
+    assert.ok(files.length > 0, 'Previous writer must persist a v3 generation')
+    entries.push(...await Promise.all(files.map(async name => [`${id}/${name}`,
+      createHash('sha256').update(await readFile(join(directory, name))).digest('hex')
+    ])))
+  }
+  return Object.fromEntries(entries)
 }
 
 /** Prove Candidate → recovery → Candidate continuation using actual shipped persistence providers. */
