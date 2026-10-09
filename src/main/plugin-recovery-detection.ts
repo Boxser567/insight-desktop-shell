@@ -5,6 +5,7 @@ import {
   extractSlotConflictName
 } from './runtime/harness-runtime'
 import { resolveProfileRecoveryPlugins } from './state/plugin-recovery'
+import { missingLocalArchivePlugins } from './state/local-plugin-import'
 
 export const PLUGIN_RECOVERY_EVIDENCE_TIMEOUT_MS = 1_500
 export const PLUGIN_RECOVERY_EVIDENCE_POLL_MS = 100
@@ -16,6 +17,7 @@ export interface PluginRecoveryDetection {
 
 interface DetectPluginRecoveryOptions {
   dshHome: string
+  message?: string
   initialLogs: readonly string[]
   readLatestLogs?: () => readonly string[]
   excludedPlugins?: readonly string[]
@@ -49,7 +51,10 @@ export async function detectPluginRecovery(
     const logs = mergeLogs(options.initialLogs, options.readLatestLogs?.() ?? [])
     const plugins = await resolveProfileRecoveryPlugins(
       options.dshHome,
-      extractPluginFailureReferences(logs),
+      [
+        ...extractPluginFailureReferences(logs),
+        ...await missingLocalArchivePlugins(options.dshHome, options.message ?? '')
+      ],
       extractDuplicateLoaderEntryId(logs),
       extractSlotConflictName(logs),
       options.excludedPlugins,

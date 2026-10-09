@@ -41,6 +41,47 @@ describe('plugin recovery detection', () => {
     await rm(testDir, { recursive: true, force: true })
   })
 
+  it('attributes a missing local archive in profile repair to its declared plugin', async () => {
+    const archive = join(testDir, 'deleted-source.tgz')
+    await writeFile(profilePackageJsonPath(testDir), JSON.stringify({
+      dependencies: { 'conflicting-plugin': `file:${archive}` },
+      dsh: { profile: { bundles: ['conflicting-plugin'] } }
+    }))
+    const detection = await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: [],
+      message: `ENOENT: no such file or directory, open '${archive}'`
+    })
+    expect(detection.plugins).toEqual(['conflicting-plugin'])
+  })
+
+  it('does not attribute an unrelated missing file to a local archive plugin', async () => {
+    const archive = join(testDir, 'deleted-source.tgz')
+    await writeFile(profilePackageJsonPath(testDir), JSON.stringify({
+      dependencies: { 'conflicting-plugin': `file:${archive}` },
+      dsh: { profile: { bundles: ['conflicting-plugin'] } }
+    }))
+    expect((await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: [],
+      message: `ENOENT: no such file or directory, open '${archive}.other'`
+    })).plugins).toEqual([])
+  })
+
+  it('resolves relative archive dependencies from the profile directory', async () => {
+    const archive = join(testDir, 'profiles', 'web', 'downloads', 'plugin.tgz')
+    await writeFile(profilePackageJsonPath(testDir), JSON.stringify({
+      dependencies: { '@example/plugin': 'file:downloads/plugin.tgz' },
+      dsh: { profile: { bundles: ['@example/plugin'] } }
+    }))
+    const detection = await detectPluginRecovery({
+      dshHome: testDir,
+      initialLogs: [],
+      message: `ENOENT: no such file or directory, open "${archive}"`
+    })
+    expect(detection.plugins).toEqual(['@example/plugin'])
+  })
+
   it('retries unresolved frontend evidence and identifies a plugin from a later console error', async () => {
     let currentTime = 0
     let liveLogs: string[] = []

@@ -46,7 +46,7 @@ import { isHarnessUrl } from './security-policy'
 import { ensureLaunchRoot } from './state/launch-root'
 import { insightDataPath } from './state/insight-data'
 import { initializeBundledProfile } from './state/bundled-profile'
-import { resolveLocalPluginImport } from './state/local-plugin-import'
+import { resolveLocalPluginImport, stageLocalPluginImport } from './state/local-plugin-import'
 import { readRuntimeManifest } from './state/runtime-manifest'
 import { resolveCoreRuntime } from './state/core-runtime'
 import {
@@ -898,8 +898,8 @@ async function importLocalPlugin(): Promise<void> {
   if (picker.canceled || !selectedPath) return
 
   try {
-    const plugin = await resolveLocalPluginImport(selectedPath)
     const dshHome = requireCurrentDshHome()
+    const plugin = await stageLocalPluginImport(dshHome, await resolveLocalPluginImport(selectedPath))
     await showSplash()
     await runtime.stop()
     const result = await addProfilePluginWithDsh(
@@ -1391,6 +1391,7 @@ async function showPluginRecovery(options?: {
       const message = recoveryMessage ?? snapshot.message
       const detection = await detectPluginRecovery({
         dshHome,
+        message,
         initialLogs: recoveryLogs ?? snapshot.logs,
         readLatestLogs: followRendererLogs ? () => rendererPluginFailureLogs : undefined,
         excludedPlugins: removedPlugins,
