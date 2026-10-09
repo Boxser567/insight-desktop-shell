@@ -703,6 +703,14 @@ function extractPluginReferences(
     if (!line.startsWith('[stderr] ')) continue
     const text = line.slice(8)
 
+    // Compatibility admission can reject a hoisted dependency before Loader
+    // imports it. Retain that package so recovery can find its third-party owner.
+    for (const match of text.matchAll(
+      /dsh: (?:disabling profile plugin|skipping profile bundle)[^\r\n]*?: Plugin ((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)@[^\s]+ is incompatible with dsh /gi
+    )) {
+      if (match[1] && accepts(match[1])) plugins.add(match[1])
+    }
+
     // Loader failures are nested (for example the internal `cordis:include`
     // entry wrapping a third-party bundle). Collect every entry in the chain;
     // taking only the first one loses the actual uninstallable owner.
