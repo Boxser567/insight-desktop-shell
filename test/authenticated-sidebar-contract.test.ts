@@ -42,7 +42,7 @@ describe('authenticated single-sidebar integration contract', () => {
     }
   })
 
-  it('prepares a version-eight Profile with Core-owned built-ins', async () => {
+  it('prepares a version-nine Profile with Core-owned built-ins', async () => {
     const prepare = await readFile('scripts/prepare-bundled-profile.mjs', 'utf8')
     const installationOwned = await readFile('src/main/state/installation-owned-bundles.ts', 'utf8')
     const recovery = await readFile('src/main/state/plugin-recovery.ts', 'utf8')
@@ -51,8 +51,9 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(prepare).not.toContain('patchBundledMarket')
     expect(prepare).not.toContain('dshmarket')
     expect(prepare).not.toContain('@changfenhuang/dsh-genui')
-    expect(prepare).toContain('const DEFAULT_PROFILE_VERSION = 8')
+    expect(prepare).toContain('const DEFAULT_PROFILE_VERSION = 9')
     expect(prepare).toContain("const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
+    expect(prepare).toContain("const WORKFLOW_PACKAGE = '@insight-ai/insight-workflow-op'")
     expect(prepare).toContain("manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'")
     expect(prepare).toContain("packages.includes('packages/*')")
     expect(installationOwned).toContain("DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'")
@@ -66,6 +67,8 @@ describe('authenticated single-sidebar integration contract', () => {
     }
     const workspace = await readFile(`${generatedProfileRoot}/pnpm-workspace.yaml`, 'utf8')
     const patch = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/cordis.patch.yml`, 'utf8')
+    const workflowManifest = JSON.parse(await readFile(`${generatedProfileRoot}/packages/insight-workflow-op/package.json`, 'utf8'))
+    const workflowPatch = await readFile(`${generatedProfileRoot}/packages/insight-workflow-op/cordis.patch.yml`, 'utf8')
     const bundledClient = await readFile(`${generatedProfileRoot}/packages/insight-desktop-integration/lib/client.js`, 'utf8')
     const builtClient = await readFile('packages/insight-desktop-integration/lib/client.js', 'utf8')
 
@@ -73,10 +76,14 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(manifest.dependencies.dshmarket).toBeUndefined()
     expect(manifest.dependencies['@changfenhuang/dsh-genui']).toBeUndefined()
     expect(manifest.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
+    expect(manifest.dependencies['@insight-ai/insight-workflow-op']).toBe('workspace:*')
     expect(manifest.dsh.profile.bundles).toContain('@insight-ai/desktop-integration')
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
+    expect(manifest.dsh.profile.bundles).toContain('@insight-ai/insight-workflow-op')
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(9)
     expect(workspace).toContain('packages/*')
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
+    expect(workflowManifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
+    expect(workflowPatch).toContain("name: '@insight-ai/insight-workflow-op'")
     expect(bundledClient).toBe(builtClient)
     expect(existsSync(`${generatedProfileRoot}/packages/insight-desktop-integration/tests`)).toBe(false)
     expect(existsSync(`${generatedProfileRoot}/node_modules/dshmarket/package.json`)).toBe(false)

@@ -7,10 +7,10 @@ import { profilePackageJsonPath, pluginDeclaredEntryIds } from './plugin-recover
 import { prunePatchLayer } from './patch-layer'
 import { removeTree } from './remove-tree'
 import { clearProfileInstallMarker, markProfileInstallComplete } from './profile-install-marker'
-import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
+import { DESKTOP_INTEGRATION_PACKAGE, WORKFLOW_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
-const DEFAULT_PROFILE_VERSION = 8
+const DEFAULT_PROFILE_VERSION = 9
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
@@ -115,11 +115,11 @@ async function copyProfile(source: string, destination: string): Promise<void> {
   }
 }
 
-async function copyDesktopIntegration(source: string, destination: string): Promise<void> {
-  const relativePackage = join('packages', 'insight-desktop-integration')
+async function copyManagedPackage(source: string, destination: string, directoryName: string, packageName: string): Promise<void> {
+  const relativePackage = join('packages', directoryName)
   const sourcePackage = join(source, relativePackage)
   if (!existsSync(join(sourcePackage, 'package.json'))) {
-    throw new Error('The bundled desktop integration package was not found.')
+    throw new Error(`The bundled ${packageName} package was not found.`)
   }
   const destinationPackage = join(destination, relativePackage)
   await mkdir(dirname(destinationPackage), { recursive: true })
@@ -127,7 +127,7 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
   await cp(sourcePackage, destinationPackage, { recursive: true, verbatimSymlinks: true })
 
   // Windows installers flatten the workspace link into a separate installed copy.
-  const installedPackage = join('node_modules', ...DESKTOP_INTEGRATION_PACKAGE.split('/'))
+  const installedPackage = join('node_modules', ...packageName.split('/'))
   const sourceInstalledPackage = join(source, installedPackage)
   if (existsSync(sourceInstalledPackage)) {
     const destinationInstalledPackage = join(destination, installedPackage)
@@ -287,16 +287,22 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'
     changed = true
   }
+  if (manifest.dependencies[WORKFLOW_PACKAGE] !== 'workspace:*') {
+    manifest.dependencies[WORKFLOW_PACKAGE] = 'workspace:*'
+    changed = true
+  }
   manifest.dsh ??= {}
   manifest.dsh.profile ??= {}
   const remaining = (manifest.dsh.profile.bundles ?? []).filter(bundle =>
     bundle !== SIDEBAR_PACKAGE &&
     !RETIRED_PACKAGES.includes(bundle) &&
-    bundle !== DESKTOP_INTEGRATION_PACKAGE
+    bundle !== DESKTOP_INTEGRATION_PACKAGE &&
+    bundle !== WORKFLOW_PACKAGE
   )
   const bundles = [
     ...remaining,
-    DESKTOP_INTEGRATION_PACKAGE
+    DESKTOP_INTEGRATION_PACKAGE,
+    WORKFLOW_PACKAGE
   ]
   if (JSON.stringify(manifest.dsh.profile.bundles ?? []) !== JSON.stringify(bundles)) {
     manifest.dsh.profile.bundles = bundles
@@ -341,7 +347,8 @@ async function restoreManagedProfile(
       }
     }
   }
-  await copyDesktopIntegration(source, destination)
+  await copyManagedPackage(source, destination, 'insight-desktop-integration', DESKTOP_INTEGRATION_PACKAGE)
+  await copyManagedPackage(source, destination, 'insight-workflow-op', WORKFLOW_PACKAGE)
   // Retire the installation-owned sidebar; the Core web app supplies the native UI.
   await removeTree(join(destination, 'node_modules', SIDEBAR_PACKAGE))
   await removeRetiredBundledPackages(destination)
@@ -390,7 +397,7 @@ export async function initializeBundledProfile(
     return true
   }
 
-  if ([4, 5, 6, 7, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
+  if ([4, 5, 6, 7, 8, DEFAULT_PROFILE_VERSION].includes(current.insightDesktop?.defaultProfileVersion ?? 0)) {
     await restoreManagedProfile(
       source,
       destination,

@@ -1,0 +1,721 @@
+/** 工作流工具 DTO；运行时校验与 agent 可见的字段说明见 workflow-schemas.ts。 */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. 基础领域类型
+// ─────────────────────────────────────────────────────────────────────────────
+/** 支持的节点类型 */
+export type NodeType =
+  | BasicNodeType
+  | ToolNodeType;
+/** 基础节点 */
+export type BasicNodeType =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video';
+/** 工具节点 */
+export type ToolNodeType =
+  | 'poseTool'
+  | 'highDefinitionTool';
+export type ImageModelType = 'text_to_image' | 'reference_image_to_image';
+export type VideoModelType =
+  | 'first_last_frame_to_video'
+  | 'image_to_video'
+  | 'reference_image_to_video'
+  | 'text_to_video';
+export type AudioModelType = 'tts' | 'text_to_audio' | 'audio_to_audio';
+export type ModelType = ImageModelType | VideoModelType | AudioModelType;
+/** 可序列化的 JSON 值；工具入参和出参中避免使用 `any` 或 `unknown`。 */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. 持久化与查询数据模型（不直接用作 Agent 创建参数）
+// ─────────────────────────────────────────────────────────────────────────────
+export type ExecutionStatus =
+  | 'running'
+  | 'success'
+  | 'failed';
+export interface NodeTaskInfo {
+  status: ExecutionStatus;
+  errorMsg?: string;
+}
+
+export interface NodeDataBase {
+  title: string;
+  value: string | string[];
+  taskInfo: NodeTaskInfo;
+}
+/** 模型节点的通用已保存参数；需结合模型配置元数据进行业务校验。 */
+export interface BasicNodeParams {
+  model: string;
+  prompt: string;
+  /** 不在具名字段中的模型参数。 */
+  additionalParameters?: JsonObject;
+}
+
+/** 文本节点沿用通用的 model/prompt，并增加资源搜索开关。 */
+export interface TextNodeParams extends BasicNodeParams {
+  search_resource: boolean
+}
+
+export interface ImageNodeParams extends BasicNodeParams {
+  modelType: ImageModelType;
+  aspect_ratio?: string;
+  gen_count?: number;
+  quality?: string;
+  resolution?: string;
+}
+
+/** 视频节点参数 */
+export interface VideoNodeParams extends BasicNodeParams {
+  modelType: VideoModelType;
+  aspect_ratio?: string;
+  duration?: number;
+  enableAudio?: boolean;
+  gen_count?: number;
+  resolution?: string;
+}
+
+/** 音频节点参数 */
+export interface AudioNodeParams extends BasicNodeParams {
+  modelType: AudioModelType;
+  gen_count?: number;
+  seniorParams?: {
+    customMode?: boolean;
+    instrumental?: boolean;
+    styleWeight?: number;
+    vocalGender?: number;
+    weirdnessConstraint?: number;
+  }
+}
+
+export interface NodeBase {
+  id: string;
+  position: Position;
+  /** 由画布渲染层维护的测量尺寸, 默认 400 * 400。 */
+  measured?: Size;
+}
+
+export interface TextNode extends NodeBase {
+  type: 'text';
+  data: NodeDataBase & { params: TextNodeParams };
+}
+
+export interface ImageNode extends NodeBase {
+  type: 'image';
+  data: NodeDataBase & { params: ImageNodeParams };
+}
+
+export interface VideoNode extends NodeBase {
+  type: 'video';
+  data: NodeDataBase & { params: VideoNodeParams };
+}
+
+export interface AudioNode extends NodeBase {
+  type: 'audio';
+  data: NodeDataBase & { params: AudioNodeParams };
+}
+
+export interface PoseToolNode extends NodeBase {
+  type: 'poseTool';
+  data: NodeDataBase & { params?: JsonObject };
+}
+
+export interface HighDefinitionToolNode extends NodeBase {
+  type: 'highDefinitionTool';
+  data: NodeDataBase & { params?: JsonObject };
+}
+/** 节点判别联合类型；根据 `type` 识别对应的数据结构。 */
+export type Node =
+  | TextNode
+  | ImageNode
+  | VideoNode
+  | AudioNode
+  | PoseToolNode
+  | HighDefinitionToolNode;
+export interface Edge {
+  id: string;
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  nodes: Node[];
+  edges: Edge[];
+}
+
+export interface WorkflowSummary {
+  id: string;
+  name: string;
+  nodeCount: number;
+  edgeCount: number;
+}
+
+export interface NodeSummary {
+  id: string;
+  type: NodeType;
+  title: string;
+  position: Position;
+  /** 可使用模型的基础节点可能具有 model（text 也定义了该字段）。 */
+  model?: string;
+  /** 仅图像、视频、音频节点定义了 modelType；具体取值需与节点类型匹配。 */
+  modelType?: ModelType;
+  status: ExecutionStatus;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. 节点能力发现与模型配置
+// ─────────────────────────────────────────────────────────────────────────────
+/** 参数控件元数据；服务端仍须校验模型特有的条件规则。 */
+interface ParameterSchemaBase {
+  label: string;
+}
+
+export interface ChoicesParameterSchema extends ParameterSchemaBase {
+  type: 'choices';
+  choices: Array<{ value: string; label: string }>;
+  default?: string;
+}
+
+export interface NumberParameterSchema extends ParameterSchemaBase {
+  type: 'number';
+  min: number;
+  max: number;
+  step: number;
+  default?: number;
+}
+
+export interface SwitchParameterSchema extends ParameterSchemaBase {
+  type: 'switch';
+  default?: boolean;
+}
+export type ParameterSchema =
+  | ChoicesParameterSchema
+  | NumberParameterSchema
+  | SwitchParameterSchema;
+/** 摘要保留取值约束，只省略选项的展示标签。 */
+export interface ChoicesParameterSchemaSummary extends ParameterSchemaBase {
+  type: 'choices';
+  choices: string[];
+  default?: string;
+}
+
+export type NumberParameterSchemaSummary = NumberParameterSchema;
+export type SwitchParameterSchemaSummary = SwitchParameterSchema;
+export type ParameterSchemaSummary =
+  | ChoicesParameterSchemaSummary
+  | NumberParameterSchemaSummary
+  | SwitchParameterSchemaSummary;
+export interface NodeDefinition {
+  nodeType: NodeType;
+  description: string;
+  /** 使用模型的基础节点可提供支持的模型类型；工具节点可省略。 */
+  supportedModelTypes?: ModelType[];
+}
+
+interface ModelSettingBase {
+  model: string;
+  modelName: string;
+  description: string;
+  maxPrompt: number;
+}
+export type BaseModelSetting = ModelSettingBase & (
+  | { nodeType: 'text'; modelType?: never }
+  | { nodeType: 'image'; modelType: ImageModelType }
+  | { nodeType: 'video'; modelType: VideoModelType }
+  | { nodeType: 'audio'; modelType: AudioModelType }
+);
+/** 模型基本信息、参数控件和默认值。 */
+export type ModelSetting = BaseModelSetting & {
+  /**
+   * 普通参数名到控件定义的映射；键对应 Node.data.params 中的字段。
+   */
+  parameters: Record<string, ParameterSchema>;
+  /**
+   * 高级参数名到控件定义的映射；键对应 Node.data.params.seniorParams 中的字段。
+   */
+  senoirParameters?: Record<string, ParameterSchema>;
+  /**
+   * 一组合法默认值；键对应 data.params 或 data.params.seniorParams 中的字段。
+   */
+  defaultParameters: JsonObject;
+};
+
+/** 模型简要信息；capabilities 保留参数的取值约束。 */
+export type ModelSettingSummary = BaseModelSetting & {
+  capabilities: Record<string, ParameterSchemaSummary>;
+};
+/** 按节点类型获取节点概览及支持的模型方式。 */
+export interface GetNodeDefinitionInput {
+  nodeType: NodeType;
+}
+
+export interface GetNodeDefinitionOutput {
+  /** 成功时返回节点概览；当前 mock 对未知类型直接报错。 */
+  nodeDefinition: NodeDefinition;
+}
+
+/** 搜索条件支持的基础值类型 */
+export type QueryValue = string | number | boolean;
+
+/**
+ * 通用搜索过滤条件。
+ *
+ * - field: 对象访问语法，如 'a.b.c'
+ *
+ * 不同操作符对应不同的值类型：
+ * - eq / ne：相等、不相等
+ * - gt / gte / lt / lte：数值比较
+ * - in / not_in：集合包含、不包含
+ * - exists / not_exists：字段是否存在
+ * - supports：目标是否支持指定值，由业务层定义支持规则
+ */
+export type QueryFilter =
+  | {
+      field: string;
+      operator: 'eq' | 'ne' | 'supports';
+      value: QueryValue;
+    }
+  | {
+      field: string;
+      operator: 'gt' | 'gte' | 'lt' | 'lte';
+      value: number;
+    }
+  | {
+      field: string;
+      operator: 'in' | 'not_in';
+      value: QueryValue[];
+    }
+  | {
+      field: string;
+      operator: 'exists' | 'not_exists';
+    };
+
+/** 结构化查询；filters.all 为 AND，filters.any 为 OR，field 支持点路径。 */
+export interface Query {
+  filters?: {
+    all?: QueryFilter[];
+    any?: QueryFilter[];
+  };
+
+  limit?: number;
+}
+
+export interface QueryModelsInput {
+  /** filters.all 必须按 nodeType 精确筛选；图像、视频、音频模型还需按 modelType 精确筛选。 */
+  query: Query;
+}
+
+export interface QueryModelsOutput {
+  models: ModelSettingSummary[];
+}
+export interface GetModelSettingInput {
+  /** 同样需要 nodeType/modelType 条件；无 model 条件时返回首个匹配设置。 */
+  query: Query;
+}
+
+export interface GetModelSettingOutput {
+  model: ModelSetting;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. 工作流与节点查询（默认返回精简视图）
+// ─────────────────────────────────────────────────────────────────────────────
+export interface CreateWorkflowInput {
+  /** 工作流展示名称；未传入时由服务端提供默认名称。 */
+  name?: string;
+}
+
+export interface CreateWorkflowOutput {
+  workflow: WorkflowSummary;
+}
+
+export interface ListWorkflowsInput {
+  /** 仅按 id、name 字段过滤。 */
+  query?: Query;
+}
+
+export interface ListWorkflowsOutput {
+  workflows: WorkflowSummary[];
+}
+
+export interface GetWorkflowInput {
+  workflowId: string;
+  /** 默认使用 `summary`；只有确实需要时才请求 `full`。 */
+  view?: 'summary' | 'structure' | 'full';
+}
+
+export interface GetWorkflowSummaryOutput {
+  view: 'summary';
+  workflow: WorkflowSummary;
+}
+
+export interface GetWorkflowStructureOutput {
+  view: 'structure';
+  workflow: WorkflowSummary;
+  nodes: NodeSummary[];
+  edges: Edge[];
+}
+
+export interface GetWorkflowFullOutput {
+  view: 'full';
+  workflow: Workflow;
+}
+
+export type GetWorkflowOutput =
+  | GetWorkflowSummaryOutput
+  | GetWorkflowStructureOutput
+  | GetWorkflowFullOutput;
+
+export interface ListNodesInput {
+  workflowId: string;
+  /** 默认返回 `summary` 摘要视图。 */
+  view?: 'summary' | 'full';
+  /** 可按节点字段或 data.params.modelType 等点路径过滤。 */
+  query?: Query;
+}
+
+export interface ListNodesSummaryOutput {
+  view: 'summary';
+  nodes: NodeSummary[];
+}
+
+export interface ListNodesFullOutput {
+  view: 'full';
+  nodes: Node[];
+}
+
+export type ListNodesOutput = ListNodesSummaryOutput | ListNodesFullOutput;
+
+export interface GetNodeInput {
+  workflowId: string;
+  nodeId: string;
+}
+
+export interface GetNodeOutput {
+  node: Node;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Agent 节点创建参数（不要求填写 id、measured 或 taskInfo）
+// ─────────────────────────────────────────────────────────────────────────────
+export interface NodeCreateBase {
+  title?: string;
+  /** 未指定位置时，由服务端自动选择布局位置。 */
+  position?: Position;
+  /** 创建时指定的期望尺寸；与渲染层测得的 measured 并非同一字段，映射由服务端决定。 */
+  size?: Size;
+}
+/** 模型节点通用创建字段。 */
+interface BasicCreateBase extends NodeCreateBase {
+  model: string;
+  prompt?: string;
+}
+
+/** 文本节点创建参数。 */
+export interface TextNodeCreateInput extends BasicCreateBase {
+  type: 'text';
+  search_resource?: boolean
+}
+
+/** 图像节点创建参数。 */
+export interface ImageNodeCreateInput extends BasicCreateBase {
+  type: 'image';
+  modelType: ImageModelType;
+  aspect_ratio?: string;
+  gen_count?: number;
+  quality?: string;
+  resolution?: string;
+}
+
+/** 视频节点创建参数。 */
+export interface VideoNodeCreateInput extends BasicCreateBase {
+  type: 'video';
+  modelType: VideoModelType;
+  aspect_ratio?: string;
+  duration?: number;
+  enableAudio?: boolean;
+  gen_count?: number;
+  resolution?: string;
+}
+
+/** 音频节点创建参数。 */
+export interface AudioNodeCreateInput extends BasicCreateBase {
+  type: 'audio';
+  modelType: AudioModelType;
+  gen_count?: number;
+  seniorParams?: {
+    customMode?: boolean;
+    instrumental?: boolean;
+    styleWeight?: number;
+    vocalGender?: number;
+    weirdnessConstraint?: number;
+  }
+}
+
+export interface PoseToolNodeCreateInput extends NodeCreateBase {
+  type: 'poseTool';
+  parameters?: JsonObject;
+}
+
+export interface HighDefinitionToolNodeCreateInput extends NodeCreateBase {
+  type: 'highDefinitionTool';
+  parameters?: JsonObject;
+}
+
+export type NodeCreateInput =
+  | TextNodeCreateInput
+  | ImageNodeCreateInput
+  | VideoNodeCreateInput
+  | AudioNodeCreateInput
+  | PoseToolNodeCreateInput
+  | HighDefinitionToolNodeCreateInput;
+
+/**
+ * 同一批次（Patch）中的节点引用。
+ * `existing` 引用已存在的节点；`created` 使用 `clientId` 引用本批次中
+ * 更早执行的 `add_node` 操作所创建的节点。各操作按数组顺序处理。
+ */
+export type NodeReference =
+  | { kind: 'existing'; nodeId: string }
+  | { kind: 'created'; clientId: string };
+/**
+ * `set` 替换参数字典中指定的顶层键，`unset` 删除指定的顶层键；
+ * 修改某个嵌套键时，需要提交其所在顶层键的完整替换值。
+ * 模型节点仅用于 additionalParameters，工具节点用于 params。
+ * 同一个键不能同时出现在 set 与 unset 中。
+ */
+export interface ParameterPatch {
+  set?: JsonObject;
+  unset?: string[];
+}
+/**
+ * 未提供的字段保持不变。type 必须与目标节点一致；参数补丁只修改指定键。
+ */
+interface NodeChangesBase {
+  title?: string;
+  position?: Position;
+  size?: Size;
+}
+
+interface ModelNodeChangesBase extends NodeChangesBase {
+  model?: string;
+  prompt?: string;
+  additionalParameters?: ParameterPatch;
+}
+
+export type NodeChanges =
+  | (ModelNodeChangesBase & { type: 'text'; search_resource?: boolean })
+  | (ModelNodeChangesBase & {
+      type: 'image';
+      modelType?: ImageModelType;
+      aspect_ratio?: string;
+      gen_count?: number;
+      quality?: string;
+      resolution?: string;
+    })
+  | (ModelNodeChangesBase & {
+      type: 'video';
+      modelType?: VideoModelType;
+      aspect_ratio?: string;
+      duration?: number;
+      enableAudio?: boolean;
+      gen_count?: number;
+      resolution?: string;
+    })
+  | (ModelNodeChangesBase & {
+      type: 'audio';
+      modelType?: AudioModelType;
+      gen_count?: number;
+      /** 提供时整体替换 seniorParams。 */
+      seniorParams?: AudioNodeParams['seniorParams'];
+    })
+  | (NodeChangesBase & { type: 'poseTool'; parameters?: ParameterPatch })
+  | (NodeChangesBase & { type: 'highDefinitionTool'; parameters?: ParameterPatch });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. 工作流原子化批量修改操作
+// ─────────────────────────────────────────────────────────────────────────────
+export interface AddNodeOperation {
+  op: 'add_node';
+  /** 本批次内唯一的临时标识，可供后续 `add_edge` 引用。 */
+  clientId: string;
+  node: NodeCreateInput;
+}
+
+export interface UpdateNodeOperation {
+  op: 'update_node';
+  nodeId: string;
+  changes: NodeChanges;
+}
+/** 删除节点时，服务端必须在同一事务中一并删除相关连线。 */
+export interface DeleteNodeOperation {
+  op: 'delete_node';
+  nodeId: string;
+}
+
+export interface AddEdgeOperation {
+  op: 'add_edge';
+  /** 本批次内唯一的临时标识，用于对应返回的 edgeId。 */
+  clientId: string;
+  source: NodeReference;
+  target: NodeReference;
+  /** 可省略；当前 mock 使用 output，真实端口由画布服务校验。 */
+  sourceHandle?: string;
+  /** 可省略；当前 mock 使用 input。 */
+  targetHandle?: string;
+}
+
+export interface DeleteEdgeOperation {
+  op: 'delete_edge';
+  edgeId: string;
+}
+
+export interface RenameWorkflowOperation {
+  op: 'rename_workflow';
+  name: string;
+}
+/** 操作判别联合类型；通过不同的 `op` 字段确定操作结构。 */
+export type WorkflowOperation =
+  | AddNodeOperation
+  | UpdateNodeOperation
+  | DeleteNodeOperation
+  | AddEdgeOperation
+  | DeleteEdgeOperation
+  | RenameWorkflowOperation;
+/** 所有操作以事务方式提交；任一校验失败都不得修改原工作流。 */
+export interface ApplyWorkflowPatchInput {
+  workflowId: string;
+  operations: WorkflowOperation[];
+  /** 仅校验操作，不持久化修改，也不分配永久 ID。 */
+  dryRun?: boolean;
+  /** 幂等键：防止请求重试导致重复修改。 */
+  idempotencyKey?: string;
+}
+
+export interface ToolError {
+  /** 供程序识别的错误码，例如 MODEL_NOT_FOUND、INVALID_PORT。 */
+  code: string;
+  message: string;
+  /** 错误字段的 JSON Pointer 路径（如适用）。 */
+  path?: string;
+  /** 发生错误的操作在 `operations` 数组中的索引，从 0 开始。 */
+  operationIndex?: number;
+  retryable?: boolean;
+}
+
+export interface CreatedNodeReference {
+  clientId: string;
+  nodeId: string;
+}
+
+/** 已创建连线的引用。 */
+export interface CreatedEdgeReference {
+  clientId: string;
+  edgeId: string;
+}
+
+export interface ApplyWorkflowPatchOutput {
+  /** 仅全部操作实际提交成功时为 `true`；即使试运行成功，`applied` 仍为 `false`。 */
+  applied: boolean;
+  /** 校验通过时为 `true`，包括试运行场景。 */
+  valid: boolean;
+  createdNodes: CreatedNodeReference[];
+  createdEdges: CreatedEdgeReference[];
+  errors: ToolError[];
+  warnings: ToolError[];
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. 校验与执行生命周期
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ExecuteWorkflowInput {
+  workflowId: string;
+  /** 幂等键：避免传输重试触发重复执行及额外费用。 */
+  idempotencyKey?: string;
+  /** 宿主系统签发的确认令牌；用于需要用户单独授权的执行任务。 */
+  confirmationToken?: string;
+}
+
+export interface ExecuteWorkflowOutput {
+  runId: string;
+  workflowId: string;
+  status: 'queued' | 'running';
+  /** true 表示当前仅为 mock 执行，没有生成真实媒体。 */
+  mock?: boolean;
+}
+
+export interface NodeRunSummary {
+  nodeId: string;
+  status: ExecutionStatus;
+  progress?: number;
+  artifactIds?: string[];
+  error?: ToolError;
+}
+
+export interface WorkflowRun {
+  runId: string;
+  workflowId: string;
+  status: ExecutionStatus;
+  /** 整体进度百分比，取值为 0～100；仅在可计算时提供。 */
+  progress?: number;
+  nodes: NodeRunSummary[];
+  error?: ToolError;
+  /** true 表示当前仅为 mock 运行记录。 */
+  mock?: boolean;
+}
+
+export interface GetWorkflowRunInput {
+  runId: string;
+}
+
+export interface GetWorkflowRunOutput {
+  run: WorkflowRun;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Agent 工具契约
+// ─────────────────────────────────────────────────────────────────────────────
+/** 方法与输入输出类型；agent 的调用顺序和场景示例见 workflow-skill.ts。 */
+export interface WorkflowToolContracts {
+  get_node_definition: { input: GetNodeDefinitionInput; output: GetNodeDefinitionOutput };
+  search_models: { input: QueryModelsInput; output: QueryModelsOutput };
+  get_model_setting: { input: GetModelSettingInput; output: GetModelSettingOutput };
+  create_workflow: { input: CreateWorkflowInput; output: CreateWorkflowOutput };
+  list_workflows: { input: ListWorkflowsInput; output: ListWorkflowsOutput };
+  get_workflow: { input: GetWorkflowInput; output: GetWorkflowOutput };
+  list_nodes: { input: ListNodesInput; output: ListNodesOutput };
+  get_node: { input: GetNodeInput; output: GetNodeOutput };
+  apply_workflow_patch: { input: ApplyWorkflowPatchInput; output: ApplyWorkflowPatchOutput };
+  execute_workflow: { input: ExecuteWorkflowInput; output: ExecuteWorkflowOutput };
+  get_workflow_run: { input: GetWorkflowRunInput; output: GetWorkflowRunOutput };
+}
+/** 工具注册时使用的描述文本，供 Agent 理解功能；应保持简洁明确。 */
+export const WORKFLOW_TOOL_DESCRIPTIONS = {
+  get_node_definition: '按节点类型查询节点概览及支持的模型方式。',
+  search_models: '按查询条件获取指定节点的可用模型列表。',
+  get_model_setting: '按 query 获取模型的参数控件和默认值；无 model 条件时选择首个匹配模型。',
+  create_workflow: '创建空工作流，返回工作流 id。',
+  list_workflows: '按id/名称获取指定工作流的摘要数据。',
+  get_workflow: '获取指定工作流的摘要、图结构或完整数据。',
+  list_nodes: '按查询条件获取指定工作流的节点摘要或完整节点。',
+  get_node: '获取指定工作流节点的完整配置。',
+  apply_workflow_patch: '批量新增、局部更新、删除节点和连线，或重命名工作流。',
+  execute_workflow: '启动非空工作流并返回运行 ID；真实执行可能需要宿主系统授权。',
+  get_workflow_run: '查询工作流执行状态、进度、节点错误及生成产物引用。',
+} as const satisfies Record<keyof WorkflowToolContracts, string>;
