@@ -83,14 +83,17 @@ export function apply(ctx: Context): void {
                 if (typeof input?.workflowId === 'string') calls.set(block.id, input.workflowId)
               } catch { /* Ignore malformed historical tool arguments. */ }
             }
-          } else if (block.type === 'tool-result' && calls.has(block.toolCallId)) {
-            const requestedId = calls.get(block.toolCallId)
-            calls.delete(block.toolCallId)
-            if (block.isError) continue
+          } else if ((block as { type: string }).type === 'tool-result') {
+            // Persisted tool results are present at runtime but omitted from deriveMessages' block type.
+            const resultBlock = block as unknown as { toolCallId: string; isError?: boolean; content: Array<{ type: string; text?: string }> }
+            if (!calls.has(resultBlock.toolCallId)) continue
+            const requestedId = calls.get(resultBlock.toolCallId)
+            calls.delete(resultBlock.toolCallId)
+            if (resultBlock.isError) continue
             let id = requestedId
             if (id === null) {
               try {
-                const result = JSON.parse(block.content.find(part => part.type === 'text')?.text ?? '')
+                const result = JSON.parse(resultBlock.content.find(part => part.type === 'text')?.text ?? '')
                 id = typeof result?.workflow?.id === 'string' ? result.workflow.id : undefined
               } catch { /* Ignore malformed historical tool results. */ }
             }
@@ -116,9 +119,10 @@ export function apply(ctx: Context): void {
     let output: unknown
     switch (name) {
       case 'get_node_definition': {
-        const node = NODE_DEFINITIONS.find(node => node.nodeType === args.nodeType)
-        if (!node) throw new Error('未知节点类型')
-        output = { nodeDefinition: node }; break
+        const types = Array.isArray(args.nodeType) ? args.nodeType : [args.nodeType]
+        const nodeDefinitions = types.map(type => NODE_DEFINITIONS.find(node => node.nodeType === type))
+        if (nodeDefinitions.some(node => !node)) throw new Error('未知节点类型')
+        output = { nodeDefinitions }; break
       }
       case 'search_models': {
         const query = args.query as Query

@@ -177,13 +177,14 @@ const query = object({
 }).describe('结构化查询条件；filters.all 为 AND，filters.any 为 OR。')
 const modelQuery = query.superRefine((value, ctx) => {
   const conditions = value.filters?.all ?? []
-  const node = conditions.find(filter => filter.field === 'nodeType' && filter.operator === 'eq')
-  if (!node || node.operator !== 'eq' || !['text', 'image', 'audio', 'video'].includes(String(node.value))) {
-    ctx.addIssue({ code: 'custom', message: 'filters.all 必须包含基础节点的 nodeType eq 条件' })
-  } else if (node.value !== 'text' && !conditions.some(filter => filter.field === 'modelType' && filter.operator === 'eq')) {
+  const node = conditions.find(filter => filter.field === 'nodeType' && (filter.operator === 'eq' || filter.operator === 'in'))
+  const types = node?.operator === 'eq' ? [node.value] : node?.operator === 'in' ? node.value : []
+  if (!types.length || !types.every(type => ['text', 'image', 'audio', 'video'].includes(String(type)))) {
+    ctx.addIssue({ code: 'custom', message: 'filters.all 必须包含基础节点的 nodeType eq 或 in 条件' })
+  } else if (types.length === 1 && types[0] !== 'text' && !conditions.some(filter => filter.field === 'modelType' && filter.operator === 'eq')) {
     ctx.addIssue({ code: 'custom', message: '图像、视频、音频模型还需要 modelType eq 条件' })
   }
-}).describe('模型查询必须在 filters.all 中用 eq 指定 nodeType；图像、视频、音频还须指定 modelType。')
+}).describe('模型查询在 filters.all 中用 nodeType eq 指定单类，非文本类还需 modelType eq；批量发现用 nodeType in 指定多类。')
 
 const createBase = {
   title: z.string().optional().describe('节点显示标题；省略时由服务端生成。'),
@@ -273,8 +274,8 @@ const listNodesOutput = z.discriminatedUnion('view', [
 
 export const workflowSchemas = {
   get_node_definition: {
-    input: object({ nodeType }).describe('指定一种节点类型。'),
-    output: object({ nodeDefinition }).describe('该节点类型的概览和支持的模型方式。')
+    input: object({ nodeType: z.union([nodeType, z.array(nodeType).min(1)]).describe('单个节点类型，或要一次查询的节点类型列表；查询所有节点时传入全部 NodeType。') }).describe('按一种或多种节点类型查询。'),
+    output: object({ nodeDefinitions: z.array(nodeDefinition).describe('按请求顺序返回的节点概览；单个类型也返回数组。') }).describe('节点概览及支持的模型方式。')
   },
   search_models: {
     input: object({ query: modelQuery }).describe('按节点类型与模型方式查询可用模型。'),
@@ -334,7 +335,7 @@ export const workflowSchemas = {
 } }
 
 export const workflowResultGuides = {
-  get_node_definition: 'nodeDefinition 含 nodeType、description 和可选 supportedModelTypes；选模型后再查询配置。',
+  get_node_definition: 'nodeDefinitions 按请求顺序列出 nodeType、description 和可选 supportedModelTypes；选模型后再查询配置。',
   search_models: 'models 是含 model ID、nodeType、modelType 和 capabilities 的摘要。',
   get_model_setting: 'model 含完整 parameters、senoirParameters 与 defaultParameters；参数控件不是标准 JSON Schema。',
   create_workflow: 'workflow.id 用于后续调用；nodeCount 和 edgeCount 初始为 0。',

@@ -77,6 +77,9 @@ describe('built-in workflow plugin', () => {
     const modelSearch = h.tools.get('workflow_search_models')!.parameters as any
     expect(modelSearch.required).toContain('query')
     expect(modelSearch.properties.query.properties.filters.properties.all.items.oneOf).toHaveLength(4)
+    const definitions = h.tools.get('workflow_get_node_definition')!
+    expect((definitions.parameters.properties as Record<string, any>).nodeType.oneOf).toHaveLength(2)
+    expect((definitions.output.schema.properties as Record<string, any>).nodeDefinitions.type).toBe('array')
     const patch = h.tools.get('workflow_apply_workflow_patch')!
     const properties = patch.parameters.properties as Record<string, any>
     expect(properties.workflowId.description).toContain('工作流 ID')
@@ -102,7 +105,7 @@ describe('built-in workflow plugin', () => {
     expect(h.skillContent).toContain('当前 mock 不能导入')
     await h.ask('帮我生成一段5秒钟的视频')
     expect(h.context()).toBe('')
-    expect(await h.call('get_node_definition', { nodeType: 'video' })).toMatchObject({ nodeDefinition: { nodeType: 'video', description: '视频', supportedModelTypes: ['text_to_video'] } })
+    expect(await h.call('get_node_definition', { nodeType: 'video' })).toMatchObject({ nodeDefinitions: [{ nodeType: 'video', description: '视频', supportedModelTypes: ['text_to_video'] }] })
     const videoQuery = { filters: { all: [{ field: 'nodeType', operator: 'eq', value: 'video' }, { field: 'modelType', operator: 'eq', value: 'text_to_video' }] } }
     expect(await h.call('search_models', { query: videoQuery })).toMatchObject({ models: [{ model: 'mock-video-5s' }] })
     expect(await h.call('search_models', { query: { filters: { all: [...videoQuery.filters.all, { field: 'parameters.duration', operator: 'supports', value: 5 }] } } })).toMatchObject({ models: [{ model: 'mock-video-5s' }] })
@@ -134,6 +137,35 @@ describe('built-in workflow plugin', () => {
     expect(h.context()).toContain('"nodeCount":1')
     h.open([JSON.stringify({ workflowId: created.workflow.id })])
     expect(h.context()).toContain('"nodeCount":1')
+  })
+
+  it('batches node discovery, model discovery and three node additions', async () => {
+    const h = harness()
+    expect(h.skillContent).toContain('operator:"in"')
+    const allTypes = ['text', 'image', 'audio', 'video', 'poseTool', 'highDefinitionTool']
+    expect(await h.call('get_node_definition', { nodeType: allTypes })).toMatchObject({
+      nodeDefinitions: allTypes.map(nodeType => ({ nodeType }))
+    })
+    expect(await h.call('get_node_definition', { nodeType: ['image', 'text'] })).toMatchObject({
+      nodeDefinitions: [{ nodeType: 'image' }, { nodeType: 'text' }]
+    })
+    const query = { filters: { all: [{ field: 'nodeType', operator: 'in', value: ['image', 'text'] }] } }
+    expect(await h.call('search_models', { query })).toMatchObject({
+      models: [{ model: 'mock-text' }, { model: 'mock-image' }]
+    })
+    await expect(h.call('search_models', { query: { filters: { all: [{ field: 'nodeType', operator: 'in', value: ['poseTool', 'image'] }] } } })).rejects.toThrow()
+    const created = await h.call('create_workflow', { name: '图文工作流' }) as { workflow: { id: string } }
+    const patched = await h.call('apply_workflow_patch', {
+      workflowId: created.workflow.id,
+      operations: [
+        { op: 'add_node', clientId: 'image', node: { type: 'image', model: 'mock-image', modelType: 'text_to_image', prompt: '一张海报' } },
+        { op: 'add_node', clientId: 'text-1', node: { type: 'text', model: 'mock-text', prompt: '标题' } },
+        { op: 'add_node', clientId: 'text-2', node: { type: 'text', model: 'mock-text', prompt: '正文' } }
+      ]
+    }) as { applied: boolean; createdNodes: Array<{ clientId: string }> }
+    expect(patched.applied).toBe(true)
+    expect(patched.createdNodes.map(node => node.clientId)).toEqual(['image', 'text-1', 'text-2'])
+    expect(await h.call('get_workflow', { workflowId: created.workflow.id })).toMatchObject({ workflow: { nodeCount: 3 } })
   })
 
   it('reloads workflow context and rejects invalid patches without mutation', async () => {

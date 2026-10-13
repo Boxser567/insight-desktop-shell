@@ -1,4 +1,4 @@
-/** 工作流工具 DTO；运行时校验与 agent 可见的字段说明见 workflow-schemas.ts。 */
+/** 工作流操作协议的类型源文件；维护规范见 ../README.md，Agent 操作步骤见 workflow-skill.ts。 */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. 基础领域类型
@@ -264,14 +264,15 @@ export type ModelSetting = BaseModelSetting & {
 export type ModelSettingSummary = BaseModelSetting & {
   capabilities: Record<string, ParameterSchemaSummary>;
 };
-/** 按节点类型获取节点概览及支持的模型方式。 */
+/** 一次查询一种或多种节点的概览及支持的模型方式。 */
 export interface GetNodeDefinitionInput {
-  nodeType: NodeType;
+  /** 单个节点类型或需要批量查询的节点类型列表。 */
+  nodeType: NodeType | NodeType[];
 }
 
 export interface GetNodeDefinitionOutput {
-  /** 成功时返回节点概览；当前 mock 对未知类型直接报错。 */
-  nodeDefinition: NodeDefinition;
+  /** 按请求顺序返回节点概览；单个类型也返回数组。 */
+  nodeDefinitions: NodeDefinition[];
 }
 
 /** 搜索条件支持的基础值类型 */
@@ -321,7 +322,7 @@ export interface Query {
 }
 
 export interface QueryModelsInput {
-  /** filters.all 必须按 nodeType 精确筛选；图像、视频、音频模型还需按 modelType 精确筛选。 */
+  /** 单类查询使用 nodeType eq，非文本类还需 modelType eq；批量发现使用 nodeType in。 */
   query: Query;
 }
 
@@ -329,7 +330,7 @@ export interface QueryModelsOutput {
   models: ModelSettingSummary[];
 }
 export interface GetModelSettingInput {
-  /** 同样需要 nodeType/modelType 条件；无 model 条件时返回首个匹配设置。 */
+  /** 选定模型后用 nodeType/modelType/model 精确定位；无 model 条件时返回首个匹配设置。 */
   query: Query;
 }
 
@@ -691,7 +692,6 @@ export interface GetWorkflowRunOutput {
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. Agent 工具契约
 // ─────────────────────────────────────────────────────────────────────────────
-/** 方法与输入输出类型；agent 的调用顺序和场景示例见 workflow-skill.ts。 */
 export interface WorkflowToolContracts {
   get_node_definition: { input: GetNodeDefinitionInput; output: GetNodeDefinitionOutput };
   search_models: { input: QueryModelsInput; output: QueryModelsOutput };
@@ -707,8 +707,8 @@ export interface WorkflowToolContracts {
 }
 /** 工具注册时使用的描述文本，供 Agent 理解功能；应保持简洁明确。 */
 export const WORKFLOW_TOOL_DESCRIPTIONS = {
-  get_node_definition: '按节点类型查询节点概览及支持的模型方式。',
-  search_models: '按查询条件获取指定节点的可用模型列表。',
+  get_node_definition: '按一个或多个节点类型批量查询节点概览及支持的模型方式。',
+  search_models: '按查询条件获取一个或多个基础节点类型的可用模型列表。',
   get_model_setting: '按 query 获取模型的参数控件和默认值；无 model 条件时选择首个匹配模型。',
   create_workflow: '创建空工作流，返回工作流 id。',
   list_workflows: '按id/名称获取指定工作流的摘要数据。',
