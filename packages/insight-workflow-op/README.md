@@ -4,9 +4,9 @@
 
 ## 协议维护规范
 
-1. 以 [`src/workflow-agent-tools.type.ts`](src/workflow-agent-tools.type.ts) 作为工作流操作协议的类型源文件。变更工具、字段或领域类型时，先修改这里；每个工具都在 `WorkflowToolContracts` 中用明确的 `input` 和 `output` 类型声明，不用泛型入参或无说明的 `any`。
-2. 同步 [`src/workflow-schemas.ts`](src/workflow-schemas.ts) 中对应的 Zod schema，为方法、每个入参及返回字段写明用途、取值和必要的调用前提。Zod 负责运行时校验，并投影成 dsh 支持的 JSON Schema，供 Agent 组织工具调用。
-3. 同步 [`src/index.ts`](src/index.ts) 的工具实现和描述、[`src/workflow-skill.ts`](src/workflow-skill.ts) 的 Agent 操作指导，以及 mock 和测试。当前没有自动从 TypeScript 类型生成 Zod schema 的步骤，因此只改类型文件不会更新运行时契约。
+1. 工作流工具契约位于 [`../insight-workflow-protocol/`](../insight-workflow-protocol/)；修改工具、字段或领域类型时，先更新协议包的类型和 Zod schema。
+2. 本插件的 [`src/dsh-schema.ts`](src/dsh-schema.ts) 仅将协议 Schema 投影成 dsh 支持的 JSON Schema；工具执行由 [`src/mock-workflows.ts`](src/mock-workflows.ts) 负责。
+3. 同步 [`src/mock-workflows.ts`](src/mock-workflows.ts) 的 mock 实现、[`src/workflow-skill.ts`](src/workflow-skill.ts) 的 Agent 操作指导，以及测试。当前没有自动从 TypeScript 类型生成 Zod schema 的步骤，因此只改类型文件不会更新运行时契约。
 4. 类型文件保留数据结构及字段语义；调用顺序、场景示例和批量调用策略放在 skill 中。README 记录维护约定，避免把操作步骤重复写进类型注释。
 
 ## Agent 调用约定

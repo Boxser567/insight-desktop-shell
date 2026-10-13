@@ -1,0 +1,19 @@
+{
+  "name": "@insight-ai/insight-workflow-protocol",
+  "description": "Platform-independent workflow tool contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": ["lib"],
+  "dependencies": {
+    "zod": "^4.5.4"
+  }
+}

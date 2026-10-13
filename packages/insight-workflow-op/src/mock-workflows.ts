@@ -1,8 +1,50 @@
 import { randomUUID } from 'node:crypto'
+import { workflowSkillContent } from './workflow-skill'
 import type {
   ApplyWorkflowPatchInput, ApplyWorkflowPatchOutput, Edge, ModelSetting, Node, NodeCreateInput,
-  NodeSummary, Workflow, WorkflowOperation, WorkflowSummary
-} from './workflow-agent-tools.type'
+  NodeSummary, Query, QueryFilter, Workflow, WorkflowBackend, WorkflowOperation, WorkflowSummary, WorkflowToolContracts
+} from '@insight-ai/insight-workflow-protocol'
+
+function take<T>(items: T[], limit?: number): T[] {
+  if (limit === undefined) return items
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('limit 必须为正整数')
+  return items.slice(0, limit)
+}
+
+function matchesQuery(value: unknown, query?: Query): boolean {
+  const matches = (filter: QueryFilter): boolean => {
+    const actual = filter.field.split('.').reduce<unknown>((part, key) =>
+      part && typeof part === 'object' && Object.hasOwn(part, key) ? (part as Record<string, unknown>)[key] : undefined, value)
+    switch (filter.operator) {
+      case 'eq': return actual === filter.value
+      case 'ne': return actual !== filter.value
+      case 'gt': return typeof actual === 'number' && actual > filter.value
+      case 'gte': return typeof actual === 'number' && actual >= filter.value
+      case 'lt': return typeof actual === 'number' && actual < filter.value
+      case 'lte': return typeof actual === 'number' && actual <= filter.value
+      case 'in': return filter.value.includes(actual as never)
+      case 'not_in': return !filter.value.includes(actual as never)
+      case 'exists': return actual !== undefined
+      case 'not_exists': return actual === undefined
+      case 'supports': {
+        if (Array.isArray(actual)) return actual.includes(filter.value)
+        if (actual !== null && typeof actual === 'object') {
+          if ('choices' in actual && Array.isArray(actual.choices))
+            return actual.choices.some(choice => typeof choice === 'object' && choice !== null && 'value' in choice ? choice.value === filter.value : choice === filter.value)
+          if ('min' in actual && 'max' in actual && 'step' in actual && typeof filter.value === 'number' &&
+            typeof actual.min === 'number' && typeof actual.max === 'number' && typeof actual.step === 'number') {
+            const steps = (filter.value - actual.min) / actual.step
+            return filter.value >= actual.min && filter.value <= actual.max && Math.abs(steps - Math.round(steps)) < 1e-9
+          }
+          if ('type' in actual && actual.type === 'switch') return typeof filter.value === 'boolean'
+        }
+        return actual === filter.value
+      }
+    }
+  }
+  return (query?.filters?.all ?? []).every(matches) &&
+    (!query?.filters?.any?.length || query.filters.any.some(matches))
+}
 
 export const NODE_TYPES = ['text', 'image', 'audio', 'video', 'poseTool', 'highDefinitionTool'] as const
 export const VIDEO_MODEL: ModelSetting = {
@@ -39,11 +81,91 @@ export function nodeSummary(node: Node): NodeSummary {
   }
 }
 
-export class MockWorkflows {
+export class MockWorkflowBackend implements WorkflowBackend {
+  readonly skillDescription = '当前仅提供 mock，不能产出真实媒体。'
+  readonly toolNotice = '当前返回 mock 数据，不执行真实画布或媒体任务。'
+  readonly skillContent = workflowSkillContent
+
   readonly workflows = new Map<string, Workflow>()
   readonly runs = new Map<string, { runId: string; workflowId: string; status: 'running'; nodes: [] }>()
   readonly patches = new Map<string, ApplyWorkflowPatchOutput>()
   readonly executed = new Map<string, string>()
+
+  async execute<K extends keyof WorkflowToolContracts>(name: K, input: WorkflowToolContracts[K]['input']): Promise<WorkflowToolContracts[K]['output']> {
+    const args = input as Record<string, unknown>
+    let output: unknown
+    switch (name) {
+      case 'get_node_definition': {
+        const types = Array.isArray(args.nodeType) ? args.nodeType : [args.nodeType]
+        const nodeDefinitions = types.map(type => NODE_DEFINITIONS.find(node => node.nodeType === type))
+        if (nodeDefinitions.some(node => !node)) throw new Error('未知节点类型')
+        output = { nodeDefinitions }; break
+      }
+      case 'search_models': {
+        const query = args.query as Query
+        const models = MODELS.filter(model => matchesQuery(model, query))
+          .map(({ parameters, defaultParameters: _defaults, senoirParameters: _senior, ...model }) => ({
+            ...model,
+            capabilities: Object.fromEntries(Object.entries(parameters).map(([key, parameter]) =>
+              [key, parameter.type === 'choices' ? { ...parameter, choices: parameter.choices.map(choice => choice.value) } : parameter]))
+          }))
+        output = { models: take(models, query.limit) }
+        break
+      }
+      case 'get_model_setting': {
+        const model = MODELS.find(model => matchesQuery(model, args.query as Query))
+        if (!model) throw new Error('模型不存在')
+        output = { model }; break
+      }
+      case 'create_workflow': output = { workflow: this.create(args.name as string | undefined) }; break
+      case 'list_workflows': {
+        const query = args.query as Query | undefined
+        const workflows = [...this.workflows.values()].filter(workflow => matchesQuery(workflow, query)).map(summary)
+        output = { workflows: take(workflows, query?.limit) }; break
+      }
+      case 'get_workflow': {
+        const workflow = this.get(args.workflowId as string)
+        output = args.view === 'full' ? { view: 'full', workflow } : args.view === 'structure'
+          ? { view: 'structure', workflow: summary(workflow), nodes: workflow.nodes.map(nodeSummary), edges: workflow.edges }
+          : { view: 'summary', workflow: summary(workflow) }
+        break
+      }
+      case 'list_nodes': {
+        const query = args.query as Query | undefined
+        const found = this.get(args.workflowId as string).nodes.filter(node => matchesQuery(node, query))
+        const nodes = take(found, query?.limit)
+        output = args.view === 'full' ? { view: 'full', nodes } : { view: 'summary', nodes: nodes.map(nodeSummary) }
+        break
+      }
+      case 'get_node': {
+        const node = this.get(args.workflowId as string).nodes.find(node => node.id === args.nodeId)
+        if (!node) throw new Error('节点不存在')
+        output = { node }; break
+      }
+      case 'apply_workflow_patch': output = this.patch(input as ApplyWorkflowPatchInput); break
+      case 'execute_workflow': {
+        const workflow = this.get(args.workflowId as string)
+        const key = typeof args.idempotencyKey === 'string' && `${workflow.id}:${args.idempotencyKey}`
+        const previous = key && this.executed.get(key)
+        if (previous) {
+          const run = this.runs.get(previous)!
+          output = { runId: run.runId, workflowId: run.workflowId, status: run.status, mock: true }
+          break
+        }
+        if (!workflow.nodes.length) throw new Error('空工作流不能执行')
+        const run = { runId: randomUUID(), workflowId: workflow.id, status: 'running' as const, nodes: [] as [] }
+        this.runs.set(run.runId, run)
+        if (key) this.executed.set(key, run.runId)
+        output = { runId: run.runId, workflowId: run.workflowId, status: run.status, mock: true }; break
+      }
+      case 'get_workflow_run': {
+        const run = this.runs.get(args.runId as string)
+        if (!run) throw new Error('运行记录不存在')
+        output = { run: { ...run, mock: true } }; break
+      }
+    }
+    return output as WorkflowToolContracts[K]['output']
+  }
 
   create(name = '未命名工作流'): WorkflowSummary {
     const workflow: Workflow = { id: randomUUID(), name, nodes: [], edges: [] }
@@ -55,6 +177,11 @@ export class MockWorkflows {
     const workflow = this.workflows.get(id)
     if (!workflow) throw new Error(`工作流不存在：${id}（mock 数据仅在当前运行期间可用）`)
     return workflow
+  }
+
+  currentSummary(id: string): WorkflowSummary | undefined {
+    const workflow = this.workflows.get(id)
+    return workflow && summary(workflow)
   }
 
   patch(input: ApplyWorkflowPatchInput): ApplyWorkflowPatchOutput {

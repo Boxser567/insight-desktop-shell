@@ -5,7 +5,7 @@ import type {
   NodeChanges,
   ParameterSchema,
   VideoNodeCreateInput,
-} from '../src/workflow-agent-tools.type';
+} from '@insight-ai/insight-workflow-protocol';
 
 const video = {
   type: 'video',

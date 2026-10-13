@@ -13,6 +13,9 @@ await build({
   format: 'esm',
   platform: 'node',
   target: 'es2022',
+  alias: {
+    '@insight-ai/insight-workflow-protocol': join(root, 'packages', 'insight-workflow-protocol', 'src', 'index.ts')
+  },
   external: ['@deepseek-ai/*'],
   legalComments: 'none'
 })

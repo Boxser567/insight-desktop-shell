@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
-import type { WorkflowToolContracts } from './workflow-agent-tools.type'
+import type { WorkflowToolContracts } from './workflow-agent-tools.type.js'
 
 const object = z.strictObject
 const tagged = <T extends string>(value: T, description: string) => z.literal(value).describe(description)
@@ -237,7 +236,7 @@ const operation = z.discriminatedUnion('op', [
   object({ op: tagged('add_node', '新增节点。'), clientId: id.describe('本批次唯一临时 ID；后续 add_edge 可引用。'), node: nodeCreate }),
   object({ op: tagged('update_node', '修改已有节点。'), nodeId, changes: nodeChanges }),
   object({ op: tagged('delete_node', '删除已有节点。'), nodeId }),
-  object({ op: tagged('add_edge', '新增连线。'), clientId: id.describe('本批次唯一临时连线 ID。'), source: nodeReference, target: nodeReference, sourceHandle: z.string().optional().describe('源输出端口；当前 mock 省略时使用 output。'), targetHandle: z.string().optional().describe('目标输入端口；当前 mock 省略时使用 input。') }),
+  object({ op: tagged('add_edge', '新增连线。'), clientId: id.describe('本批次唯一临时连线 ID。'), source: nodeReference, target: nodeReference, sourceHandle: z.string().optional().describe('源输出端口；省略时由后端解析并校验。'), targetHandle: z.string().optional().describe('目标输入端口；省略时由后端解析并校验。') }),
   object({ op: tagged('delete_edge', '删除已有连线。'), edgeId: id.describe('要删除的连线 ID。') }),
   object({ op: tagged('rename_workflow', '重命名工作流。'), name: z.string().min(1).describe('新工作流名称。') })
 ]).describe('原子补丁中的一项操作；按数组顺序执行，op 决定其余字段。')
@@ -347,32 +346,6 @@ export const workflowResultGuides = {
   execute_workflow: 'runId 用于查询运行，status 为 queued 或 running，mock=true 表示没有真实生成。',
   get_workflow_run: 'run 含 status、progress、nodes 和可选 error；nodes[].artifactIds 是节点产物引用；mock=true 表示模拟状态。'
 } satisfies Record<keyof WorkflowToolContracts, string>
-
-// dsh accepts a deliberately small JSON Schema subset. Zod remains the full validator;
-// this projection keeps model-visible structure/descriptions and drops unsupported numeric limits.
-export function dshSchema(schema: z.ZodType): JsonSchemaNode {
-  const raw = z.toJSONSchema(schema) as Record<string, unknown>
-  function project(value: unknown): JsonSchemaNode {
-    const node = value as Record<string, unknown>
-    if (node.$ref) return { description: '任意可序列化 JSON 值；具体参数请查询模型设置。' }
-    const description = typeof node.description === 'string' ? { description: node.description } : {}
-    const variants = node.oneOf ?? node.anyOf
-    if (Array.isArray(variants)) return { ...description, oneOf: variants.map(project) }
-    if (Array.isArray(node.type)) return { ...description, oneOf: node.type.map(type => project({ type })) }
-    const result: JsonSchemaNode = { ...description }
-    if (typeof node.type === 'string') result.type = node.type as JsonSchemaNode['type']
-    if (node.const !== undefined) result.const = node.const as never
-    if (Array.isArray(node.enum)) result.enum = node.enum as never
-    if (node.type === 'object') {
-      result.properties = Object.fromEntries(Object.entries((node.properties ?? {}) as Record<string, unknown>).map(([key, child]) => [key, project(child)]))
-      if (Array.isArray(node.required)) result.required = node.required as string[]
-      result.additionalProperties = node.additionalProperties !== false
-    }
-    if (node.type === 'array' && node.items) result.items = project(node.items)
-    return result
-  }
-  return project(raw)
-}
 
 // Keep the schemas for non-tool DTOs accessible to contract tests and future canvas integration.
 export const workflowTypes = {

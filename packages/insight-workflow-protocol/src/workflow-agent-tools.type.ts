@@ -1,4 +1,4 @@
-/** 工作流操作协议的类型源文件；维护规范见 ../README.md，Agent 操作步骤见 workflow-skill.ts。 */
+/** 工作流操作协议的类型源文件；维护规范见 ../README.md。 */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. 基础领域类型
@@ -578,9 +578,9 @@ export interface AddEdgeOperation {
   clientId: string;
   source: NodeReference;
   target: NodeReference;
-  /** 可省略；当前 mock 使用 output，真实端口由画布服务校验。 */
+  /** 可省略；由后端解析并校验源端口。 */
   sourceHandle?: string;
-  /** 可省略；当前 mock 使用 input。 */
+  /** 可省略；由后端解析并校验目标端口。 */
   targetHandle?: string;
 }
 

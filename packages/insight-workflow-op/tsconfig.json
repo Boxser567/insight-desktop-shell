@@ -9,6 +9,9 @@
     ],
     "noEmit": true,
     "paths": {
+      "@insight-ai/insight-workflow-protocol": [
+        "packages/insight-workflow-protocol/src/index.ts"
+      ],
       "@deepseek-ai/cordis": [
         "build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"
       ],

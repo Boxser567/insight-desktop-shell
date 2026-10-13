@@ -1,17 +1,21 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { apply } from '../packages/insight-workflow-op/src/index'
+
+await import(new URL('../scripts/build-workflow-op.mjs', import.meta.url).href)
+const { apply } = await import(new URL('../packages/insight-workflow-op/lib/index.js', import.meta.url).href)
 
 function harness(history: Array<string | { content: unknown[] }> = []) {
   const tools = new Map<string, { description: string; parameters: Record<string, unknown>; output: { schema: Record<string, unknown> }; execute: (args: unknown, exec: unknown) => Promise<unknown> }>()
   const events = new Map<string, Function>()
+  let skillDescription = ''
   let skillContent = ''
   let context = () => ''
   let agent: { id: string; session: { deriveMessages: () => unknown[] }; ctx: { systemPrompt: { context: (contribution: { text: () => string }) => void } } }
   apply({
     skills: { register: (skill: unknown) => {
       expect(skill).toMatchObject({ name: 'insight-workflow', invocation: { modelInvocable: true, userInvocable: false } })
+      skillDescription = (skill as { description: string }).description
       skillContent = (skill as { content: string }).content
     } },
     tools: { register: (tool: { name: string; description: string; parameters: Record<string, unknown>; output: { schema: Record<string, unknown> }; execute: (args: unknown, exec: unknown) => Promise<unknown> }) => { tools.set(tool.name, tool) } },
@@ -35,7 +39,7 @@ function harness(history: Array<string | { content: unknown[] }> = []) {
   const ask = async (text: string) => {
     events.get('agent/inbox/inserted')?.({ agent, message: { content: [{ type: 'text', text }] } })
   }
-  return { tools, call, ask, open, context: () => context(), skillContent }
+  return { tools, call, ask, open, context: () => context(), skillDescription, skillContent }
 }
 
 describe('built-in workflow plugin', () => {
@@ -99,6 +103,8 @@ describe('built-in workflow plugin', () => {
     const h = harness()
     expect(h.tools.size).toBe(11)
     expect(h.context()).toBe('')
+    expect(h.skillDescription).toContain('当前仅提供 mock')
+    expect(h.tools.get('workflow_execute_workflow')?.description).toContain('当前返回 mock 数据')
     expect(h.skillContent).toContain('filters.all')
     expect(h.skillContent).toContain('data.params.seniorParams')
     expect(h.skillContent).toContain('reference_image_to_image')
