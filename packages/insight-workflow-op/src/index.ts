@@ -8,6 +8,14 @@ import type { WorkflowBackend, WorkflowToolContracts } from '@insight-ai/insight
 import { dshSchema } from './dsh-schema'
 import { MockWorkflowBackend } from './mock-workflows'
 
+export { createCanvasApi, CanvasRequestError } from './canvas-api'
+export type { CanvasCredentialTransport } from './canvas-credential'
+export type {
+  CanvasApi, CanvasApiResponse, CanvasData, CanvasGraph, CanvasGraphEdge, CanvasGraphNode,
+  CanvasUpdate, CanvasVersionNumber, FlowData, FlowListData, FlowListParams, FlowListRecord,
+  FlowParams, GetFlowDataResponse, GetFlowsListResponse, GetModelParamsResponse, SaveFlowResult
+} from './canvas-api'
+
 export const inject = ['tools', 'skills', 'systemPrompt']
 export const name = 'insight-workflow-op'
 

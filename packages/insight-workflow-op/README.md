@@ -1,6 +1,8 @@
 # 工作流操作插件
 
-这个插件为 dsh 注册 `insight-workflow` 内置 skill 和 `workflow_*` 工具。当前画布 API 尚未接通，工具使用进程内 mock 数据；执行结果不代表真实媒体已生成。
+这个插件为 dsh 注册 `insight-workflow` 内置 skill 和 `workflow_*` 工具。`createCanvasApi()` 提供五个画布请求，调用时通过现有私有通道取得当前登录令牌，再由 Host 请求服务；它尚未用于 `workflow_*` 工具。`getFlowData()` 将响应中的 `data.data` JSON 字符串解析为 `CanvasGraph`。工具仍使用进程内 mock 数据，执行结果不代表真实媒体已生成。
+
+调用方在插件清理时应调用 `dispose()`，以中止尚未结束的请求。
 
 ## 协议维护规范
 
