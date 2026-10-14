@@ -31,9 +31,9 @@ const taskInfo = object({
 const dataBase = {
   title: z.string().describe('节点显示标题。'),
   value: z.union([z.string(), z.array(z.string())]).optional().describe('生成物或预览图的 URL；尚无资源时可省略。'),
+  type: tagged('upload', '已有资源节点，不执行生成。').optional(),
   taskInfo
 }
-const mediaDataBase = { ...dataBase, type: tagged('upload', '用户上传的资源，不执行生成。').optional() }
 const baseParams = {
   model: model.optional().describe('已选模型 ID；画布中未配置模型的节点可省略。'),
   prompt: z.string().describe('提供给模型的提示词。')
@@ -73,9 +73,9 @@ const nodeBase = {
 }
 const node = z.discriminatedUnion('type', [
   object({ ...nodeBase, type: tagged('text', '文本节点。'), data: object({ ...dataBase, params: textParams }).describe('文本节点数据。') }),
-  object({ ...nodeBase, type: tagged('image', '图像节点。'), data: object({ ...mediaDataBase, params: imageParams }).describe('图像节点数据。') }),
-  object({ ...nodeBase, type: tagged('audio', '音频节点。'), data: object({ ...mediaDataBase, params: audioParams }).describe('音频节点数据。') }),
-  object({ ...nodeBase, type: tagged('video', '视频节点。'), data: object({ ...mediaDataBase, params: videoParams }).describe('视频节点数据。') }),
+  object({ ...nodeBase, type: tagged('image', '图像节点。'), data: object({ ...dataBase, params: imageParams }).describe('图像节点数据。') }),
+  object({ ...nodeBase, type: tagged('audio', '音频节点。'), data: object({ ...dataBase, params: audioParams }).describe('音频节点数据。') }),
+  object({ ...nodeBase, type: tagged('video', '视频节点。'), data: object({ ...dataBase, params: videoParams }).describe('视频节点数据。') }),
   object({ ...nodeBase, type: tagged('poseTool', '姿态工具节点。'), data: object({ ...dataBase, params: jsonObject.optional().describe('姿态工具参数。') }).describe('姿态工具节点数据。') }),
   object({ ...nodeBase, type: tagged('highDefinitionTool', '高清工具节点。'), data: object({ ...dataBase, params: jsonObject.optional().describe('高清工具参数。') }).describe('高清工具节点数据。') })
 ]).describe('节点完整数据；type 决定 data.params 的结构。')
@@ -193,7 +193,8 @@ const createBase = {
 const modelCreateBase = {
   ...createBase,
   model,
-  prompt: z.string().optional().describe('生成提示词；没有提示词时可省略。')
+  prompt: z.string().optional().describe('生成提示词；没有提示词时可省略。'),
+  value: z.union([z.string(), z.array(z.string())]).optional().describe('已有资源的 URL；提供时新节点标记为 upload。')
 }
 const nodeCreate = z.discriminatedUnion('type', [
   object({ ...modelCreateBase, type: tagged('text', '新建文本节点。'), search_resource: z.boolean().optional().describe('是否启用资源检索。') }),
@@ -217,7 +218,8 @@ const changesBase = {
 const modelChangesBase = {
   ...changesBase,
   model: model.optional().describe('新的模型 ID；须与节点类型匹配。'),
-  prompt: z.string().optional().describe('新的提示词。')
+  prompt: z.string().optional().describe('新的提示词。'),
+  value: z.union([z.string(), z.array(z.string())]).optional().describe('新的资源 URL，写入节点 data.value。')
 }
 const nodeChanges = z.discriminatedUnion('type', [
   object({ ...modelChangesBase, type: tagged('text', '修改文本节点。'), search_resource: z.boolean().optional().describe('新的资源检索开关。') }),

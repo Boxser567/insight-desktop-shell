@@ -134,6 +134,7 @@ describe('remote workflow backend', () => {
     const added = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].addNodes![0]!)
     expect(added.data).toMatchObject({ taskInfo: { status: 'success' } })
     expect(added.data).not.toHaveProperty('value')
+    expect(added.data).not.toHaveProperty('type')
     const missingHandles = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
       { op: 'add_edge', source: 'video', target: result.createdNodes[0]!.id }
     ] })
@@ -149,6 +150,22 @@ describe('remote workflow backend', () => {
     expect(graph.nodes.some(node => node.id === 'group')).toBe(true)
     expect(graph.edges).toHaveLength(2)
     expect(backend.currentSummary('42')?.nodeCount).toBe(2)
+  })
+
+  it('saves a new artifact on data and marks the node as uploaded', async () => {
+    const { api } = canvas()
+    const backend = new RemoteWorkflowBackend(api)
+    const result = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'add_node', node: { type: 'video', model: 'real-video', modelType: 'text_to_video',
+        value: 'https://example.com/reference.mp4' } }
+    ] })
+    expect(result).toMatchObject({ applied: true, valid: true })
+    const saved = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].addNodes![0]!)
+    expect(saved.data).toMatchObject({ type: 'upload', value: 'https://example.com/reference.mp4' })
+    expect(saved.data.params).not.toHaveProperty('value')
+    expect(await backend.execute('get_node', { workflowId: '42', id: saved.id })).toMatchObject({
+      node: { data: { type: 'upload', value: 'https://example.com/reference.mp4' } }
+    })
   })
 
   it('does not write a partially applied patch when a later operation is invalid', async () => {
@@ -275,12 +292,13 @@ describe('remote workflow backend', () => {
     })
     const patched = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
       { op: 'update_node', id: 'a1c33110-f357-4efe-bbe0-e10c4f33e17a',
-        changes: { type: 'image', title: '更新后的上传资源' } }
+        changes: { type: 'image', title: '更新后的上传资源', value: 'https://example.com/reference.png' } }
     ] })
     expect(patched.errors).toEqual([])
     expect(patched).toMatchObject({ applied: true, valid: true })
     const saved = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].updateNodes![0]!)
-    expect(saved.data).toMatchObject({ title: '更新后的上传资源', type: 'upload' })
-    expect(saved.data).not.toHaveProperty('value')
+    expect(saved.data).toMatchObject({ title: '更新后的上传资源', type: 'upload',
+      value: 'https://example.com/reference.png' })
+    expect(saved.data.params).not.toHaveProperty('value')
   })
 })

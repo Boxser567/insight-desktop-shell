@@ -101,8 +101,15 @@ describe('built-in workflow plugin', () => {
     const video = addNode.properties.node.oneOf.find((variant: any) => variant.properties.type.const === 'video')
     expect(video.required).toContain('modelType')
     expect(video.properties.duration.description).toContain('秒')
+    expect(video.properties.value.description).toContain('upload')
+    const updateNode = operations.find(operation => operation.properties.op.const === 'update_node')!
+    const imageChanges = updateNode.properties.changes.oneOf.find((variant: any) => variant.properties.type.const === 'image')
+    expect(imageChanges.properties.value.description).toContain('data.value')
     expect((patch.output.schema.properties as Record<string, any>).createdNodes.items.properties.id.description).toContain('ID')
     expect(validateJsonSchemaValue(patch.parameters, { workflowId: 'w', operations: [{ op: 'add_node', node: { type: 'video', model: 'm' } }] })).not.toEqual([])
+    expect(validateJsonSchemaValue(patch.parameters, { workflowId: 'w', operations: [
+      { op: 'add_node', node: { type: 'video', model: 'm', modelType: 'text_to_video', value: 'https://example.com/reference.mp4' } }
+    ] })).toEqual([])
   })
 
   it('restores only verified workflow tool history and retains it across compaction', async () => {

@@ -4,9 +4,8 @@ import type {
   NodeSummary, NodeType, ParameterSchema, Query, QueryFilter, Workflow, WorkflowBackend,
   WorkflowOperation, WorkflowSummary, WorkflowToolContracts
 } from '@insight-ai/insight-workflow-protocol'
-import { workflowTypes } from '../../insight-workflow-protocol/src'
+import { workflowSkillContent, workflowTypes } from '../../insight-workflow-protocol/src'
 import { createCanvasApi, type CanvasApi, type CanvasGraphNode, type FlowData } from './canvas-api'
-import { workflowSkillContent } from './workflow-skill'
 
 const NODE_TYPES = ['text', 'image', 'audio', 'video', 'poseTool', 'highDefinitionTool'] as const
 const NODE_DESCRIPTIONS = {
@@ -101,7 +100,7 @@ function projectedNode(raw: CanvasGraphNode): Node | undefined {
     if (raw.type === 'text') selected.search_resource ??= false
   }
   const rawTask = record(raw.data.taskInfo) ? raw.data.taskInfo : {}
-  const isUpload = (raw.type === 'image' || raw.type === 'audio' || raw.type === 'video') && raw.data.type === 'upload'
+  const isUpload = raw.data.type === 'upload'
   const status = rawTask.status === 'success' || rawTask.status === 'SUCCESS' ? 'success'
     : rawTask.status === 'failed' || rawTask.status === 'failure' || rawTask.status === 'FAILURE' ? 'failed'
       : isUpload ? 'success' : 'running'
@@ -208,8 +207,10 @@ function createNode(input: NodeCreateInput, models: ModelSetting[], nodes: Array
     data: { title: input.title ?? `${input.type} 节点`, taskInfo: { status: 'success' as const } }
   }
   if (input.type === 'poseTool' || input.type === 'highDefinitionTool') return { ...base, type: input.type, data: { ...base.data, params: input.parameters ?? {} } } as Node
-  const { type, title: _title, position: _position, size: _size, ...params } = input
-  return { ...base, type, data: { ...base.data, params: { ...(selectedModel ? selectedModel.defaultParameters : {}), ...params, prompt: input.prompt ?? '', ...(type === 'text' ? { search_resource: input.search_resource ?? false } : {}) } } } as Node
+  const { type, title: _title, position: _position, size: _size, value, ...params } = input
+  return { ...base, type, data: { ...base.data,
+    ...(value !== undefined ? { value, type: 'upload' as const } : {}),
+    params: { ...(selectedModel ? selectedModel.defaultParameters : {}), ...params, prompt: input.prompt ?? '', ...(type === 'text' ? { search_resource: input.search_resource ?? false } : {}) } } } as Node
 }
 
 function applyOperation(workflow: Workflow, operation: WorkflowOperation, result: ApplyWorkflowPatchOutput,
@@ -231,7 +232,9 @@ function applyOperation(workflow: Workflow, operation: WorkflowOperation, result
       const target = node.data.params as Record<string, unknown> | undefined
       if (target) {
         for (const [key, value] of Object.entries(params)) {
-          if (key === 'parameters') {
+          if (key === 'value') {
+            node.data.value = value as Node['data']['value']
+          } else if (key === 'parameters') {
             const patch = value as { set?: Record<string, unknown>; unset?: string[] }
             const next = { ...target, ...patch.set }
             for (const unset of patch.unset ?? []) delete next[unset]
@@ -444,7 +447,8 @@ export class RemoteWorkflowBackend implements WorkflowBackend {
         }
         return JSON.stringify({ ...original, position: node.position,
           ...(node.measured ? { measured: node.measured } : {}),
-          data: { ...original.data, title: node.data.title, params } })
+          data: { ...original.data, title: node.data.title, params,
+            ...(JSON.stringify(node.data.value) !== JSON.stringify(previous.data.value) ? { value: node.data.value } : {}) } })
       }
       const visibleEdgeIds = new Set(before.edges.map(edge => edge.id))
       await this.canvas.updateCanvas({ id: before.id, versionNumber: flow.versionNumber,

@@ -54,10 +54,14 @@ export interface NodeTaskInfo {
   errorMsg?: string;
 }
 
+/** 生成产物数据。 */
+export type Artifact = string | string[];
+
 export interface NodeDataBase {
   title: string;
   /** 生成物或预览图的 URL；尚无资源时可省略。 */
-  value?: string | string[];
+  value?: Artifact;
+  type?: 'upload';
   taskInfo: NodeTaskInfo;
 }
 /** 模型节点的通用已保存参数；画布中尚未选模型的节点可缺少 model。 */
@@ -109,9 +113,6 @@ export interface NodeBase {
   measured?: Size;
 }
 
-/** 标记用户上传的资源节点；适用于图像、视频和音频节点。 */
-export type NonGenerationNode = { type?: 'upload' };
-
 export interface TextNode extends NodeBase {
   type: 'text';
   data: NodeDataBase & { params: TextNodeParams };
@@ -119,17 +120,17 @@ export interface TextNode extends NodeBase {
 
 export interface ImageNode extends NodeBase {
   type: 'image';
-  data: NodeDataBase & NonGenerationNode & { params: ImageNodeParams };
+  data: NodeDataBase & { params: ImageNodeParams };
 }
 
 export interface VideoNode extends NodeBase {
   type: 'video';
-  data: NodeDataBase & NonGenerationNode & { params: VideoNodeParams };
+  data: NodeDataBase & { params: VideoNodeParams };
 }
 
 export interface AudioNode extends NodeBase {
   type: 'audio';
-  data: NodeDataBase & NonGenerationNode & { params: AudioNodeParams };
+  data: NodeDataBase & { params: AudioNodeParams };
 }
 
 export interface PoseToolNode extends NodeBase {
@@ -428,6 +429,7 @@ export interface NodeCreateBase {
 interface BasicCreateBase extends NodeCreateBase {
   model: string;
   prompt?: string;
+  value?: Artifact;
 }
 
 /** 文本节点创建参数。 */
@@ -511,6 +513,7 @@ interface NodeChangesBase {
 interface ModelNodeChangesBase extends NodeChangesBase {
   model?: string;
   prompt?: string;
+  value?: Artifact;
 }
 
 export type NodeChanges =
@@ -539,8 +542,8 @@ export type NodeChanges =
       /** 提供时整体替换 seniorParams。 */
       seniorParams?: AudioNodeParams['seniorParams'];
     })
-  | (NodeChangesBase & { type: 'poseTool'; parameters?: ParameterPatch })
-  | (NodeChangesBase & { type: 'highDefinitionTool'; parameters?: ParameterPatch });
+  | (NodeChangesBase & { type: 'poseTool' })
+  | (NodeChangesBase & { type: 'highDefinitionTool' });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. 工作流原子化批量修改操作
