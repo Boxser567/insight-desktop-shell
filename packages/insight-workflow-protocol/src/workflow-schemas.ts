@@ -35,8 +35,7 @@ const dataBase = {
 }
 const baseParams = {
   model,
-  prompt: z.string().describe('提供给模型的提示词。'),
-  additionalParameters: jsonObject.optional().describe('模型特有参数；先查询 get_model_setting，不要与具名参数重复。')
+  prompt: z.string().describe('提供给模型的提示词。')
 }
 const seniorParams = object({
   customMode: z.boolean().optional().describe('是否启用自定义模式。'),
@@ -203,10 +202,6 @@ const nodeCreate = z.discriminatedUnion('type', [
   object({ ...createBase, type: tagged('poseTool', '新建姿态工具节点。'), parameters: jsonObject.optional().describe('姿态工具参数。') }),
   object({ ...createBase, type: tagged('highDefinitionTool', '新建高清工具节点。'), parameters: jsonObject.optional().describe('高清工具参数。') })
 ]).describe('新节点参数；不填写 id、measured 或 taskInfo。type 决定其余必填字段。')
-const nodeReference = z.discriminatedUnion('kind', [
-  object({ kind: tagged('existing', '引用已存在节点。'), nodeId }),
-  object({ kind: tagged('created', '引用本批次刚创建的节点。'), clientId: id.describe('本 patch 内先前 add_node 操作的 clientId。') })
-]).describe('连线端点：引用已有 nodeId，或本批次先前创建节点的 clientId。')
 const parameterPatch = object({
   set: jsonObject.optional().describe('按顶层键设置或替换参数；嵌套值需整体替换。'),
   unset: z.array(z.string()).optional().describe('要删除的顶层参数键；不得同时出现在 set 中。')
@@ -221,8 +216,7 @@ const changesBase = {
 const modelChangesBase = {
   ...changesBase,
   model: model.optional().describe('新的模型 ID；须与节点类型匹配。'),
-  prompt: z.string().optional().describe('新的提示词。'),
-  additionalParameters: parameterPatch.optional().describe('模型额外参数的局部补丁。')
+  prompt: z.string().optional().describe('新的提示词。')
 }
 const nodeChanges = z.discriminatedUnion('type', [
   object({ ...modelChangesBase, type: tagged('text', '修改文本节点。'), search_resource: z.boolean().optional().describe('新的资源检索开关。') }),
@@ -233,11 +227,11 @@ const nodeChanges = z.discriminatedUnion('type', [
   object({ ...changesBase, type: tagged('highDefinitionTool', '修改高清工具节点。'), parameters: parameterPatch.optional().describe('高清工具参数补丁。') })
 ]).describe('局部节点修改；type 必须与目标节点一致，未提供字段保持不变。')
 const operation = z.discriminatedUnion('op', [
-  object({ op: tagged('add_node', '新增节点。'), clientId: id.describe('本批次唯一临时 ID；后续 add_edge 可引用。'), node: nodeCreate }),
-  object({ op: tagged('update_node', '修改已有节点。'), nodeId, changes: nodeChanges }),
-  object({ op: tagged('delete_node', '删除已有节点。'), nodeId }),
-  object({ op: tagged('add_edge', '新增连线。'), clientId: id.describe('本批次唯一临时连线 ID。'), source: nodeReference, target: nodeReference, sourceHandle: z.string().optional().describe('源输出端口；省略时由后端解析并校验。'), targetHandle: z.string().optional().describe('目标输入端口；省略时由后端解析并校验。') }),
-  object({ op: tagged('delete_edge', '删除已有连线。'), edgeId: id.describe('要删除的连线 ID。') }),
+  object({ op: tagged('add_node', '新增节点。'), node: nodeCreate }),
+  object({ op: tagged('update_node', '修改已有节点。'), id: nodeId, changes: nodeChanges }),
+  object({ op: tagged('delete_node', '删除已有节点。'), id: nodeId }),
+  object({ op: tagged('add_edge', '新增连线。'), source: nodeId.describe('已有源节点 ID；本批次新节点须待提交后才能引用。'), target: nodeId.describe('已有目标节点 ID；本批次新节点须待提交后才能引用。'), sourceHandle: z.string().optional().describe('源输出端口；省略时由后端解析并校验。'), targetHandle: z.string().optional().describe('目标输入端口；省略时由后端解析并校验。') }),
+  object({ op: tagged('delete_edge', '删除已有连线。'), id: id.describe('要删除的连线 ID。') }),
   object({ op: tagged('rename_workflow', '重命名工作流。'), name: z.string().min(1).describe('新工作流名称。') })
 ]).describe('原子补丁中的一项操作；按数组顺序执行，op 决定其余字段。')
 const toolError = object({
@@ -301,21 +295,19 @@ export const workflowSchemas = {
     output: listNodesOutput
   },
   get_node: {
-    input: object({ workflowId, nodeId }).describe('查询指定工作流的一个节点。'),
+    input: object({ workflowId, id: nodeId }).describe('查询指定工作流的一个节点。'),
     output: object({ node }).describe('节点完整参数与任务状态。')
   },
   apply_workflow_patch: {
     input: object({
       workflowId,
-      operations: z.array(operation).describe('按顺序执行的原子操作；任一失败则不提交。'),
-      dryRun: z.boolean().optional().describe('true 仅校验，不写入或分配永久 ID。'),
-      idempotencyKey: z.string().optional().describe('重试时复用同一键，防止重复修改。')
+      operations: z.array(operation).describe('按顺序执行的原子操作；任一失败则不提交。')
     }).describe('原子事务补丁。'),
     output: object({
-      applied: z.boolean().describe('只有全部操作真正提交后才为 true；试运行始终为 false。'),
-      valid: z.boolean().describe('操作是否全部校验通过，包括试运行。'),
-      createdNodes: z.array(object({ clientId: id, nodeId })).describe('临时节点 ID 到永久节点 ID 的映射。'),
-      createdEdges: z.array(object({ clientId: id, edgeId: id })).describe('临时连线 ID 到永久连线 ID 的映射。'),
+      applied: z.boolean().describe('只有全部操作真正提交后才为 true。'),
+      valid: z.boolean().describe('操作是否全部校验通过。'),
+      createdNodes: z.array(object({ id: nodeId })).describe('按 add_node 操作顺序返回新节点 ID。'),
+      createdEdges: z.array(object({ id })).describe('按 add_edge 操作顺序返回新连线 ID。'),
       errors: z.array(toolError).describe('阻止提交的错误。'),
       warnings: z.array(toolError).describe('不阻止提交的警告。')
     }).describe('原子修改结果。')
@@ -342,7 +334,7 @@ export const workflowResultGuides = {
   get_workflow: 'view=summary 返回 workflow 摘要；structure 还返回 nodes 摘要与 edges；full 返回完整 workflow。',
   list_nodes: 'view=summary 返回 nodes 摘要；full 返回包含 data.params 的完整节点。',
   get_node: 'node 是完整节点，data.params 随 type 不同而变化，data.taskInfo 给出执行状态。',
-  apply_workflow_patch: 'applied 表示已提交，valid 表示校验通过；createdNodes/createdEdges 映射临时 ID，errors/warnings 给出问题。',
+  apply_workflow_patch: 'applied 表示已提交，valid 表示校验通过；createdNodes/createdEdges 按新增操作顺序列出实现方生成的 ID，errors/warnings 给出问题。',
   execute_workflow: 'runId 用于查询运行，status 为 queued 或 running，mock=true 表示没有真实生成。',
   get_workflow_run: 'run 含 status、progress、nodes 和可选 error；nodes[].artifactIds 是节点产物引用；mock=true 表示模拟状态。'
 } satisfies Record<keyof WorkflowToolContracts, string>
@@ -353,6 +345,6 @@ export const workflowTypes = {
   jsonValue, jsonObject, position, size, taskInfo, textParams, imageParams, videoParams, audioParams,
   node, edge, workflow, workflowSummary, nodeSummary, parameter, parameterSummary,
   capability, modelSetting, modelSettingSummary, nodeDefinition,
-  queryValue, queryFilter, query, modelQuery, nodeCreate, nodeReference, parameterPatch, nodeChanges,
+  queryValue, queryFilter, query, modelQuery, nodeCreate, parameterPatch, nodeChanges,
   operation, toolError, nodeRun, run
 }

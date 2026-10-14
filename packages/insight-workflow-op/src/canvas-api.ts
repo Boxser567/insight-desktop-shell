@@ -127,14 +127,14 @@ type ModelParams = {
   sort: number
 }
 
-export type GetModelParamsResponse = CanvasApiResponse<{
-  [key in string]: Record<ModelType, {
+type ModelParamsData = {
+  [key in string]: Partial<Record<ModelType, {
     name: string;
     models: Record<string, ModelParams>
-  }> | ModelParams | {
+  }>> | ModelParams | {
     models: Record<string, ModelParams>
   }
-}>
+}
 
 export type GetFlowDataResponse = CanvasApiResponse<FlowData>
 type RawFlowData = Omit<FlowData, 'data'> & { data: string }
@@ -147,7 +147,7 @@ export interface SaveFlowResult {
 export interface CanvasApi {
   saveFlow(params: CanvasData): Promise<CanvasApiResponse<SaveFlowResult>>
   getFlowData(params: FlowParams): Promise<GetFlowDataResponse>
-  getModelParams(): Promise<GetModelParamsResponse>
+  getModelParams(): Promise<ModelParamsData>
   updateCanvas(params: CanvasUpdate): Promise<CanvasApiResponse<{ id: number /** canvas id */ }>>
   getFlowsList(params: FlowListParams): Promise<GetFlowsListResponse>
   dispose(): void
@@ -161,6 +161,17 @@ export class CanvasRequestError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseModelParams(value: unknown): ModelParamsData {
+  let config: unknown = value
+  if (Array.isArray(value)) {
+    if (!isRecord(value[0]) || typeof value[0].config !== 'string') throw new CanvasRequestError('INVALID_RESPONSE')
+    try { config = JSON.parse(value[0].config) }
+    catch { throw new CanvasRequestError('INVALID_RESPONSE') }
+  }
+  if (!isRecord(config)) throw new CanvasRequestError('INVALID_RESPONSE')
+  return config as ModelParamsData
 }
 
 function parseCanvasGraph(value: unknown): CanvasGraph {
@@ -242,7 +253,25 @@ export function createCanvasApi(
         data: parse(data),
       }
     },
-    getModelParams: () => request('game-ai-editor-center/api/v2/workflow/listNodeSetting', {}),
+    getModelParams: async () => {
+      const controller = new AbortController()
+      controllers.add(controller)
+      try {
+        let response: Response
+        try {
+          response = await fetchRequest('https://game-ai-admin-test-cdn.idealead.com/model_node_setting/model_params_with_sort.json', {
+            method: 'GET', redirect: 'error',
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+          })
+        } catch { throw new CanvasRequestError('REQUEST_FAILED') }
+        if (!response.ok) throw new CanvasRequestError('REQUEST_FAILED', response.status)
+        let value: unknown
+        value = await response.json()
+        return value as ModelParamsData
+      } finally {
+        controllers.delete(controller)
+      }
+    },
     updateCanvas: params => request('game-ai-editor-center/api/canvas/partialUpdate', params),
     getFlowsList: params => request<FlowListData>('game-ai-editor-center/api/canvas/list', {
       canvasType: [0], version: 'comfyui', sort_type: 'time_desc',  ...params,

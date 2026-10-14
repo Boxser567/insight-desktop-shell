@@ -4,23 +4,25 @@ import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-agent'
 import { WORKFLOW_TOOL_DESCRIPTIONS, workflowResultGuides, workflowSchemas } from '@insight-ai/insight-workflow-protocol'
-import type { WorkflowBackend, WorkflowToolContracts } from '@insight-ai/insight-workflow-protocol'
+import type { WorkflowBackend, WorkflowSummary, WorkflowToolContracts } from '@insight-ai/insight-workflow-protocol'
 import { dshSchema } from './dsh-schema'
-import { MockWorkflowBackend } from './mock-workflows'
+import { RemoteWorkflowBackend } from './remote-workflow'
 
 export { createCanvasApi, CanvasRequestError } from './canvas-api'
 export type { CanvasCredentialTransport } from './canvas-credential'
 export type {
   CanvasApi, CanvasApiResponse, CanvasData, CanvasGraph, CanvasGraphEdge, CanvasGraphNode,
   CanvasUpdate, CanvasVersionNumber, FlowData, FlowListData, FlowListParams, FlowListRecord,
-  FlowParams, GetFlowDataResponse, GetFlowsListResponse, GetModelParamsResponse, SaveFlowResult
+  FlowParams, GetFlowDataResponse, GetFlowsListResponse, SaveFlowResult
 } from './canvas-api'
 
 export const inject = ['tools', 'skills', 'systemPrompt']
 export const name = 'insight-workflow-op'
 
-export function apply(ctx: Context): void {
-  const backend: WorkflowBackend = new MockWorkflowBackend()
+export function apply(ctx: Context, injectedBackend?: WorkflowBackend): void {
+  const backend: WorkflowBackend = injectedBackend && typeof injectedBackend.execute === 'function'
+    ? injectedBackend : new RemoteWorkflowBackend()
+  if (backend instanceof RemoteWorkflowBackend) ctx.effect(() => () => backend.dispose(), 'insight-workflow: canvas API')
   const skill = {
     name: 'insight-workflow',
     description: `用户要创建、查看、修改或运行工作流，或请求生成图像、音频、视频时使用。${backend.skillDescription}`,
@@ -30,6 +32,19 @@ export function apply(ctx: Context): void {
   }
   const active = new WeakMap<object, { workflowId?: string }>()
   const remembered = new Map<string, string>()
+  const restoredSummaries = new Map<string, WorkflowSummary>()
+  const historicalSummary = (value: unknown): WorkflowSummary | undefined => {
+    if (!value || typeof value !== 'object' || !('workflow' in value)) return undefined
+    const workflow = value.workflow
+    if (!workflow || typeof workflow !== 'object' || !('id' in workflow) || !('name' in workflow) ||
+      typeof workflow.id !== 'string' || typeof workflow.name !== 'string') return undefined
+    const nodeCount = 'nodeCount' in workflow ? workflow.nodeCount
+      : 'nodes' in workflow && Array.isArray(workflow.nodes) ? workflow.nodes.length : undefined
+    const edgeCount = 'edgeCount' in workflow ? workflow.edgeCount
+      : 'edges' in workflow && Array.isArray(workflow.edges) ? workflow.edges.length : undefined
+    if (!Number.isSafeInteger(nodeCount) || !Number.isSafeInteger(edgeCount)) return undefined
+    return { id: workflow.id, name: workflow.name, nodeCount: nodeCount as number, edgeCount: edgeCount as number }
+  }
 
   ctx.skills.register(skill)
   ctx.on('agent/created', ({ agent, source }) => {
@@ -55,13 +70,15 @@ export function apply(ctx: Context): void {
             calls.delete(resultBlock.toolCallId)
             if (resultBlock.isError) continue
             let id = requestedId
-            if (id === null) {
-              try {
-                const result = JSON.parse(resultBlock.content.find(part => part.type === 'text')?.text ?? '')
-                id = typeof result?.workflow?.id === 'string' ? result.workflow.id : undefined
-              } catch { /* Ignore malformed historical tool results. */ }
-            }
-            if (id && backend.currentSummary(id) !== undefined) workflowId = id
+            let verified = false
+            try {
+              const result = JSON.parse(resultBlock.content.find(part => part.type === 'text')?.text ?? '')
+              verified = result !== null && typeof result === 'object' && result.applied !== false
+              const summary = historicalSummary(result)
+              if (id === null) id = summary?.id
+              if (id && summary?.id === id) restoredSummaries.set(id, summary)
+            } catch { /* Ignore malformed historical tool results. */ }
+            if (verified && id) workflowId = id
           }
         }
       }
@@ -72,8 +89,9 @@ export function apply(ctx: Context): void {
     agent.ctx.systemPrompt.context({
       name: 'insight-workflow', order: 500,
       text: () => {
-        const current = state.workflowId && backend.currentSummary(state.workflowId)
-        return current ? `当前工作流最新摘要：${JSON.stringify(current)}` : ''
+        const current = state.workflowId && (backend.currentSummary(state.workflowId) ?? restoredSummaries.get(state.workflowId))
+        if (current) return `当前工作流摘要：${JSON.stringify(current)}`
+        return state.workflowId ? `当前工作流 ID：${JSON.stringify(state.workflowId)}。请先调用 workflow_get_workflow 确认当前结构。` : ''
       }
     })
     return undefined

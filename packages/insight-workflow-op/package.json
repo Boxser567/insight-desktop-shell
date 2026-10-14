@@ -1,6 +1,6 @@
 {
   "name": "@insight-ai/insight-workflow-op",
-  "description": "Built-in mock workflow tools for the desktop agent",
+  "description": "Built-in remote canvas workflow tools for the desktop agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",

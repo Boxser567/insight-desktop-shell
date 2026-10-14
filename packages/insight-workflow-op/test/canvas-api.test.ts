@@ -42,7 +42,8 @@ const flowData = {
 describe('first-party canvas API', () => {
   it('calls the five fixed endpoints with a fresh account token and matching bodies', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) =>
-      success(url.endsWith('/canvas/get') ? flowData : { id: 12 }))
+      success(url.endsWith('/canvas/get') ? flowData : url.endsWith('/workflow/listNodeSetting')
+        ? [{ config: '{}' }] : { id: 12 }))
     const transport = credentialTransport()
     const api = createCanvasApi(transport, fetch)
     const cases = [
@@ -145,6 +146,37 @@ describe('first-party canvas API', () => {
     expect(response.data?.data).toEqual(graph)
     expect(response.data?.data.nodes[0]?.type).toBe('group')
     api.dispose()
+  })
+
+  it('parses serialized model config and rejects malformed rows', async () => {
+    const config = { video: { text_to_video: { models: { modelA: { model_name: 'A' } } } } }
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(success([{ config: JSON.stringify(config) }]))
+      .mockResolvedValueOnce(success([{ config: '{broken' }]))
+      .mockResolvedValueOnce(success([]))
+    const api = createCanvasApi(credentialTransport(), fetch)
+    expect((await api.getModelParams()).data).toEqual(config)
+    await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    api.dispose()
+  })
+
+  it('reads test model config from the CDN without sending the account token', async () => {
+    vi.stubEnv('INSIGHT_DESKTOP_SERVICE_ENVIRONMENT', 'test')
+    const config = { video: { text_to_video: { models: {} } } }
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ config: JSON.stringify(config) }])))
+    const api = createCanvasApi(credentialTransport(), fetch)
+    try {
+      expect((await api.getModelParams()).data).toEqual(config)
+      expect(fetch).toHaveBeenCalledWith(
+        'https://game-ai-admin-test-cdn.idealead.com/model_node_setting/model_params_with_sort.json',
+        expect.objectContaining({ method: 'GET', redirect: 'error' })
+      )
+      expect(fetch.mock.calls[0]![1].headers).toBeUndefined()
+    } finally {
+      api.dispose()
+      vi.unstubAllEnvs()
+    }
   })
 
   it('rejects malformed saved canvas data', async () => {

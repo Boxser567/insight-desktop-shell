@@ -65,8 +65,6 @@ export interface NodeDataBase {
 export interface BasicNodeParams {
   model: string;
   prompt: string;
-  /** 不在具名字段中的模型参数。 */
-  additionalParameters?: JsonObject;
 }
 
 /** 文本节点沿用通用的 model/prompt，并增加资源搜索开关。 */
@@ -408,7 +406,7 @@ export type ListNodesOutput = ListNodesSummaryOutput | ListNodesFullOutput;
 
 export interface GetNodeInput {
   workflowId: string;
-  nodeId: string;
+  id: string;
 }
 
 export interface GetNodeOutput {
@@ -490,17 +488,9 @@ export type NodeCreateInput =
   | HighDefinitionToolNodeCreateInput;
 
 /**
- * 同一批次（Patch）中的节点引用。
- * `existing` 引用已存在的节点；`created` 使用 `clientId` 引用本批次中
- * 更早执行的 `add_node` 操作所创建的节点。各操作按数组顺序处理。
- */
-export type NodeReference =
-  | { kind: 'existing'; nodeId: string }
-  | { kind: 'created'; clientId: string };
-/**
  * `set` 替换参数字典中指定的顶层键，`unset` 删除指定的顶层键；
  * 修改某个嵌套键时，需要提交其所在顶层键的完整替换值。
- * 模型节点仅用于 additionalParameters，工具节点用于 params。
+ * 仅用于工具节点的 params。
  * 同一个键不能同时出现在 set 与 unset 中。
  */
 export interface ParameterPatch {
@@ -519,7 +509,6 @@ interface NodeChangesBase {
 interface ModelNodeChangesBase extends NodeChangesBase {
   model?: string;
   prompt?: string;
-  additionalParameters?: ParameterPatch;
 }
 
 export type NodeChanges =
@@ -554,30 +543,30 @@ export type NodeChanges =
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. 工作流原子化批量修改操作
 // ─────────────────────────────────────────────────────────────────────────────
+/** 创建时不传 ID；实现方生成后在结果中返回。 */
 export interface AddNodeOperation {
   op: 'add_node';
-  /** 本批次内唯一的临时标识，可供后续 `add_edge` 引用。 */
-  clientId: string;
   node: NodeCreateInput;
 }
 
 export interface UpdateNodeOperation {
   op: 'update_node';
-  nodeId: string;
+  id: string;
   changes: NodeChanges;
 }
 /** 删除节点时，服务端必须在同一事务中一并删除相关连线。 */
 export interface DeleteNodeOperation {
   op: 'delete_node';
-  nodeId: string;
+  id: string;
 }
 
+/** 创建时不传 ID；实现方生成后在结果中返回。 */
 export interface AddEdgeOperation {
   op: 'add_edge';
-  /** 本批次内唯一的临时标识，用于对应返回的 edgeId。 */
-  clientId: string;
-  source: NodeReference;
-  target: NodeReference;
+  /** 已存在节点的 ID；本批次新节点的 ID 要在提交后才能获取。 */
+  source: string;
+  /** 已存在节点的 ID；本批次新节点的 ID 要在提交后才能获取。 */
+  target: string;
   /** 可省略；由后端解析并校验源端口。 */
   sourceHandle?: string;
   /** 可省略；由后端解析并校验目标端口。 */
@@ -586,7 +575,7 @@ export interface AddEdgeOperation {
 
 export interface DeleteEdgeOperation {
   op: 'delete_edge';
-  edgeId: string;
+  id: string;
 }
 
 export interface RenameWorkflowOperation {
@@ -605,10 +594,6 @@ export type WorkflowOperation =
 export interface ApplyWorkflowPatchInput {
   workflowId: string;
   operations: WorkflowOperation[];
-  /** 仅校验操作，不持久化修改，也不分配永久 ID。 */
-  dryRun?: boolean;
-  /** 幂等键：防止请求重试导致重复修改。 */
-  idempotencyKey?: string;
 }
 
 export interface ToolError {
@@ -622,24 +607,15 @@ export interface ToolError {
   retryable?: boolean;
 }
 
-export interface CreatedNodeReference {
-  clientId: string;
-  nodeId: string;
-}
-
-/** 已创建连线的引用。 */
-export interface CreatedEdgeReference {
-  clientId: string;
-  edgeId: string;
-}
-
 export interface ApplyWorkflowPatchOutput {
-  /** 仅全部操作实际提交成功时为 `true`；即使试运行成功，`applied` 仍为 `false`。 */
+  /** 仅全部操作实际提交成功时为 `true`。 */
   applied: boolean;
-  /** 校验通过时为 `true`，包括试运行场景。 */
+  /** 操作是否全部校验通过。 */
   valid: boolean;
-  createdNodes: CreatedNodeReference[];
-  createdEdges: CreatedEdgeReference[];
+  /** 按 add_node 操作顺序返回实现方生成的 ID。 */
+  createdNodes: Array<{ id: string }>;
+  /** 按 add_edge 操作顺序返回实现方生成的 ID。 */
+  createdEdges: Array<{ id: string }>;
   errors: ToolError[];
   warnings: ToolError[];
 }

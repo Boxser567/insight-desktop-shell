@@ -16,12 +16,11 @@ const video = {
 const change = {
   type: 'video',
   duration: 5,
-  additionalParameters: { set: { seed: 7 } },
 } satisfies NodeChanges;
 
 const patch = {
   workflowId: 'workflow-1',
-  operations: [{ op: 'update_node', nodeId: 'node-1', changes: change }],
+  operations: [{ op: 'update_node', id: 'node-1', changes: change }],
 } satisfies ApplyWorkflowPatchInput;
 
 const summary = {
@@ -40,11 +39,11 @@ const invalidVideo: VideoNodeCreateInput = { type: 'video', model: 'audio-model'
 const invalidParameter: ParameterSchema = { type: 'number', label: 'Duration' };
 // @ts-expect-error A model summary must match its node and model types.
 const invalidSummary: ModelSettingSummary = { ...summary, modelType: 'tts' };
-// @ts-expect-error Created edges need a client ID for the result mapping.
 const invalidEdge: AddEdgeOperation = {
   op: 'add_edge',
+  // @ts-expect-error Edge endpoints are node IDs, not reference objects.
   source: { kind: 'existing', nodeId: 'node-1' },
-  target: { kind: 'existing', nodeId: 'node-2' },
+  target: 'node-2',
 };
 // @ts-expect-error Updates require an operations array.
 const invalidPatch: ApplyWorkflowPatchInput = { workflowId: 'workflow-1' };

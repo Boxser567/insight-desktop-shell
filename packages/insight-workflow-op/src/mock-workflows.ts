@@ -5,13 +5,13 @@ import type {
   NodeSummary, Query, QueryFilter, Workflow, WorkflowBackend, WorkflowOperation, WorkflowSummary, WorkflowToolContracts
 } from '@insight-ai/insight-workflow-protocol'
 
-function take<T>(items: T[], limit?: number): T[] {
+export function take<T>(items: T[], limit?: number): T[] {
   if (limit === undefined) return items
   if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('limit 必须为正整数')
   return items.slice(0, limit)
 }
 
-function matchesQuery(value: unknown, query?: Query): boolean {
+export function matchesQuery(value: unknown, query?: Query): boolean {
   const matches = (filter: QueryFilter): boolean => {
     const actual = filter.field.split('.').reduce<unknown>((part, key) =>
       part && typeof part === 'object' && Object.hasOwn(part, key) ? (part as Record<string, unknown>)[key] : undefined, value)
@@ -88,8 +88,9 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   readonly workflows = new Map<string, Workflow>()
   readonly runs = new Map<string, { runId: string; workflowId: string; status: 'running'; nodes: [] }>()
-  readonly patches = new Map<string, ApplyWorkflowPatchOutput>()
   readonly executed = new Map<string, string>()
+
+  constructor(private readonly models: ModelSetting[] = MODELS, private readonly validateAllModels = true) {}
 
   async execute<K extends keyof WorkflowToolContracts>(name: K, input: WorkflowToolContracts[K]['input']): Promise<WorkflowToolContracts[K]['output']> {
     const args = input as Record<string, unknown>
@@ -103,7 +104,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
       }
       case 'search_models': {
         const query = args.query as Query
-        const models = MODELS.filter(model => matchesQuery(model, query))
+        const models = this.models.filter(model => matchesQuery(model, query))
           .map(({ parameters, defaultParameters: _defaults, senoirParameters: _senior, ...model }) => ({
             ...model,
             capabilities: Object.fromEntries(Object.entries(parameters).map(([key, parameter]) =>
@@ -113,7 +114,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
         break
       }
       case 'get_model_setting': {
-        const model = MODELS.find(model => matchesQuery(model, args.query as Query))
+        const model = this.models.find(model => matchesQuery(model, args.query as Query))
         if (!model) throw new Error('模型不存在')
         output = { model }; break
       }
@@ -138,7 +139,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
         break
       }
       case 'get_node': {
-        const node = this.get(args.workflowId as string).nodes.find(node => node.id === args.nodeId)
+        const node = this.get(args.workflowId as string).nodes.find(node => node.id === args.id)
         if (!node) throw new Error('节点不存在')
         output = { node }; break
       }
@@ -186,23 +187,20 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   patch(input: ApplyWorkflowPatchInput): ApplyWorkflowPatchOutput {
     const current = this.get(input.workflowId)
-    const key = input.idempotencyKey && `${input.workflowId}:${input.idempotencyKey}`
-    if (key && this.patches.has(key)) return this.patches.get(key)!
     const result: ApplyWorkflowPatchOutput = {
       applied: false, valid: false,
       createdNodes: [], createdEdges: [], errors: [], warnings: []
     }
     // shortcut: mock uses JSON cloning and process memory; replace with the canvas transaction API when available.
     const draft = structuredClone(current)
-    const created = new Map<string, string>()
     try {
-      for (const operation of input.operations) this.applyOperation(draft, operation, created, result)
+      for (const operation of input.operations) this.applyOperation(draft, operation, result)
       for (const node of draft.nodes) {
-        if ((node.type === 'text' || node.type === 'image' || node.type === 'audio' || node.type === 'video') &&
-          !MODELS.some(model => model.nodeType === node.type && model.model === node.data.params.model)) {
+        if (this.validateAllModels && (node.type === 'text' || node.type === 'image' || node.type === 'audio' || node.type === 'video') &&
+          !this.models.some(model => model.nodeType === node.type && model.model === node.data.params.model)) {
           throw new Error('模型与节点类型不匹配')
         }
-        if (node.type === 'video' && (node.data.params.modelType !== 'text_to_video' ||
+        if (this.models === MODELS && node.type === 'video' && (node.data.params.modelType !== 'text_to_video' ||
           (node.data.params.duration !== undefined && (!Number.isInteger(node.data.params.duration) || node.data.params.duration < 1 || node.data.params.duration > 10)))) {
           throw new Error('mock 视频仅支持 text_to_video，时长为 1～10 秒')
         }
@@ -214,29 +212,21 @@ export class MockWorkflowBackend implements WorkflowBackend {
       return result
     }
     result.valid = true
-    if (!input.dryRun) {
-      this.workflows.set(draft.id, draft)
-      result.applied = true
-      if (key) this.patches.set(key, result)
-    } else {
-      result.createdNodes = []
-      result.createdEdges = []
-    }
+    this.workflows.set(draft.id, draft)
+    result.applied = true
     return result
   }
 
-  private applyOperation(workflow: Workflow, operation: WorkflowOperation, created: Map<string, string>, result: ApplyWorkflowPatchOutput): void {
+  private applyOperation(workflow: Workflow, operation: WorkflowOperation, result: ApplyWorkflowPatchOutput): void {
     switch (operation.op) {
       case 'add_node': {
-        if (created.has(operation.clientId)) throw new Error('clientId 重复')
         const node = this.createNode(operation.node)
         workflow.nodes.push(node)
-        created.set(operation.clientId, node.id)
-        result.createdNodes.push({ clientId: operation.clientId, nodeId: node.id })
+        result.createdNodes.push({ id: node.id })
         return
       }
       case 'update_node': {
-        const node = workflow.nodes.find(item => item.id === operation.nodeId)
+        const node = workflow.nodes.find(item => item.id === operation.id)
         if (!node || node.type !== operation.changes.type) throw new Error('目标节点不存在或类型不匹配')
         const { title, position, size, type: _type, ...params } = operation.changes
         if (title !== undefined) node.data.title = title
@@ -245,14 +235,11 @@ export class MockWorkflowBackend implements WorkflowBackend {
         const target = node.data.params as Record<string, unknown> | undefined
         if (target) {
           for (const [key, value] of Object.entries(params)) {
-            if (key === 'additionalParameters' || key === 'parameters') {
+            if (key === 'parameters') {
               const patch = value as { set?: Record<string, unknown>; unset?: string[] }
-              const name = key === 'parameters' ? 'params' : key
-              const existing = (name === 'params' ? target : target[name]) as Record<string, unknown> | undefined
-              const next = { ...existing, ...patch.set }
+              const next = { ...target, ...patch.set }
               for (const unset of patch.unset ?? []) delete next[unset]
-              if (name === 'params') node.data.params = next as never
-              else target[name] = next
+              node.data.params = next as never
             } else target[key] = value
           }
         }
@@ -260,24 +247,22 @@ export class MockWorkflowBackend implements WorkflowBackend {
       }
       case 'delete_node': {
         const before = workflow.nodes.length
-        workflow.nodes = workflow.nodes.filter(node => node.id !== operation.nodeId)
+        workflow.nodes = workflow.nodes.filter(node => node.id !== operation.id)
         if (before === workflow.nodes.length) throw new Error('目标节点不存在')
-        workflow.edges = workflow.edges.filter(edge => edge.source !== operation.nodeId && edge.target !== operation.nodeId)
+        workflow.edges = workflow.edges.filter(edge => edge.source !== operation.id && edge.target !== operation.id)
         return
       }
       case 'add_edge': {
-        const resolve = (reference: typeof operation.source) => reference.kind === 'existing' ? reference.nodeId : created.get(reference.clientId)
-        const source = resolve(operation.source)
-        const target = resolve(operation.target)
+        const { source, target } = operation
         if (!source || !target || source === target || !workflow.nodes.some(node => node.id === source) || !workflow.nodes.some(node => node.id === target)) throw new Error('连线节点无效')
         const edge: Edge = { id: randomUUID(), source, target, sourceHandle: operation.sourceHandle ?? 'output', targetHandle: operation.targetHandle ?? 'input' }
         workflow.edges.push(edge)
-        result.createdEdges.push({ clientId: operation.clientId, edgeId: edge.id })
+        result.createdEdges.push({ id: edge.id })
         return
       }
       case 'delete_edge': {
         const before = workflow.edges.length
-        workflow.edges = workflow.edges.filter(edge => edge.id !== operation.edgeId)
+        workflow.edges = workflow.edges.filter(edge => edge.id !== operation.id)
         if (before === workflow.edges.length) throw new Error('目标连线不存在')
         return
       }
@@ -291,12 +276,12 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   private createNode(input: NodeCreateInput): Node {
     if (!NODE_TYPES.includes(input.type)) throw new Error('未知节点类型')
-    const selectedModel = 'model' in input && MODELS.find(model => model.model === input.model && model.nodeType === input.type &&
+    const selectedModel = 'model' in input && this.models.find(model => model.model === input.model && model.nodeType === input.type &&
       (!('modelType' in input) || !('modelType' in model) || input.modelType === model.modelType))
     if ('model' in input && !selectedModel) {
       throw new Error('模型与节点类型不匹配，请先查询可用模型')
     }
-    if (input.type === 'video' && (input.modelType !== 'text_to_video' ||
+    if (this.models === MODELS && input.type === 'video' && (input.modelType !== 'text_to_video' ||
       (input.duration !== undefined && (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 10)))) {
       throw new Error('mock 视频仅支持 text_to_video，时长为 1～10 秒')
     }

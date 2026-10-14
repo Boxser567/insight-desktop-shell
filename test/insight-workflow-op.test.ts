@@ -1,11 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import type { WorkflowBackend } from '../packages/insight-workflow-protocol/src/workflow-backend'
+import type { CanvasApi } from '../packages/insight-workflow-op/src/canvas-api'
+import { MockWorkflowBackend } from '../packages/insight-workflow-op/src/mock-workflows'
+import { RemoteWorkflowBackend } from '../packages/insight-workflow-op/src/remote-workflow'
 
 await import(new URL('../scripts/build-workflow-op.mjs', import.meta.url).href)
 const { apply } = await import(new URL('../packages/insight-workflow-op/lib/index.js', import.meta.url).href)
 
-function harness(history: Array<string | { content: unknown[] }> = []) {
+function harness(history: Array<string | { content: unknown[] }> = [], backend: WorkflowBackend = new MockWorkflowBackend()) {
   const tools = new Map<string, { description: string; parameters: Record<string, unknown>; output: { schema: Record<string, unknown> }; execute: (args: unknown, exec: unknown) => Promise<unknown> }>()
   const events = new Map<string, Function>()
   let skillDescription = ''
@@ -20,7 +24,7 @@ function harness(history: Array<string | { content: unknown[] }> = []) {
     } },
     tools: { register: (tool: { name: string; description: string; parameters: Record<string, unknown>; output: { schema: Record<string, unknown> }; execute: (args: unknown, exec: unknown) => Promise<unknown> }) => { tools.set(tool.name, tool) } },
     on: (name: string, listener: Function) => { events.set(name, listener) }
-  } as never)
+  } as never, backend)
   const open = (messages: Array<string | { content: unknown[] }>, source = 'resume', id = 'session-1') => {
     agent = {
       id,
@@ -43,6 +47,22 @@ function harness(history: Array<string | { content: unknown[] }> = []) {
 }
 
 describe('built-in workflow plugin', () => {
+  it('uses the remote backend by default and disposes its canvas client', () => {
+    const before = process.listenerCount('message')
+    const dispose: Array<() => void> = []
+    let description = ''
+    apply({
+      skills: { register: (skill: { description: string }) => { description = skill.description } },
+      tools: { register: () => {} },
+      on: () => {},
+      effect: (install: () => () => void) => { dispose.push(install()) }
+    } as never)
+    expect(description).toContain('远端画布')
+    expect(process.listenerCount('message')).toBe(before + 1)
+    dispose.forEach(cleanup => cleanup())
+    expect(process.listenerCount('message')).toBe(before)
+  })
+
   it('declares a loadable Harness bundle', async () => {
     const root = new URL('../packages/insight-workflow-op/', import.meta.url)
     const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'))
@@ -91,12 +111,12 @@ describe('built-in workflow plugin', () => {
     const operations = properties.operations.items.oneOf as Array<Record<string, any>>
     expect(operations).toHaveLength(6)
     const addNode = operations.find(operation => operation.properties.op.const === 'add_node')!
-    expect(addNode.required).toEqual(expect.arrayContaining(['clientId', 'node']))
+    expect(addNode.required).toEqual(['op', 'node'])
     const video = addNode.properties.node.oneOf.find((variant: any) => variant.properties.type.const === 'video')
     expect(video.required).toContain('modelType')
     expect(video.properties.duration.description).toContain('秒')
-    expect((patch.output.schema.properties as Record<string, any>).createdNodes.items.properties.nodeId.description).toContain('ID')
-    expect(validateJsonSchemaValue(patch.parameters, { workflowId: 'w', operations: [{ op: 'add_node', clientId: 'n', node: { type: 'video', model: 'm' } }] })).not.toEqual([])
+    expect((patch.output.schema.properties as Record<string, any>).createdNodes.items.properties.id.description).toContain('ID')
+    expect(validateJsonSchemaValue(patch.parameters, { workflowId: 'w', operations: [{ op: 'add_node', node: { type: 'video', model: 'm' } }] })).not.toEqual([])
   })
 
   it('offers its skill on demand and handles a five-second video request with mock tools', async () => {
@@ -108,7 +128,7 @@ describe('built-in workflow plugin', () => {
     expect(h.skillContent).toContain('filters.all')
     expect(h.skillContent).toContain('data.params.seniorParams')
     expect(h.skillContent).toContain('reference_image_to_image')
-    expect(h.skillContent).toContain('当前 mock 不能导入')
+    expect(h.skillContent).toContain('当前工具不能导入')
     await h.ask('帮我生成一段5秒钟的视频')
     expect(h.context()).toBe('')
     expect(await h.call('get_node_definition', { nodeType: 'video' })).toMatchObject({ nodeDefinitions: [{ nodeType: 'video', description: '视频', supportedModelTypes: ['text_to_video'] }] })
@@ -122,19 +142,17 @@ describe('built-in workflow plugin', () => {
     expect(await h.call('list_workflows', { query: { filters: { all: [{ field: 'name', operator: 'eq', value: '5秒视频' }] } } })).toMatchObject({ workflows: [{ id: created.workflow.id }] })
     const patchInput = {
       workflowId: created.workflow.id,
-      idempotencyKey: 'video-op',
-      operations: [{ op: 'add_node', clientId: 'video-1', node: { type: 'video', model: 'mock-video-5s', modelType: 'text_to_video', prompt: '一段5秒钟的视频' } }]
+      operations: [{ op: 'add_node', node: { type: 'video', model: 'mock-video-5s', modelType: 'text_to_video', prompt: '一段5秒钟的视频' } }]
     }
-    const patched = await h.call('apply_workflow_patch', patchInput) as { applied: boolean; createdNodes: Array<{ nodeId: string }> }
+    const patched = await h.call('apply_workflow_patch', patchInput) as { applied: boolean; createdNodes: Array<{ id: string }> }
     expect(patched.applied).toBe(true)
     expect(patched.createdNodes).toHaveLength(1)
-    expect(await h.call('get_workflow', { workflowId: created.workflow.id, view: 'structure' })).toMatchObject({ view: 'structure', nodes: [{ id: patched.createdNodes[0]?.nodeId }] })
+    expect(await h.call('get_workflow', { workflowId: created.workflow.id, view: 'structure' })).toMatchObject({ view: 'structure', nodes: [{ id: patched.createdNodes[0]?.id }] })
     expect(await h.call('get_workflow', { workflowId: created.workflow.id, view: 'full' })).toMatchObject({ view: 'full', workflow: { nodes: [{ data: { params: { duration: 5 } } }] } })
     expect(await h.call('list_nodes', { workflowId: created.workflow.id })).toMatchObject({ view: 'summary', nodes: [{ type: 'video' }] })
     expect(await h.call('list_nodes', { workflowId: created.workflow.id, view: 'full' })).toMatchObject({ view: 'full', nodes: [{ type: 'video' }] })
     expect(await h.call('list_nodes', { workflowId: created.workflow.id, query: { filters: { all: [{ field: 'data.params.modelType', operator: 'eq', value: 'text_to_video' }] } } })).toMatchObject({ nodes: [{ type: 'video' }] })
-    expect(await h.call('get_node', { workflowId: created.workflow.id, nodeId: patched.createdNodes[0]!.nodeId })).toMatchObject({ node: { type: 'video' } })
-    expect(await h.call('apply_workflow_patch', patchInput)).toEqual(patched)
+    expect(await h.call('get_node', { workflowId: created.workflow.id, id: patched.createdNodes[0]!.id })).toMatchObject({ node: { type: 'video' } })
     const executeInput = { workflowId: created.workflow.id, idempotencyKey: 'run-video' }
     const run = await h.call('execute_workflow', executeInput) as { runId: string; mock: boolean }
     expect(run.mock).toBe(true)
@@ -164,25 +182,30 @@ describe('built-in workflow plugin', () => {
     const patched = await h.call('apply_workflow_patch', {
       workflowId: created.workflow.id,
       operations: [
-        { op: 'add_node', clientId: 'image', node: { type: 'image', model: 'mock-image', modelType: 'text_to_image', prompt: '一张海报' } },
-        { op: 'add_node', clientId: 'text-1', node: { type: 'text', model: 'mock-text', prompt: '标题' } },
-        { op: 'add_node', clientId: 'text-2', node: { type: 'text', model: 'mock-text', prompt: '正文' } }
+        { op: 'add_node', node: { type: 'image', model: 'mock-image', modelType: 'text_to_image', prompt: '一张海报' } },
+        { op: 'add_node', node: { type: 'text', model: 'mock-text', prompt: '标题' } },
+        { op: 'add_node', node: { type: 'text', model: 'mock-text', prompt: '正文' } }
       ]
-    }) as { applied: boolean; createdNodes: Array<{ clientId: string }> }
+    }) as { applied: boolean; createdNodes: Array<{ id: string }> }
     expect(patched.applied).toBe(true)
-    expect(patched.createdNodes.map(node => node.clientId)).toEqual(['image', 'text-1', 'text-2'])
+    expect(patched.createdNodes).toHaveLength(3)
+    expect(new Set(patched.createdNodes.map(node => node.id)).size).toBe(3)
     expect(await h.call('get_workflow', { workflowId: created.workflow.id })).toMatchObject({ workflow: { nodeCount: 3 } })
+    const linked = await h.call('apply_workflow_patch', { workflowId: created.workflow.id, operations: [
+      { op: 'add_edge', source: patched.createdNodes[0]!.id, target: patched.createdNodes[1]!.id }
+    ] })
+    expect(linked).toMatchObject({ applied: true, createdEdges: [{ id: expect.any(String) }] })
   })
 
   it('reloads workflow context and rejects invalid patches without mutation', async () => {
     const h = harness()
     const created = await h.call('create_workflow', {}) as { workflow: { id: string } }
-    await expect(h.call('apply_workflow_patch', { workflowId: created.workflow.id, operations: [{ op: 'add_node', clientId: 'x', node: { type: 'video', model: 'wrong' } }] })).rejects.toThrow()
-    const invalid = await h.call('apply_workflow_patch', { workflowId: created.workflow.id, operations: [{ op: 'add_node', clientId: 'x', node: { type: 'video', model: 'wrong', modelType: 'text_to_video' } }] })
+    await expect(h.call('apply_workflow_patch', { workflowId: created.workflow.id, operations: [{ op: 'add_node', node: { type: 'video', model: 'wrong' } }] })).rejects.toThrow()
+    const invalid = await h.call('apply_workflow_patch', { workflowId: created.workflow.id, operations: [{ op: 'add_node', node: { type: 'video', model: 'wrong', modelType: 'text_to_video' } }] })
     expect(invalid).toMatchObject({ applied: false, errors: [{ code: 'INVALID_PATCH' }] })
     expect(await h.call('get_workflow', { workflowId: created.workflow.id })).toMatchObject({ workflow: { nodeCount: 0 } })
     h.open([`继续工作流 ID: ${created.workflow.id}`])
-    expect(h.context()).toContain('当前工作流最新摘要')
+    expect(h.context()).toContain('当前工作流摘要')
   })
 
   it('restores only verified workflow tool history and retains it across compaction', async () => {
@@ -208,5 +231,31 @@ describe('built-in workflow plugin', () => {
     expect(h.context()).toContain(first.workflow.id)
     h.open([`工作流 ID: ${second.workflow.id}`], 'clear', 'other-session')
     expect(h.context()).toBe('')
+  })
+
+  it('restores a verified workflow summary with a fresh remote backend', () => {
+    const workflow = { id: '42', name: '已保存画布', nodeCount: 2, edgeCount: 1 }
+    const history = [
+      { content: [{ type: 'tool-call', id: 'create', name: 'workflow_create_workflow', arguments: '{}' }] },
+      { content: [{ type: 'tool-result', toolCallId: 'create', content: [{ type: 'text', text: JSON.stringify({ workflow }) }] }] }
+    ]
+    const backend = new RemoteWorkflowBackend({ dispose: () => {} } as CanvasApi)
+    const h = harness(history, backend)
+    expect(h.context()).toContain('"id":"42"')
+    expect(h.context()).toContain('"nodeCount":2')
+    h.open([], 'compact')
+    expect(h.context()).toContain('"id":"42"')
+  })
+
+  it('recovers the workflow ID when only a successful patch remains in history', () => {
+    const history = [
+      { content: [{ type: 'tool-call', id: 'patch', name: 'workflow_apply_workflow_patch',
+        arguments: JSON.stringify({ workflowId: '42', operations: [] }) }] },
+      { content: [{ type: 'tool-result', toolCallId: 'patch', content: [{ type: 'text',
+        text: JSON.stringify({ applied: true, valid: true, createdNodes: [], createdEdges: [], errors: [], warnings: [] }) }] }] }
+    ]
+    const h = harness(history, new RemoteWorkflowBackend({ dispose: () => {} } as CanvasApi))
+    expect(h.context()).toContain('当前工作流 ID："42"')
+    expect(h.context()).toContain('workflow_get_workflow')
   })
 })
