@@ -1,0 +1,33 @@
+{
+  "archive": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/insight-ai-desktop-canvas-plugin-0.3.0-alpha.10.tgz",
+  "sha256": "a8c571962f77331f2a756726b9c9ee3adc263fbcb734f42e96315237fc04ab3e",
+  "bytes": 14454451,
+  "all_packaged_files_match_build": true,
+  "file_count": 58,
+  "dependencies": {
+    "ali-oss": "6.20.0"
+  },
+  "critical_files": [
+    {
+      "path": "lib/index.js",
+      "sha256": "6a570089ab9b28ac593574ff38ae3a19eacf4f962972675f3de23acc1a1772fd"
+    },
+    {
+      "path": "lib/client.js",
+      "sha256": "d1f8f85f1bc7175effb9d6d86abf5f42e6b585fcbe3d915b870bc7689b00a7a5"
+    },
+    {
+      "path": "canvas-app/dist/canvas-service-manifest.json",
+      "sha256": "ab048fcd1678e3c613ff93a3d7e315b506f3c764690098d8c39e054ac6a0d50a"
+    },
+    {
+      "path": "canvas-app/dist/assets/workflowTabOwnership-Cs6xKYa4.js",
+      "sha256": "1aa42bb179457c3e2dd2dd5a0d73899b41dc47279e590a4dc4e16902106de24f"
+    },
+    {
+      "path": "canvas-app/dist/canvas-service.js",
+      "sha256": "b4b80a97097d03a18aef1ab02e52b48773d32a9c7ccd9b6a5d731102deca7bd7"
+    }
+  ],
+  "probe_not_shipped": true
+}

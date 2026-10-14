@@ -1,0 +1,2250 @@
+diff --git a/private/tmp/canvas-graph-baseline/README.md b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/README.md
+index 219108d..8d5dfd8 100644
+--- a/private/tmp/canvas-graph-baseline/README.md
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/README.md
+@@ -1,6 +1,6 @@
+ # Desktop Canvas Plugin
+ 
+-独立的生产画布插件仓库。旧 `/canvas/$id` 所需源码已一次性复制到独立 Vite 子项目；右栏接入真实 React Flow 画布、基础编辑和画布原有的实时保存。测试画布 `2873` 的桌面加载、编辑、持久化和重开已由用户人工验收，增删改查也已在旧项目测试环境交叉确认。插件随客户端登录环境选择服务：本地 Dev 使用测试 Gateway、模型配置和分享域名；正式安装版使用生产环境，不把 Dev 的测试 Token 发往生产。`0.3.0-alpha.4` 扩大画布业务路径转发并移除插件附加浮层；`0.3.0-alpha.5` 恢复精简标题与直接分享入口；`0.3.0-alpha.6` 修复模型参数加载；`0.3.0-alpha.7` 在分享后展示完整 `/share/<分享码>` 链接，自动复制受限时提供再次复制和手动复制。新增改动仍待真实客户端复验。0.3.0-alpha.9新增Agent对话创建空画布、读取画布和添加普通节点；详情与添加经Host/Client SSE桥复用原生服务，无需打开画布。本期只创建与保存，不触发模型生成、模板执行、节点更新或删除。alpha.9已由用户真实对话确认画布103161及文本/空图片节点成功。alpha.10新增聊天图片/已有画布图片素材导入，复用原生image/upload节点与保存队列；上传、保存与资产登记分开回执。alpha.10已在真实账号103165完成上传、保存、登记及重载核对。alpha.11修复Agent缺省新增重叠：原生尺寸准备后计算位置，坐标与新增一起严格保存；新增auto/absolute/after契约。alpha.11真实账号坐标手测另行记录，不能用自动回归替代。
++独立的生产画布插件仓库，复用成熟 React Flow 画布业务与实时保存。0.3.0-alpha.12向Agent提供七个工具：创建、读取、普通节点编辑、素材引用/导入、真实连线、模型配置查询。操作由插件常驻Client服务中的原生Store及保存队列执行，无需打开画布；本版只编辑与保存，不提交生成或模板。后端和原生UI行为保持现状。插件随客户端登录环境选择服务，本地Dev走测试Gateway，正式安装版走生产。alpha.9已由用户真实对话确认画布103161的文本/空图片节点；alpha.10已在真实账号103165完成图片上传、保存、登记及重载；alpha.11新增自动放置坐标契约。alpha.12的图编辑真实账号手测另行记录，自动化fixture不能替代实账验收。
+ 
+ [架构设计](docs/plans/2026-09-29-desktop-canvas-plugin-design.md) · [数据传输规范](docs/protocol.md) · [迁入清单](canvas-app/PORTING-MANIFEST.md) · [桌面验收步骤](docs/acceptance.md)
+ 
+@@ -17,21 +17,23 @@ npm run verify:isolated
+ 
+ 隔离验收读取同级 Shell 的已构建运行时和 Profile 模板，在本仓库 `.sandbox/` 副本安装插件，不修改 Shell/Core 工作区。2026-09-29 的隔离安装/卸载、受保护页面和打包资源验证已通过。隔离 Profile 没有桌面登录态；本版真实编辑器的桌面人工验收结果见 [验收记录](docs/acceptance.md)。
+ 
+-## Agent对话工具（0.3.0-alpha.11）
++## Agent对话工具（0.3.0-alpha.12）
+ 
+ 目标Core为0.2.1-alpha.1，工具peer要求该精确版本；开发dsh-tools与Cordis对齐实际Core的0.2.1-alpha.1 / 4.0.5-alpha.1。不宣称新工具已兼容旧Core0.1.6。新增附件peer要求0.2.1-alpha.1。开发Client/Host SDK与实际Core统一至0.2.1-alpha.1，解决旧开发包Cordis peer冲突；Web业务依赖不升级。Host运行依赖ali-oss6.20.0，与原Web同版本。
+ 
+ - canvas_create({name?})：Host复用固定saveOrUpdate创建空图，返回真实ID/address/version及runtime:ready或not_ready。创建成功但服务未就绪时保留ID；create_unknown不自动重建。
+-- canvas_get({canvasId,view?,nodeIds?,refresh?})：默认summary保持旧输出；nodes通过当前会话Client服务读详情，可省略nodeIds取得空图版本/前20个节点；summary不接收nodeIds/refresh。
+-- canvas_node_edit({canvasId,expectedVersion,action:'add',node})：仅添加text/image/video/audio普通节点，字段遵循原NodeDraft；saved才表示本次保存。版本冲突先读取，submission_unknown先核对，不自动重复新增。
++- canvas_get({canvasId,view?,nodeIds?,refresh?,nodeOffset?,edgeOffset?,limit?,expectedVersion?})：默认summary保持旧输出；nodes读取最多20个节点详情；graph读取真实节点、尺寸、端口、允许输入与边，每类独立分页1–20项。graph续页必须带第一页confirmed版本；版本变化重读第一页。refresh:true仅用于读取的权威重载。
++- canvas_node_edit({canvasId,expectedVersion,action,...})：add添加普通text/image/video/audio；update用nodeId/changes改title/text/prompt/标量params；delete用nodeIds删除普通节点并清理原生关联边/空组；configure用nodeId/configuration配置普通image/video的modelType/model/标量params。各分支字段独立，不能提交原始node.data。上传或工具产物媒体仅改标题、删除，不改内容/生成参数。模型切换与级联参数优先用configure；先查询合法值。saved才表示保存，affectedEdgeIds返回真实边ID，warnings仅提示输入兼容性，不表示执行生成。
++- canvas_edges({canvasId,expectedVersion,action,...})：add(connection)、delete(edgeIds)、reconnect(edgeId/connection)、reorder(targetNodeId/完整edgeIds)。source/target为真实节点ID，省略handles由插件解析真实原生端口。允许普通节点来源连接合法目标及已有工具输入；工具本体来源和内部产物管理边不开放。重复引用、假端口、新环及容量超限拒绝；reconnect保留ID，reorder只替换目标入边槽位。delete/reorder一次1–20个边ID。
++- canvas_models({canvasId,nodeType,modelType?,model?,modeOffset?,modelOffset?,limit?,expectedCatalogVersion?})：只读当前账号图片/视频模型目录。返回真实value和可编辑标量参数；模式/模型独立分页，续页绑定catalogVersion。paramHints按所选模型默认父参数组合；配置后用nodes详情查询当前实时选项。不开放高级嵌套参数。
+ 
+ - canvas_assets({})：列出当前可见用户消息中的图片attachmentId/尺寸等信息，最多20条；无图片返回needs_input，不读其他会话/文件路径。
+ - canvas_asset_import({canvasId,expectedVersion,source,title?,placement?})：source为attachment+attachmentId，或canvas_node+canvasId/nodeId/outputIndex。Host使用当前用户STS/OSS上传或复用已授权节点产物，经v3桥asset.add保存原生图片来源节点；saved保留真实节点ID/版本，assetRegistration独立报告登记结果。
+ 
+ 坐标契约：两类新增默认省略placement或使用{mode:'auto'}，由插件按最新Store及原生显示尺寸向右追加，既有节点不移动。精确位置使用{mode:'absolute',position:{x,y}}，包括(0,0)，不避让。沿已有节点延展使用{mode:'after',anchorNodeId}，按锚点世界位置右侧追加，不扫描全图、不建立连线，也不保证无局部重叠。模型工具不再接受裸position；共享协议/旧内部调用仍保留其精确含义。节点详情返回本地position、显示size、parentId（顶层null）；有parentId时坐标相对父组。尺寸读取失败时沿用原生默认占位，后续尺寸变化不自动重排旧图。
+ 
+-五工具保留原JSON字符串输出。会话和内部requestId来自真实exec.agent.id/callId，不开放给模型；创建去重限定Host插件生命周期，节点去重复用现有桥。关闭客户端/重启后不承诺跨进程exactly-once。原UI与dsh-resource地址保留，工具不自动打开标签。
++七工具保留JSON字符串输出。会话和内部requestId来自真实exec.agent.id/callId，不开放给模型；创建去重限定Host插件生命周期，节点和连线去重复用现有桥。每次写入使用最新confirmed版本；submission_unknown保留真实节点/边ID，先权威读取核对，不能自动重复写。关闭客户端/重启后不承诺跨进程exactly-once。原UI与dsh-resource地址保留，工具不自动打开标签。
+ 
+ 素材说明：只支持Harness当前可见用户图片（PNG/JPEG/WEBP/GIF、小于20MiB），上传已归一化字节，可能压缩/修正朝向，不承诺原文件字节保真。文件附件及已被会话压缩移除的旧图需重新提供图片或明确既有画布节点。多产物来源需明确序号，不能自动猜选。已确认上传按环境/账号/会话/附件复用；unknown上传或保存不能换调用自动重试。保存成功但登记失败保留节点，不回滚/重复添加。
+ 
+-当前对话工具范围与原生画布业务范围不同：原生连线、生成和图像编辑/抠图等业务已有，alpha.11仍未向Agent开放这些操作。能力未接入不能据此推断原生业务不存在；普通新增与素材导入仍只保存。
++当前Agent可编辑真实业务图、节点和合法生成配置，所有操作仅保存。原生生成、图像编辑/抠图等业务已有，alpha.12尚未开放执行、创建工具节点或模板。能力未接入不能据此推断原生业务不存在。后端与原生UI入口保持现状；Agent不需要打开画布。
+diff --git a/private/tmp/canvas-graph-baseline/canvas-app/legacy/src/store/flowStoreCore.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/legacy/src/store/flowStoreCore.ts
+index ba597dc..2ad97c3 100644
+--- a/private/tmp/canvas-graph-baseline/canvas-app/legacy/src/store/flowStoreCore.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/legacy/src/store/flowStoreCore.ts
+@@ -1,9 +1,10 @@
+ import { getAgentGenerationCounts, validateAgentRunInputs } from '../../../src/agent-node-policy';
+ import { createStore, type StoreApi } from 'zustand/vanilla';
+ import { placeAgentNodes } from '../../../src/agent-node-placement';
++import { resolveAgentEdgeChange, type AgentEdgeChange } from '../../../src/agent-edge-policy';
+ import { createAgentEditGuard, type AgentEditGuard } from '../../../src/agent-edit-guard';
+ import { isEqual, isPlainObject } from 'lodash-es';
+-import { CanvasAgentError, type AgentWriteOptions, type AgentRunOptions, type Failure, type ErrorCode } from '../../../../src/shared/canvas-agent-protocol';
++import { CanvasAgentError, type AgentWriteOptions, type AgentRunOptions, type Failure, type ErrorCode, type EdgeEditOperation } from '../../../../src/shared/canvas-agent-protocol';
+ import { parseCanvasId } from '../../../../src/shared/protocol';
+ import type { Node, Edge } from '@xyflow/react';
+ import { addEdge } from '@xyflow/react';
+@@ -116,7 +117,7 @@ interface Measured {
+   height: number;
+ }
+ 
+-export interface AgentMutationOutcome { version: string; affectedNodeIds: string[]; unchanged?: boolean }
++export interface AgentMutationOutcome { version: string; affectedNodeIds: string[]; affectedEdgeIds?: string[]; unchanged?: boolean }
+ export type AgentNodeUpdate = NodeUpdate | ((state: FlowState, node: Node) => NodeUpdate);
+ export type AgentNodeCreate = Node[] | ((state: FlowState) => Node[]);
+ 
+@@ -225,6 +226,7 @@ export interface FlowState {
+     persistNodeChanges: (updateNodes: Array<any>, deleteNodeIds: string[]) => void;
+     updateNodeSelected: (id: string, selected: boolean) => void;
+     // 连线操作
++    editAgentEdges: (operation: EdgeEditOperation, options: AgentWriteOptions) => Promise<AgentMutationOutcome>;
+     deleteEdges: (ids: string[]) => void;
+     updateInputEdgesType: (id: string, type: string) => void;
+     edgeOrderChange: (imageMap: ImageMapItem[]) => void;
+@@ -357,8 +359,12 @@ const createFlowState = (
+       }
+       const allDeleteIds = [...new Set([...ids, ...getEmptyGroupIdsAfterDelete(nodes, ids)])];
+       if (options) assertAgentNodesIdle(nodes, allDeleteIds);
+-      mediaDimensions.invalidate(allDeleteIds);
+       const newEdges = edges.filter(e => !allDeleteIds.includes(e.source) && !allDeleteIds.includes(e.target));
++      const removedEdges = edges.filter(edge => !newEdges.includes(edge));
++      const affectedEdgeIds = removedEdges.map(edge => edge.id);
++      const persistenceOptions = options ? { ...options, affectedNodeIds: [...new Set([...allDeleteIds, ...removedEdges.flatMap(edge => [edge.source, edge.target])])] } : undefined;
++      if (persistenceOptions) assertAgentNodesIdle(nodes, persistenceOptions.affectedNodeIds);
++      mediaDimensions.invalidate(allDeleteIds);
+       set({
+         nodes: nodes.filter(n => !allDeleteIds.includes(n.id)),
+         edges: newEdges,
+@@ -367,9 +373,9 @@ const createFlowState = (
+         () => partialUpdate(canvasId, {
+           deleteNodeIds: allDeleteIds,
+           allEdges: newEdges,
+-        }, options), options);
++        }, persistenceOptions), options);
+       if (!options) { get().actions.recordSnapshot(); return; }
+-      return operation.then(outcome => { if (get().canvasId === canvasId) get().actions.recordSnapshot(); return outcome as AgentMutationOutcome; }, error => {
++      return operation.then(outcome => { if (get().canvasId === canvasId) get().actions.recordSnapshot(); return { ...outcome as AgentMutationOutcome, affectedEdgeIds }; }, error => {
+         if (get().canvasId === canvasId) {
+           if (!isUnknownWrite(error)) {
+             const restoredNodes = restoreDeletedElements(nodes, get().nodes, new Set(allDeleteIds));
+@@ -382,11 +388,77 @@ const createFlowState = (
+           }
+           get().actions.recordSnapshot();
+         }
+-        throw Object.assign(error, { affectedNodeIds: allDeleteIds });
++        throw Object.assign(error, { affectedNodeIds: allDeleteIds, affectedEdgeIds });
+       });
+     }
+   }
+ 
++  const rollbackEdgeChange = (before: Edge[], change: AgentEdgeChange) => {
++    const afterById = new Map(change.edges.map(edge => [edge.id, edge]));
++    const beforeById = new Map(before.map(edge => [edge.id, edge]));
++    const touched = new Set(change.affectedEdgeIds);
++    const nodeIds = new Set(get().nodes.map(node => node.id));
++    const unavailableRelations = new Set<string>();
++    const sameEndpoints = (left: Edge, right: Edge) => left.source === right.source && left.target === right.target
++      && left.sourceHandle === right.sourceHandle && left.targetHandle === right.targetHandle;
++    let conflict = false;
++    let current = get().edges.filter(edge => {
++      if (!touched.has(edge.id) || beforeById.has(edge.id)) return true;
++      const optimistic = afterById.get(edge.id);
++      if (optimistic && sameEndpoints(edge, optimistic)) return false;
++      conflict = true; return true;
++    }).map(edge => {
++      const old = beforeById.get(edge.id); const optimistic = afterById.get(edge.id);
++      if (!touched.has(edge.id) || !old || !optimistic) return edge;
++      // Reconnect endpoints form one relation; never combine old and newer relations field by field.
++      if (!sameEndpoints(old, optimistic) && !sameEndpoints(edge, optimistic)) { conflict = true; return edge; }
++      if (!sameEndpoints(old, optimistic) && (!nodeIds.has(old.source) || !nodeIds.has(old.target))) {
++        conflict = true; unavailableRelations.add(edge.id); return edge;
++      }
++      const restored = restoreChangedFields(old, optimistic, edge); conflict ||= restored.conflict;
++      return restored.value as Edge;
++    });
++    const deleted = new Set(before.filter(edge => touched.has(edge.id) && !afterById.has(edge.id)).map(edge => edge.id));
++    const restored = restoreDeletedElements(before, current, deleted);
++    conflict ||= restored.conflict; current = restored.elements;
++    current = current.filter(edge => {
++      if ((!deleted.has(edge.id) && !unavailableRelations.has(edge.id)) || (nodeIds.has(edge.source) && nodeIds.has(edge.target))) return true;
++      conflict = true; return false;
++    });
++    const ordered = (edges: Edge[]) => edges.filter(edge => touched.has(edge.id)).map(edge => edge.id);
++    const oldOrder = ordered(before); const optimisticOrder = ordered(change.edges);
++    // Reorder only touched slots when no later operation changed that order or membership.
++    if (oldOrder.length === optimisticOrder.length && oldOrder.every(id => afterById.has(id)) && !isEqual(oldOrder, optimisticOrder)) {
++      if (isEqual(ordered(current), optimisticOrder)) {
++        const byId = new Map(current.map(edge => [edge.id, edge])); let cursor = 0;
++        current = current.map(edge => touched.has(edge.id) ? byId.get(oldOrder[cursor++])! : edge);
++      } else conflict = true;
++    }
++    set({ edges: current });
++    return conflict;
++  };
++
++  const editAgentEdges = (operation: EdgeEditOperation, options: AgentWriteOptions): Promise<AgentMutationOutcome> => guardAgentOperation(async () => {
++    const { canvasId, nodes, edges } = get();
++    assertAgentWrite(get(), canvasId, options);
++    if (operation.expectedVersion !== options.expectedVersion) throw agentError('INVALID_ARGUMENT', '连线操作版本与保存版本不一致');
++    const change = resolveAgentEdgeChange(get(), operation);
++    assertAgentNodesIdle(nodes, change.affectedNodeIds);
++    if (change.unchanged) return { version: String(get().versionNumber), affectedNodeIds: change.affectedNodeIds, affectedEdgeIds: change.affectedEdgeIds, unchanged: true };
++    set({ edges: change.edges });
++    try {
++      const outcome = await partialUpdate(canvasId, { allEdges: change.edges }, { ...options, affectedNodeIds: change.affectedNodeIds });
++      if (get().canvasId === canvasId) get().actions.recordSnapshot();
++      return { ...outcome as AgentMutationOutcome, affectedNodeIds: change.affectedNodeIds, affectedEdgeIds: change.affectedEdgeIds };
++    } catch (error) {
++      if (get().canvasId === canvasId) {
++        if (!isUnknownWrite(error) && rollbackEdgeChange(edges, change)) set({ agentPersistenceIssue: persistenceFailure(error) });
++        get().actions.recordSnapshot();
++      }
++      throw Object.assign(error as Error, { affectedNodeIds: change.affectedNodeIds, affectedEdgeIds: change.affectedEdgeIds });
++    }
++  });
++
+   function updateNode(id: string, update: NodeUpdate, isRecord?: boolean, isSubmit?: boolean): void;
+   function updateNode(id: string, update: AgentNodeUpdate, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
+   function updateNode(id: string, input: AgentNodeUpdate, isRecord = true, isSubmit = true, options?: AgentWriteOptions): void | Promise<AgentMutationOutcome> {
+@@ -1178,6 +1250,8 @@ const createFlowState = (
+       set({ edges: newEdges });
+     },
+ 
++    editAgentEdges,
++
+     deleteEdges: (ids: string[]) => {
+       if (!ids.length) return;
+       const { canvasId, edges } = get();
+@@ -1498,7 +1572,7 @@ export function createFlowStoreApi({
+     const partialUpdate = (canvasId: string, payload: ParamsContent, options?: AgentWriteOptions) =>
+       enqueueMutation(canvasId, async () => {
+         const currentVersion = get().canvasId === canvasId ? get().versionNumber : undefined;
+-        if (options) assertAgentNodesIdle(get().nodes, [...(payload.updateNodes ?? []).map(node => node.id), ...(payload.deleteNodeIds ?? [])]);
++        if (options) assertAgentNodesIdle(get().nodes, [...(payload.updateNodes ?? []).map(node => node.id), ...(payload.deleteNodeIds ?? []), ...(options.affectedNodeIds ?? [])]);
+         return partialUpdateRequest(canvasId, payload, currentVersion, { ...requestOptions?.(), ...(options ? { receiptMode: 'agent' as const, signal: options.signal } : {}) }, get().readOnly);
+       }, options).then(response => options ? {
+         version: String((response as any)?.versionNumber ?? (response as any)?.data?.versionNumber),
+diff --git a/private/tmp/canvas-graph-baseline/canvas-app/src/agent-adapter.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-adapter.ts
+index 6d4b3dd..49f4fba 100644
+--- a/private/tmp/canvas-graph-baseline/canvas-app/src/agent-adapter.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-adapter.ts
+@@ -1,10 +1,12 @@
+-import { CanvasAgentError, parseCanvasOperation, assertCanvasMessageSize, MAX_NODE_IDS,
++import { CanvasAgentError, parseCanvasOperation, assertCanvasMessageSize, MAX_NODE_IDS, isCanvasReadOperation,
+   type CanvasOperation, type CanvasOperationResult, type Failure, type ErrorCode, type NodePlacement, type NodeDraft, type CanvasAssetInput } from '../../src/shared/canvas-agent-protocol';
+ import type { CanvasContext } from './canvas-context';
+ import { createAgentNode, createAgentAssetNode, describeAgentNode, resolveAgentNodePatch, getAgentGenerationCounts, validateAgentRunInputs } from './agent-node-policy';
+ import { isTrustedCanvasVersion } from './canvas-initialization';
+ import { isNonGenerativeMedia } from '../legacy/src/components/canvasFlow/utils/type';
+ import { STANDARD_NODE_TYPES } from '../../src/shared/canvas-agent-protocol';
++import { readAgentGraph } from './agent-graph-read';
++import { readAgentModels, resolveAgentNodeConfiguration, getAgentInputCompatibility } from './agent-model-policy';
+ 
+ const placementFor = (input: NodeDraft | CanvasAssetInput): NodePlacement => input.placement
+   ?? (input.position ? { mode: 'absolute', position: input.position } : { mode: 'auto' });
+@@ -23,16 +25,37 @@ export function createCanvasAgentAdapter(context: CanvasContext) {
+       try {
+         operation = structuredClone(parseCanvasOperation(input));
+         if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
+-        await context.initialize(operation.action === 'canvas.read' ? 'read' : operation.action === 'node.run' ? 'run' : 'edit', signal);
++        await context.initialize(isCanvasReadOperation(operation) ? 'read' : operation.action === 'node.run' ? 'run' : 'edit', signal);
+         const state = context.store.getState();
++        const snapshotVersion = version();
++        const consistency = () => !snapshotVersion || context.store.getState() !== state || state.actions.hasPendingMutations()
++          || context.guard.isEditorBusy() || context.guard.isOperationBusy() || state.agentPersistenceIssue
++          || state.versionConflict || context.barrier.isUncertain() ? 'unconfirmed' as const : 'confirmed' as const;
+         if (operation.action === 'canvas.read') {
+           const ids = operation.nodeIds ?? state.nodes.slice(0, MAX_NODE_IDS).map(node => node.id);
+-          const result: CanvasOperationResult = { status: 'read', canvasId: context.canvasId, version: version(),
+-            consistency: !version() || state.actions.hasPendingMutations() || context.guard.isEditorBusy() || context.guard.isOperationBusy() || state.agentPersistenceIssue || state.versionConflict || context.barrier.isUncertain() ? 'unconfirmed' : 'confirmed',
++          const result: CanvasOperationResult = { status: 'read', canvasId: context.canvasId, version: snapshotVersion,
++            consistency: consistency(),
+             nodeCount: state.nodes.length, nodes: ids.flatMap(id => { const node = state.nodes.find(item => item.id === id); return node ? [describeAgentNode(state, node)] : []; }),
+             missingNodeIds: ids.filter(id => !state.nodes.some(node => node.id === id)) };
+           assertCanvasMessageSize(result); return result;
+         }
++        if (operation.action === 'canvas.graph.read') {
++          if (operation.expectedVersion !== undefined) {
++            if (!snapshotVersion || consistency() !== 'confirmed') fail('VERSION_UNAVAILABLE', '图结构尚未确认，请等待保存完成后重新读取第一页');
++            if (operation.expectedVersion !== snapshotVersion) fail('VERSION_CONFLICT', '图结构版本已变化，请从第一页重新读取');
++          }
++          const result: CanvasOperationResult = { status: 'graph', canvasId: context.canvasId,
++            version: snapshotVersion, consistency: consistency(), ...readAgentGraph(state, operation) };
++          assertCanvasMessageSize(result); return result;
++        }
++        if (operation.action === 'canvas.models.read') {
++          requireConfiguration();
++          const catalog = await readAgentModels(state, operation);
++          if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '读取已取消');
++          const result: CanvasOperationResult = { status: 'models', canvasId: context.canvasId,
++            version: snapshotVersion, consistency: consistency(), ...catalog };
++          assertCanvasMessageSize(result); return result;
++        }
+         if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
+         const options = { expectedVersion: operation.expectedVersion, strictReceipt: true as const, signal };
+         if (operation.action === 'node.run') {
+@@ -70,29 +93,54 @@ export function createCanvasAgentAdapter(context: CanvasContext) {
+             if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
+             return resolveAgentNodePatch(current, node, changes);
+           }, true, true, options);
+-        } else {
++        } else if (operation.action === 'node.configure') {
++          requireConfiguration();
++          const configuration = operation.configuration;
++          outcome = await state.actions.updateNode(operation.nodeId, (current, node) => {
++            if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
++            return resolveAgentNodeConfiguration(current, node, configuration);
++          }, true, true, options);
++        } else if (operation.action === 'edge.add' || operation.action === 'edge.delete'
++          || operation.action === 'edge.reconnect' || operation.action === 'edge.reorder') {
++          outcome = await state.actions.editAgentEdges(operation, options);
++        } else if (operation.action === 'node.delete') {
+           for (const id of operation.nodeIds) {
+             const node = state.nodes.find(node => node.id === id);
+             if (!node) fail('NODE_NOT_FOUND', '删除目标不存在');
+-            if (!supported(node)) fail('UNSUPPORTED_NODE', '本期只开放普通节点删除');
++            if (!STANDARD_NODE_TYPES.some(type => type === node.type)) fail('UNSUPPORTED_NODE', '本期只开放普通节点删除');
+           }
+           outcome = await state.actions.deleteNodes(operation.nodeIds, options);
+         }
+         if (!outcome) fail('SAVE_REJECTED', '保存没有返回严格回执');
+-        return { status: 'saved', canvasId: context.canvasId, version: outcome.version, affectedNodeIds: outcome.affectedNodeIds, unchanged: outcome.unchanged === true };
++        const current = context.store.getState();
++        const affectedEdges = new Set(outcome.affectedEdgeIds ?? []);
++        const warningNodeIds = [...new Set([...outcome.affectedNodeIds,
++          ...state.edges.filter(edge => affectedEdges.has(edge.id)).map(edge => edge.target)])];
++        const warnings = [...new Set(warningNodeIds.flatMap(id => {
++          const node = current.nodes.find(item => item.id === id);
++          try {
++            const warning = node && supported(node) ? getAgentInputCompatibility(current, node) : null;
++            return warning ? [id + '：' + warning] : [];
++          } catch { return [id + '：输入兼容性尚未确认，请重新读取节点核对']; }
++        }))];
++        return { status: 'saved', canvasId: context.canvasId, version: outcome.version,
++          affectedNodeIds: outcome.affectedNodeIds, unchanged: outcome.unchanged === true,
++          ...(outcome.affectedEdgeIds ? { affectedEdgeIds: outcome.affectedEdgeIds } : {}),
++          ...(warnings.length ? { warnings } : {}) };
+       } catch (error: any) {
+-        if (error?.requestPhase === 'sent_unknown') {
++        if (error?.requestPhase === 'sent_unknown' && !isCanvasReadOperation(operation)) {
+           const failure: Failure = { code: 'SUBMISSION_UNKNOWN', message: error.message || '请求结果未确认，请先读取核对', retry: 'read_first' };
+           context.store.setState({ agentPersistenceIssue: failure });
+           const nodeId = 'nodeId' in operation ? operation.nodeId : undefined;
+           const taskId = typeof error.raw?.taskId === 'string' && error.raw.taskId.trim() && error.raw.taskId.length <= 200 ? error.raw.taskId : undefined;
+           return { status: 'submission_unknown', canvasId: context.canvasId, phase: operation.action === 'node.run' ? 'run' : 'save', version: version(),
+             affectedNodeIds: error.affectedNodeIds ?? ('nodeIds' in operation ? operation.nodeIds ?? [] : nodeId ? [nodeId] : []), error: failure,
++            ...(Array.isArray(error.affectedEdgeIds) ? { affectedEdgeIds: error.affectedEdgeIds } : {}),
+             ...(operation.action === 'node.run' ? { nodeId: operation.nodeId, generation: operation.approvedGeneration, ...(taskId ? { taskId } : {}) } : {}) };
+         }
+-        const code: ErrorCode = error instanceof CanvasAgentError ? error.code : String(error?.code ?? error?.raw?.code) === '5011' ? 'VERSION_CONFLICT' : error?.status === 401 || error?.status === 403 ? 'AUTH_REQUIRED' : operation?.action === 'node.run' ? 'RUN_REJECTED' : 'SAVE_REJECTED';
++        const code: ErrorCode = error instanceof CanvasAgentError ? error.code : String(error?.code ?? error?.raw?.code) === '5011' ? 'VERSION_CONFLICT' : error?.status === 401 || error?.status === 403 ? 'AUTH_REQUIRED' : isCanvasReadOperation(operation) ? 'READ_REJECTED' : operation?.action === 'node.run' ? 'RUN_REJECTED' : 'SAVE_REJECTED';
+         return { status: 'rejected', canvasId: context.canvasId, version: version(), effect: 'none',
+-          error: { code, message: error?.message || error?.msg || '画布操作未执行', retry: code === 'INVALID_ARGUMENT' || code === 'UNSUPPORTED_NODE' ? 'after_input' : 'read_first' } };
++          error: { code, message: error?.message || error?.msg || '画布操作未执行', retry: code === 'INVALID_ARGUMENT' || code === 'UNSUPPORTED_NODE' || code === 'INVALID_CONNECTION' ? 'after_input' : 'read_first' } };
+       }
+     },
+   };
+diff --git a/private/tmp/canvas-graph-baseline/canvas-app/src/agent-node-policy.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-node-policy.ts
+index 657fb52..4e02a99 100644
+--- a/private/tmp/canvas-graph-baseline/canvas-app/src/agent-node-policy.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-node-policy.ts
+@@ -63,10 +63,16 @@ function validateMediaParams(state: AgentNodeState, node: Node & { type: MediaNo
+   }
+ }
+ 
+-export function resolveAgentNodePatch(state: AgentNodeState, node: Node, input: NodeChanges): { data: Record<string, unknown> } {
++export function resolveAgentNodePatch(state: AgentNodeState, node: Node, input: NodeChanges): {
++  data: Record<string, unknown>; width?: number; height?: number; measured?: { width: number; height: number };
++} {
+   if (!state.nodes.some(item => item.id === node.id)) throw new CanvasAgentError('NODE_NOT_FOUND', '目标节点已不存在');
+-  if (!supported(node)) throw new CanvasAgentError('UNSUPPORTED_NODE', '本期不开放该节点的内容修改');
+   const changes = parseNodeChanges(input);
++  const ordinary = STANDARD_NODE_TYPES.some(type => type === node.type);
++  const sourceOnly = isNonGenerativeMedia(String(node.data.type ?? ''));
++  if (!ordinary || (sourceOnly && (node.type === 'text' || Object.keys(changes).some(key => key !== 'title')))) {
++    throw new CanvasAgentError('UNSUPPORTED_NODE', '该节点仅允许修改标题，上传或工具产物不能改写内容与生成参数');
++  }
+   const data: Record<string, unknown> = {};
+   if (changes.title !== undefined) {
+     const validation = validateNodeTitle({ existingNodes: state.nodes, nodeId: node.id, nextTitle: changes.title });
+@@ -92,6 +98,13 @@ export function resolveAgentNodePatch(state: AgentNodeState, node: Node, input:
+     }
+     data.params = params;
+   }
++  if (data.params !== undefined) {
++    const sized = applyEmptyMediaNodeDimensions({ ...node, data: { ...node.data, ...data } });
++    if ((sized.width !== node.width || sized.height !== node.height)
++      && typeof sized.width === 'number' && typeof sized.height === 'number') {
++      return { data, width: sized.width, height: sized.height, measured: { width: sized.width, height: sized.height } };
++    }
++  }
+   return { data };
+ }
+ 
+@@ -204,3 +217,6 @@ export function describeAgentNode(state: AgentNodeState, node: Node): NodeDetail
+   assertCanvasMessageSize(detail);
+   return detail;
+ }
++
++// Shared native validation for the dedicated generation-configuration entry point.
++export { simpleFields as getAgentMediaParamFields, validateMediaParams as validateAgentMediaParams };
+diff --git a/private/tmp/canvas-graph-baseline/canvas-app/test/agent-node-policy.test.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-node-policy.test.ts
+index cb17d3e..b2685fb 100644
+--- a/private/tmp/canvas-graph-baseline/canvas-app/test/agent-node-policy.test.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-node-policy.test.ts
+@@ -59,6 +59,21 @@ describe('controlled node mapping', () => {
+     expect(patch.data.params).toMatchObject({ aspect_ratio: '16:9', quality: 'high', gen_count: 2, model: 'fixture-model', modelType: 'fixture-mode' });
+     expect(node.data.params).toMatchObject({ aspect_ratio: '1:1', quality: 'low' });
+   });
++  it('updates native empty-media dimensions for ratio edits and preserves dimensions of existing products', () => {
++    const state = makeState(); const node = state.nodes[0];
++    node.width = 400; node.height = 400; node.measured = { width: 400, height: 400 };
++    const before = structuredClone(node);
++    const patch = resolveAgentNodePatch(state, node, { params: { aspect_ratio: '16:9', quality: 'high' } });
++    expect(patch.width).toBeGreaterThan(400); expect(patch.height).toBe(400);
++    expect(patch.measured).toEqual({ width: patch.width, height: patch.height });
++    expect(node).toEqual(before);
++    for (const type of ['image', 'video']) {
++      const existing = { ...node, type, data: { ...node.data, value: 'https://example.test/product.png' } };
++      const unchangedSize = resolveAgentNodePatch(makeState([existing]), existing, { params: { aspect_ratio: '16:9', quality: 'high' } });
++      expect(unchangedSize).not.toHaveProperty('width'); expect(unchangedSize).not.toHaveProperty('height');
++      expect(unchangedSize.data.params).toMatchObject({ aspect_ratio: '16:9', quality: 'high' });
++    }
++  });
+   it('applies native option permissions and preserves successful-empty permission semantics', () => {
+     const state = makeState(); const node = state.nodes[0];
+     state.modelNodePermission = normalizeModelNodeSettings([{ model_key: 'fixture-model', model_category: 'image', visible: 1, enabled: 1, custom_parameters: { gen_count: { choices: [{ value: 1 }, { value: 2, enabled: 0 }, { value: 4, visible: 0 }] } } }]);
+diff --git a/private/tmp/canvas-graph-baseline/canvas-app/test/agent-runtime-complete.test.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-runtime-complete.test.ts
+index e4ceed2..e3da53d 100644
+--- a/private/tmp/canvas-graph-baseline/canvas-app/test/agent-runtime-complete.test.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-runtime-complete.test.ts
+@@ -1,5 +1,6 @@
+ // @vitest-environment jsdom
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { webcrypto } from 'node:crypto';
+ import type { CanvasContext } from '../src/canvas-context';
+ import type { Node } from '@xyflow/react';
+ const api = vi.hoisted(() => ({ graph: vi.fn(), models: vi.fn(), permission: vi.fn(), tools: vi.fn(), update: vi.fn(), invoke: vi.fn(), capacity: vi.fn(), balance: vi.fn(), dimensions: vi.fn(), contexts: new Map<string, CanvasContext>() }));
+@@ -10,6 +11,7 @@ vi.mock('@/components/canvasFlow/utils/mediaDimensionLoader', () => ({ loadIntri
+ vi.mock('@/utils', () => ({ isSvgImageUrl: () => false, compressImage: vi.fn() }));
+ vi.mock('../src/canvas-context', async original => { const module = await original<typeof import('../src/canvas-context')>(); return { ...module, createCanvasContext: (...args: Parameters<typeof module.createCanvasContext>) => { const context = module.createCanvasContext(...args); api.contexts.set(args[0], context); return context; } }; });
+ import {registerCanvasTools} from '../../src/host/canvas-tools';
++import { registerCanvasGraphTools } from '../../src/host/canvas-graph-tools';
+ import { registerCanvasAssetTools } from '../../src/host/canvas-asset-tools';
+ import { createCanvasAssetApi } from '../../src/host/canvas-assets';
+ import {createEmptyCanvas} from '../../src/host/canvas-api';
+@@ -27,12 +29,13 @@ const success = (data: unknown) => ({ code: 'SUCCESS', data });
+ const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; };
+ const model = { model_name: 'fixture', parameters: { gen_count: { default: 1, choices: [1,2].map(value => ({ value, label: String(value) })) } }, senoir_parameters: {} };
+ const node = (type = 'text', id = 'n1'): Node => ({ id, type, position: { x: 0, y: 0 }, data: { title: id, params: { model: 'fixture', modelType: 'text_to_image', gen_count: 1, prompt: 'test' }, value: type === 'text' ? 'text' : '', taskInfo: { status: 'success' }, product: [] } });
+-const row = (nodes: Node[] = [], versionNumber = '18', taskStatus = 'FINISHED') => success({ name: 'fixture', data: JSON.stringify({ nodes, edges: [] }), taskStatus, versionNumber });
++const row = (nodes: Node[] = [], versionNumber = '18', taskStatus = 'FINISHED', edges: any[] = []) => success({ name: 'fixture', data: JSON.stringify({ nodes, edges }), taskStatus, versionNumber });
+ const service = () => { const value = createCanvasServiceRuntime(); services.push(value); return value; };
+ const prepare = async (nodes: Node[] = []) => { api.graph.mockResolvedValueOnce(row(nodes)); const rt = service(); await rt.ensureContext({ canvasId: '2873', capability: 'edit' }); return rt; };
+ const execute = (rt: ReturnType<typeof service>, operation: any) => rt.execute({ canvasId: '2873', operation });
+ beforeEach(() => {
+   vi.resetAllMocks(); api.contexts.clear(); vi.stubGlobal('BroadcastChannel', undefined);
++  vi.stubGlobal('crypto', webcrypto);
+   api.graph.mockResolvedValue(row());
+   api.models.mockResolvedValue(success([{ config: JSON.stringify({ text: { fixture: model }, image: { text_to_image: { name: 'fixture', models: { fixture: model } } }, video: { text_to_image: { name: 'fixture', models: { fixture: model } } }, audio: { music: { name: 'fixture', models: { fixture: model } } } }) }]));
+   api.permission.mockResolvedValue(success([])); api.tools.mockResolvedValue(success([])); api.update.mockResolvedValue(success({ versionNumber: '19' }));
+@@ -546,3 +549,111 @@ describe('Agent native node placement', () => {
+     } finally { disconnect(); endpoint.dispose(); host.dispose(); }
+   });
+ });
++
++describe('agent graph editing delivery through the existing service', () => {
++  it('pages brief graph metadata with a confirmed version and preserves raw edge order', async () => {
++    const original = { ...node('image', 'original'), width: 400, height: 400, measured: { width: 400, height: 400 }, data: { ...node('image').data, type: 'upload', value: 'https://assets.example/original.png', dimensionMeta: { sourceValue: 'https://assets.example/original.png', status: 'valid', mode: 'auto' } } };
++    const nodes = [node('text', 'copy'), original, node('image', 'poster')];
++    const edges = [{ id: 'copy-edge', source: 'copy', target: 'poster', sourceHandle: 'text_source', targetHandle: 'text_target' }, { id: 'image-edge', source: 'original', target: 'poster', sourceHandle: 'image_source', targetHandle: 'image_target' }];
++    api.graph.mockResolvedValueOnce(row(nodes, '18', 'FINISHED', edges)); const rt = service();
++    const first = await execute(rt, { action: 'canvas.graph.read', limit: 1 });
++    expect(first).toMatchObject({ status: 'graph', consistency: 'confirmed', version: '18', nodeCount: 3, edgeCount: 2, nextNodeOffset: 1, nextEdgeOffset: 1, nodes: [{ id: 'copy', ports: expect.arrayContaining([{ id: 'text_target', type: 'target', mediaType: 'text', limit: null }]) }], edges: [edges[0]] });
++    if (first.status !== 'graph') throw new Error(JSON.stringify(first));
++    expect(first.nodes[0]).not.toHaveProperty('text'); expect(first.nodes[0]).not.toHaveProperty('params');
++    const next = await execute(rt, { action: 'canvas.graph.read', nodeOffset: 1, edgeOffset: 1, limit: 1, expectedVersion: first.version });
++    expect(next).toMatchObject({ status: 'graph', nodes: [{ id: 'original', canConfigureGeneration: false }], edges: [edges[1]], nextNodeOffset: 2, nextEdgeOffset: null });
++    expect(() => parseCanvasOperationResult(first)).not.toThrow(); expect(() => parseCanvasOperationResult(next)).not.toThrow();
++    expect(await execute(rt, { action: 'canvas.graph.read', nodeOffset: 1 })).toMatchObject({ status: 'rejected', error: { code: 'INVALID_ARGUMENT' } });
++    api.contexts.get('2873')!.store.getState().actions.setVersionNumber('19');
++    expect(await execute(rt, { action: 'canvas.graph.read', nodeOffset: 1, expectedVersion: '18' })).toMatchObject({ status: 'rejected', error: { code: 'VERSION_CONFLICT' } });
++    expect(api.update).not.toHaveBeenCalled(); expect(api.invoke).not.toHaveBeenCalled(); expect(document.querySelectorAll('iframe')).toHaveLength(0);
++  });
++
++  it('rejects model reads and configuration if the native permission stage failed', async () => {
++    api.permission.mockRejectedValueOnce(new Error('offline')); const rt = await prepare([node('image')]);
++    expect(await execute(rt, { action: 'canvas.models.read', nodeType: 'image' })).toMatchObject({ status: 'rejected', error: { code: 'CONFIGURATION_ERROR' } });
++    expect(await execute(rt, { action: 'node.configure', expectedVersion: '18', nodeId: 'n1', configuration: { model: 'fixture' } })).toMatchObject({ status: 'rejected', error: { code: 'CONFIGURATION_ERROR' } });
++    expect(api.update).not.toHaveBeenCalled();
++  });
++
++  it('keeps real edge IDs after an unknown save and blocks replay until reload', async () => {
++    const rt = await prepare([node('text', 'copy'), node('image', 'poster')]);
++    api.update.mockRejectedValueOnce(Object.assign(new Error('response lost'), { requestPhase: 'sent_unknown' }));
++    const operation = { action: 'edge.add', expectedVersion: '18', connection: { sourceNodeId: 'copy', targetNodeId: 'poster' } };
++    const unknown = await execute(rt, operation);
++    expect(unknown).toMatchObject({ status: 'submission_unknown', affectedNodeIds: ['copy', 'poster'], affectedEdgeIds: [expect.any(String)] });
++    expect(() => parseCanvasOperationResult(unknown)).not.toThrow();
++    const edges = api.contexts.get('2873')!.store.getState().edges;
++    if (unknown.status !== 'submission_unknown') throw new Error(JSON.stringify(unknown));
++    expect(edges.map(edge => edge.id)).toEqual(unknown.affectedEdgeIds);
++    expect(await execute(rt, operation)).toMatchObject({ status: 'rejected', error: { code: 'SUBMISSION_UNKNOWN' } });
++    expect(await execute(rt, { action: 'canvas.graph.read' })).toMatchObject({ status: 'graph', consistency: 'unconfirmed', edges: [{ id: edges[0].id }] });
++    expect(api.update).toHaveBeenCalledTimes(1); expect(api.invoke).not.toHaveBeenCalled();
++  });
++
++  it('reports a generic catalogue read failure as read-only rejection without fencing later reads', async () => {
++    const rt = await prepare();
++    vi.stubGlobal('crypto', { randomUUID: () => webcrypto.randomUUID(), subtle: { digest: async () => { throw new Error('digest unavailable'); } } });
++    expect(await execute(rt, { action: 'canvas.models.read', nodeType: 'image' })).toMatchObject({ status: 'rejected', effect: 'none', error: { code: 'READ_REJECTED' } });
++    expect(api.contexts.get('2873')!.store.getState().agentPersistenceIssue).toBeNull();
++    expect(await execute(rt, { action: 'canvas.graph.read' })).toMatchObject({ status: 'graph', consistency: 'confirmed' });
++    expect(api.update).not.toHaveBeenCalled(); expect(api.invoke).not.toHaveBeenCalled();
++  });
++
++  it('registered tools update, connect, configure, reorder, reconnect and delete with one native Store and no generation', async () => {
++    const nativeModel = { ...model, parameters: { ...model.parameters, aspect_ratio: { default: '1:1', choices: [{ value: '1:1', label: '方图' }, { value: '16:9', label: '横图' }] } } };
++    api.models.mockResolvedValueOnce(success([{ config: JSON.stringify({ text: { fixture: model }, image: { text_to_image: { name: '文生图', models: { fixture: nativeModel } }, reference_image_to_image: { name: '图生图', models: { fixture: nativeModel } } } }) }]));
++    const original = { ...node('image', 'original'), width: 400, height: 400, measured: { width: 400, height: 400 }, data: { ...node('image').data, type: 'upload', value: 'https://assets.example/original.png', product: [], dimensionMeta: { sourceValue: 'https://assets.example/original.png', status: 'valid', mode: 'auto' } } };
++    const alternate = { ...original, id: 'alternate', data: { ...original.data, title: 'alternate', value: 'https://assets.example/alternate.png', dimensionMeta: { sourceValue: 'https://assets.example/alternate.png', status: 'valid', mode: 'auto' } } };
++    api.graph.mockResolvedValueOnce(row([node('text', 'copy'), original, alternate]));
++    let saveVersion = 18; api.update.mockImplementation(async () => success({ versionNumber: String(++saveVersion) }));
++    const rt = service(); const host = createCanvasHostBridge(); const origin = 'http://127.0.0.1:3000'; const registration = host.attachClient(origin, 'graph-tool-client');
++    const endpoint = createCanvasCommandEndpoint({ connectionId: registration.connectionId, getRuntime: async () => rt, isSessionBound: () => true, send: event => host.acceptClientEvent(registration.bridgeKey, origin, event) });
++    const disconnect = host.connectStream(registration.bridgeKey, origin, event => { void endpoint.handle(event); });
++    host.acceptClientEvent(registration.bridgeKey, origin, { type: 'session.sync', protocolVersion: 3, connectionId: registration.connectionId, revision: 1, sessionIds: ['graph-session'] });
++    const definitions = new Map<string, any>(); const cleanups: Array<() => void> = [];
++    const toolContext = { tools: { register: (definition: any) => { definitions.set(definition.name, definition); return () => definitions.delete(definition.name); } }, effect: (fn: any) => { const cleanup = fn(); if (typeof cleanup === 'function') cleanups.push(cleanup); } };
++    registerCanvasTools(toolContext as any, host); registerCanvasGraphTools(toolContext as any, host);
++    const run = async (name: string, args: any, callId: string) => JSON.parse(await definitions.get(name).execute(args, { callId, agent: { id: 'graph-session' }, signal: new AbortController().signal }));
++    const save = async (name: string, args: any, callId: string) => {
++      const result = await run(name, { canvasId: '2873', expectedVersion: String(saveVersion), ...args }, callId);
++      expect(result.status, JSON.stringify(result)).toBe('saved'); expect(result.version).toBe(String(saveVersion)); return result;
++    };
++    try {
++      const graph = await run('canvas_get', { canvasId: '2873', view: 'graph' }, 'graph');
++      expect(graph).toMatchObject({ status: 'graph', nodeCount: 3, edgeCount: 0, version: '18' });
++      await save('canvas_node_edit', { action: 'update', nodeId: 'copy', changes: { text: '耳机头部卖点文案' } }, 'copy-update');
++      await save('canvas_node_edit', { action: 'update', nodeId: 'original', changes: { title: '耳机原图' } }, 'source-title');
++      const created = await save('canvas_node_edit', { action: 'add', node: { type: 'image', changes: { title: '头部卖点图' } } }, 'poster-add'); const posterId = created.affectedNodeIds[0];
++      const textEdge = await save('canvas_edges', { action: 'add', connection: { sourceNodeId: 'copy', targetNodeId: posterId } }, 'copy-connect');
++      const imageEdge = await save('canvas_edges', { action: 'add', connection: { sourceNodeId: 'original', targetNodeId: posterId } }, 'original-connect');
++      expect(imageEdge.warnings).toHaveLength(1);
++      const catalog = await run('canvas_models', { canvasId: '2873', nodeType: 'image', modelType: 'reference_image_to_image' }, 'models');
++      expect(catalog).toMatchObject({ status: 'models', modelType: 'reference_image_to_image', models: [{ value: 'fixture' }], paramHints: expect.arrayContaining([{ field: 'aspect_ratio', editable: true, choices: ['1:1', '16:9'] }]) });
++      const configured = await save('canvas_node_edit', { action: 'configure', nodeId: posterId, configuration: { modelType: catalog.modelType, model: catalog.model, params: { gen_count: 1, aspect_ratio: '16:9' } } }, 'configure');
++      expect(configured.warnings).toBeUndefined();
++      const orderedIds = [imageEdge.affectedEdgeIds[0], textEdge.affectedEdgeIds[0]];
++      await save('canvas_edges', { action: 'reorder', targetNodeId: posterId, edgeIds: orderedIds }, 'reorder');
++      const changed = await save('canvas_edges', { action: 'reconnect', edgeId: imageEdge.affectedEdgeIds[0], connection: { sourceNodeId: 'alternate', targetNodeId: posterId } }, 'reconnect');
++      expect(changed.affectedEdgeIds).toEqual(imageEdge.affectedEdgeIds);
++      const ctx = api.contexts.get('2873')!;
++      expect(ctx.store.getState().edges.map(edge => edge.id)).toEqual(orderedIds);
++      expect(ctx.store.getState().nodes.find(item => item.id === posterId)!.data.params).toMatchObject({ modelType: 'reference_image_to_image', model: 'fixture', gen_count: 1, aspect_ratio: '16:9' });
++      const calls = api.update.mock.calls.length;
++      expect(await run('canvas_node_edit', { canvasId: '2873', action: 'configure', expectedVersion: String(saveVersion), nodeId: posterId, configuration: { params: { aspect_ratio: 'invalid' } } }, 'invalid-config')).toMatchObject({ status: 'rejected', error: { code: 'INVALID_ARGUMENT' } });
++      expect(await run('canvas_node_edit', { canvasId: '2873', action: 'update', expectedVersion: String(saveVersion), nodeId: 'original', changes: { prompt: 'rewrite uploaded source' } }, 'invalid-source')).toMatchObject({ status: 'rejected', error: { code: 'UNSUPPORTED_NODE' } });
++      expect(api.update).toHaveBeenCalledTimes(calls);
++      await save('canvas_edges', { action: 'delete', edgeIds: textEdge.affectedEdgeIds }, 'edge-delete');
++      const deleted = await save('canvas_node_edit', { action: 'delete', nodeIds: ['alternate'] }, 'source-delete');
++      expect(deleted.affectedEdgeIds).toEqual(imageEdge.affectedEdgeIds);
++      expect(deleted.warnings).toHaveLength(1); expect(deleted.warnings[0]).toContain(posterId);
++      const stored = ctx.store.getState(); api.graph.mockResolvedValue(row(stored.nodes, String(saveVersion), 'FINISHED', stored.edges));
++      const reread = await run('canvas_get', { canvasId: '2873', view: 'graph', refresh: true }, 'reload');
++      expect(reread).toMatchObject({ status: 'graph', consistency: 'confirmed', edgeCount: 0, version: String(saveVersion) });
++      const details = await run('canvas_get', { canvasId: '2873', view: 'nodes', nodeIds: ['original', posterId] }, 'details');
++      expect(details.nodes[0]).toMatchObject({ title: '耳机原图', contentType: 'upload', outputs: ['https://assets.example/original.png'], generation: null });
++      expect(details.nodes[1].outputs).toEqual([]); expect(details.nodes[1].params.modelType).toBe('reference_image_to_image');
++      expect(api.update).toHaveBeenCalledTimes(10); expect(api.invoke).not.toHaveBeenCalled(); expect(document.querySelectorAll('iframe')).toHaveLength(0);
++    } finally { cleanups.forEach(cleanup => cleanup()); disconnect(); endpoint.dispose(); host.dispose(); }
++  });
++});
+diff --git a/private/tmp/canvas-graph-baseline/package-lock.json b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/package-lock.json
+index d8b91bb..f54cf88 100644
+--- a/private/tmp/canvas-graph-baseline/package-lock.json
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "@insight-ai/desktop-canvas-plugin",
+-  "version": "0.3.0-alpha.11",
++  "version": "0.3.0-alpha.12",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "@insight-ai/desktop-canvas-plugin",
+-      "version": "0.3.0-alpha.11",
++      "version": "0.3.0-alpha.12",
+       "dependencies": {
+         "ali-oss": "6.20.0"
+       },
+diff --git a/private/tmp/canvas-graph-baseline/package.json b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/package.json
+index 9ea83b8..7aa1bdd 100644
+--- a/private/tmp/canvas-graph-baseline/package.json
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@insight-ai/desktop-canvas-plugin",
+-  "version": "0.3.0-alpha.11",
++  "version": "0.3.0-alpha.12",
+   "private": true,
+   "type": "module",
+   "engines": {
+diff --git a/private/tmp/canvas-graph-baseline/scripts/verify-isolated.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/scripts/verify-isolated.mjs
+index a31944c..b2a44c0 100644
+--- a/private/tmp/canvas-graph-baseline/scripts/verify-isolated.mjs
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/scripts/verify-isolated.mjs
+@@ -150,9 +150,12 @@ export function apply(ctx) {
+     if (!catalogResponse.ok) throw new Error('Isolated tool catalog probe unavailable')
+     const catalog = await catalogResponse.json()
+     const toolNames = catalog.map(tool => tool.name).sort()
+-    if (JSON.stringify(toolNames) !== JSON.stringify(['canvas_asset_import', 'canvas_assets', 'canvas_create', 'canvas_get', 'canvas_node_edit'])) throw new Error('Unexpected canvas tool catalog: ' + toolNames.join(', '))
++    if (JSON.stringify(toolNames) !== JSON.stringify(['canvas_asset_import', 'canvas_assets', 'canvas_create', 'canvas_edges', 'canvas_get', 'canvas_models', 'canvas_node_edit'])) throw new Error('Unexpected canvas tool catalog: ' + toolNames.join(', '))
+     const addSchema = catalog.find(tool => tool.name === 'canvas_node_edit').parameters.properties
+-    if (JSON.stringify(addSchema.action.enum) !== JSON.stringify(['add']) || 'nodeId' in addSchema || 'sessionId' in addSchema) throw new Error('Packaged node tool exceeded add-only scope')
++    if (JSON.stringify(addSchema.action.enum) !== JSON.stringify(['add', 'update', 'delete', 'configure']) || 'sessionId' in addSchema || 'run' in addSchema) throw new Error('Packaged node tool exceeded graph-save scope')
++    const edgeSchema = catalog.find(tool => tool.name === 'canvas_edges').parameters.properties
++    const modelSchema = catalog.find(tool => tool.name === 'canvas_models').parameters.properties
++    if (JSON.stringify(edgeSchema.action.enum) !== JSON.stringify(['add', 'delete', 'reconnect', 'reorder']) || 'sessionId' in edgeSchema || 'token' in edgeSchema || JSON.stringify(modelSchema.nodeType.enum) !== JSON.stringify(['image', 'video'])) throw new Error('Packaged graph tool contract mismatch')
+     const assetSchema = catalog.find(tool => tool.name === 'canvas_asset_import').parameters.properties
+     if ('url' in assetSchema.source.properties || 'sessionId' in assetSchema || 'token' in assetSchema || 'path' in assetSchema) throw new Error('Packaged asset tool exposed unsupported authority')
+     const nodePlacement = addSchema.node.properties.placement
+@@ -160,7 +163,7 @@ export function apply(ctx) {
+     const packageFile = await realpath(join(home, 'profiles/web/node_modules/@insight-ai/desktop-canvas-plugin/package.json'))
+     const dependency = createRequire(packageFile)('ali-oss/package.json')
+     if (dependency.version !== '6.20.0' || typeof createRequire(packageFile)('ali-oss').prototype.put !== 'function') throw new Error('Packaged OSS Node dependency unavailable')
+-    console.log('PASS: actual Core catalog contains exactly five controlled canvas tools and packaged OSS dependency')
++    console.log('PASS: actual Core catalog contains exactly seven controlled save/read canvas tools and packaged OSS dependency')
+     const unauthorizedModelParams = await fetch(`${base}/desktop-canvas/api/model-params`)
+     if (unauthorizedModelParams.status !== 401) throw new Error(`Unauthenticated model params status ${unauthorizedModelParams.status}`)
+     const invalid = await fetch(`${base}/desktop-canvas/view?id=0`, { headers: { cookie } })
+diff --git a/private/tmp/canvas-graph-baseline/src/client/canvas-command-endpoint.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/client/canvas-command-endpoint.ts
+index b1d09fb..b26d025 100644
+--- a/private/tmp/canvas-graph-baseline/src/client/canvas-command-endpoint.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/client/canvas-command-endpoint.ts
+@@ -1,4 +1,4 @@
+-import { CanvasAgentError, MAX_MESSAGE_BYTES, ERROR_CODES, type CanvasOperationResult, type ErrorCode, type Failure } from '../shared/canvas-agent-protocol'
++import { isCanvasReadOperation, CanvasAgentError, MAX_MESSAGE_BYTES, ERROR_CODES, type CanvasOperationResult, type ErrorCode, type Failure } from '../shared/canvas-agent-protocol'
+ import { bridgeFingerprint, messageBytes, MAX_BRIDGE_CACHE_BYTES, MAX_BRIDGE_INFLIGHT, MAX_BRIDGE_RECORDS, parseServiceHostEvent, parseServiceClientEvent, type ServiceHostEvent, type ServiceClientEvent, type PrepareAck, type CommandAck } from '../shared/canvas-bridge-protocol'
+ import type { CanvasServiceRuntimeBase } from '../shared/canvas-service-runtime'
+ type Command = Exclude<ServiceHostEvent, { type: 'bridge.connected' }>
+@@ -66,16 +66,18 @@ export function createCanvasCommandEndpoint(options: { connectionId: string; get
+         } else {
+           const info = runtime.getContextInfo(event.canvasId)
+           if (info?.contextId !== event.contextId) throw new CanvasAgentError('CONTEXT_GONE', '目标画布上下文已被替换或释放')
+-          const capability = event.payload.action === 'canvas.read' ? 'read' : 'edit'
++          const capability = isCanvasReadOperation(event.payload) ? 'read' : 'edit'
+           if (!info.readiness.capabilities[capability]) throw new CanvasAgentError(info.readiness.reason?.code ?? 'CONTEXT_NOT_READY', info.readiness.reason?.message ?? '画布暂不可执行')
+           settle({ type: 'canvas.command.ack', protocolVersion: 3, connectionId: event.connectionId, sessionId: event.sessionId, canvasId: event.canvasId, contextId: event.contextId, requestId: event.requestId, phase: 'started' })
+           // No await between identity check and execute's synchronous context capture.
+           startedExecution = true
+           const result: CanvasOperationResult = await runtime.execute({ canvasId: event.canvasId, expectedContextId: event.contextId, operation: event.payload })
++          const readStatus = event.payload.action === 'canvas.read' ? 'read' : event.payload.action === 'canvas.graph.read' ? 'graph' : 'models'
++          if (isCanvasReadOperation(event.payload) ? ![readStatus, 'rejected'].includes(result.status) : !['saved', 'submission_unknown', 'rejected'].includes(result.status)) throw new CanvasAgentError('INVALID_ARGUMENT', '回执与操作类型不匹配')
+           settle({ type: 'canvas.command.ack', protocolVersion: 3, connectionId: event.connectionId, sessionId: event.sessionId, canvasId: event.canvasId, contextId: event.contextId, requestId: event.requestId, phase: 'settled', result })
+         }
+       } catch (cause) {
+-        if (event.type === 'canvas.command' && event.payload.action !== 'canvas.read' && startedExecution && (cause as {requestPhase?:string})?.requestPhase !== 'not_sent') {
++        if (event.type === 'canvas.command' && !isCanvasReadOperation(event.payload) && startedExecution && (cause as {requestPhase?:string})?.requestPhase !== 'not_sent') {
+           settle({type:'canvas.command.ack',protocolVersion:3,connectionId:event.connectionId,sessionId:event.sessionId,canvasId:event.canvasId,contextId:event.contextId,requestId:event.requestId,phase:'settled',result:{status:'submission_unknown',canvasId:event.canvasId,version:null,phase:'save',affectedNodeIds:[],error:{code:'SUBMISSION_UNKNOWN',message:'服务已开始执行，但未取得可信保存回执，请核对结果',retry:'never_auto'}}})
+         } else settle(reject(event, cause))
+       }
+diff --git a/private/tmp/canvas-graph-baseline/src/host/canvas-bridge.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-bridge.ts
+index 21721f2..9dc644b 100644
+--- a/private/tmp/canvas-graph-baseline/src/host/canvas-bridge.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-bridge.ts
+@@ -1,5 +1,5 @@
+ import { randomBytes, randomUUID } from 'node:crypto'
+-import { CanvasAgentError, MAX_MESSAGE_BYTES, type CanvasOperationResult, type ErrorCode, type FrameReadiness } from '../shared/canvas-agent-protocol'
++import { isCanvasReadOperation, CanvasAgentError, MAX_MESSAGE_BYTES, type CanvasOperationResult, type ErrorCode, type FrameReadiness } from '../shared/canvas-agent-protocol'
+ import { assertBridgeId, bridgeFingerprint, messageBytes, MAX_BRIDGE_CACHE_BYTES, MAX_BRIDGE_INFLIGHT, MAX_BRIDGE_RECORDS, parseBridgeOperation, parseServiceClientEvent, parseServiceHostEvent, type BridgeCapability, type BridgeOperation, type BridgeTarget, type ClientRegistration, type ServiceClientEvent, type ServiceHostEvent } from '../shared/canvas-bridge-protocol'
+ import { parseCanvasId } from '../shared/protocol'
+ export interface CanvasHostBridge {
+@@ -41,7 +41,7 @@ export function createCanvasHostBridge({ timeoutMs = 30000 }: { timeoutMs?: numb
+   function unavailable(record: Pending, code: ErrorCode, message: string) {
+     if (!record.waiting) return
+     if (record.event.type === 'canvas.prepare') finish(record, undefined, error(code === 'READ_TIMEOUT' ? 'CONTEXT_NOT_READY' : code, message))
+-    else if (record.sent && record.event.payload.action !== 'canvas.read') finish(record, { status: 'submission_unknown', canvasId: record.event.canvasId, version: null, phase: 'save', affectedNodeIds: [], error: { code: 'SUBMISSION_UNKNOWN', message, retry: 'never_auto' } }, undefined, false)
++    else if (record.sent && !isCanvasReadOperation(record.event.payload)) finish(record, { status: 'submission_unknown', canvasId: record.event.canvasId, version: null, phase: 'save', affectedNodeIds: [], error: { code: 'SUBMISSION_UNKNOWN', message, retry: 'never_auto' } }, undefined, false)
+     else finish(record, rejected(record.event.canvasId, record.sent ? 'READ_TIMEOUT' : code, message))
+   }
+   function disconnected(client: Client) {
+@@ -122,13 +122,14 @@ export function createCanvasHostBridge({ timeoutMs = 30000 }: { timeoutMs?: numb
+         if (event.phase !== 'settled') return
+         if (record.terminal) return
+         const result = event.result
+-        if (record.event.payload.action === 'canvas.read' ? !['read', 'rejected'].includes(result.status) : !['saved', 'submission_unknown', 'rejected'].includes(result.status)) throw error('INVALID_ARGUMENT', '回执与操作类型不匹配')
++        const expectedStatus = record.event.payload.action === 'canvas.read' ? 'read' : record.event.payload.action === 'canvas.graph.read' ? 'graph' : 'models'
++        if (isCanvasReadOperation(record.event.payload) ? ![expectedStatus, 'rejected'].includes(result.status) : !['saved', 'submission_unknown', 'rejected'].includes(result.status)) throw error('INVALID_ARGUMENT', '回执与操作类型不匹配')
+         finish(record, result)
+       }
+     },
+     async ensureContext(sessionId, canvasId, capability, requestId, signal, refresh = false) {
+       active(); assertBridgeId(sessionId); assertBridgeId(requestId)
+-      if (!parseCanvasId(canvasId) || !['read', 'edit'].includes(capability)) throw error('INVALID_ARGUMENT', '画布或能力无效')
++      if (!parseCanvasId(canvasId) || !['read', 'edit'].includes(capability) || (refresh && capability !== 'read')) throw error('INVALID_ARGUMENT', '画布或能力无效')
+       const fingerprint = bridgeFingerprint({ type: 'canvas.prepare', sessionId, canvasId, capability, refresh })
+       const old = cached(requestId, fingerprint); if (old) return await old as BridgeTarget
+       const candidates = [...clients.values()].filter(client => client.stream && client.sessions.has(sessionId))
+@@ -145,7 +146,7 @@ export function createCanvasHostBridge({ timeoutMs = 30000 }: { timeoutMs?: numb
+       const client = findConnection(target.connectionId), context = client?.contexts.get(target.canvasId)
+       if (!client?.stream || !client.sessions.has(target.sessionId)) return rejected(target.canvasId, 'CLIENT_UNAVAILABLE', '目标 Client 或会话已断开')
+       if (context?.contextId !== target.contextId) return rejected(target.canvasId, 'CONTEXT_GONE', '目标上下文已被替换')
+-      const capability = operation.action === 'canvas.read' ? 'read' : 'edit'
++      const capability = isCanvasReadOperation(operation) ? 'read' : 'edit'
+       if (!context.state.capabilities[capability]) return rejected(target.canvasId, context.state.reason?.code ?? 'CONTEXT_NOT_READY', context.state.reason?.message ?? '画布暂不可执行')
+       const event = parseServiceHostEvent({ type: 'canvas.command', protocolVersion: 3, connectionId: target.connectionId, sessionId: target.sessionId, canvasId: target.canvasId, contextId: target.contextId, requestId, deadline: Date.now() + timeoutMs, payload: operation }) as Command
+       return await submit(event, fingerprint, client, signal) as CanvasOperationResult
+diff --git a/private/tmp/canvas-graph-baseline/src/host/canvas-tools.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-tools.ts
+index 22f11d4..c5f13be 100644
+--- a/private/tmp/canvas-graph-baseline/src/host/canvas-tools.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-tools.ts
+@@ -1,8 +1,8 @@
+ import { createHash } from 'node:crypto'
+ import type { Context } from '@deepseek-ai/cordis'
+ import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+-import { assertCanvasMessageSize, CanvasAgentError, type CanvasCreateOutput, type Failure, type ToolRejection } from '../shared/canvas-agent-protocol'
+-import { assertBridgeId, MAX_BRIDGE_INFLIGHT, MAX_BRIDGE_RECORDS, parseBridgeOperation } from '../shared/canvas-bridge-protocol'
++import { assertCanvasMessageSize, CanvasAgentError, type CanvasCreateOutput, type CanvasOperationResult, type Failure, type ToolRejection } from '../shared/canvas-agent-protocol'
++import { assertBridgeId, MAX_BRIDGE_INFLIGHT, MAX_BRIDGE_RECORDS, parseBridgeOperation, type BridgeOperation } from '../shared/canvas-bridge-protocol'
+ import { canvasAddress, parseCanvasId, type CanvasId } from '../shared/protocol'
+ import { CanvasApiError, CanvasHttpError, canvasName, createEmptyCanvas } from './canvas-api'
+ import type { CanvasHostBridge } from './canvas-bridge'
+@@ -18,7 +18,13 @@ export const nodePlacementParameterSpec = {
+     { type: 'object', additionalProperties: false, properties: { mode: { type: 'string', const: 'after', required: true }, anchorNodeId: { type: 'string', required: true, description: '当前画布中的真实节点ID，最多100字符。' } } },
+   ],
+ } as const
+-const output = { schema: { type: 'string' } as const, render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }] }
++export const canvasToolOutput = { schema: { type: 'string' } as const, render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }] }
++const output = canvasToolOutput
++const parameterValues = { type: 'object', additionalProperties: true, description: '仅当前模型允许的标量技术参数；不能含model/modelType/prompt，不支持高级嵌套参数。' } as const
++const nodeChangesParameterSpec = { type: 'object', additionalProperties: false, properties: {
++  title: { type: 'string', description: '最多100字符，遵循原生命名规则。' }, text: { type: 'string', description: '仅文本节点正文，最多32768字符。' },
++  prompt: { type: 'string', description: '普通生成节点的提示词，最多32768字符，不触发生成。' }, params: parameterValues,
++} } as const
+ export function argumentsObject(input: unknown, allowed: string[]): Record<string, unknown> {
+   assertCanvasMessageSize(input)
+   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !allowed.includes(key))) throw new CanvasAgentError('INVALID_ARGUMENT', '工具参数含不支持的字段')
+@@ -50,6 +56,20 @@ export function reject(requestId: string, cause: unknown, canvasId?: CanvasId):
+   return { status: 'rejected', requestId, effect: 'none', error: failure(cause), ...(canvasId ? { canvasId, address: canvasAddress(canvasId) } : {}) }
+ }
+ 
++/** Native service owns mutation, optimistic versions and same-call bridge deduplication. */
++export async function dispatchCanvasWrite(bridge: CanvasHostBridge, id: CanvasId, operation: BridgeOperation, exec: ToolRunContext, request: string): Promise<(CanvasOperationResult & { requestId: string; address: string })> {
++  const target = await bridge.ensureContext(sessionOf(exec), id, 'edit', request + ':prepare', exec.signal)
++  try {
++    const result = await bridge.dispatch(target, request + ':write', operation, exec.signal)
++    const receipt = result.status === 'submission_unknown' ? { ...result, error: { ...result.error, retry: 'never_auto' as const } } : result
++    return { ...receipt, requestId: request, address: canvasAddress(id) }
++  } catch (cause) {
++    if (cause instanceof CanvasAgentError && cause.code !== 'SUBMISSION_UNKNOWN') throw cause
++    return { status: 'submission_unknown', canvasId: id, version: null, phase: 'save', affectedNodeIds: [], requestId: request, address: canvasAddress(id),
++      error: { code: 'SUBMISSION_UNKNOWN', message: '画布保存结果未确认，请先权威读取核对，不要自动重复写入', retry: 'never_auto' } }
++  }
++}
++
+ /** Three model-facing tools; all native writes still run in the existing Client service. */
+ export function registerCanvasTools(ctx: Context, bridge: CanvasHostBridge, { createCanvas = createEmptyCanvas, getCanvas = fetchCanvas }: Partial<ToolDependencies> = {}): void {
+   const creations = new Map<string, { name: string; pending: boolean; promise: Promise<CanvasCreateOutput> }>()
+@@ -93,65 +113,68 @@ export function registerCanvasTools(ctx: Context, bridge: CanvasHostBridge, { cr
+   }))
+   ctx.tools.register(defineTool({
+     name: 'canvas_get', timeoutMs: 90000,
+-    description: '读取已有画布，不打开画布。默认summary保留名称/节点摘要，不能作为写前版本依据。view:nodes返回真实节点详情和坐标/尺寸/所属组、可信version、consistency和缺失ID；position为本地坐标，有parentId时相对父组，否则为画布坐标，size为画布显示尺寸；可省略nodeIds读取前20个节点及总数，空画布也可取得版本。refresh:true从后端权威重载。unconfirmed或内容截断时不得声称已确认完整保存。',
++    description: '读取已有画布，不打开画布。summary返回最多20个摘要，不能作写前版本依据；nodes返回节点正文/素材/参数、可信version和consistency，nodeIds省略时前20个；graph返回真实节点端口、允许输入类型及连线，outputs素材URL不是连线。graph的nodeOffset与edgeOffset独立分页，limit默认20；续页必须带第一页confirmed版本expectedVersion，版本变更时重新从第一页读取，勿混合不同版本。position有parentId时相对父组。refresh:true从后端重载，只用于读取；unconfirmed或内容截断不能声称完整确认。',
+     parameters: {
+       canvasId: { type: 'string', required: true, description: '正Long十进制字符串画布ID。' },
+-      view: { type: 'string', enum: ['summary', 'nodes'], description: '默认summary；添加节点前用nodes取得可信version。' },
+-      nodeIds: { type: 'array', items: { type: 'string' }, description: '仅nodes可用，1–20个唯一节点ID；省略返回前20个节点。' },
+-      refresh: { type: 'boolean', description: '仅nodes可用；true显式权威重载，默认false。' }
++      view: { type: 'string', enum: ['summary', 'nodes', 'graph'], description: '默认summary；写前使用nodes或graph的confirmed版本。' },
++      nodeIds: { type: 'array', items: { type: 'string' }, description: '仅nodes可用，1–20个唯一节点ID；省略前20个。' },
++      refresh: { type: 'boolean', description: '仅nodes/graph可用；true从后端重载，默认false。' },
++      nodeOffset: { type: 'number', description: '仅graph，非负整数；续页带expectedVersion。' },
++      edgeOffset: { type: 'number', description: '仅graph，非负整数；续页带expectedVersion。' },
++      limit: { type: 'number', description: '仅graph，各节点/边页长度1–20整数，默认20。' },
++      expectedVersion: { type: 'string', description: '仅graph，第一页confirmed版本；任何offset大于0时必填。' },
+     }, output,
+     async execute(input, exec) {
+       const request = requestId('canvas_get', exec); let id: CanvasId | undefined
+       try {
+-        const args = argumentsObject(input, ['canvasId', 'view', 'nodeIds', 'refresh']); id = idOf(args)
+-        if (args.view === undefined || args.view === 'summary') {
+-          if ('nodeIds' in args || 'refresh' in args) throw new CanvasAgentError('INVALID_ARGUMENT', 'nodeIds和refresh仅用于nodes详情读取')
++        const args = argumentsObject(input, ['canvasId', 'view', 'nodeIds', 'refresh', 'nodeOffset', 'edgeOffset', 'limit', 'expectedVersion']); id = idOf(args)
++        const view = args.view ?? 'summary'
++        if (view === 'summary') {
++          argumentsObject(args, ['canvasId', 'view'])
+           const snapshot = await getCanvas(id, undefined, undefined, exec.signal)
+           return JSON.stringify({ ...snapshot, nodes: snapshot.nodes.slice(0, 20), address: canvasAddress(id) })
+         }
+-        if (args.view !== 'nodes' || ('refresh' in args && typeof args.refresh !== 'boolean')) throw new CanvasAgentError('INVALID_ARGUMENT', '详情读取参数无效')
+-        const operation = parseBridgeOperation({ action: 'canvas.read', ...('nodeIds' in args ? { nodeIds: args.nodeIds } : {}) })
++        if (!['nodes', 'graph'].includes(String(view)) || ('refresh' in args && typeof args.refresh !== 'boolean')) throw new CanvasAgentError('INVALID_ARGUMENT', '详情读取参数无效')
++        argumentsObject(args, view === 'nodes' ? ['canvasId', 'view', 'nodeIds', 'refresh'] : ['canvasId', 'view', 'refresh', 'nodeOffset', 'edgeOffset', 'limit', 'expectedVersion'])
++        const operation = parseBridgeOperation(view === 'nodes'
++          ? { action: 'canvas.read', ...('nodeIds' in args ? { nodeIds: args.nodeIds } : {}) }
++          : { action: 'canvas.graph.read', ...Object.fromEntries(['nodeOffset', 'edgeOffset', 'limit', 'expectedVersion'].filter(key => key in args).map(key => [key, args[key]])) })
+         const target = await bridge.ensureContext(sessionOf(exec), id, 'read', request + ':prepare', exec.signal, args.refresh === true)
+         const result = await bridge.dispatch(target, request + ':read', operation, exec.signal)
+-        return JSON.stringify({ ...result, requestId: request, address: canvasAddress(id), ...(result.status === 'read' ? { source: 'plugin-service' } : {}) })
++        return JSON.stringify({ ...result, requestId: request, address: canvasAddress(id), ...(['read', 'graph'].includes(result.status) ? { source: 'plugin-service' } : {}) })
+       } catch (cause) { return JSON.stringify(reject(request, cause, id)) }
+     }
+   }))
+   ctx.tools.register(defineTool({
+     name: 'canvas_node_edit', timeoutMs: 90000,
+-    description: '在已有画布添加一个普通text/image/video/audio节点，无需打开画布；本期仅action:add，只保存节点与内容，不触发模型生成。默认自动追加放置，不传坐标；需要精确位置才用node.placement:absolute，沿已有节点延展用after，不建立连线。旧node.position不再接受，请用placement。expectedVersion必须取自created服务就绪结果或canvas_get(view:nodes)的confirmed可信版本，不猜0、不自动覆盖冲突。技术参数省略时复用原生默认值；params不可指定model/modelType/prompt。saved才表示保存完成；submission_unknown须先权威读取核对，不能换调用自动重复新增。',
++    description: '已有画布普通节点的保存操作，无需打开画布；action:add添加text/image/video/audio；update修改原节点的title/text/prompt/合法标量params；delete删除nodeIds及原生关联边；configure为普通image/video生成节点选择真实modelType/model和合法参数。上传/工具产物媒体只允许改标题或删除，不能改生成参数。严格按action提供一组字段：add仅node、update仅nodeId+changes、delete仅nodeIds、configure仅nodeId+configuration。不会执行生成/模板。默认自动放置，absolute仅精确位置，after只是坐标延展不建边。expectedVersion取最新confirmed读取或服务就绪created版本；冲突先重读，不覆盖。saved才是保存完成；submission_unknown保留真实ID，先权威读取，不能自动重复操作。',
+     parameters: {
+       canvasId: { type: 'string', required: true, description: '已有画布ID，正Long十进制字符串。' },
+       expectedVersion: { type: 'string', required: true, description: '最新confirmed版本原样传入。' },
+-      action: { type: 'string', enum: ['add'], required: true },
+-      node: { type: 'object', required: true, additionalProperties: false, properties: {
++      action: { type: 'string', enum: ['add', 'update', 'delete', 'configure'], required: true },
++      node: { type: 'object', additionalProperties: false, description: '仅add。', properties: {
+         type: { type: 'string', required: true, enum: ['text', 'image', 'video', 'audio'] },
+-        placement: nodePlacementParameterSpec,
+-        changes: { type: 'object', additionalProperties: false, properties: {
+-          title: { type: 'string', description: '最多100字符。' }, text: { type: 'string', description: '文本节点正文，最多32768字符。' },
+-          prompt: { type: 'string', description: '提示词，最多32768字符，不触发生成。' },
+-          params: { type: 'object', additionalProperties: true, description: '仅image/video允许的标量技术参数，优先省略以沿用原生默认值。' }
+-        } }
+-      } }
++        placement: nodePlacementParameterSpec, changes: nodeChangesParameterSpec,
++      } },
++      nodeId: { type: 'string', description: '仅update/configure，真实目标节点ID。' },
++      changes: { ...nodeChangesParameterSpec, description: '仅update，至少一个变化字段；不会清空其他内容。' },
++      nodeIds: { type: 'array', items: { type: 'string' }, description: '仅delete，1–20个真实普通节点ID。删除会同时移除原生关联边。' },
++      configuration: { type: 'object', additionalProperties: false, description: '仅configure，至少一个配置字段；先canvas_models读取当前账号可用值，不猜模型。', properties: {
++        modelType: { type: 'string', description: '原生真实模式值，不使用中文展示名。' },
++        model: { type: 'string', description: '当前模式内可用的真实模型值。' }, params: parameterValues,
++      } },
+     }, output,
+     async execute(input, exec) {
+-      const request = requestId('canvas_node_edit', exec); let id: CanvasId | undefined; let dispatchAttempted = false
++      const request = requestId('canvas_node_edit', exec); let id: CanvasId | undefined
+       try {
+-        const args = argumentsObject(input, ['canvasId', 'expectedVersion', 'action', 'node']); id = idOf(args)
++        const args = argumentsObject(input, ['canvasId', 'expectedVersion', 'action', 'node', 'nodeId', 'changes', 'nodeIds', 'configuration']); id = idOf(args)
++        const fields = args.action === 'add' ? ['node'] : args.action === 'update' ? ['nodeId', 'changes'] : args.action === 'delete' ? ['nodeIds'] : args.action === 'configure' ? ['nodeId', 'configuration'] : null
++        if (!fields) throw new CanvasAgentError('INVALID_ARGUMENT', '节点操作仅支持add/update/delete/configure')
++        argumentsObject(args, ['canvasId', 'expectedVersion', 'action', ...fields])
+         if (args.node && typeof args.node === 'object' && Object.hasOwn(args.node, 'position')) throw new CanvasAgentError('INVALID_ARGUMENT', '请使用node.placement指定放置规则；精确坐标使用absolute模式')
+-        if (args.action !== 'add') throw new CanvasAgentError('INVALID_ARGUMENT', '本期只支持添加节点')
+-        const operation = parseBridgeOperation({ action: 'node.add', expectedVersion: args.expectedVersion, node: args.node })
+-        const target = await bridge.ensureContext(sessionOf(exec), id, 'edit', request + ':prepare', exec.signal)
+-        dispatchAttempted = true
+-        const result = await bridge.dispatch(target, request + ':add', operation, exec.signal)
+-        const receipt = result.status === 'submission_unknown' ? { ...result, error: { ...result.error, retry: 'never_auto' as const } } : result
+-        return JSON.stringify({ ...receipt, requestId: request, address: canvasAddress(id) })
+-      } catch (cause) {
+-        if (id && dispatchAttempted && (!(cause instanceof CanvasAgentError) || cause.code === 'SUBMISSION_UNKNOWN')) {
+-          return JSON.stringify({ status: 'submission_unknown', canvasId: id, version: null, phase: 'save', affectedNodeIds: [], requestId: request, address: canvasAddress(id), error: { code: 'SUBMISSION_UNKNOWN', message: '节点保存结果未确认，请先读取核对，不要重复新增', retry: 'never_auto' } })
+-        }
+-        return JSON.stringify(reject(request, cause, id))
+-      }
++        const operation = parseBridgeOperation({ action: 'node.' + args.action, expectedVersion: args.expectedVersion, ...Object.fromEntries(fields.filter(key => key in args).map(key => [key, args[key]])) })
++        return JSON.stringify(await dispatchCanvasWrite(bridge, id, operation, exec, request))
++      } catch (cause) { return JSON.stringify(reject(request, cause, id)) }
+     }
+   }))
+ }
+diff --git a/private/tmp/canvas-graph-baseline/src/host/index.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/index.ts
+index d2f041d..479e447 100644
+--- a/private/tmp/canvas-graph-baseline/src/host/index.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/index.ts
+@@ -1,6 +1,7 @@
+ import type { Context } from '@deepseek-ai/cordis'
+ import { registerCanvasAssetTools } from './canvas-asset-tools'
+ import { registerCanvasTools } from './canvas-tools'
++import { registerCanvasGraphTools } from './canvas-graph-tools'
+ import { registerGatewayRoute } from './gateway-route'
+ import { registerModelParamsRoute } from './model-params-route'
+ import { registerPageRoute } from './page-route'
+@@ -19,5 +20,6 @@ export function apply(ctx: Context): void {
+   registerSnapshotRoute(ctx)
+   registerGatewayRoute(ctx)
+   registerCanvasTools(ctx, bridge)
++  registerCanvasGraphTools(ctx, bridge)
+   registerCanvasAssetTools(ctx, bridge)
+ }
+diff --git a/private/tmp/canvas-graph-baseline/src/shared/canvas-agent-protocol.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/shared/canvas-agent-protocol.ts
+index a3650d8..526e076 100644
+--- a/private/tmp/canvas-graph-baseline/src/shared/canvas-agent-protocol.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/shared/canvas-agent-protocol.ts
+@@ -18,6 +18,19 @@ export interface NodeChanges {
+   text?: string;
+   params?: Record<string, JsonScalar>;
+ }
++export interface NodeConfiguration {
++  modelType?: string;
++  model?: string;
++  params?: Record<string, JsonScalar>;
++}
++export interface EdgeConnection {
++  sourceNodeId: string; targetNodeId: string; sourceHandle?: string; targetHandle?: string;
++}
++export type EdgeEditOperation =
++  | { action: 'edge.add'; expectedVersion: Version; connection: EdgeConnection }
++  | { action: 'edge.delete'; expectedVersion: Version; edgeIds: string[] }
++  | { action: 'edge.reconnect'; expectedVersion: Version; edgeId: string; connection: EdgeConnection }
++  | { action: 'edge.reorder'; expectedVersion: Version; targetNodeId: string; edgeIds: string[] };
+ export type NodePlacement =
+   | { mode: 'auto' }
+   | { mode: 'absolute'; position: { x: number; y: number } }
+@@ -58,7 +71,7 @@ export const ERROR_CODES = [
+   'ASSET_NOT_FOUND', 'ASSET_UPLOAD_REJECTED', 'ASSET_UPLOAD_UNKNOWN', 'ASSET_REGISTRATION_REJECTED',
+   'INVALID_ARGUMENT', 'AGENT_CONTEXT_REQUIRED', 'CLIENT_UNAVAILABLE',
+   'CLIENT_AMBIGUOUS', 'CONTEXT_GONE', 'CONTEXT_NOT_READY', 'CONTEXT_INACTIVE', 'FRAME_NOT_READY', 'FRAME_INACTIVE', 'FRAME_GONE',
+-  'READ_TIMEOUT', 'READ_ONLY', 'NODE_NOT_FOUND', 'NODE_BUSY', 'EDITOR_BUSY',
++  'READ_TIMEOUT', 'READ_REJECTED', 'READ_ONLY', 'NODE_NOT_FOUND', 'EDGE_NOT_FOUND', 'INVALID_CONNECTION', 'CATALOG_VERSION_CONFLICT', 'NODE_BUSY', 'EDITOR_BUSY',
+   'UNSUPPORTED_NODE', 'CONFIGURATION_ERROR', 'VERSION_UNAVAILABLE',
+   'VERSION_CONFLICT', 'AUTH_REQUIRED', 'SAVE_REJECTED', 'RUN_REJECTED',
+   'COUNT_CHANGED', 'CONFIRMATION_DECLINED', 'CONFIRMATION_UNAVAILABLE',
+@@ -82,9 +95,30 @@ export interface ReadReceipt {
+   consistency: 'confirmed' | 'unconfirmed'; nodeCount: number;
+   nodes: NodeDetail[]; missingNodeIds: string[];
+ }
++export interface GraphPort { id: string; type: 'source' | 'target'; mediaType: string; limit: number | null }
++export interface GraphNode {
++  id: string; type: string; title: string; position: { x: number; y: number };
++  size: { width: number; height: number }; parentId: string | null;
++  ports: GraphPort[]; allowedInputTypes: string[]; canConfigureGeneration: boolean;
++}
++export interface GraphEdge { id: string; source: string; target: string; sourceHandle: string | null; targetHandle: string | null }
++export interface GraphReadReceipt {
++  status: 'graph'; canvasId: string; version: Version | null; consistency: 'confirmed' | 'unconfirmed';
++  nodeCount: number; edgeCount: number; nodes: GraphNode[]; edges: GraphEdge[];
++  nodeOffset: number; edgeOffset: number; nextNodeOffset: number | null; nextEdgeOffset: number | null;
++}
++export interface ModelCatalogSnapshot {
++  catalogVersion: string; nodeType: 'image' | 'video'; modes: Array<{ value: string; label: string }>;
++  modeCount: number; modeOffset: number; nextModeOffset: number | null; modelType: string | null;
++  models: Array<{ value: string; label: string }>; modelCount: number; modelOffset: number;
++  nextModelOffset: number | null; model: string | null; paramHints: ParamHint[];
++}
++export interface ModelsReadReceipt extends ModelCatalogSnapshot {
++  status: 'models'; canvasId: string; version: Version | null; consistency: 'confirmed' | 'unconfirmed';
++}
+ export interface SaveReceipt {
+   status: 'saved'; canvasId: string; version: Version;
+-  affectedNodeIds: string[]; unchanged: boolean;
++  affectedNodeIds: string[]; unchanged: boolean; affectedEdgeIds?: string[]; warnings?: string[];
+ }
+ export interface RunReceipt {
+   status: 'submitted'; canvasId: string; version: Version;
+@@ -93,26 +127,33 @@ export interface RunReceipt {
+ export interface UnknownReceipt {
+   status: 'submission_unknown'; canvasId: string; phase: 'save' | 'run';
+   version: Version | null; affectedNodeIds: string[];
+-  generation?: GenerationCounts; nodeId?: string; taskId?: string; error: Failure;
++  generation?: GenerationCounts; nodeId?: string; taskId?: string; error: Failure; affectedEdgeIds?: string[];
+ }
+ export interface RejectedReceipt {
+   status: 'rejected'; canvasId: string; version: Version | null;
+   effect: 'none'; error: Failure;
+ }
+-export type CanvasOperationResult = ReadReceipt | SaveReceipt | RunReceipt | UnknownReceipt | RejectedReceipt;
++export type CanvasOperationResult = ReadReceipt | GraphReadReceipt | ModelsReadReceipt | SaveReceipt | RunReceipt | UnknownReceipt | RejectedReceipt;
+ export type CanvasOperation =
+   | { action: 'canvas.read'; nodeIds?: string[] }
++  | { action: 'canvas.graph.read'; nodeOffset?: number; edgeOffset?: number; limit?: number; expectedVersion?: Version }
++  | { action: 'canvas.models.read'; nodeType: 'image' | 'video'; modelType?: string; model?: string; modeOffset?: number; modelOffset?: number; limit?: number; expectedCatalogVersion?: string }
+   | { action: 'node.add'; expectedVersion: Version; node: NodeDraft }
+   | { action: 'asset.add'; expectedVersion: Version; asset: CanvasAssetInput }
+   | { action: 'node.update'; expectedVersion: Version; nodeId: string; changes: NodeChanges }
+   | { action: 'node.delete'; expectedVersion: Version; nodeIds: string[] }
+-  | { action: 'node.run'; expectedVersion: Version; nodeId: string; approvedGeneration: GenerationCounts };
++  | { action: 'node.configure'; expectedVersion: Version; nodeId: string; configuration: NodeConfiguration }
++  | { action: 'node.run'; expectedVersion: Version; nodeId: string; approvedGeneration: GenerationCounts }
++  | EdgeEditOperation;
++export function isCanvasReadOperation(operation: CanvasOperation): boolean {
++  return operation.action === 'canvas.read' || operation.action === 'canvas.graph.read' || operation.action === 'canvas.models.read';
++}
+ export interface FrameReadiness {
+   phase: 'loading' | 'ready' | 'failed' | 'inactive' | 'disposed';
+   capabilities: { read: boolean; edit: boolean; run: boolean };
+   version: Version | null; reason?: Failure;
+ }
+-export interface AgentWriteOptions { expectedVersion: Version; strictReceipt: true; signal?: AbortSignal; nodePlacement?: NodePlacement }
++export interface AgentWriteOptions { expectedVersion: Version; strictReceipt: true; signal?: AbortSignal; nodePlacement?: NodePlacement; affectedNodeIds?: string[] }
+ export interface AgentRunOptions extends AgentWriteOptions {
+   strictTransportErrors: true; approvedGeneration: GenerationCounts;
+ }
+@@ -146,15 +187,15 @@ export type CanvasCreateOutput =
+   | { status: 'created'; requestId: string; canvasId: string; address: string; name: string; version: Version | null; runtime: 'ready' | 'not_ready'; runtimeError?: Failure }
+   | { status: 'create_unknown'; requestId: string; error: Failure }
+   | ToolRejection;
+-export interface CanvasGetInput { canvasId: string; view?: 'summary' | 'nodes'; nodeIds?: string[]; refresh?: boolean }
++export interface CanvasGetInput { canvasId: string; view?: 'summary' | 'nodes' | 'graph'; nodeIds?: string[]; refresh?: boolean; nodeOffset?: number; edgeOffset?: number; limit?: number; expectedVersion?: Version }
+ export interface CanvasSummaryOutput {
+   canvasId: string; name: string; nodeCount: number;
+   nodes: Array<{ id: string; title: string; type: string; value: string }>; address: string;
+ }
+-export type CanvasGetOutput = CanvasSummaryOutput | (ReadReceipt & { requestId: string; address: string; source: 'plugin-service' }) | ToolRejection;
++export type CanvasGetOutput = CanvasSummaryOutput | ((ReadReceipt | GraphReadReceipt) & { requestId: string; address: string; source: 'plugin-service' }) | ToolRejection;
+ export interface CanvasNodeEditInput {
+-  canvasId: string; expectedVersion: Version; action: 'add' | 'update' | 'delete';
+-  node?: NodeDraft; nodeId?: string; changes?: NodeChanges; nodeIds?: string[];
++  canvasId: string; expectedVersion: Version; action: 'add' | 'update' | 'delete' | 'configure';
++  node?: NodeDraft; nodeId?: string; changes?: NodeChanges; nodeIds?: string[]; configuration?: NodeConfiguration;
+ }
+ export type CanvasNodeEditOutput = ((SaveReceipt | UnknownReceipt) & { requestId: string; address: string }) | ToolRejection;
+ export interface CanvasRunInput { canvasId: string; scope: 'node'; nodeId: string; expectedVersion: Version }
+@@ -183,12 +224,24 @@ const nodeId = identifier(MAX_NODE_ID_LENGTH);
+ const routingId = identifier(MAX_ROUTING_ID_LENGTH);
+ const canvasId: Check = value => typeof value === 'string' && value.length <= 19 && parseCanvasId(value) !== undefined;
+ const nodeIds: Check = value => array(nodeId)(value) && (value as string[]).length > 0 && new Set(value as string[]).size <= MAX_NODE_IDS;
++const edgeIds: Check = value => array(nodeId, MAX_NODE_IDS)(value) && (value as string[]).length > 0 && new Set(value as string[]).size === (value as string[]).length;
+ const scalar: Check = value => value === null || typeof value === 'boolean' || string(MAX_CONTENT_LENGTH)(value) || finite(value);
+ const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype']);
+ export const FORBIDDEN_PARAM_FIELDS = new Set(['model', 'modelType', 'prompt', ...unsafeKeys]);
+ const scalarParams: Check = value => record(value) && Object.entries(value).every(([key, item]) => identifier(100)(key) && !unsafeKeys.has(key) && scalar(item));
+ const changes: Check = value => shape({}, { title: string(MAX_TITLE_LENGTH), prompt: string(MAX_CONTENT_LENGTH), text: string(MAX_CONTENT_LENGTH), params: item => scalarParams(item) && Object.keys(item as object).length > 0 && Object.keys(item as object).every(key => !FORBIDDEN_PARAM_FIELDS.has(key)) })(value)
+   && Object.keys(value as object).length > 0;
++const configuration: Check = value => shape({}, {
++  modelType: identifier(200), model: identifier(200),
++  params: item => scalarParams(item) && Object.keys(item as object).length > 0 && Object.keys(item as object).every(key => !FORBIDDEN_PARAM_FIELDS.has(key)),
++})(value) && Object.keys(value as object).length > 0;
++const connection = shape({ sourceNodeId: nodeId, targetNodeId: nodeId }, { sourceHandle: identifier(200), targetHandle: identifier(200) });
++const pageLimit: Check = value => integer(value) && (value as number) >= 1 && (value as number) <= MAX_NODE_IDS;
++const graphQuery: Check = value => shape({ action: oneOf(['canvas.graph.read']) }, { nodeOffset: integer, edgeOffset: integer, limit: pageLimit, expectedVersion: version })(value)
++  && (!((value as { nodeOffset?: number; edgeOffset?: number }).nodeOffset || (value as { edgeOffset?: number }).edgeOffset) || Object.hasOwn(value as object, 'expectedVersion'));
++const modelQuery: Check = value => shape({ action: oneOf(['canvas.models.read']), nodeType: oneOf(['image', 'video']) }, {
++  modelType: identifier(200), model: identifier(200), modeOffset: integer, modelOffset: integer, limit: pageLimit, expectedCatalogVersion: version,
++})(value) && (!((value as { modeOffset?: number; modelOffset?: number }).modeOffset || (value as { modelOffset?: number }).modelOffset) || Object.hasOwn(value as object, 'expectedCatalogVersion'));
+ const position = shape({ x: finite, y: finite });
+ const placement: Check = value => shape({ mode: oneOf(['auto']) })(value)
+   || shape({ mode: oneOf(['absolute']), position })(value)
+@@ -204,10 +257,17 @@ const counts = shape({ images: integer, videos: integer });
+ const failure = shape({ code: oneOf(ERROR_CODES), message: string(MAX_CONTENT_LENGTH, 1), retry: oneOf(['read_first', 'after_ready', 'after_input', 'developer_fix', 'user_decision', 'never_auto']) });
+ const operationChecks: Record<CanvasOperation['action'], Check> = {
+   'canvas.read': shape({ action: oneOf(['canvas.read']) }, { nodeIds }),
++  'canvas.graph.read': graphQuery,
++  'canvas.models.read': modelQuery,
+   'node.add': shape({ action: oneOf(['node.add']), expectedVersion: version, node: draft }),
+   'asset.add': shape({ action: oneOf(['asset.add']), expectedVersion: version, asset }),
+   'node.update': shape({ action: oneOf(['node.update']), expectedVersion: version, nodeId, changes }),
+   'node.delete': shape({ action: oneOf(['node.delete']), expectedVersion: version, nodeIds }),
++  'node.configure': shape({ action: oneOf(['node.configure']), expectedVersion: version, nodeId, configuration }),
++  'edge.add': shape({ action: oneOf(['edge.add']), expectedVersion: version, connection }),
++  'edge.delete': shape({ action: oneOf(['edge.delete']), expectedVersion: version, edgeIds }),
++  'edge.reconnect': shape({ action: oneOf(['edge.reconnect']), expectedVersion: version, edgeId: nodeId, connection }),
++  'edge.reorder': shape({ action: oneOf(['edge.reorder']), expectedVersion: version, targetNodeId: nodeId, edgeIds }),
+   'node.run': shape({ action: oneOf(['node.run']), expectedVersion: version, nodeId, approvedGeneration: counts }),
+ };
+ const operation: Check = value => record(value) && typeof value.action === 'string'
+@@ -220,29 +280,41 @@ const detail = shape({
+   outputs: array(string(MAX_CONTENT_LENGTH, 1), 20), generation: nullable(counts), truncatedFields: array(string(200, 1)),
+ }, { position, size: shape({ width: value => finite(value) && (value as number) > 0, height: value => finite(value) && (value as number) > 0 }), parentId: nullable(nodeId) });
+ const resultBase = { canvasId, version: nullable(version) };
++const paramHint = shape({ field: identifier(100), editable: boolean }, { choices: array(scalar), min: finite, max: finite });
++const size = shape({ width: value => finite(value) && (value as number) > 0, height: value => finite(value) && (value as number) > 0 });
++const graphNode = shape({ id: nodeId, type: string(100), title: string(MAX_TITLE_LENGTH), position, size, parentId: nullable(nodeId),
++  ports: array(shape({ id: identifier(200), type: oneOf(['source', 'target']), mediaType: identifier(100), limit: nullable(integer) }), 100),
++  allowedInputTypes: array(identifier(100), 100), canConfigureGeneration: boolean });
++const graphEdge = shape({ id: nodeId, source: nodeId, target: nodeId, sourceHandle: nullable(string(200)), targetHandle: nullable(string(200)) });
++const modelOption = shape({ value: identifier(200), label: string(200) });
+ const resultChecks: Record<CanvasOperationResult['status'], Check> = {
+   read: shape({ ...resultBase, status: oneOf(['read']), consistency: oneOf(['confirmed', 'unconfirmed']), nodeCount: integer, nodes: array(detail, MAX_NODE_IDS), missingNodeIds: array(nodeId, MAX_NODE_IDS) }),
+-  saved: shape({ canvasId, version, status: oneOf(['saved']), affectedNodeIds: array(nodeId), unchanged: boolean }),
++  graph: shape({ ...resultBase, status: oneOf(['graph']), consistency: oneOf(['confirmed', 'unconfirmed']), nodeCount: integer, edgeCount: integer,
++    nodes: array(graphNode, MAX_NODE_IDS), edges: array(graphEdge, MAX_NODE_IDS), nodeOffset: integer, edgeOffset: integer, nextNodeOffset: nullable(integer), nextEdgeOffset: nullable(integer) }),
++  models: shape({ ...resultBase, status: oneOf(['models']), consistency: oneOf(['confirmed', 'unconfirmed']), catalogVersion: version, nodeType: oneOf(['image', 'video']),
++    modes: array(modelOption, MAX_NODE_IDS), modeCount: integer, modeOffset: integer, nextModeOffset: nullable(integer), modelType: nullable(identifier(200)),
++    models: array(modelOption, MAX_NODE_IDS), modelCount: integer, modelOffset: integer, nextModelOffset: nullable(integer), model: nullable(identifier(200)), paramHints: array(paramHint) }),
++  saved: shape({ canvasId, version, status: oneOf(['saved']), affectedNodeIds: array(nodeId), unchanged: boolean }, { affectedEdgeIds: array(nodeId), warnings: array(string(2048)) }),
+   submitted: shape({ canvasId, version, status: oneOf(['submitted']), nodeId, taskId: routingId, generation: counts }),
+-  submission_unknown: shape({ ...resultBase, status: oneOf(['submission_unknown']), phase: oneOf(['save', 'run']), affectedNodeIds: array(nodeId), error: failure }, { generation: counts, nodeId, taskId: routingId }),
++  submission_unknown: shape({ ...resultBase, status: oneOf(['submission_unknown']), phase: oneOf(['save', 'run']), affectedNodeIds: array(nodeId), error: failure }, { generation: counts, nodeId, taskId: routingId, affectedEdgeIds: array(nodeId) }),
+   rejected: shape({ ...resultBase, status: oneOf(['rejected']), effect: oneOf(['none']), error: failure }),
+ };
+ const result: Check = value => record(value) && typeof value.status === 'string'
+   && Object.hasOwn(resultChecks, value.status) && resultChecks[value.status as CanvasOperationResult['status']](value);
+ const readiness = shape({ phase: oneOf(['loading', 'ready', 'failed', 'inactive', 'disposed']), capabilities: shape({ read: boolean, edit: boolean, run: boolean }), version: nullable(version) }, { reason: failure });
+-const connection = { protocolVersion: oneOf([2]), connectionId: routingId };
+-const open = { ...connection, sessionId: routingId, canvasId, requestId: routingId };
+-const binding = { ...connection, frameId: routingId, sessionId: routingId, canvasId };
++const connectionFields = { protocolVersion: oneOf([2]), connectionId: routingId };
++const open = { ...connectionFields, sessionId: routingId, canvasId, requestId: routingId };
++const binding = { ...connectionFields, frameId: routingId, sessionId: routingId, canvasId };
+ const command = shape({ ...binding, type: oneOf(['canvas.command']), requestId: routingId, payload: operation });
+ const frame: Check = value => shape({ ...binding, type: oneOf(['canvas.frame.state']), state: readiness })(value)
+   || shape({ ...binding, type: oneOf(['canvas.command.ack']), requestId: routingId, phase: oneOf(['accepted', 'started']) })(value)
+   || (shape({ ...binding, type: oneOf(['canvas.command.ack']), requestId: routingId, phase: oneOf(['settled']), result })(value)
+     && (value as FrameAck & { result: CanvasOperationResult }).result.canvasId === (value as FrameAck).canvasId);
+ const parent: Check = value => command(value) || shape({ ...binding, type: oneOf(['canvas.bridge.bind']) })(value);
+-const host: Check = value => command(value) || shape({ ...connection, type: oneOf(['bridge.connected']) })(value) || shape({ ...open, type: oneOf(['canvas.open']) })(value);
++const host: Check = value => command(value) || shape({ ...connectionFields, type: oneOf(['bridge.connected']) })(value) || shape({ ...open, type: oneOf(['canvas.open']) })(value);
+ const client: Check = value => frame(value)
+-  || shape({ ...connection, type: oneOf(['session.bind', 'session.unbind']), sessionId: routingId })(value)
+-  || shape({ ...connection, type: oneOf(['bridge.detach']) })(value)
++  || shape({ ...connectionFields, type: oneOf(['session.bind', 'session.unbind']), sessionId: routingId })(value)
++  || shape({ ...connectionFields, type: oneOf(['bridge.detach']) })(value)
+   || shape({ ...open, type: oneOf(['canvas.open.ack']), status: oneOf(['opening']) })(value)
+   || shape({ ...open, type: oneOf(['canvas.open.ack']), status: oneOf(['rejected']), error: failure })(value);
+ 
+@@ -259,6 +331,7 @@ function parse<T>(value: unknown, check: Check, label: string): T {
+ }
+ export function parseCanvasAsset(value: unknown): CanvasAssetInput { return parse(value, asset, '图片素材'); }
+ export function parseNodeChanges(value: unknown): NodeChanges { return parse(value, changes, '节点变化'); }
++export function parseNodeConfiguration(value: unknown): NodeConfiguration { return parse(value, configuration, '节点配置'); }
+ export function parseNodePlacement(value: unknown): NodePlacement { return parse(value, placement, '节点放置'); }
+ export function parseNodeDraft(value: unknown): NodeDraft { return parse(value, draft, '新增节点'); }
+ export function parseCanvasOperation(value: unknown): CanvasOperation {
+diff --git a/private/tmp/canvas-graph-baseline/src/shared/canvas-bridge-protocol.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/shared/canvas-bridge-protocol.ts
+index 08d86d4..89605b0 100644
+--- a/private/tmp/canvas-graph-baseline/src/shared/canvas-bridge-protocol.ts
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/shared/canvas-bridge-protocol.ts
+@@ -5,7 +5,7 @@ export const MAX_BRIDGE_RECORDS = 1024
+ export const MAX_BRIDGE_INFLIGHT = 8
+ export const MAX_BRIDGE_CACHE_BYTES = 32 * 1024 * 1024
+ export type BridgeCapability = 'read' | 'edit'
+-export type BridgeOperation = Extract<CanvasOperation, { action: 'canvas.read' | 'node.add' | 'asset.add' }>
++export type BridgeOperation = Exclude<CanvasOperation, { action: 'node.run' }>
+ export interface BridgeTarget { connectionId: string; sessionId: string; canvasId: string; contextId: string; readiness: FrameReadiness }
+ export interface ClientRegistration { protocolVersion: 3; clientId: string; connectionId: string; bridgeKey: string }
+ interface Connection { protocolVersion: 3; connectionId: string }
+@@ -51,7 +51,7 @@ function base(value: Record<string, unknown>, request = false): void {
+ }
+ export function parseBridgeOperation(value: unknown): BridgeOperation {
+   const operation = parseCanvasOperation(value)
+-  if (operation.action !== 'canvas.read' && operation.action !== 'node.add' && operation.action !== 'asset.add') invalid()
++  if (operation.action === 'node.run') invalid()
+   return structuredClone(operation)
+ }
+ export function parseClientRegistration(input: unknown): ClientRegistration {
+@@ -67,7 +67,7 @@ export function parseServiceHostEvent(input: unknown): ServiceHostEvent {
+     if (!Number.isSafeInteger(value.deadline) || Number(value.deadline) < 1) invalid()
+     if (value.type === 'canvas.prepare') {
+       exact(value, [...requestFields, 'deadline', 'capability'], ['refresh'])
+-      if (!['read', 'edit'].includes(String(value.capability)) || ('refresh' in value && typeof value.refresh !== 'boolean')) invalid()
++      if (!['read', 'edit'].includes(String(value.capability)) || ('refresh' in value && typeof value.refresh !== 'boolean') || (value.refresh === true && value.capability !== 'read')) invalid()
+     } else if (value.type === 'canvas.command') {
+       exact(value, [...requestFields, 'deadline', 'contextId', 'payload']); assertBridgeId(value.contextId)
+       value.payload = parseBridgeOperation(value.payload)
+diff --git a/private/tmp/canvas-graph-baseline/test/canvas-bridge-protocol.test.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-bridge-protocol.test.mjs
+index 82dbaf8..cd32951 100644
+--- a/private/tmp/canvas-graph-baseline/test/canvas-bridge-protocol.test.mjs
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-bridge-protocol.test.mjs
+@@ -3,9 +3,9 @@ import test from 'node:test'
+ import { parseServiceHostEvent, parseServiceClientEvent, bridgeFingerprint } from '../src/shared/canvas-bridge-protocol.ts'
+ const base = { protocolVersion: 3, connectionId: 'connection', sessionId: 'session', canvasId: '9007199254740993', requestId: 'call', deadline: Date.now() + 30000 }
+ const command = { ...base, type: 'canvas.command', contextId: 'context', payload: { action: 'node.add', expectedVersion: '18', node: { type: 'text', changes: { text: 'hello' } } } }
+-test('service protocol preserves IDs, rejects legacy frame fields and non-milestone operations', () => {
++test('service protocol preserves IDs, rejects legacy frame fields and generation operations', () => {
+   assert.equal(parseServiceHostEvent(command).canvasId, base.canvasId)
+-  for (const input of [{ ...command, protocolVersion: 2 }, { ...command, frameId: 'frame' }, { ...command, contextId: undefined }, { ...command, payload: { action: 'node.delete', expectedVersion: '18', nodeIds: ['n'] } }]) assert.throws(() => parseServiceHostEvent(input))
++  for (const input of [{ ...command, protocolVersion: 2 }, { ...command, frameId: 'frame' }, { ...command, contextId: undefined }, { ...command, payload: { action: 'node.run', expectedVersion: '18', nodeId: 'n', approvedGeneration: { images: 1, videos: 0 } } }]) assert.throws(() => parseServiceHostEvent(input))
+   assert.throws(() => parseServiceHostEvent({ ...base, type: 'canvas.prepare', capability: 'run' }))
+ })
+ test('client receipts require matching canvas, strict fields and versioned session snapshots', () => {
+@@ -24,7 +24,7 @@ test('fingerprints normalize key order and parsers own their input snapshot', ()
+ })
+ 
+ 
+-test('asset.add is the only newly allowed service operation and owns nested asset fields', () => {
++test('asset.add retains ownership of nested asset fields and generation remains prohibited', () => {
+   const payload = { action: 'asset.add', expectedVersion: '18', asset: { url: 'https://assets.example/image.png', title: '参考图', position: { x: 5, y: -10 } } }
+   const parsed = parseServiceHostEvent({ ...command, payload })
+   assert.deepEqual(parsed.payload, payload)
+@@ -35,8 +35,6 @@ test('asset.add is the only newly allowed service operation and owns nested asse
+     { action: 'node.add', expectedVersion: '18', node: { type: 'image' } },
+   ]) assert.equal(parseServiceHostEvent({ ...command, payload: operation }).payload.action, operation.action)
+   for (const operation of [
+-    { action: 'node.update', expectedVersion: '18', nodeId: 'n', changes: { title: 'new' } },
+-    { action: 'node.delete', expectedVersion: '18', nodeIds: ['n'] },
+     { action: 'node.run', expectedVersion: '18', nodeId: 'n', approvedGeneration: { images: 1, videos: 0 } },
+     { action: 'template.run', templateId: 'template' },
+   ]) assert.throws(() => parseServiceHostEvent({ ...command, payload: operation }), { code: 'INVALID_ARGUMENT' })
+diff --git a/private/tmp/canvas-graph-baseline/test/canvas-bridge.test.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-bridge.test.mjs
+index b3ea2ab..fd2d2eb 100644
+--- a/private/tmp/canvas-graph-baseline/test/canvas-bridge.test.mjs
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-bridge.test.mjs
+@@ -17,6 +17,29 @@ function fixture(options) {
+     return waiting
+   }, settle(target, requestId = 'add') { const {readiness,...route}=target; send({ ...route, type: 'canvas.command.ack', requestId, phase: 'settled', result: { status: 'saved', canvasId: '2873', version: '19', affectedNodeIds: ['node'], unchanged: false } }) } }
+ }
++
++test('graph/model dispatched read disconnects never become unknown writes', async t => {
++  for (const operation of [{ action: 'canvas.graph.read' }, { action: 'canvas.models.read', nodeType: 'image' }]) {
++    const f = fixture(); t.after(() => f.bridge.dispose()); const target = await f.prepare()
++    const waiting = f.bridge.dispatch(target, 'read', operation); f.stop()
++    const result = await waiting
++    assert.equal(result.status, 'rejected'); assert.equal(result.effect, 'none'); assert.equal(result.error.code, 'READ_TIMEOUT')
++    assert.equal((await f.bridge.dispatch(target, 'read', operation)).status, 'rejected')
++  }
++})
++test('Host accepts only matching graph/model read statuses and preserves saved edge IDs', async t => {
++  const f = fixture(); t.after(() => f.bridge.dispose()); const target = await f.prepare()
++  const graph = { status: 'graph', canvasId: '2873', version: '18', consistency: 'confirmed', nodeCount: 0, edgeCount: 0, nodes: [], edges: [], nodeOffset: 0, edgeOffset: 0, nextNodeOffset: null, nextEdgeOffset: null }
++  const waiting = f.bridge.dispatch(target, 'graph', { action: 'canvas.graph.read' })
++  const { readiness, ...route } = target
++  assert.throws(() => f.send({ ...route, type: 'canvas.command.ack', requestId: 'graph', phase: 'settled', result: { status: 'saved', canvasId: '2873', version: '19', affectedNodeIds: [], unchanged: false } }), { code: 'INVALID_ARGUMENT' })
++  f.send({ ...route, type: 'canvas.command.ack', requestId: 'graph', phase: 'settled', result: graph })
++  assert.deepEqual(await waiting, graph)
++  const saved = { status: 'saved', canvasId: '2873', version: '19', affectedNodeIds: ['source', 'target'], affectedEdgeIds: ['edge'], unchanged: false }
++  const edge = f.bridge.dispatch(target, 'edge', { action: 'edge.add', expectedVersion: '18', connection: { sourceNodeId: 'source', targetNodeId: 'target' } })
++  f.send({ ...route, type: 'canvas.command.ack', requestId: 'edge', phase: 'settled', result: saved })
++  assert.deepEqual(await edge, saved)
++})
+ test('Host routes prepare and one write to one fixed context, deduplicates call IDs and validates late ACKs', async t => {
+   const f = fixture(); t.after(() => f.bridge.dispose()); const target = await f.prepare()
+   const waiting = f.bridge.dispatch(target, 'add', add); const same = f.bridge.dispatch(target, 'add', { node: add.node, action: add.action, expectedVersion: '18' })
+@@ -56,7 +79,8 @@ test('cancel before dispatch sends nothing; a dispatched cancellation is unknown
+ })
+ test('prepare/command target cannot change after context replacement; explicit refresh uses prepare without opening UI', async t => {
+   const f = fixture(); t.after(() => f.bridge.dispose()); const old = await f.prepare()
+-  const waiting = f.bridge.ensureContext('session', '2873', 'edit', 'refresh', undefined, true)
++  await assert.rejects(f.bridge.ensureContext('session', '2873', 'edit', 'invalid-refresh', undefined, true), { code: 'INVALID_ARGUMENT' })
++  const waiting = f.bridge.ensureContext('session', '2873', 'read', 'refresh', undefined, true)
+   const { deadline, capability, refresh, ...event } = f.events.at(-1); assert.equal(refresh, true)
+   f.send({ ...event, type: 'canvas.prepare.ack', status: 'prepared', contextId: 'new-context', state })
+   await waiting
+diff --git a/private/tmp/canvas-graph-baseline/test/canvas-command-endpoint.test.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-command-endpoint.test.mjs
+index b2777ba..1780a17 100644
+--- a/private/tmp/canvas-graph-baseline/test/canvas-command-endpoint.test.mjs
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-command-endpoint.test.mjs
+@@ -102,3 +102,33 @@ test('invalid asset input is rejected before Client execution or ACK emission',
+   await assert.rejects(f.endpoint.handle({ ...command, payload: { action: 'asset.add', expectedVersion: '18', asset: { url: 'file:///tmp/private.png' } } }), { code: 'INVALID_ARGUMENT' })
+   assert.equal(f.calls, 0); assert.equal(f.sent.length, 0)
+ })
++
++test('graph/model read failures after start are read rejections, never submission_unknown', async t => {
++  for (const payload of [{ action: 'canvas.graph.read' }, { action: 'canvas.models.read', nodeType: 'image' }]) {
++    const f = fixture(); t.after(() => f.endpoint.dispose()); let calls = 0
++    f.rt.execute = async () => { calls++; throw new Error('read failed') }
++    const input = { ...command, requestId: payload.action, payload }
++    await f.endpoint.handle(input)
++    assert.equal(f.sent.at(-1).result.status, 'rejected'); assert.equal(f.sent.at(-1).result.effect, 'none')
++    await f.endpoint.handle(input); assert.equal(calls, 1)
++  }
++})
++test('graph reads only require read readiness and mismatched saved receipts cannot pass as read success', async t => {
++  const f = fixture(); t.after(() => f.endpoint.dispose())
++  f.rt.getContextInfo = () => ({ contextId: 'context', readiness: { ...state, capabilities: { read: true, edit: false, run: false } } })
++  const graph = { status: 'graph', canvasId: '2873', version: '18', consistency: 'confirmed', nodeCount: 0, edgeCount: 0, nodes: [], edges: [], nodeOffset: 0, edgeOffset: 0, nextNodeOffset: null, nextEdgeOffset: null }
++  f.rt.execute = async () => graph
++  await f.endpoint.handle({ ...command, requestId: 'graph', payload: { action: 'canvas.graph.read' } })
++  assert.deepEqual(f.sent.at(-1).result, graph)
++  f.rt.execute = async () => ({ status: 'saved', canvasId: '2873', version: '19', affectedNodeIds: [], unchanged: false })
++  await f.endpoint.handle({ ...command, requestId: 'bad-read', payload: { action: 'canvas.graph.read' } })
++  assert.equal(f.sent.at(-1).result.status, 'rejected'); assert.equal(f.sent.at(-1).result.error.code, 'INVALID_ARGUMENT')
++})
++test('edge writes retain unknown affectedEdgeIds and replay never starts a second native write', async t => {
++  const f = fixture(); t.after(() => f.endpoint.dispose()); let calls = 0
++  const unknown = { status: 'submission_unknown', canvasId: '2873', version: null, phase: 'save', affectedNodeIds: ['source', 'target'], affectedEdgeIds: ['edge'], error: { code: 'SUBMISSION_UNKNOWN', message: 'lost', retry: 'never_auto' } }
++  f.rt.execute = async () => { calls++; return unknown }
++  const input = { ...command, requestId: 'edge', payload: { action: 'edge.add', expectedVersion: '18', connection: { sourceNodeId: 'source', targetNodeId: 'target' } } }
++  await f.endpoint.handle(input); await f.endpoint.handle(input)
++  assert.deepEqual(f.sent.at(-1).result, unknown); assert.equal(calls, 1)
++})
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-edge-policy.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-edge-policy.ts
+new file mode 100644
+index 0000000..bb2743e
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-edge-policy.ts
+@@ -0,0 +1,119 @@
++import type { Edge, Node } from '@xyflow/react';
++import { v4 as uuidv4 } from 'uuid';
++import setting from '../legacy/src/components/canvasFlow/settings/setting';
++import util from '../legacy/src/components/canvasFlow/utils/util';
++import { getHandleLimit } from '../legacy/src/components/canvasFlow/utils/multiConnect';
++import { CanvasAgentError, STANDARD_NODE_TYPES, type EdgeConnection, type EdgeEditOperation, type GraphPort } from '../../src/shared/canvas-agent-protocol';
++
++type GraphState = { nodes: Node[]; edges: Edge[] };
++export interface AgentEdgeChange {
++  edges: Edge[];
++  affectedNodeIds: string[];
++  affectedEdgeIds: string[];
++  unchanged: boolean;
++}
++
++function invalid(message: string): never { throw new CanvasAgentError('INVALID_CONNECTION', message); }
++function standard(node: Node): boolean { return STANDARD_NODE_TYPES.some(type => type === node.type); }
++
++/** Native registration is the source of truth, including tool port capacities. */
++export function getAgentNodePorts(node: Node): GraphPort[] {
++  const handlers = setting.handlersMap[String(node.type) as keyof typeof setting.handlersMap] ?? [];
++  return handlers.map(handle => ({ id: handle.id, type: handle.type,
++    mediaType: handle.id.split('_')[0], limit: 'limit' in handle && typeof handle.limit === 'number' ? handle.limit : null }));
++}
++
++export function getAgentAllowedInputTypes(node: Node): string[] {
++  const ports = getAgentNodePorts(node).filter(port => port.type === 'target');
++  const mode = String((node.data.params as { mode?: unknown } | undefined)?.mode ?? 'custom');
++  const allowed = node.type === 'storyboardTool' && mode === 'gen_script' ? ['text']
++    : node.type === 'storyboardTool' && mode === 'video_understand' ? ['video']
++    : setting.targetTypeMap[String(node.type) as keyof typeof setting.targetTypeMap] ?? [];
++  return [...new Set(allowed)].filter(type => ports.some(port => port.mediaType === type));
++}
++
++function nodeOf(state: GraphState, id: string, role: 'source' | 'target'): Node {
++  const node = state.nodes.find(item => item.id === id);
++  if (!node) throw new CanvasAgentError('NODE_NOT_FOUND', '连线节点不存在：' + id);
++  if (role === 'source' ? !standard(node) : !getAgentNodePorts(node).some(port => port.type === 'target')) throw new CanvasAgentError('UNSUPPORTED_NODE', '本期不编辑工具输出管理边或无输入端口的节点');
++  return node;
++}
++
++function hasPath(edges: Edge[], start: string, end: string): boolean {
++  const visited = new Set<string>();
++  const pending = [start];
++  while (pending.length) {
++    const id = pending.pop()!;
++    if (id === end) return true;
++    if (visited.has(id)) continue;
++    visited.add(id);
++    for (const edge of edges) if (edge.source === id) pending.push(edge.target);
++  }
++  return false;
++}
++
++function resolveConnection(state: GraphState, connection: EdgeConnection, id: string, workingEdges: Edge[]): Edge {
++  const source = nodeOf(state, connection.sourceNodeId, 'source');
++  const target = nodeOf(state, connection.targetNodeId, 'target');
++  if (source.id === target.id) invalid('节点不能连接自身');
++  const sourcePorts = getAgentNodePorts(source).filter(port => port.type === 'source');
++  const sourceHandle = connection.sourceHandle ?? sourcePorts[0]?.id;
++  const sourcePort = sourcePorts.find(port => port.id === sourceHandle);
++  if (!sourcePort) invalid('源节点没有指定的输出端口');
++  const targetPorts = getAgentNodePorts(target).filter(port => port.type === 'target');
++  const targetHandle = connection.targetHandle ?? targetPorts.find(port => port.mediaType === sourcePort.mediaType)?.id;
++  const targetPort = targetPorts.find(port => port.id === targetHandle);
++  if (!targetPort) invalid('目标节点没有兼容的输入端口');
++  // Do not silently turn an explicitly selected port into a different input slot.
++  if (sourcePort.mediaType !== targetPort.mediaType || !getAgentAllowedInputTypes(target).includes(sourcePort.mediaType)) invalid('连线输入输出类型不兼容');
++  const edge: Edge = { id, source: source.id, target: target.id, sourceHandle, targetHandle };
++  if (!util.validateConnection(edge, state.nodes)) invalid('连线未通过原生校验');
++  // Native getSourceMap resolves each source once; a second port cannot safely represent a second input.
++  if (workingEdges.some(item => item.source === edge.source && item.target === edge.target)) invalid('这两个节点之间已存在连线');
++  const limit = getHandleLimit(target.type, targetHandle);
++  if (limit !== undefined && workingEdges.filter(item => item.target === target.id && item.targetHandle === targetHandle).length >= limit) invalid('目标输入端口已达到连线数量上限');
++  if (hasPath(workingEdges, target.id, source.id)) invalid('此连线会产生循环依赖');
++  return util.dealEdge(edge);
++}
++
++function edgeOf(state: GraphState, id: string): Edge {
++  const found = state.edges.filter(edge => edge.id === id);
++  if (found.length !== 1) throw new CanvasAgentError('EDGE_NOT_FOUND', '连线不存在或ID不唯一：' + id);
++  nodeOf(state, found[0].source, 'source'); nodeOf(state, found[0].target, 'target');
++  return found[0];
++}
++
++/** Computes one complete delta; no Store writes, HTTP calls, selection or layout changes. */
++export function resolveAgentEdgeChange(state: GraphState, operation: EdgeEditOperation): AgentEdgeChange {
++  let edges: Edge[];
++  let affectedEdgeIds: string[];
++  let affectedNodeIds: string[];
++  let unchanged = false;
++  if (operation.action === 'edge.add') {
++    const edge = resolveConnection(state, operation.connection, uuidv4(), state.edges);
++    edges = [...state.edges, edge]; affectedEdgeIds = [edge.id]; affectedNodeIds = [edge.source, edge.target];
++  } else if (operation.action === 'edge.delete') {
++    const removed = operation.edgeIds.map(id => edgeOf(state, id));
++    const ids = new Set(operation.edgeIds);
++    edges = state.edges.filter(edge => !ids.has(edge.id)); affectedEdgeIds = [...ids];
++    affectedNodeIds = removed.flatMap(edge => [edge.source, edge.target]);
++  } else if (operation.action === 'edge.reconnect') {
++    const old = edgeOf(state, operation.edgeId);
++    const replacement = resolveConnection(state, operation.connection, old.id, state.edges.filter(edge => edge.id !== old.id));
++    unchanged = old.source === replacement.source && old.target === replacement.target
++      && old.sourceHandle === replacement.sourceHandle && old.targetHandle === replacement.targetHandle;
++    edges = unchanged ? state.edges : state.edges.map(edge => edge.id === old.id ? { ...edge, ...replacement } : edge);
++    affectedEdgeIds = [old.id]; affectedNodeIds = [old.source, old.target, replacement.source, replacement.target];
++  } else {
++    nodeOf(state, operation.targetNodeId, 'target');
++    const incoming = state.edges.filter(edge => edge.target === operation.targetNodeId);
++    if (incoming.length !== operation.edgeIds.length || new Set(operation.edgeIds).size !== operation.edgeIds.length
++      || incoming.some(edge => !operation.edgeIds.includes(edge.id))) throw new CanvasAgentError('INVALID_ARGUMENT', '排序必须包含目标节点的全部入边，且不得包含其他连线');
++    const byId = new Map(incoming.map(edge => [edge.id, edgeOf(state, edge.id)]));
++    let cursor = 0;
++    edges = state.edges.map(edge => edge.target === operation.targetNodeId ? byId.get(operation.edgeIds[cursor++])! : edge);
++    unchanged = incoming.every((edge, index) => edge.id === operation.edgeIds[index]);
++    affectedEdgeIds = [...operation.edgeIds]; affectedNodeIds = [operation.targetNodeId, ...incoming.map(edge => edge.source)];
++  }
++  return { edges, affectedNodeIds: [...new Set(affectedNodeIds)], affectedEdgeIds, unchanged };
++}
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-graph-read.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-graph-read.ts
+new file mode 100644
+index 0000000..c325f9d
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-graph-read.ts
+@@ -0,0 +1,35 @@
++import type { GraphReadReceipt, CanvasOperation } from '../../src/shared/canvas-agent-protocol';
++import { MAX_NODE_IDS, MAX_TITLE_LENGTH } from '../../src/shared/canvas-agent-protocol';
++import type { AgentNodeState } from './agent-node-policy';
++import { getAgentNodeGeometry } from './agent-node-placement';
++import { getAgentNodePorts, getAgentAllowedInputTypes } from './agent-edge-policy';
++import { isNonGenerativeMedia } from '../legacy/src/components/canvasFlow/utils/type';
++
++type GraphQuery = Extract<CanvasOperation, { action: 'canvas.graph.read' }>;
++type GraphSnapshot = Omit<GraphReadReceipt, 'status' | 'canvasId' | 'version' | 'consistency'>;
++
++/** Bounded graph metadata. Contents and media URLs remain in the existing node-detail query. */
++export function readAgentGraph(state: AgentNodeState, query: GraphQuery): GraphSnapshot {
++  const nodeOffset = query.nodeOffset ?? 0;
++  const edgeOffset = query.edgeOffset ?? 0;
++  const limit = query.limit ?? MAX_NODE_IDS;
++  return {
++    nodeCount: state.nodes.length, edgeCount: state.edges.length,
++    nodeOffset, edgeOffset,
++    nextNodeOffset: nodeOffset + limit < state.nodes.length ? nodeOffset + limit : null,
++    nextEdgeOffset: edgeOffset + limit < state.edges.length ? edgeOffset + limit : null,
++    nodes: state.nodes.slice(nodeOffset, nodeOffset + limit).map(node => ({
++      id: node.id, type: node.type ?? '',
++      title: (typeof node.data.title === 'string' ? node.data.title : '').slice(0, MAX_TITLE_LENGTH),
++      ...getAgentNodeGeometry(node), ports: getAgentNodePorts(node),
++      allowedInputTypes: getAgentAllowedInputTypes(node),
++      canConfigureGeneration: (node.type === 'image' || node.type === 'video')
++        && !isNonGenerativeMedia(String(node.data.type ?? '')),
++    })),
++    // Preserve native array order; it is the material order consumed by getSourceMap.
++    edges: state.edges.slice(edgeOffset, edgeOffset + limit).map(edge => ({
++      id: edge.id, source: edge.source, target: edge.target,
++      sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null,
++    })),
++  };
++}
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-model-policy.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-model-policy.ts
+new file mode 100644
+index 0000000..d9cab45
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/src/agent-model-policy.ts
+@@ -0,0 +1,140 @@
++import type { Node } from '@xyflow/react';
++import util, { applyEmptyMediaNodeDimensions } from '../legacy/src/components/canvasFlow/utils/util';
++import { applyMediaModelTypeChange, buildMediaNodeParamState, creareDefaultParamsV2, getTransformItems,
++  getImageModelTypeMismatchReason, getVideoModelTypeMismatchReason, resolveParamsOnModelChange,
++  type MediaModelsMap, type MediaNodeType } from '../legacy/src/components/canvasFlow/utils/mediaNodeModelUtil';
++import { getChoiceFlag, isChoiceUsable, isModelSelectable } from '../legacy/src/components/canvasFlow/utils/modelPermission';
++import { isNonGenerativeMedia } from '../legacy/src/components/canvasFlow/utils/type';
++import { CanvasAgentError, parseCanvasOperation, parseNodeConfiguration, FORBIDDEN_PARAM_FIELDS,
++  type CanvasOperation, type JsonScalar, type ModelCatalogSnapshot, type NodeConfiguration, type ParamHint } from '../../src/shared/canvas-agent-protocol';
++import { getAgentMediaParamFields, validateAgentMediaParams, type AgentNodeState } from './agent-node-policy';
++
++type ModelsQuery = Extract<CanvasOperation, { action: 'canvas.models.read' }>;
++const paramsOf = (node: Node): Record<string, unknown> => node.data.params && typeof node.data.params === 'object'
++  && !Array.isArray(node.data.params) ? node.data.params as Record<string, unknown> : {};
++const mediaMap = (state: AgentNodeState) => state.modelsMap as unknown as MediaModelsMap;
++const isMedia = (node: Node): node is Node & { type: MediaNodeType } => node.type === 'image' || node.type === 'video';
++const scalar = (value: unknown): value is JsonScalar => value === null || typeof value === 'string'
++  || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
++
++function canonical(value: unknown): unknown {
++  if (value instanceof Map) return [...value.entries()].sort(([a], [b]) => String(a).localeCompare(String(b)))
++    .map(([key, item]) => [key, canonical(item)]);
++  if (Array.isArray(value)) return value.map(canonical);
++  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort()
++    .map(key => [key, canonical((value as Record<string, unknown>)[key])]));
++  return value;
++}
++
++function paramHints(state: AgentNodeState, type: MediaNodeType, params: Record<string, unknown>): ParamHint[] {
++  const parsed = buildMediaNodeParamState(mediaMap(state), type, params, state.modelNodePermission);
++  return [...parsed.otherParams, parsed.timeParam].filter(field => field.key && !FORBIDDEN_PARAM_FIELDS.has(field.key))
++    .map(field => {
++      const choices = (field.option ?? []).map(choice => choice.value).filter(value => scalar(value)
++        && isChoiceUsable(getChoiceFlag(state.modelNodePermission, type, String(params.model), field.key, value)));
++      return { field: field.key, editable: choices.length > 0, choices };
++    });
++}
++
++/** Snapshot pages share a digest of the native model and permission configuration. */
++export async function readAgentModels(state: AgentNodeState, input: ModelsQuery): Promise<ModelCatalogSnapshot> {
++  const query = parseCanvasOperation(input) as ModelsQuery;
++  const modelsMap = mediaMap(state);
++  const encoded = new TextEncoder().encode(JSON.stringify(canonical({ nodeType: query.nodeType,
++    models: modelsMap[query.nodeType] ?? [], permission: state.modelNodePermission })));
++  const digest = await crypto.subtle.digest('SHA-256', encoded);
++  const catalogVersion = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
++  const modeOffset = query.modeOffset ?? 0;
++  const modelOffset = query.modelOffset ?? 0;
++  const limit = query.limit ?? 20;
++  if ((modeOffset > 0 || modelOffset > 0) && !query.expectedCatalogVersion) {
++    throw new CanvasAgentError('INVALID_ARGUMENT', '模型目录续页需要 expectedCatalogVersion');
++  }
++  if (query.expectedCatalogVersion && query.expectedCatalogVersion !== catalogVersion) {
++    throw new CanvasAgentError('CATALOG_VERSION_CONFLICT', '模型或权限目录已变化，请从第一页重新读取');
++  }
++  const modes = (modelsMap[query.nodeType] ?? []).filter(mode => mode.params?.some(model =>
++    isModelSelectable(state.modelNodePermission, query.nodeType, String(model.value))));
++  const selectedMode = query.modelType !== undefined ? modes.find(mode => mode.value === query.modelType)
++    : query.model !== undefined ? modes.find(mode => mode.params.some(model => model.value === query.model
++      && isModelSelectable(state.modelNodePermission, query.nodeType, String(model.value)))) : modes[0];
++  if ((query.modelType !== undefined || query.model !== undefined) && !selectedMode) {
++    throw new CanvasAgentError('CONFIGURATION_ERROR', '指定模式或模型未配置，或当前账号没有使用权限');
++  }
++  const models = (selectedMode?.params ?? []).filter(model => isModelSelectable(state.modelNodePermission, query.nodeType, String(model.value)));
++  const selectedModel = query.model !== undefined ? models.find(model => model.value === query.model) : models[0];
++  if (query.model !== undefined && !selectedModel) {
++    throw new CanvasAgentError('CONFIGURATION_ERROR', '指定模型不属于该模式，或当前账号没有使用权限');
++  }
++  const defaults = selectedMode && selectedModel
++    ? creareDefaultParamsV2(modelsMap, query.nodeType, selectedMode.value, String(selectedModel.value), state.modelNodePermission) : null;
++  return { catalogVersion, nodeType: query.nodeType,
++    modes: modes.slice(modeOffset, modeOffset + limit).map(mode => ({ value: mode.value, label: mode.label })),
++    modeCount: modes.length, modeOffset, nextModeOffset: modeOffset + limit < modes.length ? modeOffset + limit : null,
++    modelType: selectedMode?.value ?? null,
++    models: models.slice(modelOffset, modelOffset + limit).map(model => ({ value: String(model.value), label: model.label })),
++    modelCount: models.length, modelOffset, nextModelOffset: modelOffset + limit < models.length ? modelOffset + limit : null,
++    model: selectedModel ? String(selectedModel.value) : null,
++    paramHints: defaults ? paramHints(state, query.nodeType, defaults) : [] };
++}
++
++/** Native input semantics count resolved materials, rather than empty source nodes. */
++export function getAgentInputCompatibility(state: AgentNodeState, node: Node): string | null {
++  if (!isMedia(node) || isNonGenerativeMedia(String(node.data.type ?? ''))) return null;
++  const params = paramsOf(node);
++  const { images, videos, audios } = util.getSourceMap(state.nodes, state.edges, node.id);
++  return (node.type === 'image' ? getImageModelTypeMismatchReason(String(params.modelType ?? ''), images.length)
++    : getVideoModelTypeMismatchReason(String(params.modelType ?? ''), images.length, videos.length > 0 || audios.length > 0)) ?? null;
++}
++
++/** Only configuration changes: native content, sources, products and execution state are preserved. */
++export function resolveAgentNodeConfiguration(state: AgentNodeState, node: Node, input: NodeConfiguration): {
++  data: Record<string, unknown>; width?: number; height?: number; measured?: { width: number; height: number };
++} {
++  const configuration = parseNodeConfiguration(input);
++  if (!state.nodes.some(current => current.id === node.id)) throw new CanvasAgentError('NODE_NOT_FOUND', '目标节点已不存在');
++  if (!isMedia(node) || isNonGenerativeMedia(String(node.data.type ?? ''))) {
++    throw new CanvasAgentError('UNSUPPORTED_NODE', '本期仅配置普通图片和视频生成节点，不改写上传或工具产物');
++  }
++  const modelsMap = mediaMap(state);
++  const origin = paramsOf(node);
++  let params = configuration.modelType !== undefined
++    ? applyMediaModelTypeChange(modelsMap, node.type, configuration.modelType, origin) : { ...origin };
++  const mode = modelsMap[node.type]?.find(item => item.value === params.modelType);
++  if (!mode) throw new CanvasAgentError('CONFIGURATION_ERROR', '指定生成模式未配置');
++  const modelKey = configuration.model ?? String(params.model ?? '');
++  if (!mode.params.some(model => model.value === modelKey)
++    || !isModelSelectable(state.modelNodePermission, node.type, modelKey)) {
++    throw new CanvasAgentError('CONFIGURATION_ERROR', '模型不属于当前模式，或当前账号没有使用权限；请先查询可用模型');
++  }
++  const changedModel = modelKey !== origin.model || params.modelType !== origin.modelType;
++  if (changedModel || configuration.model !== undefined) {
++    params = resolveParamsOnModelChange(modelsMap, node.type, modelKey, params, state.modelNodePermission);
++  }
++  const explicit = configuration.params ?? {};
++  const fields = getAgentMediaParamFields(state, node, params);
++  for (const key of Object.keys(explicit)) {
++    if (!fields.some(field => field.key === key)) {
++      throw new CanvasAgentError('INVALID_ARGUMENT', '本期不开放参数 ' + key);
++    }
++  }
++  // Use the native cascade defaults only for omitted children. Explicit child values are validated below.
++  for (const field of fields) {
++    if (!Object.hasOwn(explicit, field.key)) continue;
++    const value = explicit[field.key];
++    if (value === null) continue;
++    const cascade = field.cascade?.[String(value)];
++    if (cascade && Object.entries(cascade).some(([, choices]) => !Array.isArray(choices) || choices.length === 0)) {
++      throw new CanvasAgentError('INVALID_ARGUMENT', '参数 ' + field.key + ' 的级联子参数没有可用选项');
++    }
++    for (const child of getTransformItems(fields, field.key, value)) {
++      if (!Object.hasOwn(explicit, child.key)) params[child.key] = child.value;
++    }
++  }
++  params = { ...params, ...explicit };
++  validateAgentMediaParams(state, node, params);
++  const updated = applyEmptyMediaNodeDimensions({ ...node, data: { ...node.data, params } });
++  return { data: { params }, ...((updated.width !== node.width || updated.height !== node.height)
++    && typeof updated.width === 'number' && typeof updated.height === 'number' ? {
++      width: updated.width, height: updated.height, measured: { width: updated.width, height: updated.height } } : {}) };
++}
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-policy.test.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-policy.test.ts
+new file mode 100644
+index 0000000..e90ac7f
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-policy.test.ts
+@@ -0,0 +1,108 @@
++import { describe, expect, it, vi } from 'vitest';
++import type { Edge, Node } from '@xyflow/react';
++vi.mock('@/api/workflow', () => ({ updateCanvas: vi.fn(), saveFlow: vi.fn(), excuteWorkFlow: vi.fn() }));
++vi.mock('@/api/asset', () => ({ getAvailableCapacity: vi.fn() }));
++vi.mock('@/components/common/storageLimitManager', () => ({ openStorageLimitDialog: vi.fn() }));
++vi.mock('@/utils', () => ({ isSvgImageUrl: () => false, compressImage: vi.fn() }));
++vi.mock('sonner', () => ({ toast: { error: vi.fn(), warning: vi.fn() } }));
++import { getAgentNodePorts, getAgentAllowedInputTypes, resolveAgentEdgeChange } from '../src/agent-edge-policy';
++
++const node = (id: string, type = 'image', data: Record<string, unknown> = {}): Node => ({ id, type, position: { x: 0, y: 0 }, data });
++const edge = (id: string, source: string, target: string, type = 'image'): Edge => ({ id, source, target, sourceHandle: type + '_source', targetHandle: type + '_target' });
++const add = (sourceNodeId: string, targetNodeId: string, handles = {}) => ({ action: 'edge.add' as const, expectedVersion: '18', connection: { sourceNodeId, targetNodeId, ...handles } });
++
++describe('native Agent edge policy', () => {
++  it('reads registered ordinary/upload ports and native capacities without model guesses', () => {
++    expect(getAgentNodePorts(node('i', 'image', { type: 'upload' }))).toEqual([
++      { id: 'text_target', type: 'target', mediaType: 'text', limit: null },
++      { id: 'image_target', type: 'target', mediaType: 'image', limit: null },
++      { id: 'image_source', type: 'source', mediaType: 'image', limit: null },
++    ]);
++    expect(getAgentNodePorts(node('tool', 'highDefinitionTool'))[0]).toMatchObject({ id: 'image_target', limit: 1 });
++    expect(getAgentNodePorts(node('group', 'group'))).toEqual([]);
++  });
++  it('reports current storyboard mode input restrictions', () => {
++    expect(getAgentAllowedInputTypes(node('s', 'storyboardTool', { params: { mode: 'gen_script' } }))).toEqual(['text']);
++    expect(getAgentAllowedInputTypes(node('s', 'storyboardTool', { params: { mode: 'video_understand' } }))).toEqual(['video']);
++    expect(getAgentAllowedInputTypes(node('s', 'storyboardTool', { params: { mode: 'custom' } }))).toEqual(['text', 'image', 'video']);
++  });
++  it('infers native handles and creates a complete delta without moving or modifying nodes', () => {
++    const nodes = [node('copy', 'text', { value: '文案' }), node('target')]; const original = structuredClone(nodes);
++    const result = resolveAgentEdgeChange({ nodes, edges: [] }, add('copy', 'target'));
++    expect(result.edges).toHaveLength(1); expect(result.edges[0]).toMatchObject({ source: 'copy', target: 'target', sourceHandle: 'text_source', targetHandle: 'text_target', className: 'text_source' });
++    expect(result.affectedNodeIds).toEqual(['copy', 'target']); expect(result.affectedEdgeIds).toEqual([result.edges[0].id]); expect(nodes).toEqual(original);
++  });
++  it('allows an uploaded image or ordinary tool result to feed an existing native tool', () => {
++    for (const type of ['upload', 'tool']) {
++      const result = resolveAgentEdgeChange({ nodes: [node('asset', 'image', { type }), node('target', 'highDefinitionTool')], edges: [] }, add('asset', 'target'));
++      expect(result.edges[0].targetHandle).toBe('image_target');
++    }
++  });
++  it('enforces native target capacity before a second tool input', () => {
++    const state = { nodes: [node('a'), node('b'), node('tool', 'highDefinitionTool')], edges: [edge('existing', 'a', 'tool')] };
++    expect(() => resolveAgentEdgeChange(state, add('b', 'tool'))).toThrow('数量上限');
++  });
++  it('honors the native storyboard input mode while retaining its registered port discovery', () => {
++    const state = { nodes: [node('asset'), node('copy', 'text'), node('story', 'storyboardTool', { params: { mode: 'gen_script' } })], edges: [] };
++    expect(getAgentNodePorts(state.nodes[2]).some(port => port.id === 'image_target')).toBe(true);
++    expect(() => resolveAgentEdgeChange(state, add('asset', 'story'))).toThrow('不兼容');
++    expect(resolveAgentEdgeChange(state, add('copy', 'story')).edges[0].targetHandle).toBe('text_target');
++  });
++  it.each([
++    { sourceHandle: 'video_source', targetHandle: 'video_target' },
++    { sourceHandle: 'fake_source', targetHandle: 'fake_target' },
++    { sourceHandle: 'image_source', targetHandle: 'text_target' },
++  ])('rejects unregistered or incompatible handles: %j', handles => {
++    const state = { nodes: [node('asset'), node('target')], edges: [] };
++    expect(() => resolveAgentEdgeChange(state, add('asset', 'target', handles))).toThrow(); expect(state.edges).toEqual([]);
++  });
++  it('rejects incompatible native input types, self loops and missing nodes', () => {
++    const state = { nodes: [node('audio', 'audio'), node('target')], edges: [] };
++    expect(() => resolveAgentEdgeChange(state, add('audio', 'target'))).toThrow('兼容');
++    expect(() => resolveAgentEdgeChange(state, add('target', 'target'))).toThrow('自身');
++    expect(() => resolveAgentEdgeChange(state, add('missing', 'target'))).toThrow('不存在');
++  });
++  it('does not allow a second reference to the same source-target through a different registered target port', () => {
++    const state = { nodes: [node('asset'), node('target')], edges: [{ ...edge('old', 'asset', 'target'), targetHandle: 'text_target' }] };
++    expect(() => resolveAgentEdgeChange(state, add('asset', 'target'))).toThrow('已存在');
++  });
++  it('rejects only a newly introduced cycle, without rewriting an unrelated legacy cycle', () => {
++    const nodes = ['a', 'b', 'c', 'd'].map(id => node(id));
++    expect(() => resolveAgentEdgeChange({ nodes, edges: [edge('ab', 'a', 'b')] }, add('b', 'a'))).toThrow('循环');
++    const existing = [edge('ab', 'a', 'b'), edge('ba', 'b', 'a')];
++    expect(resolveAgentEdgeChange({ nodes, edges: existing }, add('c', 'd')).edges.slice(0, 2)).toEqual(existing);
++  });
++  it('reconnects an existing edge in its slot with the same ID and preserves native metadata', () => {
++    const state = { nodes: [node('a'), node('b'), node('c')], edges: [{ ...edge('same', 'a', 'b'), data: { label: 'native' }, style: { opacity: 0.5 } }] };
++    const result = resolveAgentEdgeChange(state, { action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'a', targetNodeId: 'c' } });
++    expect(result.edges[0]).toMatchObject({ id: 'same', target: 'c', data: { label: 'native' }, style: { opacity: 0.5 } });
++    expect(result.affectedNodeIds).toEqual(['a', 'b', 'c']);
++    expect(resolveAgentEdgeChange(state, { action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'a', targetNodeId: 'b' } }).unchanged).toBe(true);
++  });
++  it('refuses changes to native tool output-management edges', () => {
++    const nodes = [node('tool', 'highDefinitionTool'), node('result', 'image', { type: 'tool' }), node('target')];
++    const state = { nodes, edges: [edge('managed', 'tool', 'result')] };
++    expect(() => resolveAgentEdgeChange(state, add('tool', 'target'))).toThrow('管理边');
++    expect(() => resolveAgentEdgeChange(state, { action: 'edge.delete', expectedVersion: '18', edgeIds: ['managed'] })).toThrow('管理边');
++    expect(() => resolveAgentEdgeChange(state, { action: 'edge.reconnect', expectedVersion: '18', edgeId: 'managed', connection: { sourceNodeId: 'result', targetNodeId: 'target' } })).toThrow('管理边');
++    expect(() => resolveAgentEdgeChange(state, { action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'result', edgeIds: ['managed'] })).toThrow('管理边');
++  });
++  it('reorders complete target inputs only, retaining unrelated slots and edge metadata', () => {
++    const nodes = ['a', 'b', 'c', 'target', 'other'].map(id => node(id));
++    const state = { nodes, edges: [edge('a', 'a', 'target'), edge('outside', 'c', 'other'), edge('b', 'b', 'target')] };
++    const result = resolveAgentEdgeChange(state, { action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'target', edgeIds: ['b', 'a'] });
++    expect(result.edges.map(edge => edge.id)).toEqual(['b', 'outside', 'a']); expect(result.edges[1]).toBe(state.edges[1]);
++    expect(result.affectedEdgeIds).toEqual(['b', 'a']);
++  });
++  it('refuses incomplete, duplicate or cross-target ordering', () => {
++    const nodes = ['a', 'b', 'c', 'target', 'other'].map(id => node(id));
++    const state = { nodes, edges: [edge('a', 'a', 'target'), edge('outside', 'c', 'other'), edge('b', 'b', 'target')] };
++    for (const edgeIds of [['a'], ['a', 'a'], ['a', 'outside']]) expect(() => resolveAgentEdgeChange(state, { action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'target', edgeIds })).toThrow('全部入边');
++  });
++  it('deletes only requested real edge IDs and rejects missing IDs', () => {
++    const state = { nodes: [node('a'), node('tool', 'highDefinitionTool')], edges: [edge('e', 'a', 'tool')] };
++    const result = resolveAgentEdgeChange(state, { action: 'edge.delete', expectedVersion: '18', edgeIds: ['e'] });
++    expect(result.edges).toEqual([]); expect(result.affectedNodeIds).toEqual(['a', 'tool']);
++    expect(() => resolveAgentEdgeChange(state, { action: 'edge.delete', expectedVersion: '18', edgeIds: ['absent'] })).toThrow('不存在');
++  });
++});
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-store.test.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-store.test.ts
+new file mode 100644
+index 0000000..e9d6cb9
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-edge-store.test.ts
+@@ -0,0 +1,173 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { Edge, Node } from '@xyflow/react';
++import type { EdgeEditOperation } from '../../src/shared/canvas-agent-protocol';
++const api = vi.hoisted(() => ({ update: vi.fn(), save: vi.fn(), invoke: vi.fn(), capacity: vi.fn() }));
++vi.mock('@/api/workflow', () => ({ updateCanvas: api.update, saveFlow: api.save, excuteWorkFlow: api.invoke }));
++vi.mock('@/api/asset', () => ({ getAvailableCapacity: api.capacity }));
++vi.mock('@/components/common/storageLimitManager', () => ({ openStorageLimitDialog: vi.fn() }));
++vi.mock('@/components/canvasFlow/utils/mediaDimensionLoader', () => ({ loadIntrinsicMediaDimensions: vi.fn().mockResolvedValue(null) }));
++vi.mock('@/utils', () => ({ isSvgImageUrl: () => false, compressImage: vi.fn() }));
++vi.mock('sonner', () => ({ toast: { error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
++import { createFlowStoreApi } from '../legacy/src/store/flowStoreCore';
++import { createAgentEditGuard } from '../src/agent-edit-guard';
++
++const node = (id: string): Node => ({ id, type: 'image', position: { x: 0, y: 0 }, data: { title: id, params: {}, taskInfo: { status: 'success' } } });
++const edge = (id: string, source: string, target: string): Edge => ({ id, source, target, sourceHandle: 'image_source', targetHandle: 'image_target', className: 'image_source' });
++const deferred = <T>() => { let resolve!: (value: T) => void; let reject!: (error: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
++const refused = () => Object.assign(new Error('明确拒绝'), { requestPhase: 'rejected' });
++const unknown = () => Object.assign(new Error('回执未知'), { requestPhase: 'sent_unknown' });
++let guard: ReturnType<typeof createAgentEditGuard>;
++let store: ReturnType<typeof createFlowStoreApi>;
++const state = () => store.getState();
++const add = (sourceNodeId = 'a', targetNodeId = 'target', expectedVersion = '18'): EdgeEditOperation => ({ action: 'edge.add', expectedVersion, connection: { sourceNodeId, targetNodeId } });
++const edit = (operation: EdgeEditOperation) => state().actions.editAgentEdges(operation, { strictReceipt: true, expectedVersion: operation.expectedVersion });
++const incoming = () => [edge('first', 'a', 'target'), edge('outside', 'c', 'other'), edge('second', 'b', 'target')];
++
++beforeEach(() => {
++  vi.clearAllMocks(); guard = createAgentEditGuard(); store = createFlowStoreApi({ guard });
++  store.setState({ canvasId: '2873', versionNumber: '18', nodes: ['a', 'b', 'c', 'target', 'other'].map(node) });
++  api.update.mockResolvedValue({ code: 'SUCCESS', data: { versionNumber: '19' } });
++});
++afterEach(async () => { await state().actions.awaitMutationsIdle(); guard.dispose(); });
++
++describe('native strict Agent edge writes', () => {
++  it('waits for one real receipt and returns the real edge ID, affected endpoints and exact version', async () => {
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    let settled = false; const pending = edit(add()).then(result => { settled = true; return result; });
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1)); expect(settled).toBe(false);
++    const id = state().edges[0].id;
++    expect(api.update.mock.calls[0][0]).toMatchObject({ id: '2873', edges: [edge(id, 'a', 'target')], versionNumber: '18' });
++    expect(api.update.mock.calls[0][1]).toMatchObject({ receiptMode: 'agent' });
++    gate.resolve({ code: 'SUCCESS', data: { versionNumber: '90071992547409931' } });
++    expect(await pending).toMatchObject({ version: '90071992547409931', affectedNodeIds: ['a', 'target'], affectedEdgeIds: [id] });
++    expect(state().versionNumber).toBe('90071992547409931'); expect(api.invoke).not.toHaveBeenCalled();
++  });
++  it('reconnects and deletes using the same native save queue with stable edge ID', async () => {
++    const added = await edit(add()); const id = added.affectedEdgeIds![0];
++    api.update.mockResolvedValueOnce({ code: 'SUCCESS', data: { versionNumber: '20' } });
++    expect(await edit({ action: 'edge.reconnect', expectedVersion: '19', edgeId: id, connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).toMatchObject({ affectedEdgeIds: [id], version: '20' });
++    expect(state().edges).toEqual([edge(id, 'b', 'other')]);
++    api.update.mockResolvedValueOnce({ code: 'SUCCESS', data: { versionNumber: '21' } });
++    expect(await edit({ action: 'edge.delete', expectedVersion: '20', edgeIds: [id] })).toMatchObject({ affectedEdgeIds: [id], version: '21' });
++    expect(state().edges).toEqual([]); expect(api.update).toHaveBeenCalledTimes(3);
++  });
++  it('rolls back only the refused addition while retaining later unrelated edge and node changes', async () => {
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit(add())).rejects.toMatchObject({ requestPhase: 'rejected' });
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ edges: [...state().edges, edge('later', 'c', 'other')], nodes: state().nodes.map(item => item.id === 'a' ? { ...item, data: { ...item.data, product: [{ value: 'new' }] } } : item) });
++    gate.reject(refused()); await result;
++    expect(state().edges).toEqual([edge('later', 'c', 'other')]); expect(state().nodes[0].data.product).toEqual([{ value: 'new' }]); expect(state().agentPersistenceIssue).toBeNull();
++  });
++  it('restores only reconnect fields and preserves concurrent native edge animation or styling', async () => {
++    store.setState({ edges: [edge('same', 'a', 'target')] });
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).rejects.toThrow('明确拒绝');
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ edges: state().edges.map(item => ({ ...item, type: 'animated', style: { opacity: 0.5 } })) });
++    gate.reject(refused()); await result;
++    expect(state().edges[0]).toMatchObject({ ...edge('same', 'a', 'target'), type: 'animated', style: { opacity: 0.5 } }); expect(state().agentPersistenceIssue).toBeNull();
++  });
++  it('does not override a newer reconnect after definite refusal', async () => {
++    store.setState({ edges: [edge('same', 'a', 'target')] });
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).rejects.toThrow();
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ edges: [edge('same', 'c', 'other')] }); gate.reject(refused()); await result;
++    expect(state().edges[0].source).toBe('c'); expect(state().agentPersistenceIssue).not.toBeNull();
++  });
++  it.each(['a', 'target'])('does not restore a refused reconnect to an asynchronously removed old endpoint: %s', async removedId => {
++    store.setState({ edges: [edge('same', 'a', 'target')] });
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).rejects.toThrow('明确拒绝');
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ nodes: state().nodes.filter(item => item.id !== removedId), edges: [
++      { ...state().edges[0], type: 'animated', style: { opacity: 0.5 } }, edge('later', 'c', 'other'),
++    ] });
++    gate.reject(refused()); await result;
++    expect(state().edges).toEqual([{ ...edge('same', 'b', 'other'), type: 'animated', style: { opacity: 0.5 } }, edge('later', 'c', 'other')]);
++    expect(state().agentPersistenceIssue?.code).toBe('SAVE_REJECTED');
++    await expect(edit(add('c', 'b'))).rejects.toMatchObject({ code: 'SAVE_REJECTED' }); expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('drops only the refused reconnect when neither old nor current endpoints still exist', async () => {
++    store.setState({ edges: [edge('same', 'a', 'target')] });
++    const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).rejects.toThrow();
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ nodes: state().nodes.filter(item => !['a', 'b'].includes(item.id)), edges: [...state().edges, edge('later', 'c', 'other')] });
++    gate.reject(refused()); await result;
++    expect(state().edges).toEqual([edge('later', 'c', 'other')]); expect(state().agentPersistenceIssue?.code).toBe('SAVE_REJECTED');
++  });
++  it('restores deleted edges in native slots without discarding later additions', async () => {
++    store.setState({ edges: incoming() }); const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.delete', expectedVersion: '18', edgeIds: ['first'] })).rejects.toThrow();
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ edges: [...state().edges, edge('later', 'b', 'other')] }); gate.reject(refused()); await result;
++    expect(state().edges.map(item => item.id)).toEqual(['first', 'outside', 'second', 'later']); expect(state().agentPersistenceIssue).toBeNull();
++  });
++  it('restores refused target input ordering while retaining outside slots and later edge metadata', async () => {
++    store.setState({ edges: incoming() }); const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'target', edgeIds: ['second', 'first'] })).rejects.toThrow();
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1)); expect(state().edges.map(item => item.id)).toEqual(['second', 'outside', 'first']);
++    store.setState({ edges: state().edges.map(item => ({ ...item, selected: true })) }); gate.reject(refused()); await result;
++    expect(state().edges.map(item => item.id)).toEqual(['first', 'outside', 'second']); expect(state().edges.every(item => item.selected)).toBe(true);
++  });
++  it('preserves a newer target ordering and fences after a refusal conflict', async () => {
++    store.setState({ edges: incoming() }); const gate = deferred<unknown>(); api.update.mockReturnValueOnce(gate.promise);
++    const result = expect(edit({ action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'target', edgeIds: ['second', 'first'] })).rejects.toThrow();
++    await vi.waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
++    store.setState({ edges: [...incoming(), edge('third', 'c', 'target')] }); gate.reject(refused()); await result;
++    // A changed target membership cannot silently be overwritten by an old ordering.
++    expect(state().edges.map(item => item.id)).toEqual(['first', 'outside', 'second', 'third']);
++    expect(state().agentPersistenceIssue).not.toBeNull();
++  });
++  it('retains an unknown addition and its actual ID, and refuses a later retry until authoritative reload', async () => {
++    api.update.mockRejectedValueOnce(unknown()); let error: any;
++    try { await edit(add()); } catch (value) { error = value; }
++    expect(error).toMatchObject({ requestPhase: 'sent_unknown', affectedNodeIds: ['a', 'target'], affectedEdgeIds: [state().edges[0].id] });
++    expect(state().agentPersistenceIssue?.code).toBe('SUBMISSION_UNKNOWN');
++    await expect(edit(add())).rejects.toMatchObject({ code: 'SUBMISSION_UNKNOWN' }); expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('preserves stable reconnect IDs and new endpoints when success lacks a trusted version', async () => {
++    store.setState({ edges: [edge('same', 'a', 'target')] }); api.update.mockResolvedValueOnce({ code: 'SUCCESS', data: {} });
++    await expect(edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'same', connection: { sourceNodeId: 'b', targetNodeId: 'other' } })).rejects.toMatchObject({ requestPhase: 'sent_unknown', affectedEdgeIds: ['same'] });
++    expect(state().edges[0]).toMatchObject({ id: 'same', source: 'b', target: 'other' });
++  });
++  it.each(['a', 'target'])('rejects a running affected endpoint before changing state: %s', async id => {
++    store.setState({ nodes: state().nodes.map(item => item.id === id ? { ...item, data: { ...item.data, taskInfo: { status: 'running' } } } : item) });
++    await expect(edit(add())).rejects.toMatchObject({ code: 'NODE_BUSY' }); expect(state().edges).toEqual([]); expect(api.update).not.toHaveBeenCalled();
++  });
++  it('checks affected endpoints again inside the HTTP queue without blocking an unrelated running node', async () => {
++    let changed = false; const stop = store.subscribe(value => { if (value.edges.length && !changed) { changed = true; store.setState({ nodes: value.nodes.map(item => item.id === 'target' ? { ...item, data: { ...item.data, taskInfo: { status: 'running' } } } : item) }); } });
++    await expect(edit(add())).rejects.toMatchObject({ code: 'NODE_BUSY', requestPhase: 'not_sent' }); stop(); expect(api.update).not.toHaveBeenCalled(); expect(state().edges).toEqual([]);
++    store.setState({ nodes: state().nodes.map(item => ({ ...item, data: { ...item.data, taskInfo: { status: item.id === 'other' ? 'running' : 'success' } } })) });
++    await expect(edit(add())).resolves.toMatchObject({ version: '19' }); expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('rechecks version inside the queue and rolls back the unsubmitted edge', async () => {
++    const stop = store.subscribe(value => { if (value.edges.length && value.versionNumber === '18') store.setState({ versionNumber: '20' }); });
++    await expect(edit(add())).rejects.toMatchObject({ code: 'VERSION_CONFLICT', requestPhase: 'not_sent' }); stop(); expect(api.update).not.toHaveBeenCalled(); expect(state().edges).toEqual([]); expect(state().versionNumber).toBe('20');
++  });
++  it('guards unchanged reconnects and reorders, saving nothing and respecting drafts or node busy state', async () => {
++    store.setState({ edges: incoming() });
++    expect(await edit({ action: 'edge.reorder', expectedVersion: '18', targetNodeId: 'target', edgeIds: ['first', 'second'] })).toMatchObject({ unchanged: true, version: '18' });
++    expect(await edit({ action: 'edge.reconnect', expectedVersion: '18', edgeId: 'first', connection: { sourceNodeId: 'a', targetNodeId: 'target' } })).toMatchObject({ unchanged: true, affectedEdgeIds: ['first'] });
++    expect(api.update).not.toHaveBeenCalled(); guard.markEditorBusy('draft', true);
++    await expect(edit(add('c', 'target'))).rejects.toMatchObject({ code: 'EDITOR_BUSY' }); guard.markEditorBusy('draft', false);
++  });
++  it('node deletion reports native edge cleanup and blocks a running downstream node', async () => {
++    store.setState({ edges: [edge('e', 'a', 'target')], nodes: state().nodes.map(item => item.id === 'target' ? { ...item, data: { ...item.data, taskInfo: { status: 'running' } } } : item) });
++    await expect(state().actions.deleteNodes(['a'], { strictReceipt: true, expectedVersion: '18' })).rejects.toMatchObject({ code: 'NODE_BUSY' }); expect(state().edges).toHaveLength(1); expect(api.update).not.toHaveBeenCalled();
++    store.setState({ nodes: state().nodes.map(item => ({ ...item, data: { ...item.data, taskInfo: { status: 'success' } } })) });
++    expect(await state().actions.deleteNodes(['a'], { strictReceipt: true, expectedVersion: '18' })).toMatchObject({ affectedNodeIds: ['a'], affectedEdgeIds: ['e'] }); expect(state().edges).toEqual([]);
++  });
++  it('unknown node deletion retains its optimistic result and reports removed edge IDs', async () => {
++    store.setState({ edges: [edge('e', 'a', 'target')] }); api.update.mockRejectedValueOnce(unknown());
++    await expect(state().actions.deleteNodes(['a'], { strictReceipt: true, expectedVersion: '18' })).rejects.toMatchObject({ requestPhase: 'sent_unknown', affectedNodeIds: ['a'], affectedEdgeIds: ['e'] });
++    expect(state().nodes.some(item => item.id === 'a')).toBe(false); expect(state().edges).toEqual([]); expect(state().agentPersistenceIssue?.code).toBe('SUBMISSION_UNKNOWN');
++  });
++  it('keeps native UI connect/delete/order return values, selection and single save behavior', async () => {
++    expect(state().actions.connect(edge('ui', 'a', 'target'))).toBeUndefined(); await state().actions.awaitMutationsIdle(); expect(state().edges).toHaveLength(1);
++    expect(state().actions.edgeOrderChange([{ edgeId: 'ui', value: '' }])).toBeUndefined(); await state().actions.awaitMutationsIdle();
++    expect(state().actions.deleteEdges(['ui'])).toBeUndefined(); await state().actions.awaitMutationsIdle(); expect(state().edges).toEqual([]); expect(api.update).toHaveBeenCalledTimes(3);
++  });
++});
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-model-policy.test.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-model-policy.test.ts
+new file mode 100644
+index 0000000..2c8b1af
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app/test/agent-model-policy.test.ts
+@@ -0,0 +1,169 @@
++import type { Node } from '@xyflow/react';
++import { describe, expect, it, vi } from 'vitest';
++vi.mock('../legacy/src/components/canvasFlow/utils/toolUtil', () => ({ default: { defaultWidth: 400, defaultHeight: 400 } }));
++vi.mock('@/utils', () => ({ isSvgImageUrl: () => false }));
++import { normalizeModelNodeSettings } from '../legacy/src/components/canvasFlow/utils/modelPermission';
++import { readAgentModels, resolveAgentNodeConfiguration, getAgentInputCompatibility } from '../src/agent-model-policy';
++import { resolveAgentNodePatch, type AgentNodeState } from '../src/agent-node-policy';
++
++const choices = (values: unknown[]) => values.map(value => ({ value, label: String(value) }));
++const model = (value: string, quality = 'low', canonicalModelId = 'shared') => ({ value, label: value, canonicalModelId, seniorParams: [], params: [
++  { field: 'gen_count', label: '张数', default: 1, choices: choices([1, 2]) },
++  { field: 'aspect_ratio', label: '比例', default: '1:1', choices: choices(['1:1', '16:9']), cascade: { '16:9': { quality: choices(['high']) } } },
++  { field: 'quality', label: '质量', default: quality, choices: choices(quality === 'low' ? ['low', 'high'] : ['high']) },
++  { field: 'cameraControl', label: '相机', setItems: [{ field: 'x', default: 0, choices: choices([0]) }] },
++] });
++const makeNode = (type = 'image'): Node => ({ id: 'n1', type, position: { x: 5, y: 7 }, width: 400, height: 400,
++  measured: { width: 400, height: 400 }, data: { title: '主图', value: '', product: [], taskInfo: { status: 'success' },
++    params: { modelType: type === 'video' ? 'text_to_video' : 'text_to_image', model: 'model-t', gen_count: 1,
++      aspect_ratio: '1:1', quality: 'low', prompt: '保留提示', cameraControl: { x: 0 } } } });
++const makeState = (nodes = [makeNode()]): AgentNodeState => ({ nodes, edges: [], modelNodePermission: null, modelsMap: {
++  image: [
++    { value: 'text_to_image', label: '文生图', params: [model('model-t'), model('model-hidden')] },
++    { value: 'reference_image_to_image', label: '参考生图', params: [model('model-r', 'high'), model('model-r2', 'high', 'other')] },
++  ], video: [
++    { value: 'text_to_video', label: '文生视频', params: [model('model-t')] },
++    { value: 'reference_image_to_video', label: '参考视频', params: [model('model-r', 'high')] },
++  ],
++} } as unknown as AgentNodeState);
++const reject = (fn: () => unknown, code = 'INVALID_ARGUMENT') => expect(fn).toThrow(expect.objectContaining({ code }));
++const query = { action: 'canvas.models.read' as const, nodeType: 'image' as const };
++
++describe('native model catalog', () => {
++  it('reports current modes, models and scalar choices without raw configuration', async () => {
++    const state = makeState();
++    const result = await readAgentModels(state, query);
++    expect(result.modes.map(item => item.value)).toEqual(['text_to_image', 'reference_image_to_image']);
++    expect(result.modelType).toBe('text_to_image'); expect(result.model).toBe('model-t');
++    expect(result.paramHints.find(item => item.field === 'gen_count')?.choices).toEqual([1, 2]);
++    expect(result.paramHints).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: 'cameraControl' })]));
++    expect(result).not.toHaveProperty('permission'); expect(result.catalogVersion).toMatch(/^[0-9a-f]{64}$/);
++  });
++  it('filters models and parameter choices using actual account permissions', async () => {
++    const state = makeState();
++    state.modelNodePermission = normalizeModelNodeSettings([{ model_category: 'image', model_key: 'model-r', visible: 1, enabled: 1,
++      custom_parameters: { gen_count: { choices: [{ value: 1 }, { value: 2, enabled: 0 }] } } }]);
++    const result = await readAgentModels(state, query);
++    expect(result.modes).toEqual([{ value: 'reference_image_to_image', label: '参考生图' }]);
++    expect(result.models).toEqual([{ value: 'model-r', label: 'model-r' }]);
++    expect(result.paramHints.find(item => item.field === 'gen_count')?.choices).toEqual([1]);
++    await expect(readAgentModels(state, { ...query, model: 'model-t' })).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
++  });
++  it('retains native successful-empty permission semantics and supports no configured models', async () => {
++    const state = makeState(); state.modelNodePermission = normalizeModelNodeSettings([]);
++    expect((await readAgentModels(state, query)).modelCount).toBe(2);
++    state.modelsMap = {};
++    expect(await readAgentModels(state, query)).toMatchObject({ modeCount: 0, modelCount: 0, modelType: null, model: null, paramHints: [] });
++  });
++  it('selects requested model in its mode and rejects explicit mismatches', async () => {
++    const state = makeState();
++    expect(await readAgentModels(state, { ...query, model: 'model-r2' })).toMatchObject({ modelType: 'reference_image_to_image', model: 'model-r2' });
++    await expect(readAgentModels(state, { ...query, modelType: 'text_to_image', model: 'model-r' })).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
++    await expect(readAgentModels(state, { ...query, modelType: 'fake' })).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
++  });
++  it('uses stable catalog hashes and protects continuation across permissions or model changes', async () => {
++    const state = makeState();
++    const first = await readAgentModels(state, { ...query, limit: 1 });
++    expect(first.nextModeOffset).toBe(1); expect(first.nextModelOffset).toBe(1);
++    const second = await readAgentModels(state, { ...query, limit: 1, modeOffset: 1, modelOffset: 1, expectedCatalogVersion: first.catalogVersion });
++    expect(second.catalogVersion).toBe(first.catalogVersion); expect(second.models[0].value).toBe('model-hidden');
++    await expect(readAgentModels(state, { ...query, modeOffset: 1 })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
++    (state.modelsMap as any).image[0].params[0].label = 'changed';
++    await expect(readAgentModels(state, { ...query, modeOffset: 1, expectedCatalogVersion: first.catalogVersion })).rejects.toMatchObject({ code: 'CATALOG_VERSION_CONFLICT' });
++  });
++  it('ignores object and permission Map insertion order in catalog hashing', async () => {
++    const state = makeState();
++    state.modelNodePermission = normalizeModelNodeSettings([
++      { model_category: 'image', model_key: 'model-r', visible: 1, enabled: 1 },
++      { model_category: 'image', model_key: 'model-t', visible: 1, enabled: 1 },
++    ]);
++    const first = await readAgentModels(state, query);
++    state.modelNodePermission.byCategoryAndKey = new Map([...state.modelNodePermission.byCategoryAndKey].reverse());
++    expect((await readAgentModels(state, query)).catalogVersion).toBe(first.catalogVersion);
++    state.modelNodePermission = normalizeModelNodeSettings([{ model_category: 'image', model_key: 'model-t', visible: 1, enabled: 1 }]);
++    await expect(readAgentModels(state, { ...query, modeOffset: 1, expectedCatalogVersion: first.catalogVersion })).rejects.toMatchObject({ code: 'CATALOG_VERSION_CONFLICT' });
++  });
++});
++
++describe('native generation configuration', () => {
++  it('uses native same-series mode/model migration and preserves content, prompt and products', () => {
++    const state = makeState(); const node = state.nodes[0]; const before = structuredClone(state);
++    const patch = resolveAgentNodeConfiguration(state, node, { modelType: 'reference_image_to_image' });
++    expect(patch.data.params).toMatchObject({ modelType: 'reference_image_to_image', model: 'model-r', quality: 'high', prompt: '保留提示', gen_count: 1 });
++    expect(Object.keys(patch.data)).toEqual(['params']); expect(state).toEqual(before);
++  });
++  it('rejects explicit unknown, wrong-mode and permission-blocked models rather than silently falling back', () => {
++    const state = makeState(); const node = state.nodes[0];
++    reject(() => resolveAgentNodeConfiguration(state, node, { model: 'fake' }), 'CONFIGURATION_ERROR');
++    reject(() => resolveAgentNodeConfiguration(state, node, { model: 'model-r' }), 'CONFIGURATION_ERROR');
++    state.modelNodePermission = normalizeModelNodeSettings([{ model_category: 'image', model_key: 'model-t', visible: 1, enabled: 0 }]);
++    reject(() => resolveAgentNodeConfiguration(state, node, { model: 'model-t' }), 'CONFIGURATION_ERROR');
++  });
++  it('applies native cascade defaults only to omitted children and rejects explicit illegal child values', () => {
++    const state = makeState(); const node = state.nodes[0];
++    expect(resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9' } }).data.params).toMatchObject({ aspect_ratio: '16:9', quality: 'high' });
++    reject(() => resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9', quality: 'low' } }));
++    expect(resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9', quality: 'high', gen_count: 2 } }).data.params).toMatchObject({ gen_count: 2, quality: 'high' });
++  });
++  it('validates explicit scalar types and hidden choices, never exposing complex fields', () => {
++    const state = makeState(); const node = state.nodes[0];
++    for (const configuration of [{ params: { gen_count: '2' } }, { params: { gen_count: null } }, { params: { unknown: 1 } },
++      { params: { cameraControl: { x: 1 } } }, { params: { prompt: 'bypass' } }, { modelType: 'fake' }, {}]) {
++      reject(() => resolveAgentNodeConfiguration(state, node, configuration as never), (configuration as any).modelType ? 'CONFIGURATION_ERROR' : 'INVALID_ARGUMENT');
++    }
++    state.modelNodePermission = normalizeModelNodeSettings([{ model_category: 'image', model_key: 'model-t', visible: 1, enabled: 1,
++      custom_parameters: { gen_count: { choices: [{ value: 1 }, { value: 2, enabled: 0 }] } } }]);
++    reject(() => resolveAgentNodeConfiguration(state, node, { params: { gen_count: 2 } }));
++  });
++  it('validates an explicit child against the new parent options, not stale empty options', () => {
++    const state = makeState(); const node = state.nodes[0];
++    const fields = (state.modelsMap as any).image[0].params[0].params;
++    fields.find((field: any) => field.field === 'quality').choices = [];
++    fields.find((field: any) => field.field === 'aspect_ratio').cascade['1:1'] = { quality: [] };
++    const patch = resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9', quality: 'high' } });
++    expect(patch.data.params).toMatchObject({ aspect_ratio: '16:9', quality: 'high' });
++    reject(() => resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '1:1' } }));
++    expect(node.data.params).toMatchObject({ aspect_ratio: '1:1', quality: 'low' });
++  });
++  it('reuses empty-media aspect dimensions but leaves existing product dimensions alone', () => {
++    const state = makeState(); const node = state.nodes[0];
++    const patch = resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9' } });
++    expect(patch.width).toBeGreaterThan(400); expect(patch.height).toBe(400);
++    node.data.value = 'https://example.test/product.png';
++    const existing = resolveAgentNodeConfiguration(state, node, { params: { aspect_ratio: '16:9' } });
++    expect(existing).not.toHaveProperty('width'); expect(existing).not.toHaveProperty('height');
++  });
++  it('does not convert uploaded/tool-result media or non-media nodes into generation nodes', () => {
++    for (const type of ['upload', 'tool']) {
++      for (const media of ['image', 'video', 'audio']) {
++        const node = makeNode(media); node.data.type = type; const state = makeState([node]);
++        reject(() => resolveAgentNodeConfiguration(state, node, { params: { gen_count: 2 } }), 'UNSUPPORTED_NODE');
++        expect(resolveAgentNodePatch(state, node, { title: '原始素材' }).data).toEqual({ title: '原始素材' });
++        reject(() => resolveAgentNodePatch(state, node, { title: '原始素材', prompt: '不得转换' }), 'UNSUPPORTED_NODE');
++      }
++    }
++    for (const type of ['text', 'audio', 'group', 'imageEditorTool']) {
++      const node = makeNode(type); reject(() => resolveAgentNodeConfiguration(makeState([node]), node, { model: 'model-t' }), 'UNSUPPORTED_NODE');
++    }
++    const node = makeNode(); reject(() => resolveAgentNodeConfiguration(makeState([]), node, { model: 'model-t' }), 'NODE_NOT_FOUND');
++  });
++});
++
++describe('native input-mode compatibility', () => {
++  it('reports a warning on resolved image inputs without blocking intermediate configuration saves', () => {
++    const node = makeNode(); const source = { ...makeNode(), id: 'source', data: { title: '耳机', type: 'upload', value: 'https://example.test/headphone.png' } };
++    const state = makeState([node, source]); state.edges = [{ id: 'e1', source: 'source', target: 'n1' }];
++    expect(getAgentInputCompatibility(state, node)).toBe('仅支持文本输入');
++    const patch = resolveAgentNodeConfiguration(state, node, { modelType: 'reference_image_to_image' });
++    expect(getAgentInputCompatibility(state, { ...node, data: { ...node.data, ...patch.data } })).toBeNull();
++    source.data.value = '';
++    expect(getAgentInputCompatibility(state, { ...node, data: { ...node.data, ...patch.data } })).toBe('需要连入图像');
++  });
++  it('uses native video media mismatch rules and leaves upload nodes out of compatibility checks', () => {
++    const node = makeNode('video'); const source = { ...makeNode(), id: 'source', data: { title: '耳机', value: 'https://example.test/headphone.png' } };
++    const state = makeState([node, source]); state.edges = [{ id: 'e1', source: 'source', target: 'n1' }];
++    expect(getAgentInputCompatibility(state, node)).toBe('仅支持文本输入');
++    expect(getAgentInputCompatibility(state, { ...node, data: { ...node.data, params: { ...(node.data.params as object), modelType: 'image_to_video' } } })).toBeNull();
++    node.data.type = 'upload'; expect(getAgentInputCompatibility(state, node)).toBeNull();
++  });
++});
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-graph-tools.ts b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-graph-tools.ts
+new file mode 100644
+index 0000000..6979687
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/src/host/canvas-graph-tools.ts
+@@ -0,0 +1,63 @@
++import type { Context } from '@deepseek-ai/cordis'
++import { defineTool } from '@deepseek-ai/dsh-tools'
++import { CanvasAgentError } from '../shared/canvas-agent-protocol'
++import { parseBridgeOperation } from '../shared/canvas-bridge-protocol'
++import { canvasAddress, type CanvasId } from '../shared/protocol'
++import type { CanvasHostBridge } from './canvas-bridge'
++import { argumentsObject, canvasToolOutput, dispatchCanvasWrite, idOf, reject, requestId, sessionOf } from './canvas-tools'
++
++/** Graph editing and model discovery extend the native service; no generation is registered. */
++export function registerCanvasGraphTools(ctx: Context, bridge: CanvasHostBridge): void {
++  ctx.tools.register(defineTool({
++    name: 'canvas_edges', timeoutMs: 90000,
++    description: '编辑真实画布连线并保存，不移动节点、不执行生成。add连接sourceNodeId/targetNodeId，端口省略时使用原生合法默认；delete删除edgeIds；reconnect用edgeId调整端点，保留原边ID；reorder对targetNodeId的全部入边提供完整edgeIds顺序，只调整该目标输入顺序。先canvas_get(view:graph)核对真实ID/端口/允许输入，不能把outputs素材URL当边。允许四类普通节点作为来源连接原生合法目标，包括已有工具的输入；禁止工具本体作为来源，禁止修改工具到产物的内部管理边；组不支持。expectedVersion取最新confirmed版本。saved才表示保存完成；submission_unknown先权威读取，不能自动重复写。',
++    parameters: {
++      canvasId: { type: 'string', required: true, description: '已有画布ID，正Long十进制字符串。' },
++      expectedVersion: { type: 'string', required: true, description: '最新confirmed版本原样传入。' },
++      action: { type: 'string', required: true, enum: ['add', 'delete', 'reconnect', 'reorder'] },
++      connection: { type: 'object', additionalProperties: false, description: '仅add/reconnect；使用真实节点ID。', properties: {
++        sourceNodeId: { type: 'string', required: true }, targetNodeId: { type: 'string', required: true },
++        sourceHandle: { type: 'string', description: '可选真实source端口ID，省略自动解析。' },
++        targetHandle: { type: 'string', description: '可选真实target端口ID，省略自动解析。' },
++      } },
++      edgeId: { type: 'string', description: '仅reconnect，已有真实边ID。' },
++      targetNodeId: { type: 'string', description: '仅reorder，真实目标节点ID。' },
++      edgeIds: { type: 'array', items: { type: 'string' }, description: '仅delete/reorder，1–20个唯一真实边ID；reorder必须包含目标全部入边。' },
++    }, output: canvasToolOutput,
++    async execute(input, exec) {
++      const request = requestId('canvas_edges', exec); let id: CanvasId | undefined
++      try {
++        const args = argumentsObject(input, ['canvasId', 'expectedVersion', 'action', 'connection', 'edgeId', 'edgeIds', 'targetNodeId']); id = idOf(args)
++        const fields = args.action === 'add' ? ['connection'] : args.action === 'delete' ? ['edgeIds'] : args.action === 'reconnect' ? ['edgeId', 'connection'] : args.action === 'reorder' ? ['targetNodeId', 'edgeIds'] : null
++        if (!fields) throw new CanvasAgentError('INVALID_ARGUMENT', '连线操作仅支持add/delete/reconnect/reorder')
++        argumentsObject(args, ['canvasId', 'expectedVersion', 'action', ...fields])
++        const operation = parseBridgeOperation({ action: 'edge.' + args.action, expectedVersion: args.expectedVersion, ...Object.fromEntries(fields.filter(key => key in args).map(key => [key, args[key]])) })
++        return JSON.stringify(await dispatchCanvasWrite(bridge, id, operation, exec, request))
++      } catch (cause) { return JSON.stringify(reject(request, cause, id)) }
++    }
++  }))
++  ctx.tools.register(defineTool({
++    name: 'canvas_models', timeoutMs: 90000,
++    description: '只读当前账号普通image/video生成节点的可用模式、模型与标量参数选项，不打开画布、不修改参数、不生成。modelType/model使用返回的value，勿猜或用label；省略时读取原生可用默认。modeOffset/modelOffset独立分页，limit默认20；任何offset大于0必须传第一页catalogVersion为expectedCatalogVersion，配置变更须重新读取，不混合不同配置页。通过canvas_node_edit(action:configure)保存配置；paramHints依据所选模型的默认父参数组合，不代表已有节点当前选择；configure后用canvas_get(view:nodes)查询该节点实时参数及选项。高级嵌套参数本期不开放。',
++    parameters: {
++      canvasId: { type: 'string', required: true, description: '已有画布ID，正Long十进制字符串。' },
++      nodeType: { type: 'string', required: true, enum: ['image', 'video'] },
++      modelType: { type: 'string', description: '原生真实模式value；省略选原生可用默认。' },
++      model: { type: 'string', description: '当前模式内真实模型value；省略选原生可用默认。' },
++      modeOffset: { type: 'number', description: '非负整数；续页必须带expectedCatalogVersion。' },
++      modelOffset: { type: 'number', description: '非负整数；续页必须带expectedCatalogVersion。' },
++      limit: { type: 'number', description: '各模式/模型页长度1–20整数，默认20。' },
++      expectedCatalogVersion: { type: 'string', description: '第一页catalogVersion；任何offset大于0时必填。' },
++    }, output: canvasToolOutput,
++    async execute(input, exec) {
++      const request = requestId('canvas_models', exec); let id: CanvasId | undefined
++      try {
++        const args = argumentsObject(input, ['canvasId', 'nodeType', 'modelType', 'model', 'modeOffset', 'modelOffset', 'limit', 'expectedCatalogVersion']); id = idOf(args)
++        const operation = parseBridgeOperation({ action: 'canvas.models.read', ...Object.fromEntries(Object.entries(args).filter(([key]) => key !== 'canvasId')) })
++        const target = await bridge.ensureContext(sessionOf(exec), id, 'read', request + ':prepare', exec.signal)
++        const result = await bridge.dispatch(target, request + ':read', operation, exec.signal)
++        return JSON.stringify({ ...result, requestId: request, address: canvasAddress(id), ...(result.status === 'models' ? { source: 'plugin-service' } : {}) })
++      } catch (cause) { return JSON.stringify(reject(request, cause, id)) }
++    }
++  }))
++}
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-protocol.test.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-protocol.test.mjs
+new file mode 100644
+index 0000000..5bbc094
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-protocol.test.mjs
+@@ -0,0 +1,64 @@
++import assert from 'node:assert/strict'
++import test from 'node:test'
++import { isCanvasReadOperation, parseCanvasOperation, parseCanvasOperationResult, parseNodeConfiguration } from '../src/shared/canvas-agent-protocol.ts'
++import { parseBridgeOperation, parseServiceHostEvent } from '../src/shared/canvas-bridge-protocol.ts'
++
++const operations = [
++  { action: 'canvas.graph.read', nodeOffset: 20, edgeOffset: 10, limit: 10, expectedVersion: '3' },
++  { action: 'canvas.models.read', nodeType: 'image', modelType: 'image_to_image', model: 'model', modeOffset: 0, modelOffset: 20, limit: 10, expectedCatalogVersion: 'catalog' },
++  { action: 'node.configure', expectedVersion: '3', nodeId: 'image', configuration: { modelType: 'image_to_image', model: 'model', params: { gen_count: 1 } } },
++  { action: 'edge.add', expectedVersion: '3', connection: { sourceNodeId: 'image', targetNodeId: 'target' } },
++  { action: 'edge.delete', expectedVersion: '3', edgeIds: ['edge'] },
++  { action: 'edge.reconnect', expectedVersion: '3', edgeId: 'edge', connection: { sourceNodeId: 'image', targetNodeId: 'target', sourceHandle: 'image_source', targetHandle: 'image_target' } },
++  { action: 'edge.reorder', expectedVersion: '3', targetNodeId: 'target', edgeIds: ['edge2', 'edge1'] },
++]
++test('graph save/read operations strictly preserve branch fields, and only read variants are read', () => {
++  for (const operation of operations) {
++    assert.deepEqual(parseCanvasOperation(operation), operation)
++    assert.deepEqual(parseBridgeOperation(operation), operation)
++    assert.equal(isCanvasReadOperation(operation), operation.action.startsWith('canvas.'))
++  }
++  assert.equal(isCanvasReadOperation({ action: 'canvas.read' }), true)
++  assert.throws(() => parseBridgeOperation({ action: 'node.run', expectedVersion: '3', nodeId: 'n', approvedGeneration: { images: 1, videos: 0 } }))
++})
++test('configuration rejects unknown, nested and reserved keys while retaining scalar value types', () => {
++  assert.deepEqual(parseNodeConfiguration({ params: { quality: 'medium', count: 1, fast: true, optional: null } }), { params: { quality: 'medium', count: 1, fast: true, optional: null } })
++  for (const configuration of [{}, { model: '' }, { modelType: ' ' }, { params: {} }, { prompt: 'x' }, { params: { prompt: 'x' } }, { params: { model: 'x' } }, { params: { modelType: 'x' } }, { params: { array: [] } }, { params: { nested: {} } }, JSON.parse('{"params":{"__proto__":"x"}}')]) assert.throws(() => parseNodeConfiguration(configuration), { code: 'INVALID_ARGUMENT' })
++})
++test('pagination requires snapshot revisions and finite bounded integer offsets/limits', () => {
++  for (const query of [
++    { action: 'canvas.graph.read', nodeOffset: 1 }, { action: 'canvas.graph.read', edgeOffset: 1 },
++    { action: 'canvas.graph.read', limit: 0 }, { action: 'canvas.graph.read', limit: 21 }, { action: 'canvas.graph.read', limit: 1.2 },
++    { action: 'canvas.graph.read', nodeOffset: -1 }, { action: 'canvas.graph.read', edgeOffset: Infinity },
++    { action: 'canvas.models.read', nodeType: 'image', modelOffset: 1 }, { action: 'canvas.models.read', nodeType: 'image', modeOffset: 1 },
++    { action: 'canvas.models.read', nodeType: 'audio' }, { action: 'canvas.models.read', nodeType: 'image', expectedCatalogVersion: '' },
++  ]) assert.throws(() => parseCanvasOperation(query), { code: 'INVALID_ARGUMENT' })
++  assert.deepEqual(parseCanvasOperation({ action: 'canvas.graph.read', nodeOffset: 0, edgeOffset: 0 }), { action: 'canvas.graph.read', nodeOffset: 0, edgeOffset: 0 })
++})
++test('edge arrays require unique bounded IDs; operations reject unrelated fields and missing handles', () => {
++  for (const operation of [
++    { ...operations[3], edgeId: 'forged' }, { ...operations[3], connection: { sourceNodeId: 'image', targetNodeId: 'target', sourceHandle: '' } },
++    { ...operations[4], edgeIds: [] }, { ...operations[4], edgeIds: ['edge', 'edge'] }, { ...operations[4], edgeIds: Array.from({ length: 21 }, (_, i) => 'e' + i) },
++    { ...operations[5], targetNodeId: 'bad' }, { ...operations[6], connection: operations[3].connection },
++  ]) assert.throws(() => parseCanvasOperation(operation), { code: 'INVALID_ARGUMENT' })
++})
++test('graph/model receipts preserve bounded pages and true ports, never transport credentials', () => {
++  const graph = { status: 'graph', canvasId: '103165', version: '3', consistency: 'confirmed', nodeCount: 1, edgeCount: 1, nodes: [{ id: 'image', type: 'image', title: 'image', position: { x: 0, y: 0 }, size: { width: 400, height: 400 }, parentId: null, ports: [{ id: 'image_target', type: 'target', mediaType: 'image', limit: null }], allowedInputTypes: ['text', 'image'], canConfigureGeneration: true }], edges: [{ id: 'edge', source: 'source', target: 'image', sourceHandle: 'image_source', targetHandle: 'image_target' }], nodeOffset: 0, edgeOffset: 0, nextNodeOffset: null, nextEdgeOffset: null }
++  const models = { status: 'models', canvasId: '103165', version: '3', consistency: 'confirmed', catalogVersion: 'catalog', nodeType: 'image', modes: [{ value: 'image_to_image', label: '图生图' }], modeCount: 1, modeOffset: 0, nextModeOffset: null, modelType: 'image_to_image', models: [{ value: 'model', label: 'Model' }], modelCount: 1, modelOffset: 0, nextModelOffset: null, model: 'model', paramHints: [{ field: 'gen_count', choices: [1, '2'], editable: true }] }
++  for (const result of [graph, models]) {
++    assert.deepEqual(parseCanvasOperationResult(result), result)
++    assert.throws(() => parseCanvasOperationResult({ ...result, token: 'private' }))
++  }
++  assert.throws(() => parseCanvasOperationResult({ ...graph, nodes: Array.from({ length: 21 }, () => graph.nodes[0]) }))
++  assert.throws(() => parseCanvasOperationResult({ ...models, catalogVersion: '' }))
++  const saved = { status: 'saved', canvasId: '103165', version: '4', affectedNodeIds: ['image'], affectedEdgeIds: ['edge'], warnings: ['mode mismatch'], unchanged: false }
++  assert.deepEqual(parseCanvasOperationResult(saved), saved)
++  const unknown = { ...saved, status: 'submission_unknown', version: null, phase: 'save', error: { code: 'SUBMISSION_UNKNOWN', message: 'unknown', retry: 'never_auto' } }
++  delete unknown.unchanged; delete unknown.warnings
++  assert.deepEqual(parseCanvasOperationResult(unknown), unknown)
++})
++test('refresh is read-only; edit prepare cannot force backend reload over user edits', () => {
++  const base = { type: 'canvas.prepare', protocolVersion: 3, connectionId: 'c', sessionId: 's', canvasId: '103165', requestId: 'r', deadline: Date.now() + 1000 }
++  assert.equal(parseServiceHostEvent({ ...base, capability: 'read', refresh: true }).refresh, true)
++  assert.throws(() => parseServiceHostEvent({ ...base, capability: 'edit', refresh: true }), { code: 'INVALID_ARGUMENT' })
++})
+diff --git a/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-tools.test.mjs b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-tools.test.mjs
+new file mode 100644
+index 0000000..bbae071
+--- /dev/null
++++ b/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/test/canvas-graph-tools.test.mjs
+@@ -0,0 +1,111 @@
++import assert from 'node:assert/strict'
++import test from 'node:test'
++import { registerCanvasTools } from '../src/host/canvas-tools.ts'
++import { registerCanvasGraphTools } from '../src/host/canvas-graph-tools.ts'
++import { CanvasAgentError } from '../src/shared/canvas-agent-protocol.ts'
++
++const id = '103165'
++const exec = (callId = 'call') => ({ callId, agent: { id: 'session' }, signal: new AbortController().signal })
++const graph = { status: 'graph', canvasId: id, version: '3', consistency: 'confirmed', nodeCount: 0, edgeCount: 0, nodes: [], edges: [], nodeOffset: 0, edgeOffset: 0, nextNodeOffset: null, nextEdgeOffset: null }
++const models = { status: 'models', canvasId: id, version: '3', consistency: 'confirmed', catalogVersion: 'catalog-1', nodeType: 'image', modes: [], modeCount: 0, modeOffset: 0, nextModeOffset: null, modelType: null, models: [], modelCount: 0, modelOffset: 0, nextModelOffset: null, model: null, paramHints: [] }
++const saved = { status: 'saved', canvasId: id, version: '4', affectedNodeIds: ['n1', 'n2'], affectedEdgeIds: ['edge'], warnings: ['输入改变后需检查模式'], unchanged: false }
++function fixture(overrides = {}) {
++  const definitions = new Map(), calls = []
++  const ctx = { tools: { register: tool => { definitions.set(tool.name, tool); return () => definitions.delete(tool.name) } }, effect: fn => fn() }
++  const bridge = {
++    ensureContext: async (...args) => { calls.push(['prepare', ...args]); return { connectionId: 'private', contextId: 'private-context', canvasId: id, sessionId: 'session', readiness: { phase: 'ready', capabilities: { read: true, edit: true, run: false }, version: '3' } } },
++    dispatch: async (...args) => { calls.push(['dispatch', ...args]); return args[2].action === 'canvas.graph.read' ? graph : args[2].action === 'canvas.models.read' ? models : saved },
++    ...overrides,
++  }
++  registerCanvasTools(ctx, bridge, { getCanvas: async () => { throw new Error('must not fetch summary') } })
++  registerCanvasGraphTools(ctx, bridge)
++  return { definitions, calls, async run(name, input, context = exec()) { return JSON.parse(await definitions.get(name).execute(input, context)) } }
++}
++
++test('graph tools register save/read extensions and expose no generation or routing authority', () => {
++  const f = fixture()
++  assert.deepEqual([...f.definitions.keys()], ['canvas_create', 'canvas_get', 'canvas_node_edit', 'canvas_edges', 'canvas_models'])
++  assert.match(f.definitions.get('canvas_edges').description, /包括已有工具的输入/); assert.match(f.definitions.get('canvas_edges').description, /内部管理边/); assert.match(f.definitions.get('canvas_models').description, /默认父参数组合/); assert.match(f.definitions.get('canvas_models').description, /实时参数及选项/);
++  assert.deepEqual(f.definitions.get('canvas_node_edit').parameters.properties.action.enum, ['add', 'update', 'delete', 'configure'])
++  for (const name of ['canvas_edges', 'canvas_models']) {
++    const fields = f.definitions.get(name).parameters.properties
++    for (const key of ['token', 'sessionId', 'requestId', 'run', 'url', 'graph']) assert(!Object.hasOwn(fields, key))
++  }
++})
++test('graph reads preserve independent offsets, page version and explicit authority refresh', async () => {
++  const f = fixture()
++  const result = await f.run('canvas_get', { canvasId: id, view: 'graph', nodeOffset: 20, edgeOffset: 0, limit: 10, expectedVersion: '3', refresh: true })
++  assert.equal(result.status, 'graph'); assert.equal(result.source, 'plugin-service')
++  assert.equal(f.calls[0][3], 'read'); assert.equal(f.calls[0][6], true)
++  assert.deepEqual(f.calls[1][3], { action: 'canvas.graph.read', nodeOffset: 20, edgeOffset: 0, limit: 10, expectedVersion: '3' })
++  assert(!JSON.stringify(result).includes('private'))
++})
++test('model reads send selected mode/model and catalog-bound paging through read capability', async () => {
++  const f = fixture()
++  const result = await f.run('canvas_models', { canvasId: id, nodeType: 'image', modelType: 'image_to_image', model: 'legal', modeOffset: 0, modelOffset: 20, limit: 5, expectedCatalogVersion: 'catalog-1' })
++  assert.equal(result.status, 'models'); assert.equal(result.source, 'plugin-service')
++  assert.equal(f.calls[0][3], 'read')
++  assert.deepEqual(f.calls[1][3], { action: 'canvas.models.read', nodeType: 'image', modelType: 'image_to_image', model: 'legal', modeOffset: 0, modelOffset: 20, limit: 5, expectedCatalogVersion: 'catalog-1' })
++})
++test('node update/delete/configure strictly dispatch to native methods and preserve edge IDs', async () => {
++  const f = fixture()
++  for (const [action, fields] of [
++    ['update', { nodeId: 'n1', changes: { text: 'new copy' } }],
++    ['delete', { nodeIds: ['n1'] }],
++    ['configure', { nodeId: 'n2', configuration: { modelType: 'image_to_image', model: 'legal', params: { gen_count: 1, resolution: '1K' } } }],
++  ]) {
++    const result = await f.run('canvas_node_edit', { canvasId: id, expectedVersion: '3', action, ...fields }, exec(action))
++    assert.equal(result.status, 'saved'); assert.deepEqual(result.affectedEdgeIds, ['edge']); assert.deepEqual(result.warnings, saved.warnings)
++    assert.deepEqual(f.calls.at(-1)[3], { action: 'node.' + action, expectedVersion: '3', ...fields })
++    assert.equal(f.calls.at(-2)[3], 'edit')
++  }
++})
++test('edge add/delete/reconnect/reorder pass IDs and full input order without raw graph writes', async () => {
++  const f = fixture(), connection = { sourceNodeId: 'n1', targetNodeId: 'n2', sourceHandle: 'image_source', targetHandle: 'image_target' }
++  for (const [action, fields] of [
++    ['add', { connection }], ['delete', { edgeIds: ['edge'] }], ['reconnect', { edgeId: 'edge', connection }], ['reorder', { targetNodeId: 'n2', edgeIds: ['edge2', 'edge1'] }],
++  ]) {
++    const result = await f.run('canvas_edges', { canvasId: id, expectedVersion: '3', action, ...fields }, exec(action))
++    assert.equal(result.status, 'saved'); assert.deepEqual(result.affectedEdgeIds, ['edge'])
++    assert.deepEqual(f.calls.at(-1)[3], { action: 'edge.' + action, expectedVersion: '3', ...fields })
++  }
++})
++test('invalid branch fields, unsafe config, unversioned pages and forged routing stop before bridge', async () => {
++  const f = fixture()
++  for (const [name, input] of [
++    ['canvas_get', { canvasId: id, view: 'graph', nodeIds: ['n'] }],
++    ['canvas_get', { canvasId: id, view: 'nodes', nodeOffset: 0 }],
++    ['canvas_get', { canvasId: id, view: 'graph', edgeOffset: 1 }],
++    ['canvas_get', { canvasId: id, view: 'graph', limit: 21 }],
++    ['canvas_models', { canvasId: id, nodeType: 'image', modelOffset: 1 }],
++    ['canvas_models', { canvasId: id, nodeType: 'image', refresh: true }],
++    ['canvas_edges', { canvasId: id, expectedVersion: '3', action: 'add', connection: { sourceNodeId: 'n1', targetNodeId: 'n2' }, edgeIds: ['edge'] }],
++    ['canvas_edges', { canvasId: id, expectedVersion: '3', action: 'delete', edgeIds: ['edge', 'edge'] }],
++    ['canvas_node_edit', { canvasId: id, expectedVersion: '3', action: 'update', nodeId: 'n1', changes: { title: 'ok' }, nodeIds: ['n1'] }],
++    ['canvas_node_edit', { canvasId: id, expectedVersion: '3', action: 'configure', nodeId: 'n1', configuration: { params: { model: 'forged' } } }],
++    ['canvas_node_edit', { canvasId: id, expectedVersion: '3', action: 'configure', nodeId: 'n1', configuration: { params: { cameraControl: {} } } }],
++    ['canvas_models', { canvasId: id, nodeType: 'image', sessionId: 'other' }],
++  ]) {
++    let result
++    try { result = await f.run(name, input) } catch (cause) { assert.equal(cause.code, 'INVALID_ARGS'); continue }
++    assert.equal(result.status, 'rejected'); assert.equal(result.error.code, 'INVALID_ARGUMENT')
++  }
++  assert.equal(f.calls.length, 0)
++})
++test('read failures never claim unknown writes and writes after dispatch never leak provider errors', async () => {
++  const f = fixture({ dispatch: async () => { throw new Error('private-token') } })
++  for (const [name, args] of [['canvas_get', { canvasId: id, view: 'graph' }], ['canvas_models', { canvasId: id, nodeType: 'image' }]]) {
++    const result = await f.run(name, args, exec(name)); assert.equal(result.status, 'rejected'); assert(!JSON.stringify(result).includes('private-token'))
++  }
++  const result = await f.run('canvas_edges', { canvasId: id, expectedVersion: '3', action: 'delete', edgeIds: ['edge'] }, exec('write'))
++  assert.equal(result.status, 'submission_unknown'); assert.equal(result.error.retry, 'never_auto'); assert(!JSON.stringify(result).includes('private-token'))
++})
++test('known precondition rejection stays none and unknown edge receipts retain IDs without mutation', async () => {
++  const none = fixture({ ensureContext: async () => { throw new CanvasAgentError('EDITOR_BUSY', 'editing') } })
++  const args = { canvasId: id, expectedVersion: '3', action: 'delete', edgeIds: ['edge'] }
++  assert.equal((await none.run('canvas_edges', args)).effect, 'none')
++  const unknown = { status: 'submission_unknown', canvasId: id, version: null, phase: 'save', affectedNodeIds: ['n2'], affectedEdgeIds: ['edge'], error: { code: 'SUBMISSION_UNKNOWN', message: 'unknown', retry: 'read_first' } }
++  const f = fixture({ dispatch: async () => unknown })
++  const result = await f.run('canvas_edges', args)
++  assert.deepEqual(result.affectedEdgeIds, ['edge']); assert.equal(result.error.retry, 'never_auto'); assert.equal(unknown.error.retry, 'read_first')
++})

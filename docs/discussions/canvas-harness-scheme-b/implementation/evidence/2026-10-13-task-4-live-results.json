@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-13",
+  "status": "actual_dialogue_upload_save_registration_backend_refresh_native_UI_passed",
+  "evidence_source": "manual_transcription_of_observed_native_Harness_tool_trace_and_result_detail_plus_native_canvas_visual_inspection",
+  "session_title": "创建Agent素材验收空画布",
+  "prompt": "创建一个叫“Agent素材验收”的空画布，将我附上的这张图片作为图片素材节点加入，标题为“聊天图片”。只上传和保存，不生成图片或视频，不打开画布，不修改代码。完成后告诉我画布ID、节点ID、保存版本和资产登记状态。如果提交结果未知，请停止并如实说明，不要重复新增。",
+  "fixture": {
+    "file": "task-4-test-image.png",
+    "source": "synthetic_non_user_media_created_for_this_test",
+    "mediaType": "image/png",
+    "bytes": 1667,
+    "width": 320,
+    "height": 200,
+    "attachmentId": "sha256:9125e49bebabe2c4d07cd15f6124c58bdf0762206b6ee493a2011caba80bdc33",
+    "local_file_digest_matches_attachment": true
+  },
+  "create": {
+    "status": "created",
+    "canvasId": "103165",
+    "name": "Agent素材验收",
+    "version": "0",
+    "runtime": "ready",
+    "requestId": "canvas-ae9a35b6e87f8a8c969591b8c85a135a6f7798a617cdaa46bdc184d96b58d3ea"
+  },
+  "assets": {
+    "status": "available",
+    "total": 1,
+    "truncated": false,
+    "encoding": "harness_normalized"
+  },
+  "read_before_save": {
+    "status": "read",
+    "version": "0",
+    "consistency": "confirmed",
+    "nodeCount": 0
+  },
+  "import_input": {
+    "canvasId": "103165",
+    "expectedVersion": "0",
+    "source": {
+      "type": "attachment",
+      "attachmentId": "sha256:9125e49bebabe2c4d07cd15f6124c58bdf0762206b6ee493a2011caba80bdc33"
+    },
+    "title": "聊天图片",
+    "position": {
+      "x": 0,
+      "y": 0
+    }
+  },
+  "import_result": {
+    "status": "saved",
+    "canvasId": "103165",
+    "version": "1",
+    "affectedNodeIds": [
+      "23a70961-ecc5-4ace-9447-8cdb8db56513"
+    ],
+    "unchanged": false,
+    "requestId": "canvas-573cbdbbf5c9a6f7c2e6a040c6dd5ba2441f968198178ef2b560e172327c15fd",
+    "asset": {
+      "url": "https://game-ai-editor-image-test.oss-cn-guangzhou.aliyuncs.com/110108/fac4519f-b793-4e13-9160-8305d93cde34.png",
+      "attachmentId": "sha256:9125e49bebabe2c4d07cd15f6124c58bdf0762206b6ee493a2011caba80bdc33",
+      "mediaType": "image/png",
+      "bytes": 1667,
+      "width": 320,
+      "height": 200,
+      "status": "uploaded"
+    },
+    "assetRegistration": {
+      "status": "registered"
+    }
+  },
+  "import_duration_ms_observed": 1174,
+  "authoritative_read": {
+    "input": {
+      "canvasId": "103165",
+      "nodeIds": [
+        "23a70961-ecc5-4ace-9447-8cdb8db56513"
+      ],
+      "view": "nodes",
+      "refresh": true
+    },
+    "observed_result_fields": {
+      "status": "read",
+      "canvasId": "103165",
+      "version": "1",
+      "consistency": "confirmed",
+      "nodeCount": 1,
+      "nodes": [
+        {
+          "id": "23a70961-ecc5-4ace-9447-8cdb8db56513",
+          "type": "image",
+          "title": "聊天图片",
+          "contentType": "upload",
+          "prompt": "",
+          "params": {
+            "gen_count": 1,
+            "model": "",
+            "modelType": "text_to_image",
+            "prompt": ""
+          },
+          "status": "success",
+          "inputs": [],
+          "outputs": [
+            "https://game-ai-editor-image-test.oss-cn-guangzhou.aliyuncs.com/110108/fac4519f-b793-4e13-9160-8305d93cde34.png"
+          ],
+          "generation": null,
+          "truncatedFields": []
+        }
+      ]
+    }
+  },
+  "native_UI": {
+    "opened_only_manually_after_saved_and_refresh": true,
+    "canvasId": "103165",
+    "observed_title": "Agent素材验收",
+    "observed_node_title": "聊天图片",
+    "fixture_blue_background_and_three_yellow_blocks_visible": true
+  },
+  "boundaries": {
+    "original_canvas_103161_modified": false,
+    "Agent_opened_canvas": false,
+    "canvas_iframe_count_before_manual_open": "not_queried_numerically_no_canvas_view_visible_and_no_open_action_in_tool_trace",
+    "backend_HTTP_request_counts": "not_captured",
+    "business_generation_requested_or_called_in_tool_trace": false,
+    "other_existing_Harness_tools_seen": [
+      "memory(add_two_entries)",
+      "dtodo(list)"
+    ],
+    "template_generation_or_file_attachment_raw_image_acceptance": false
+  }
+}

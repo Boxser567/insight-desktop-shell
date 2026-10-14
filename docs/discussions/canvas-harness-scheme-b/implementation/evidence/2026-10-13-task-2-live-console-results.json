@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-13",
+  "source": "user_reported_console_output",
+  "canvasId": "103136",
+  "execution_path": "Client CanvasServiceRuntime; not Host SSE command dispatch",
+  "A": {
+    "info": {
+      "canvasId": "103136",
+      "contextId": "e9c244a3-7bc6-455f-9b4c-14d66fd2f149",
+      "readiness": {
+        "phase": "ready",
+        "capabilities": { "read": true, "edit": true, "run": true },
+        "version": "0"
+      }
+    },
+    "snapshot": {
+      "status": "read",
+      "canvasId": "103136",
+      "version": "0",
+      "consistency": "confirmed",
+      "nodeCount": 0,
+      "nodes": [],
+      "missingNodeIds": []
+    },
+    "canvasIframeCount": 0
+  },
+  "B": {
+    "added": {
+      "status": "saved",
+      "canvasId": "103136",
+      "version": "1",
+      "affectedNodeIds": ["565e2522-51c8-4152-9f6e-2a47e5b39d0b"],
+      "unchanged": false
+    },
+    "title": "实账验收-846dcd14",
+    "canvasIframeCount": 0
+  },
+  "C": {
+    "reload": {
+      "canvasId": "103136",
+      "contextId": "e9c244a3-7bc6-455f-9b4c-14d66fd2f149",
+      "readiness": {
+        "phase": "ready",
+        "capabilities": { "read": true, "edit": true, "run": true },
+        "version": "1"
+      }
+    },
+    "persisted": {
+      "status": "read",
+      "canvasId": "103136",
+      "version": "1",
+      "consistency": "confirmed",
+      "nodeCount": 1,
+      "nodes": [{
+        "id": "565e2522-51c8-4152-9f6e-2a47e5b39d0b",
+        "type": "text",
+        "title": "实账验收-846dcd14",
+        "contentType": null,
+        "text": "真实账号下，未打开画布创建并保存文本节点",
+        "prompt": "",
+        "params": {
+          "gen_count": 1,
+          "model": "gemini-3.1-pro-preview",
+          "prompt": "",
+          "search_resource": false
+        },
+        "paramHints": [],
+        "status": "success",
+        "inputs": [],
+        "outputs": [],
+        "generation": { "images": 0, "videos": 0 },
+        "truncatedFields": []
+      }],
+      "missingNodeIds": []
+    },
+    "canvasIframeCount": 0
+  },
+  "assessment": {
+    "console_A_B_C": "passed_from_user_report",
+    "version_transition": "0 -> 1",
+    "matching_saved_node": true,
+    "no_canvas_iframe_in_all_outputs": true,
+    "network_partialUpdate_count_and_reload_get": "pending",
+    "native_UI_same_node": "pending",
+    "bridge_protocol_and_session_payload": "pending",
+    "real_account_Host_SSE_command_dispatch": "not_executed",
+    "Agent_dialogue_create": "not_implemented_task_3_pending"
+  }
+}

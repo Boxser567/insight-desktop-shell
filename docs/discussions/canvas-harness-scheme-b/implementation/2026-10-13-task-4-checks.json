@@ -1,0 +1,213 @@
+{
+  "task": "4_chat_image_assets",
+  "date": "2026-10-13",
+  "status": "code_automatic_checks_package_install_and_minimal_real_account_acceptance_complete",
+  "scope": {
+    "tools_added": [
+      "canvas_assets",
+      "canvas_asset_import"
+    ],
+    "internal_operation_added": "asset.add",
+    "existing_tools_preserved": [
+      "canvas_create",
+      "canvas_get",
+      "canvas_node_edit(add_only)"
+    ],
+    "backend_changed": false,
+    "shell_core_business_changed": false,
+    "store_native_UI_changed": false,
+    "run_update_delete_template_tools_registered": false,
+    "committed": false,
+    "published": false
+  },
+  "runtime": {
+    "shell": "1.0.6",
+    "core": "0.2.1-alpha.1",
+    "node": "v24.9.0",
+    "plugin": "0.3.0-alpha.10",
+    "SDK": "0.2.1-alpha.1",
+    "cordis": "4.0.5-alpha.1",
+    "OSS": "6.20.0"
+  },
+  "plugin_tests": {
+    "passed": 145,
+    "failed": 0,
+    "new_vs_task_3": 43,
+    "log": "evidence/2026-10-13-task-4-plugin-tests-final.log"
+  },
+  "web_tests": {
+    "passed": 182,
+    "failed": 0,
+    "files": 18,
+    "new_vs_task_3": 10,
+    "log": "evidence/2026-10-13-task-4-web-tests-node24.log"
+  },
+  "types": {
+    "default_Host_Client": "passed",
+    "actual_Core_Host_Client": "passed",
+    "web_exit_code": 2,
+    "existing_web_diagnostics": [
+      {
+        "file": "legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+        "line": 52,
+        "column": 101,
+        "code": "TS2345",
+        "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 74,
+        "column": 111,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 79,
+        "column": 9,
+        "code": "TS2345",
+        "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 155,
+        "column": 93,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+        "line": 149,
+        "column": 26,
+        "code": "TS2322",
+        "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"type\" | \"source\" | \"label\" | \"duration\" | \"sourceType\" | \"fileFormat\">'."
+      },
+      {
+        "file": "legacy/src/components/community/coverCrop/coverCropMedia.ts",
+        "line": 102,
+        "column": 18,
+        "code": "TS2367",
+        "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 431,
+        "column": 19,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 433,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 434,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      }
+    ],
+    "new_web_diagnostics": 0
+  },
+  "native_registered_tools_fixture": {
+    "test_file": "canvas-app/test/agent-runtime-complete.test.ts",
+    "focused_total_passed": 46,
+    "added": 2,
+    "success": {
+      "put": 1,
+      "partialUpdate": 1,
+      "asset_registration": 1,
+      "iframe": 0,
+      "invoke": 0
+    },
+    "unknown_save": "actual_native_fence_preserves_ID_and_prevents_second_save_no_registration"
+  },
+  "build": "passed_existing_large_chunk_warning",
+  "package": {
+    "archive": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/insight-ai-desktop-canvas-plugin-0.3.0-alpha.10.tgz",
+    "sha256": "a8c571962f77331f2a756726b9c9ee3adc263fbcb734f42e96315237fc04ab3e",
+    "bytes": 14454451,
+    "all_packaged_files_match_build": true,
+    "file_count": 58,
+    "dependencies": {
+      "ali-oss": "6.20.0"
+    },
+    "critical_files": [
+      {
+        "path": "lib/index.js",
+        "sha256": "6a570089ab9b28ac593574ff38ae3a19eacf4f962972675f3de23acc1a1772fd"
+      },
+      {
+        "path": "lib/client.js",
+        "sha256": "d1f8f85f1bc7175effb9d6d86abf5f42e6b585fcbe3d915b870bc7689b00a7a5"
+      },
+      {
+        "path": "canvas-app/dist/canvas-service-manifest.json",
+        "sha256": "ab048fcd1678e3c613ff93a3d7e315b506f3c764690098d8c39e054ac6a0d50a"
+      },
+      {
+        "path": "canvas-app/dist/assets/workflowTabOwnership-Cs6xKYa4.js",
+        "sha256": "1aa42bb179457c3e2dd2dd5a0d73899b41dc47279e590a4dc4e16902106de24f"
+      },
+      {
+        "path": "canvas-app/dist/canvas-service.js",
+        "sha256": "b4b80a97097d03a18aef1ab02e52b48773d32a9c7ccd9b6a5d731102deca7bd7"
+      }
+    ],
+    "probe_not_shipped": true
+  },
+  "isolated_Core": {
+    "install": "passed",
+    "tool_catalog": "exactly_five_controlled_canvas_tools",
+    "OSS_Node_dependency": "passed",
+    "protected_routes": "passed",
+    "SSE_auth_registration_handshake_session_sync_detach": "passed",
+    "uninstall": "passed",
+    "business_commands": "not_executed_in_isolation"
+  },
+  "review": {
+    "fixed": [
+      "identity_body_response_support",
+      "identity_STS_precondition_failure_not_misclassified_upload_unknown",
+      "HTTPS_CDN_asset_registration",
+      "bare_fragment_and_whitespace_URL_rejection",
+      "definite_OSS_4xx_rejected_unknown_only_ambiguous_PUT",
+      "CanvasId_brand_preserved"
+    ],
+    "web_test_runtime_issue": "initial_pnpm_child_used_global_Node_fixed_PATH_to_bundled_Node24_no_dependency_or_test_bypass",
+    "dependency_resolution": "old_0.1.6_development_SDK_Cordis_peer_conflict_resolved_by_aligning_to_actual_Core_no_force_or_legacy_peer_deps"
+  },
+  "live_acceptance": {
+    "passed": true,
+    "record": "evidence/2026-10-13-task-4-live-results.json",
+    "canvasId": "103165",
+    "nodeId": "23a70961-ecc5-4ace-9447-8cdb8db56513",
+    "version": "1",
+    "asset_registration": "registered",
+    "authoritative_refresh": "read_confirmed_same_node_and_URL",
+    "native_UI": "same_test_image_visible",
+    "installation": "evidence/2026-10-13-task-4-account-install.json",
+    "separate_unverified_details": [
+      "actual_backend_HTTP_counts",
+      "numerical_preopen_iframe_count",
+      "real_account_unknown_failure_injection",
+      "raw_file_attachments_or_compacted_history_images"
+    ]
+  },
+  "source_audit": "evidence/2026-10-13-task-4-source-audit.json",
+  "documentation_review": {
+    "links_json_whitespace": "passed",
+    "files": [
+      "README.md",
+      "plans/2026-10-13-task-4-asset-preparation.md",
+      "plans/2026-10-13-task-4-asset-implementation-plan.md",
+      "implementation/2026-10-13-task-4.md",
+      "implementation/2026-10-13-task-4-live-acceptance.md"
+    ],
+    "plan_steps_marked_executed": true
+  }
+}

@@ -2,6 +2,8 @@
 
 因赛AI Desktop is a cross-platform Electron host for the pinned Insight Harness Core Runtime.
 
+The [business capability inventory](docs/analysis/2026-10-08-business-capability-inventory.md) records implemented behavior, source evidence, validation gaps, and inputs for reassessing the official Desktop platform.
+
 ## Runtime policy
 
 The application does not install or upgrade `@deepseek-ai/dsh` from the npm registry at runtime. `core-runtime.lock.json` pins an independently released Core Runtime, and packaged builds embed that artifact together with the default Better Sidebar profile.

@@ -1,0 +1,3015 @@
+--- before/test/canvas-service-loader.test.mjs
+
++++ after/test/canvas-service-loader.test.mjs
+
+@@ -6,7 +6,7 @@
+
+ const target = () => ({ location: { origin: 'http://127.0.0.1:3000' } })
+ const runtime = () => {
+   let disposed = 0
+-  return { ensureContext() {}, getContextInfo() {}, subscribeReadiness() {}, reloadContext() {}, closeContext() {}, dispose() { disposed++ }, get disposed() { return disposed } }
++  return { execute() {}, registerView() { return () => {} }, attachView() {}, detachView() {}, ensureContext() {}, getContextInfo() {}, subscribeReadiness() {}, reloadContext() {}, closeContext() {}, dispose() { disposed++ }, get disposed() { return disposed } }
+ }
+ 
+ test('Client installs one lazy handle and loads the fixed same-origin service URL once', async () => {
+--- before/scripts/verify-isolated.mjs
+
++++ after/scripts/verify-isolated.mjs
+
+@@ -6,7 +6,7 @@
+
+ 
+ const root = dirname(dirname(fileURLToPath(import.meta.url)))
+ const shell = resolve(root, '../insight-desktop-shell')
+-const home = join(root, '.sandbox')
++const home = process.env.CANVAS_VERIFY_HOME ? resolve(process.env.CANVAS_VERIFY_HOME) : join(root, '.sandbox')
+ const runtime = join(shell, 'build/core-runtime/node_modules')
+ const node = join(runtime, 'node/bin', process.platform === 'win32' ? 'node.exe' : 'node')
+ const pnpm = join(runtime, 'pnpm/bin/pnpm.cjs')
+@@ -122,6 +122,14 @@
+
+     }
+     const unauthorizedAsset = await fetch(`${base}${scriptPath}`)
+     if (unauthorizedAsset.status !== 401) throw new Error(`Unauthenticated asset status ${unauthorizedAsset.status}`)
++    const unauthorizedService = await fetch(`${base}/desktop-canvas/canvas-service.js`)
++    if (unauthorizedService.status !== 401) throw new Error('Unauthenticated service must be protected')
++    const serviceManifest = await fetch(`${base}/desktop-canvas/canvas-service-manifest.json`, { headers: { cookie } }).then(response => response.json())
++    if (serviceManifest.entry !== 'canvas-service.js') throw new Error('Packaged service manifest missing')
++    for (const path of serviceManifest.staticChunks) {
++      const asset = await fetch(`${base}/desktop-canvas/${path}`, { headers: { cookie } })
++      if (!asset.ok || !asset.headers.get('content-type')?.startsWith('text/javascript')) throw new Error(`Packaged service chunk missing: ${path}`)
++    }
+     const unauthorizedModelParams = await fetch(`${base}/desktop-canvas/api/model-params`)
+     if (unauthorizedModelParams.status !== 401) throw new Error(`Unauthenticated model params status ${unauthorizedModelParams.status}`)
+     const invalid = await fetch(`${base}/desktop-canvas/view?id=0`, { headers: { cookie } })
+@@ -130,7 +138,18 @@
+
+     if (snapshot.status !== 401 || !(await snapshot.json()).error.includes('桌面客户端')) {
+       throw new Error(`Snapshot did not require desktop login: ${snapshot.status}`)
+     }
+-    console.log('PASS: isolated install, protected page and model params route, two canvas IDs, packaged Vite assets and desktop-login gate')
++    if (process.env.CANVAS_VERIFY_BROWSER === '1') {
++      const privateFile = join(home, 'browser-session.json')
++      await writeFile(privateFile, JSON.stringify({ base, cookie }), { mode: 0o600 })
++      console.log('READY: isolated Core browser verification')
++      const deadline = Date.now() + 10 * 60 * 1000
++      while (Date.now() < deadline) {
++        try { await readFile(join(home, 'browser-done')); break } catch { /* Browser verification is still running. */ }
++        await new Promise(resolveWait => setTimeout(resolveWait, 500))
++      }
++      await rm(privateFile, { force: true })
++    }
++    console.log('PASS: isolated install, protected page and model params route, two canvas IDs, service manifest/chunks and packaged Vite assets and desktop-login gate')
+   } finally {
+     if (child.exitCode === null) {
+       const exited = new Promise(resolveExit => child.once('exit', resolveExit))
+--- before/canvas-app/test/agent-context.test.ts
+
++++ after/canvas-app/test/agent-context.test.ts
+
+@@ -141,7 +141,7 @@
+
+     const a = makeContext('2873', { feedback: { error: errorA, showCapacityLimit: capacityA } });
+     const b = makeContext('2874', { feedback: { error: errorB, showCapacityLimit: capacityB } });
+     api.update.mockRejectedValueOnce(Object.assign(new Error('A save rejected'), { raw: { msg: 'A save rejected' }, requestPhase: 'rejected' }));
+-    await expect(a.state().actions.partialUpdate('2873', {}, options)).rejects.toThrow('A save rejected');
++    await expect(a.state().actions.partialUpdate('2873', {})).rejects.toThrow('A save rejected');
+     expect(errorA).toHaveBeenCalledWith('A save rejected'); expect(errorB).not.toHaveBeenCalled();
+     api.capacity.mockResolvedValue({ code: 'SUCCESS', data: { usedCapacity: 100, limitCapacity: 100 } });
+     await expect(a.state().actions.excuteSingle('n1')).resolves.toMatchObject({ type: 'capacity_limit' });
+--- before/canvas-app/test/agent-owned-prompt.test.ts
+
++++ after/canvas-app/test/agent-owned-prompt.test.ts
+
+@@ -0,0 +1,32 @@
+
++// @vitest-environment jsdom
++import { afterEach, beforeEach, expect, it, vi } from 'vitest';
++import { act, createElement } from 'react';
++import { createRoot, type Root } from 'react-dom/client';
++vi.mock('@/store/flowStore', () => ({ useFlowStore: (selector: (state: unknown) => unknown) => selector({ modelMaxPromptMap: {} }) }));
++vi.mock('@/routes', () => ({ router: { navigate: vi.fn() } }));
++vi.mock('@/hooks/useFileUpload', () => ({}));
++import hooks from '../legacy/src/components/canvasFlow/hooks';
++import { createAgentEditGuard } from '../src/agent-edit-guard';
++import { createCanvasEditorTimers } from '../src/canvas-editor-timers';
++import { bindCanvasView, type CanvasViewBinding } from '../src/canvas-service-binding';
++let root: Root; let container: HTMLDivElement; let release: () => void; let timers: ReturnType<typeof createCanvasEditorTimers>;
++beforeEach(() => {
++  vi.useFakeTimers(); (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  container = document.createElement('div'); document.body.append(container); root = createRoot(container);
++  const guard = createAgentEditGuard(); timers = createCanvasEditorTimers(guard);
++  // Only the prompt hook's integration port; native Store binding is covered by runtime tests.
++  release = bindCanvasView({ guard, createEditorDebounce: timers.create, onRelease: () => () => undefined, release: () => undefined } as unknown as CanvasViewBinding);
++});
++afterEach(() => { act(() => root.unmount()); release(); timers.dispose(); container.remove(); vi.useRealTimers(); });
++it('idle native prompt panels sync external saved changes, while a pending local draft is retained', () => {
++  const commit = vi.fn();
++  function Prompt({ value }: { value: string }) {
++    const { prompt, setPrompt, debouncedUpdateValue } = hooks.usePromptModelCommon({ nodeId: 'n1', nodePrompt: value, status: '', onChangePrompt: commit });
++    return createElement('textarea', { value: prompt, onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => { setPrompt(event.target.value); debouncedUpdateValue(event.target.value); } });
++  }
++  act(() => root.render(createElement(Prompt, { value: 'old' }))); act(() => root.render(createElement(Prompt, { value: 'agent saved' })));
++  const input = container.querySelector('textarea')!; expect(input.value).toBe('agent saved');
++  act(() => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'user draft'); input.dispatchEvent(new Event('input',{ bubbles: true })); });
++  act(() => root.render(createElement(Prompt, { value: 'external' }))); expect(input.value).toBe('user draft');
++  act(() => root.render(null)); act(() => vi.advanceTimersByTime(1500)); expect(commit).toHaveBeenCalledExactlyOnceWith('user draft');
++});
+--- before/canvas-app/test/agent-save-receipt.test.ts
+
++++ after/canvas-app/test/agent-save-receipt.test.ts
+
+@@ -22,7 +22,7 @@
+
+ beforeEach(async () => {
+   if (state().actions.awaitMutationsIdle) await state().actions.awaitMutationsIdle();
+   vi.clearAllMocks(); state().actions.reset();
+-  useFlowStore.setState({ canvasId: '2873', versionNumber: '18', nodes: [makeNode('n1'), makeNode('n2')] });
++  useFlowStore.setState({ canvasId: '2873', versionNumber: '18', modelsMap: { text: [{ value: 'fixture', params: [] }] }, nodes: [makeNode('n1'), makeNode('n2')] });
+   api.update.mockResolvedValue({ code: 'SUCCESS', data: { versionNumber: '19' } });
+   api.save.mockResolvedValue({ code: 'SUCCESS', data: { versionNumber: '19' } });
+   api.invoke.mockResolvedValue({ code: 'SUCCESS', data: { versionNumber: '19', taskId: 'task1' } });
+--- before/canvas-app/test/agent-runtime-complete.test.ts
+
++++ after/canvas-app/test/agent-runtime-complete.test.ts
+
+@@ -0,0 +1,285 @@
+
++// @vitest-environment jsdom
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { CanvasContext } from '../src/canvas-context';
++import type { Node } from '@xyflow/react';
++const api = vi.hoisted(() => ({ graph: vi.fn(), models: vi.fn(), permission: vi.fn(), tools: vi.fn(), update: vi.fn(), invoke: vi.fn(), capacity: vi.fn(), balance: vi.fn(), dimensions: vi.fn(), contexts: new Map<string, CanvasContext>() }));
++vi.mock('@/api/workflow', () => ({ getFlowData: api.graph, getModelParams: api.models, listModelNodeSetting: api.permission, listToolNodeSetting: api.tools, updateCanvas: api.update, saveFlow: vi.fn(), excuteWorkFlow: api.invoke, fetchTone: vi.fn(), getAllRule: vi.fn() }));
++vi.mock('@/api/asset', () => ({ getAvailableCapacity: api.capacity }));
++vi.mock('@/api/order', () => ({ accountBalance: api.balance }));
++vi.mock('@/components/canvasFlow/utils/mediaDimensionLoader', () => ({ loadIntrinsicMediaDimensions: api.dimensions }));
++vi.mock('@/utils', () => ({ isSvgImageUrl: () => false, compressImage: vi.fn() }));
++vi.mock('../src/canvas-context', async original => { const module = await original<typeof import('../src/canvas-context')>(); return { ...module, createCanvasContext: (...args: Parameters<typeof module.createCanvasContext>) => { const context = module.createCanvasContext(...args); api.contexts.set(args[0], context); return context; } }; });
++import { createCanvasServiceRuntime } from '../src/canvas-service';
++import { parseCanvasOperationResult } from '../../src/shared/canvas-agent-protocol';
++import { isAgentOperationBusy } from '../src/agent-edit-guard';
++import { bindCanvasView } from '../src/canvas-service-binding';
++import { useFlowStore } from '../legacy/src/store/flowStore';
++import { usePointStore } from '../legacy/src/store/pointStore';
++import { createWorkflowTabOwnership } from '../legacy/src/hooks/workflowTabOwnership';
++const services: ReturnType<typeof createCanvasServiceRuntime>[] = [];
++const success = (data: unknown) => ({ code: 'SUCCESS', data });
++const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; };
++const model = { model_name: 'fixture', parameters: { gen_count: { default: 1, choices: [1,2].map(value => ({ value, label: String(value) })) } }, senoir_parameters: {} };
++const node = (type = 'text', id = 'n1'): Node => ({ id, type, position: { x: 0, y: 0 }, data: { title: id, params: { model: 'fixture', modelType: 'text_to_image', gen_count: 1, prompt: 'test' }, value: type === 'text' ? 'text' : '', taskInfo: { status: 'success' }, product: [] } });
++const row = (nodes: Node[] = [], versionNumber = '18', taskStatus = 'FINISHED') => success({ name: 'fixture', data: JSON.stringify({ nodes, edges: [] }), taskStatus, versionNumber });
++const service = () => { const value = createCanvasServiceRuntime(); services.push(value); return value; };
++const prepare = async (nodes: Node[] = []) => { api.graph.mockResolvedValueOnce(row(nodes)); const rt = service(); await rt.ensureContext({ canvasId: '2873', capability: 'edit' }); return rt; };
++const execute = (rt: ReturnType<typeof service>, operation: any) => rt.execute({ canvasId: '2873', operation });
++beforeEach(() => {
++  vi.resetAllMocks(); api.contexts.clear(); vi.stubGlobal('BroadcastChannel', undefined);
++  api.graph.mockResolvedValue(row());
++  api.models.mockResolvedValue(success([{ config: JSON.stringify({ text: { fixture: model }, image: { text_to_image: { name: 'fixture', models: { fixture: model } } }, video: { text_to_image: { name: 'fixture', models: { fixture: model } } }, audio: { music: { name: 'fixture', models: { fixture: model } } } }) }]));
++  api.permission.mockResolvedValue(success([])); api.tools.mockResolvedValue(success([])); api.update.mockResolvedValue(success({ versionNumber: '19' }));
++  api.invoke.mockResolvedValue(success({ versionNumber: '19', taskId: 'task-fixture' })); api.capacity.mockResolvedValue(success({ usedCapacity: 0, limitCapacity: 100 })); api.balance.mockResolvedValue(success({ rechargeBalance: 5 }));
++  api.dimensions.mockResolvedValue(null);
++  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
++});
++afterEach(() => { services.splice(0).forEach(rt => rt.dispose()); document.body.innerHTML = ''; vi.useRealTimers(); vi.unstubAllGlobals(); });
++
++function register(rt: ReturnType<typeof service>, viewId = 'view1') {
++  const frame = document.createElement('iframe'); frame.src = `${location.origin}/desktop-canvas/view?id=2873&viewId=${viewId}`; document.body.append(frame);
++  const release = rt.registerView({ canvasId: '2873', viewId, frame });
++  return { frame, release, input: { canvasId: '2873', viewId, viewWindow: frame.contentWindow!, viewDocument: frame.contentDocument! } };
++}
++
++describe('complete no-view native canvas service', () => {
++  it('reads an empty canvas and performs add/update/delete using exactly one native save each, without a view', async () => {
++    const rt = await prepare(); const read = await execute(rt, { action: 'canvas.read' }); expect(read).toMatchObject({ status: 'read', nodes: [], nodeCount: 0 });
++    const added = await execute(rt, { action: 'node.add', expectedVersion: '18', node: { type: 'text', changes: { title: '服务验收标题', text: 'a' } } });
++    expect(added.status).toBe('saved'); if (added.status !== 'saved') throw new Error(JSON.stringify(added)); const id = added.affectedNodeIds[0];
++    expect(api.update).toHaveBeenCalledTimes(1);
++    expect(api.contexts.get('2873')!.store.getState().nodes[0].data.title).toBe('服务验收标题');
++    expect(JSON.parse(api.update.mock.calls[0][0].addNodes[0])).not.toHaveProperty('titleAssignment');
++    api.update.mockResolvedValueOnce(success({ versionNumber: '20' }));
++    const updated = await execute(rt, { action: 'node.update', expectedVersion: '19', nodeId: id, changes: { text: 'b' } }); expect(updated).toMatchObject({ status: 'saved', version: '20', affectedNodeIds: [id] });
++    const detail = await execute(rt, { action: 'canvas.read', nodeIds: [id, 'missing'] }); expect(detail).toMatchObject({ nodes: [{ text: 'b' }], missingNodeIds: ['missing'] });
++    api.update.mockResolvedValueOnce(success({ versionNumber: '21' })); const deleted = await execute(rt, { action: 'node.delete', expectedVersion: '20', nodeIds: [id] }); expect(deleted).toMatchObject({ status: 'saved', version: '21' });
++    expect(api.update).toHaveBeenCalledTimes(3); expect(document.querySelectorAll('iframe')).toHaveLength(0);
++    for (const result of [read, added, updated, detail, deleted]) expect(() => parseCanvasOperationResult(result)).not.toThrow();
++  });
++  it.each(['text','image','video','audio'])('creates %s with actual native defaults and no PromptModel', async type => {
++    const rt = await prepare(); const result = await execute(rt, { action: 'node.add', expectedVersion: '18', node: { type, changes: { prompt: 'fixture' } } });
++    expect(result.status).toBe('saved'); expect(api.contexts.get('2873')!.store.getState().nodes[0].data.params).toMatchObject({ model: 'fixture', prompt: 'fixture' }); expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('validates version and busy state even for unchanged updates; unchanged sends nothing', async () => {
++    const rt = await prepare([node()]); expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'text' } })).toMatchObject({ status: 'saved', unchanged: true, version: '18' });
++    expect(api.update).not.toHaveBeenCalled(); expect(await execute(rt, { action: 'node.update', expectedVersion: 'old', nodeId: 'n1', changes: { text: 'text' } })).toMatchObject({ status: 'rejected', error: { code: 'VERSION_CONFLICT' } });
++  });
++  it('returns the response version even if another poll advances the Store before the adapter resumes', async () => {
++    const rt = await prepare([node()]); const ctx = api.contexts.get('2873')!; let advanced = false;
++    ctx.store.subscribe(state => { if (state.versionNumber === '19' && !advanced) { advanced = true; ctx.store.getState().actions.setVersionNumber('20'); } });
++    expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'updated' } })).toMatchObject({ status: 'saved', version: '19' }); expect(ctx.store.getState().versionNumber).toBe('20');
++  });
++  it('delete includes the native empty parent group ID', async () => {
++    const group = node('group','g'); const child = { ...node(), parentId: 'g' }; const rt = await prepare([group, child]);
++    expect(await execute(rt, { action: 'node.delete', expectedVersion: '18', nodeIds: ['n1'] })).toMatchObject({ status: 'saved', affectedNodeIds: ['n1','g'] }); expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('a failed model permission stage cannot authorize media parameter editing or media creation', async () => {
++    api.permission.mockRejectedValueOnce(new Error('offline')); const rt = await prepare([node('image')]);
++    expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { params: { gen_count: 2 } } })).toMatchObject({ status: 'rejected', error: { code: 'CONFIGURATION_ERROR' } });
++    expect(await execute(rt, { action: 'node.add', expectedVersion: '18', node: { type: 'image' } })).toMatchObject({ status: 'rejected', error: { code: 'CONFIGURATION_ERROR' } }); expect(api.update).not.toHaveBeenCalled();
++  });
++  it('an unknown save is never reported saved and blocks later writes until authoritative reload', async () => {
++    const rt = await prepare([node()]); api.update.mockRejectedValueOnce(Object.assign(new Error('response lost'), { requestPhase: 'sent_unknown' }));
++    expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'unknown' } })).toMatchObject({ status: 'submission_unknown', phase: 'save' });
++    expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'again' } })).toMatchObject({ status: 'rejected', error: { code: 'SUBMISSION_UNKNOWN' } }); expect(api.update).toHaveBeenCalledTimes(1);
++    await rt.reloadContext({ canvasId: '2873', capability: 'edit' }); expect((await execute(rt, { action: 'canvas.read' })).status).toBe('read');
++  });
++  it('tracks asynchronous native node preparation before it enters the save queue', async () => {
++    const rt = await prepare(); const ctx = api.contexts.get('2873')!; const gate = deferred<null>(); api.dimensions.mockReturnValueOnce(gate.promise);
++    const newNode = node('image'); newNode.data.value = 'https://assets.example/file.png'; const add = ctx.store.getState().actions.addNode([newNode]);
++    expect(ctx.store.getState().actions.hasPendingMutations()).toBe(true); await expect(rt.closeContext('2873')).rejects.toMatchObject({ code: 'EDITOR_BUSY' });
++    await expect(ctx.reload('edit')).rejects.toMatchObject({ code: 'EDITOR_BUSY' }); gate.resolve(null); await add; expect(api.update).toHaveBeenCalledTimes(1);
++  });
++  it('disposed context ignores late native node preparation', async () => {
++    const rt = await prepare(); const ctx = api.contexts.get('2873')!; const gate = deferred<null>(); api.dimensions.mockReturnValueOnce(gate.promise);
++    const newNode = node('image'); newNode.data.value = 'https://assets.example/file.png'; const add = ctx.store.getState().actions.addNode([newNode]); rt.dispose(); gate.resolve(null);
++    await expect(add).rejects.toMatchObject({ code: 'FRAME_GONE' }); expect(api.update).not.toHaveBeenCalled(); expect(ctx.store.getState().nodes).toEqual([]);
++  });
++  it('run is accepted only with taskId and exact response version; point failure does not undo acceptance', async () => {
++    const rt = await prepare([node('image')]); api.balance.mockRejectedValue(new Error('points offline'));
++    const result = await execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } });
++    expect(result).toMatchObject({ status: 'submitted', taskId: 'task-fixture', version: '19' }); expect(api.invoke).toHaveBeenCalledTimes(1);
++    const ctx = api.contexts.get('2873')!; expect(ctx.store.getState().nodes[0].data.taskInfo).toMatchObject({ status: 'running' }); expect(ctx.guard.isOperationBusy()).toBe(false);
++  });
++  it.each([{ versionNumber: '19' }, { taskId: 'task-fixture' }])('incomplete accepted run %j is unknown and never retried', async data => {
++    const rt = await prepare([node('image')]); api.invoke.mockResolvedValueOnce(success(data));
++    expect(await execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } })).toMatchObject({ status: 'submission_unknown', phase: 'run' });
++    expect(api.invoke).toHaveBeenCalledTimes(1); expect(api.contexts.get('2873')!.store.getState().status).toBe('RUNNING');
++  });
++  it('checks generation count inside the native mutation queue after preflight', async () => {
++    const rt = await prepare([node('image')]); const gate = deferred<any>(); api.capacity.mockReturnValueOnce(gate.promise);
++    const running = execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } });
++    await vi.waitFor(() => expect(api.capacity).toHaveBeenCalled()); const ctx = api.contexts.get('2873')!; ctx.store.setState({ nodes: ctx.store.getState().nodes.map(n => ({ ...n, data: { ...n.data, params: { ...(n.data.params as object), gen_count: 2 } } })) });
++    gate.resolve(success({ usedCapacity: 0, limitCapacity: 100 })); expect(await running).toMatchObject({ status: 'rejected', error: { code: 'COUNT_CHANGED' } }); expect(api.invoke).not.toHaveBeenCalled();
++  });
++});
++
++describe('registered iframe binding and parent owned timers', () => {
++  it('uses one context/Store/points in parent and iframe hooks, with no second graph load', async () => {
++    const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input); const release = bindCanvasView(binding);
++    expect(useFlowStore.getState()).toBe(api.contexts.get('2873')!.store.getState()); expect(usePointStore.getState()).toBe(binding.points.getState()); expect(api.graph).toHaveBeenCalledTimes(1);
++    expect(await rt.attachView(view.input)).toBe(binding); release(); view.release(); expect(rt.getContextInfo('2873')?.readiness.phase).not.toBe('disposed');
++  });
++  it('rejects unregistered IDs, wrong window/document and cross-origin frame registration', async () => {
++    const rt = await prepare(); const view = register(rt);
++    await expect(rt.attachView({ ...view.input, viewId: 'fake' })).rejects.toMatchObject({ code: 'FRAME_GONE' });
++    await expect(rt.attachView({ ...view.input, viewWindow: window })).rejects.toMatchObject({ code: 'FRAME_GONE' });
++    await expect(rt.attachView({ ...view.input, viewDocument: document })).rejects.toMatchObject({ code: 'FRAME_GONE' });
++    view.frame.src = 'https://other.example/desktop-canvas/view?id=2873&viewId=other'; expect(() => rt.registerView({ canvasId: '2873', viewId: 'other', frame: view.frame })).toThrow(); view.release();
++  });
++  it('closing a view leaves its final debounce and an in-flight Agent save alive', async () => {
++    vi.useFakeTimers(); const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input);
++    const write = binding.createEditorDebounce('n1:text', text => { const current = binding.store.getState().nodes[0]; binding.store.getState().actions.updateNodeData('n1', { ...current.data, value: text }, false); }, 500);
++    write('final input'); view.release(); view.frame.remove(); expect(api.contexts.get('2873')!.guard.isEditorBusy()).toBe(true);
++    await vi.advanceTimersByTimeAsync(500); await binding.store.getState().actions.awaitMutationsIdle(); expect(binding.store.getState().nodes[0].data.value).toBe('final input'); expect(api.contexts.get('2873')!.guard.isEditorBusy()).toBe(false);
++    const next = register(rt,'view2'); await rt.attachView(next.input); const gate = deferred<any>(); api.update.mockReturnValueOnce(gate.promise);
++    const saving = execute(rt, { action: 'node.update', expectedVersion: '19', nodeId: 'n1', changes: { text: 'agent' } }); await vi.advanceTimersByTimeAsync(0); next.release(); next.frame.remove(); gate.resolve(success({ versionNumber: '20' })); expect(await saving).toMatchObject({ status: 'saved', version: '20' });
++  });
++  it('user drafts reject writes, while releasing transient view markers does not destroy other canvas guards', async () => {
++    const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input); binding.guard.markEditorBusy('draft', true);
++    expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'agent' } })).toMatchObject({ status: 'rejected', error: { code: 'EDITOR_BUSY' } }); expect(api.update).not.toHaveBeenCalled(); view.release(); expect(api.contexts.get('2873')!.guard.isEditorBusy()).toBe(false);
++  });
++  it('only the latest same-context view stays editable and closeContext refuses registered views', async () => {
++    const rt = await prepare(); const a = register(rt,'a'); const bindingA = await rt.attachView(a.input); const b = register(rt,'b'); const bindingB = await rt.attachView(b.input);
++    expect(bindingA.getReadiness().phase).toBe('inactive'); expect(bindingB.getReadiness().capabilities.edit).toBe(true); expect(bindingA.store).toBe(bindingB.store);
++    await expect(rt.closeContext('2873')).rejects.toMatchObject({ code: 'EDITOR_BUSY' }); a.release(); b.release(); await rt.closeContext('2873');
++  });
++  it('no-view native polling continues after detach and returns generated content', async () => {
++    vi.useFakeTimers(); const media = node('image'); media.data.value = ''; const rt = await prepare([media]);
++    await execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } });
++    const view = register(rt); await rt.attachView(view.input); view.release(); view.frame.remove();
++    const result = { ...media, data: { ...media.data, value: 'https://assets.example/result.png' } }; api.graph.mockResolvedValueOnce(row([result], '20', 'SUCCESS'));
++    await vi.advanceTimersByTimeAsync(200); expect(api.graph).toHaveBeenCalledTimes(2); expect(await execute(rt, { action: 'canvas.read' })).toMatchObject({ nodes: [{ outputs: ['https://assets.example/result.png'] }] });
++  });
++});
++
++describe('native ownership protocol', () => {
++  it('background service queries an existing owner and does not steal; explicit user claim wins', async () => {
++    vi.useFakeTimers(); const channels = new Set<any>();
++    class Channel {
++      listeners = new Set<(event: any) => void>(); name: string;
++      constructor(name: string) { this.name = name; channels.add(this); }
++      postMessage(data: unknown) { channels.forEach(other => { if (other !== this && other.name === this.name) other.listeners.forEach((listener: any) => listener({ data })); }); }
++      addEventListener(_name: string, listener: any) { this.listeners.add(listener); }
++      removeEventListener(_name: string, listener: any) { this.listeners.delete(listener); }
++      close() { channels.delete(this); }
++    }
++    vi.stubGlobal('BroadcastChannel', Channel); const aStatuses: string[] = []; const bStatuses: string[] = [];
++    const a = createWorkflowTabOwnership('2873', value => aStatuses.push(value));
++    const b = createWorkflowTabOwnership('2873', value => bStatuses.push(value), true);
++    await b.ready; await vi.advanceTimersByTimeAsync(100); expect(a.getStatus()).toBe('active'); expect(b.getStatus()).toBe('inactive');
++    b.claim(); expect(b.getStatus()).toBe('active'); expect(a.getStatus()).toBe('inactive'); a.dispose(); b.dispose(); expect(channels.size).toBe(0);
++  });
++});
++
++describe('review regressions', () => {
++  it('concurrent attaches deduplicate the same document and all teardown is idempotent', async () => {
++    const rt = await prepare(); const view = register(rt);
++    const [a,b] = await Promise.all([rt.attachView(view.input),rt.attachView(view.input)]); expect(a).toBe(b); expect(api.graph).toHaveBeenCalledTimes(1); view.release(); view.release();
++  });
++  it('opening a view cannot silently reload an unknown save and erase its issue', async () => {
++    const rt = await prepare([node()]); api.update.mockRejectedValueOnce(Object.assign(new Error('response lost'), { requestPhase: 'sent_unknown' }));
++    await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'unknown' } });
++    const view = register(rt); const binding = await rt.attachView(view.input);
++    expect(binding.getReadiness().reason?.code).toBe('SUBMISSION_UNKNOWN'); expect(api.graph).toHaveBeenCalledTimes(1); view.release();
++  });
++  it('inactive view subscriptions cannot erase the active view feedback', async () => {
++    const rt = await prepare([node()]); const a = register(rt,'a'); const old = await rt.attachView(a.input);
++    old.setFeedback({ error: vi.fn(), showCapacityLimit: vi.fn(), notifyAuthExpired: vi.fn(), notifyCanvasLoadError: vi.fn() });
++    const b = register(rt,'b'); const current = await rt.attachView(b.input); const error = vi.fn();
++    current.setFeedback({ error, showCapacityLimit: vi.fn(), notifyAuthExpired: vi.fn(), notifyCanvasLoadError: vi.fn() });
++    api.update.mockRejectedValueOnce(Object.assign(new Error('native rejected'), { raw: { msg: 'native rejected' } }));
++    current.store.getState().actions.updateNodeData('n1', { ...current.store.getState().nodes[0].data, value: 'native change' }); await current.store.getState().actions.awaitMutationsIdle(); expect(error).toHaveBeenCalledExactlyOnceWith('native rejected');
++    a.release(); b.release();
++  });
++  it('missing per-type model configuration rejects generator creation without saving an unusable node', async () => {
++    api.models.mockResolvedValueOnce(success([{ config: JSON.stringify({ text: { fixture: model } }) }])); const rt = await prepare();
++    expect(await execute(rt, { action: 'node.add', expectedVersion: '18', node: { type: 'image' } })).toMatchObject({ status: 'rejected', error: { code: 'CONFIGURATION_ERROR' } }); expect(api.update).not.toHaveBeenCalled();
++  });
++  it('reads during optimistic native persistence are unconfirmed until saved', async () => {
++    const rt = await prepare([node()]); const ctx = api.contexts.get('2873')!; const gate = deferred<any>(); api.update.mockReturnValueOnce(gate.promise);
++    ctx.store.getState().actions.updateNodeData('n1', { ...ctx.store.getState().nodes[0].data, value: 'unsaved' });
++    expect(await execute(rt, { action: 'canvas.read' })).toMatchObject({ status: 'read', consistency: 'unconfirmed' });
++    gate.resolve(success({ versionNumber: '19' })); await ctx.store.getState().actions.awaitMutationsIdle(); expect(await execute(rt, { action: 'canvas.read' })).toMatchObject({ consistency: 'confirmed' });
++  });
++  it('a cancelled queued command never sends invoke even if its preflight later completes', async () => {
++    const rt = await prepare([node('image')]); const gate = deferred<any>(); api.capacity.mockReturnValueOnce(gate.promise); const abort = new AbortController();
++    const running = rt.execute({ canvasId: '2873', signal: abort.signal, operation: { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } } });
++    await vi.waitFor(() => expect(api.capacity).toHaveBeenCalled()); abort.abort(); gate.resolve(success({ usedCapacity: 0, limitCapacity: 100 }));
++    expect(await running).toMatchObject({ status: 'rejected', error: { code: 'CANCELLED_BEFORE_DISPATCH' } }); expect(api.invoke).not.toHaveBeenCalled();
++  });
++  it('polling network errors follow native retry intervals but never claim a confirmed backend failure', async () => {
++    vi.useFakeTimers(); const rt = await prepare([node('image')]); await execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } });
++    api.graph.mockRejectedValue(new Error('offline')); await vi.advanceTimersByTimeAsync(200); await vi.advanceTimersByTimeAsync(50_000);
++    expect(api.graph).toHaveBeenCalledTimes(7); expect(api.contexts.get('2873')!.store.getState().status).toBe('FAILURE');
++    expect(await execute(rt, { action: 'canvas.read' })).toMatchObject({ consistency: 'unconfirmed' }); expect(rt.getContextInfo('2873')!.readiness.capabilities.edit).toBe(false);
++  });
++});
++
++it('a retired iframe module keeps its binding for callbacks which resolve the native Store hook later', async () => {
++  vi.useFakeTimers(); const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input); const release = bindCanvasView(binding);
++  const write = binding.createEditorDebounce('n1:text', text => {
++    const state = useFlowStore.getState(); const current = state.nodes.find(node => node.id === 'n1')!;
++    state.actions.updateNodeData('n1', { ...current.data, value: text });
++  }, 500);
++  write('last iframe input'); release(true); view.release(); view.frame.remove();
++  try { await vi.advanceTimersByTimeAsync(500); await binding.store.getState().actions.awaitMutationsIdle(); expect(binding.store.getState().nodes[0].data.value).toBe('last iframe input'); expect(api.update).toHaveBeenCalledTimes(1); }
++  finally { release(); }
++});
++
++it('a native UI success without a trusted response version preserves UI data but fences future Agent writes', async () => {
++  const rt = await prepare([node()]); const ctx = api.contexts.get('2873')!; api.update.mockResolvedValueOnce(success({}));
++  ctx.store.getState().actions.updateNodeData('n1', { ...ctx.store.getState().nodes[0].data, value: 'native success' }); await ctx.store.getState().actions.awaitMutationsIdle();
++  expect(ctx.store.getState().nodes[0].data.value).toBe('native success'); expect(ctx.store.getState().agentPersistenceIssue?.code).toBe('SUBMISSION_UNKNOWN');
++  expect(await execute(rt, { action: 'node.update', expectedVersion: '18', nodeId: 'n1', changes: { text: 'cannot trust old version' } })).toMatchObject({ status: 'rejected', error: { code: 'SUBMISSION_UNKNOWN' } }); expect(api.update).toHaveBeenCalledTimes(1);
++});
++
++it('missing run inputs are rejected before invoke, and failed preflight does not show a UI dialog', async () => {
++  const empty = node('image'); empty.data.params = { ...(empty.data.params as object), prompt: '' }; const rt = await prepare([empty]);
++  expect(await execute(rt, { action: 'node.run', expectedVersion: '18', nodeId: 'n1', approvedGeneration: { images: 1, videos: 0 } })).toMatchObject({ status: 'rejected', error: { code: 'RUN_REJECTED' } }); expect(api.invoke).not.toHaveBeenCalled();
++});
++
++it('an auth failure in one canvas revokes cached access to all contexts in the same Client account', async () => {
++  const rt = await prepare(); await rt.ensureContext({ canvasId: '2874', capability: 'read' });
++  api.graph.mockImplementationOnce((_input: unknown, options: { onAuthExpired: () => void }) => { options.onAuthExpired(); return Promise.reject(Object.assign(new Error('expired'), {status:401})); });
++  await expect(rt.reloadContext({canvasId:'2873',capability:'read'})).rejects.toMatchObject({code:'AUTH_REQUIRED'});
++  expect(rt.getContextInfo('2874')!.readiness.capabilities.read).toBe(false);
++});
++
++it('native prompt guard snapshots observe the bound context busy state, not the standalone guard', async () => {
++  const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input); const release = bindCanvasView(binding); const gate = deferred<any>(); api.update.mockReturnValueOnce(gate.promise);
++  const save = binding.store.getState().actions.updateNodeData('n1', {value:'agent saving'}, true, true, {strictReceipt:true,expectedVersion:'18'});
++  try { expect(isAgentOperationBusy()).toBe(true); await vi.waitFor(() => expect(api.update).toHaveBeenCalled()); }
++  finally { gate.resolve(success({versionNumber:'19'})); await save; expect(isAgentOperationBusy()).toBe(false); release(); view.release(); }
++});
++
++it('retired view readiness cannot advertise readable data after the Client runtime is disposed', async () => {
++  const rt = await prepare(); const view = register(rt); const binding = await rt.attachView(view.input); rt.dispose();
++  expect(binding.getReadiness()).toMatchObject({phase:'disposed',capabilities:{read:false,edit:false,run:false}});
++});
++
++it('parent cleanup removes native Store, point and editor subscriptions even without iframe React unmount', async () => {
++  const rt = await prepare([node()]); const view = register(rt); const binding = await rt.attachView(view.input); const release = bindCanvasView(binding);
++  const flow = vi.fn(); const point = vi.fn(); const editor = vi.fn();
++  useFlowStore.subscribe(flow); usePointStore.subscribe(point); binding.guard.subscribeEditors(editor);
++  binding.store.getState().actions.setZoom(2); binding.points.getState().actions.setPoint(1); binding.guard.markEditorBusy('draft',true);
++  expect(flow).toHaveBeenCalledTimes(1); expect(point).toHaveBeenCalledTimes(1); expect(editor).toHaveBeenCalledTimes(1);
++  view.release(); binding.store.getState().actions.setZoom(3); binding.points.getState().actions.setPoint(2); api.contexts.get('2873')!.guard.markEditorBusy('test',true);
++  expect(flow).toHaveBeenCalledTimes(1); expect(point).toHaveBeenCalledTimes(1); expect(editor).toHaveBeenCalledTimes(1); release();
++});
++
++it('native generation preflight blocks Agent edits before the user request reaches the mutation queue', async () => {
++  const rt = await prepare([node('image')]); const ctx = api.contexts.get('2873')!; const gate = deferred<any>(); api.capacity.mockReturnValueOnce(gate.promise);
++  const running = ctx.store.getState().actions.excuteSingle('n1');
++  try { expect(ctx.guard.isEditorBusy()).toBe(true); expect(await execute(rt, {action:'node.update',expectedVersion:'18',nodeId:'n1',changes:{prompt:'must not replace user run'}})).toMatchObject({status:'rejected',error:{code:'EDITOR_BUSY'}}); expect(api.update).not.toHaveBeenCalled(); }
++  finally { gate.resolve(success({usedCapacity:0,limitCapacity:100})); await running; expect(ctx.guard.isEditorBusy()).toBe(false); }
++});
++
++it('late retired view markers and feedback cannot affect its replacement document', async () => {
++  const rt = await prepare([node()]); const a = register(rt); const old = await rt.attachView(a.input); old.release();
++  const fresh = await rt.attachView(a.input); const error = vi.fn(); fresh.setFeedback({error,showCapacityLimit:vi.fn(),notifyAuthExpired:vi.fn(),notifyCanvasLoadError:vi.fn()});
++  old.guard.markEditorBusy('retired',true); old.setFeedback({error:vi.fn(),showCapacityLimit:vi.fn(),notifyAuthExpired:vi.fn(),notifyCanvasLoadError:vi.fn()});
++  expect(api.contexts.get('2873')!.guard.isEditorBusy()).toBe(false);
++  api.update.mockRejectedValueOnce(Object.assign(new Error('fresh error'),{raw:{msg:'fresh error'}})); fresh.store.getState().actions.updateNodeData('n1',{...fresh.store.getState().nodes[0].data,value:'fresh'}); await fresh.store.getState().actions.awaitMutationsIdle(); expect(error).toHaveBeenCalledExactlyOnceWith('fresh error'); a.release();
++});
+--- before/canvas-app/test/agent-native-text.test.ts
+
++++ after/canvas-app/test/agent-native-text.test.ts
+
+@@ -2,8 +2,8 @@
+
+ import { afterEach, expect, it, vi } from 'vitest';
+ import { act, createElement } from 'react';
+ import { createRoot } from 'react-dom/client';
+-const store = vi.hoisted(() => ({ update: vi.fn() }));
+-vi.mock('@/store/flowStore', () => ({ useFlowStore: (selector: (state: unknown) => unknown) => selector({ isSelection: false, modelsMap: {}, actions: { updateNodeData: store.update } }) }));
++const store = vi.hoisted(() => ({ update: vi.fn(), nodes: [] as Array<{ id: string; data: Record<string, any> }> }));
++vi.mock('@/store/flowStore', () => ({ useFlowStore: Object.assign((selector: (state: unknown) => unknown) => selector({ isSelection: false, modelsMap: {}, actions: { updateNodeData: store.update } }), { getState: () => ({ nodes: store.nodes }) }) }));
+ vi.mock('@xyflow/react', () => ({ Handle: () => null, NodeToolbar: () => null, Position: { Top: 'top', Bottom: 'bottom' }, NodeResizer: () => null, useUpdateNodeInternals: () => vi.fn() }));
+ vi.mock('../legacy/src/components/canvasFlow/hooks', () => ({ default: { useNodeResizeObserver: () => undefined, useNodeOperations: () => ({}), useHandleSend: () => ({}), useTopNodeToolbarVisible: () => false } }));
+ vi.mock('../legacy/src/components/canvasFlow/utils/util', () => ({ default: {} }));
+@@ -25,6 +25,7 @@
+
+   vi.useFakeTimers(); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+   const data = { value: '', title: 'text', titleStyle: {}, params: {}, taskInfo: { status: '' } };
++  store.nodes = [{ id: 'n4', data }];
+   act(() => root.render(createElement(TextNode, { id: 'n4', data, selected: false })));
+   act(() => container.querySelector('button')!.click()); const editor = container.querySelector('textarea')!;
+   act(() => {
+--- before/canvas-app/test/agent-service.test.ts
+
++++ after/canvas-app/test/agent-service.test.ts
+
+@@ -30,7 +30,7 @@
+
+     const service = createCanvasServiceRuntime(); expect(api.creations).not.toHaveBeenCalled();
+     const [a, b] = await Promise.all([service.ensureContext(input()), service.ensureContext(input())]);
+     expect(a.contextId).toBe(b.contextId); expect(api.creations).toHaveBeenCalledTimes(1); expect(api.graph).toHaveBeenCalledTimes(1);
+-    expect(a.readiness.capabilities).toEqual({ read: true, edit: false, run: false }); service.dispose();
++    expect(a.readiness.capabilities).toEqual({ read: true, edit: true, run: false }); service.dispose();
+   });
+   it('isolates canvas IDs and preserves large IDs without Number conversion', async () => {
+     const service = createCanvasServiceRuntime(); const a = await service.ensureContext(input()); const b = await service.ensureContext(input('9007199254740993'));
+--- before/canvas-app/src/canvas-editor-timers.ts
+
++++ after/canvas-app/src/canvas-editor-timers.ts
+
+@@ -0,0 +1,28 @@
+
++import { debounce } from '../legacy/src/utils/debounce';
++import type { AgentEditGuard } from './agent-edit-guard';
++
++/** Reuse native debounce in the Client realm; removing an iframe cannot discard its timer. */
++export function createCanvasEditorTimers(guard: AgentEditGuard) {
++  let disposed = false;
++  let sequence = 0;
++  const cancellations = new Set<() => void>();
++  return {
++    create<T extends (...args: any[]) => any>(editorId: string, commit: T, wait: number) {
++      const marker = `${editorId}:debounce:${++sequence}`;
++      let pending = false;
++      const debounced = debounce((...args: Parameters<T>): ReturnType<T> | undefined => {
++        if (disposed) return;
++        try { return commit(...args); }
++        finally { pending = false; guard.markEditorBusy(marker, false); cancellations.delete(cancel); }
++      }, wait);
++      const cancel = () => { debounced.cancel(); pending = false; guard.markEditorBusy(marker, false); cancellations.delete(cancel); };
++      const tracked = (...args: Parameters<T>) => {
++        if (disposed) return;
++        pending = true; guard.markEditorBusy(marker, true); cancellations.add(cancel);
++        return debounced(...args);
++      };
++      return Object.assign(tracked, { cancel, flush: (...args: Parameters<T>) => disposed ? undefined : debounced.flush(...args), isPending: () => pending });
++    },
++    dispose: () => { disposed = true; [...cancellations].forEach(cancel => cancel()); },
++  };
++}
+--- before/canvas-app/src/main.tsx
+
++++ after/canvas-app/src/main.tsx
+
+@@ -1,3 +1,4 @@
+
++import { bindCanvasView, type CanvasViewBinding } from './canvas-service-binding'
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+ import { RouterProvider } from '@tanstack/react-router'
+ import { createRoot } from 'react-dom/client'
+@@ -15,7 +16,18 @@
+
+ const root = document.getElementById('root')
+ if (!root) throw new Error('Canvas root element is missing')
+ 
+-createRoot(root).render(
++async function bootstrap() {
++  const viewId = new URLSearchParams(location.search).get('viewId')
++  if (viewId) {
++    if (window.parent === window || window.parent.location.origin !== location.origin) throw new Error('Canvas view has no trusted Client parent')
++    const handle = window.parent.__INSIGHT_CANVAS_RUNTIME_V1__
++    if (!handle) throw new Error('Canvas Client service is unavailable')
++    const runtime = await handle.ready
++    const binding = await runtime.attachView({ canvasId: new URLSearchParams(location.search).get('id') ?? '', viewId, viewWindow: window, viewDocument: document }) as CanvasViewBinding
++    const release = bindCanvasView(binding)
++    window.addEventListener('pagehide', () => release(true), { once: true })
++  }
++  createRoot(root!).render(
+   <QueryClientProvider client={new QueryClient()}>
+     <AuthProvider>
+       <ToastProvider>
+@@ -26,3 +38,5 @@
+
+     </AuthProvider>
+   </QueryClientProvider>,
+ )
++}
++void bootstrap().catch(error => { root.textContent = error instanceof Error ? error.message : '画布加载失败'; console.error('Canvas bootstrap failed:', error) })
+--- before/canvas-app/src/desktop-canvas.tsx
+
++++ after/canvas-app/src/desktop-canvas.tsx
+
+@@ -1,22 +1,42 @@
+
+-import { useLayoutEffect, useRef } from 'react'
++import { useEffect, useLayoutEffect, useRef, useState } from 'react'
++import { toast } from 'sonner'
+ import { installAgentCanvasEditGuard } from './agent-edit-guard'
++import { getCanvasViewBinding, type CanvasViewBinding } from './canvas-service-binding'
++import { AUTH_EXPIRED_EVENT } from './auth-context'
++import { CANVAS_LOAD_ERROR_EVENT } from './request'
+ import { useParams } from '@tanstack/react-router'
+ import { ReactFlowProvider } from '@xyflow/react'
+ import CanvasFlow from '../legacy/src/components/canvasFlow'
+ import { useWorkflowTabGuard } from '../legacy/src/hooks/useWorkflowTabGuard'
++import type { WorkflowTabStatus } from '../legacy/src/hooks/workflowTabOwnership'
+ 
+-export default function DesktopCanvas() {
+-  const { id } = useParams({ strict: false }) as { id: string }
+-  const tabStatus = useWorkflowTabGuard(id)
++function CanvasSurface({ status, binding }: { status: WorkflowTabStatus; binding?: CanvasViewBinding }) {
+   const canvasRef = useRef<HTMLDivElement>(null)
+   useLayoutEffect(() => {
+-    if (canvasRef.current) return installAgentCanvasEditGuard(canvasRef.current)
+-  }, [id, tabStatus])
+-  if (tabStatus === 'checking') return <div className="flex h-screen items-center justify-center bg-black text-white">正在加载画布…</div>
+-  if (tabStatus === 'inactive') return <div className="flex h-screen items-center justify-center bg-black text-white">此画布已在其他标签页打开，请刷新后继续编辑</div>
++    if (canvasRef.current) return binding ? binding.mountEditorRoot(canvasRef.current) : installAgentCanvasEditGuard(canvasRef.current)
++  }, [binding, status])
++  useEffect(() => binding?.setFeedback({
++    error: message => toast.error(message), showCapacityLimit: async () => { const { showStorageCapacityLimit } = await import('../legacy/src/components/canvasFlow/utils/toolUtil'); await showStorageCapacityLimit() },
++    notifyAuthExpired: () => window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT)),
++    notifyCanvasLoadError: () => window.dispatchEvent(new Event(CANVAS_LOAD_ERROR_EVENT)),
++  }), [binding])
++  if (status === 'checking') return <div className="flex h-screen items-center justify-center bg-black text-white">正在加载画布…</div>
++  if (status === 'inactive') return <div className="flex h-screen items-center justify-center bg-black text-white">此画布已在其他标签页打开，请刷新后继续编辑</div>
+   return <div ref={canvasRef} style={{ height: '100vh', width: '100%', position: 'relative' }}>
+-    <ReactFlowProvider>
+-      <CanvasFlow hideHeader />
+-    </ReactFlowProvider>
++    <ReactFlowProvider><CanvasFlow hideHeader /></ReactFlowProvider>
+   </div>
+ }
++function OwnedCanvas({ binding }: { binding: CanvasViewBinding }) {
++  const [readiness, setReadiness] = useState(binding.getReadiness)
++  useEffect(() => binding.subscribeReadiness(setReadiness), [binding])
++  if (readiness.phase === 'disposed' || !readiness.capabilities.read && readiness.phase === 'failed') return <div>{readiness.reason?.message ?? '画布上下文已失效'}</div>
++  return <CanvasSurface binding={binding} status={readiness.phase === 'inactive' ? 'inactive' : readiness.phase === 'loading' ? 'checking' : 'active'} />
++}
++function StandaloneCanvas() {
++  const { id } = useParams({ strict: false }) as { id: string }
++  return <CanvasSurface status={useWorkflowTabGuard(id)} />
++}
++export default function DesktopCanvas() {
++  const binding = getCanvasViewBinding()
++  return binding ? <OwnedCanvas binding={binding} /> : <StandaloneCanvas />
++}
+--- before/canvas-app/src/canvas-service.ts
+
++++ after/canvas-app/src/canvas-service.ts
+
+@@ -1,67 +1,179 @@
+
+ import { CanvasAgentError } from '../../src/shared/canvas-agent-protocol';
+-import type { CanvasContextInput, CanvasServiceRuntimeBase } from '../../src/shared/canvas-service-runtime';
++import type { CanvasContextInput, CanvasServiceRuntimeBase, CanvasViewRegistration } from '../../src/shared/canvas-service-runtime';
+ import { parseCanvasId } from '../../src/shared/protocol';
+ import { createCanvasContext, type CanvasContext } from './canvas-context';
++import { createCanvasAgentAdapter } from './agent-adapter';
++import { createPointStoreApi } from '../legacy/src/store/pointStore';
++import type { CanvasViewBinding, NativeUiFeedback } from './canvas-service-binding';
+ 
+ function reject(code: ConstructorParameters<typeof CanvasAgentError>[0], message: string): never {
+   throw Object.assign(new CanvasAgentError(code, message), { requestPhase: 'not_sent' });
+ }
++interface ViewEntry {
++  input: CanvasViewRegistration;
++  binding?: CanvasViewBinding;
++  document?: Document;
++  releaseBinding?: () => void;
++  publish?: () => void;
++  active: boolean;
++  attaching?: Promise<CanvasViewBinding>;
++  pendingDocument?: Document;
++  generation?: number;
++}
+ 
+-/** One registry per Client lifetime. Merely loading this module creates no context. */
+-export function createCanvasServiceRuntime(): CanvasServiceRuntimeBase {
++/** One registry and native point cache per Client lifetime. No canvas DOM is created here. */
++export function createCanvasServiceRuntime(): CanvasServiceRuntimeBase<CanvasViewBinding> {
+   const contexts = new Map<string, CanvasContext>();
++  const views = new Map<string, ViewEntry>();
++  const ownerKey = crypto.randomUUID();
++  const points = createPointStoreApi(() => ownerKey, () => ({ silentError: true }));
+   let disposed = false;
+   const assertActive = () => { if (disposed) reject('FRAME_GONE', '画布插件服务已卸载'); };
+   const validId = (canvasId: string) => {
+-    assertActive();
+-    const id = parseCanvasId(canvasId);
+-    if (!id) reject('INVALID_ARGUMENT', '画布 ID 无效');
+-    return id;
++    assertActive(); const id = parseCanvasId(canvasId);
++    if (!id) reject('INVALID_ARGUMENT', '画布 ID 无效'); return id;
+   };
+   const validate = (input: CanvasContextInput) => {
+     const id = validId(input.canvasId);
+     if (!['read', 'edit', 'run'].includes(input.capability)) reject('INVALID_ARGUMENT', '画布能力请求无效');
+-    if (input.signal?.aborted) reject('CANCELLED_BEFORE_DISPATCH', '调用方已停止等待画布准备');
+-    return id;
++    if (input.signal?.aborted) reject('CANCELLED_BEFORE_DISPATCH', '调用方已停止等待画布准备'); return id;
+   };
+-
++  const contextFor = (id: string) => {
++    let context = contexts.get(id);
++    if (!context) { context = createCanvasContext(id, points); contexts.set(id, context); }
++    return context;
++  };
++  const detachView = (viewId: string) => {
++    const entry = views.get(viewId); if (!entry) return;
++    try { entry.releaseBinding?.(); } finally { views.delete(viewId); }
++  };
+   return {
+     ensureContext: async input => {
+-      const id = validate(input);
+-      let context = contexts.get(id);
+-      if (!context) { context = createCanvasContext(id); contexts.set(id, context); }
++      const context = contextFor(validate(input));
++      await context.acquireOwnership();
+       return context.initialize(input.capability, input.signal);
+     },
++    execute: async input => {
++      if (input.signal?.aborted) reject('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
++      const context = contextFor(validId(input.canvasId));
++      await context.acquireOwnership();
++      return createCanvasAgentAdapter(context).execute(input.operation, input.signal);
++    },
++    registerView: input => {
++      const id = validId(input.canvasId);
++      if (!input.viewId || input.viewId.length > 200 || views.has(input.viewId)) reject('INVALID_ARGUMENT', '画布视图登记无效或重复');
++      const url = new URL(input.frame.src);
++      if (url.origin !== location.origin || url.pathname !== '/desktop-canvas/view' || url.searchParams.get('id') !== id || url.searchParams.get('viewId') !== input.viewId) reject('FRAME_GONE', '画布视图地址与登记目标不符');
++      const entry: ViewEntry = { input, active: false }; views.set(input.viewId, entry);
++      return () => { if (views.get(input.viewId) === entry) detachView(input.viewId); };
++    },
++    attachView: async input => {
++      const id = validId(input.canvasId); const entry = views.get(input.viewId);
++      const verify = () => {
++        if (!entry || views.get(input.viewId) !== entry || entry.input.canvasId !== id || entry.input.frame.contentWindow !== input.viewWindow
++          || input.viewWindow.document !== input.viewDocument || input.viewDocument.defaultView !== input.viewWindow
++          || input.viewWindow.location.origin !== location.origin) reject('FRAME_GONE', '画布视图未登记、跨源或已被替换');
++      };
++      verify();
++      if (entry!.binding && entry!.document === input.viewDocument) return entry!.binding;
++      if (entry!.attaching && entry!.pendingDocument === input.viewDocument) return entry!.attaching;
++      const generation = (entry!.generation ?? 0) + 1; entry!.generation = generation;
++      entry!.pendingDocument = input.viewDocument;
++      const attaching = (async () => {
++        entry!.releaseBinding?.();
++        const context = contextFor(id);
++        await context.acquireOwnership(true);
++        if (context.getInfo().readiness.capabilities.read && context.getInfo().readiness.reason?.code === 'FRAME_NOT_READY') await context.reload('read');
++        else await context.initialize('read');
++        verify();
++        if (entry!.generation !== generation) reject('FRAME_GONE', '画布视图已被替换');
++        context.setFeedback(undefined);
++        views.forEach(other => { if (other !== entry && other.input.canvasId === id && other.active) { other.active = false; other.publish?.(); } });
++        entry!.active = true; entry!.document = input.viewDocument;
++        const listeners = new Set<Parameters<CanvasViewBinding['subscribeReadiness']>[0]>();
++        const cleanups = new Set<() => void>();
++        const markers = new Set<string>();
++        let feedback: NativeUiFeedback | undefined;
++        const getReadiness = () => {
++          const state = context.getInfo().readiness;
++          return entry!.active || !state.capabilities.read ? state : { ...state, phase: 'inactive' as const, capabilities: { read: state.capabilities.read, edit: false, run: false } };
++        };
++        const publish = () => { listeners.forEach(listener => { try { listener(getReadiness()); } catch (error) { console.error('Canvas view subscriber failed:', error); } }); };
++        entry!.publish = publish;
++        const unsubscribe = context.subscribeReadiness(publish);
++        let released = false;
++        const binding: CanvasViewBinding = {
++          canvasId: id, contextId: context.contextId, viewId: input.viewId, store: context.store,
++          guard: { ...context.guard,
++          subscribeBusy: listener => {
++            const unsubscribe = context.guard.subscribeBusy(listener);
++            if (released) { unsubscribe(); return () => undefined; }
++            cleanups.add(unsubscribe); return () => { cleanups.delete(unsubscribe); unsubscribe(); };
++          },
++          subscribeEditors: listener => {
++            const unsubscribe = context.guard.subscribeEditors(listener);
++            if (released) { unsubscribe(); return () => undefined; }
++            cleanups.add(unsubscribe); return () => { cleanups.delete(unsubscribe); unsubscribe(); };
++          },
++          markEditorBusy: (marker, busy) => {
++            if (released) return;
++            const key = `${input.viewId}:${marker}`;
++            if (busy) markers.add(key); else markers.delete(key);
++            context.guard.markEditorBusy(key, busy);
++          } }, barrier: context.barrier, points,
++          getCanvasMetadata: context.getCanvasMetadata, getInitialization: context.getInitialization, getReadiness,
++          subscribeReadiness: listener => { listeners.add(listener); listener(getReadiness()); return () => { listeners.delete(listener); }; },
++          mountEditorRoot: root => {
++            if (released || root.ownerDocument !== input.viewDocument) reject('FRAME_GONE', '编辑根元素不属于登记视图');
++            const detach = context.guard.attachRoot(input.viewId, root); cleanups.add(detach);
++            return () => { cleanups.delete(detach); detach(); };
++          },
++          setFeedback: value => {
++            if (released) return () => undefined;
++            feedback = value; if (entry!.active) context.setFeedback(value);
++            return () => { if (!released && feedback === value) { feedback = undefined; if (entry!.active) context.setFeedback(undefined); } };
++          },
++          createEditorDebounce: context.timers.create,
++          onRelease: cleanup => { if (released) { cleanup(); return () => undefined; } cleanups.add(cleanup); return () => { cleanups.delete(cleanup); }; },
++          loadUiData: () => context.loadUiData(),
++          reloadFromUi: async () => { if (released) reject('FRAME_GONE', '画布视图已释放'); await context.acquireOwnership(true); await context.reload('read'); publish(); },
++          release: () => {
++            if (released) return; released = true;
++            cleanups.forEach(cleanup => { try { cleanup(); } catch (error) { console.error('Canvas view cleanup failed:', error); } }); cleanups.clear();
++            markers.forEach(marker => context.guard.markEditorBusy(marker, false)); markers.clear();
++            if (entry!.active) context.setFeedback(undefined);
++            unsubscribe(); listeners.clear(); entry!.binding = undefined; entry!.document = undefined;
++            entry!.active = false; entry!.publish = undefined; entry!.releaseBinding = undefined;
++          },
++        };
++        entry!.binding = binding; entry!.releaseBinding = binding.release;
++        return binding;
++      })();
++      entry!.attaching = attaching;
++      try { return await attaching; } finally { if (entry!.attaching === attaching) { entry!.attaching = undefined; entry!.pendingDocument = undefined; } }
++    },
++    detachView,
+     getContextInfo: canvasId => contexts.get(validId(canvasId))?.getInfo() ?? null,
+     subscribeReadiness: (canvasId, listener) => contexts.get(validId(canvasId))?.subscribeReadiness(listener) ?? (() => undefined),
+     reloadContext: async input => {
+       const context = contexts.get(validate(input));
+-      if (!context) reject('FRAME_NOT_READY', '请先准备目标画布上下文');
+-      return context.reload(input.capability, input.signal);
++      if (!context) reject('FRAME_NOT_READY', '请先准备目标画布上下文'); return context.reload(input.capability, input.signal);
+     },
+     closeContext: async canvasId => {
+-      const id = validId(canvasId); const context = contexts.get(id);
+-      if (!context) return;
++      const id = validId(canvasId); const context = contexts.get(id); if (!context) return;
++      if ([...views.values()].some(view => view.input.canvasId === id)) reject('EDITOR_BUSY', '画布视图仍在使用上下文');
+       const state = context.store.getState();
+-      if (context.getInfo().readiness.phase === 'loading' || context.guard.isEditorBusy() || context.guard.isOperationBusy() || state.actions.hasPendingMutations()) {
+-        reject('EDITOR_BUSY', '画布正在准备、编辑或保存，不能释放上下文');
+-      }
++      if (context.getInfo().readiness.phase === 'loading' || context.guard.isEditorBusy() || context.guard.isOperationBusy() || state.actions.hasPendingMutations()) reject('EDITOR_BUSY', '画布正在准备、编辑或保存，不能释放上下文');
+       if (state.status === 'RUNNING') reject('NODE_BUSY', '画布仍在生成，不能释放上下文');
+       if (state.agentPersistenceIssue) reject(state.agentPersistenceIssue.code, state.agentPersistenceIssue.message);
+       if (state.versionConflict || context.barrier.isUncertain()) reject('VERSION_CONFLICT', '画布状态尚未确认，不能释放上下文');
+-      try { context.dispose(); }
+-      finally { contexts.delete(id); }
++      try { context.dispose(); } finally { contexts.delete(id); }
+     },
+     dispose: () => {
+-      if (disposed) return;
+-      disposed = true;
+-      try {
+-        contexts.forEach(context => {
+-          try { context.dispose(); }
+-          catch (error) { console.error('Canvas context cleanup failed:', error); }
+-        });
+-      }
+-      finally { contexts.clear(); }
++      if (disposed) return; disposed = true;
++      views.forEach(view => { try { view.releaseBinding?.(); } catch (error) { console.error('Canvas view cleanup failed:', error); } }); views.clear();
++      try { contexts.forEach(context => { try { context.dispose(); } catch (error) { console.error('Canvas context cleanup failed:', error); } }); }
++      finally { contexts.clear(); points.getState().actions.resetUserPoint('session-invalidated'); }
+     },
+   };
+ }
+--- before/canvas-app/src/canvas-generation-monitor.ts
+
++++ after/canvas-app/src/canvas-generation-monitor.ts
+
+@@ -0,0 +1,83 @@
+
++import { getFlowData } from '../legacy/src/api/workflow';
++import type { FlowStoreApi } from '../legacy/src/store/flowStoreCore';
++import type { CanvasVersionBarrier } from '../legacy/src/lib/canvasVersionBarrier';
++import type { PointStoreApi } from '../legacy/src/store/pointStore';
++import { isTrustedCanvasVersion } from './canvas-initialization';
++
++/** Extracted native poller: 200ms initial, 3s running, 10s error, six errors and 5s refund check. */
++export function createCanvasGenerationMonitor(store: FlowStoreApi, barrier: CanvasVersionBarrier, points: PointStoreApi,
++  onAuthExpired?: () => void) {
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const refunds = new Set<ReturnType<typeof setTimeout>>();
++  let inFlight = false;
++  let controller: AbortController | undefined;
++  let revision = 0;
++  let errors = 0;
++  let stopped = true;
++  const refreshPoints = () => { void points.getState().actions.updateUserPoint(); };
++  const stop = () => {
++    stopped = true; revision++; clearTimeout(timer); timer = undefined;
++    controller?.abort(); controller = undefined;
++    refunds.forEach(clearTimeout); refunds.clear();
++  };
++  const schedule = (wait: number) => { timer = setTimeout(() => { timer = undefined; void poll(); }, wait); };
++  async function poll() {
++    if (stopped || inFlight) return;
++    const current = revision; const canvasId = store.getState().canvasId;
++    inFlight = true; controller = new AbortController();
++    try {
++      const response: any = await barrier.runPolling(
++        () => {
++          if (stopped || current !== revision) throw new Error('Canvas monitor stopped');
++          return getFlowData({ id: canvasId }, { signal: controller!.signal, silentError: true, onAuthExpired });
++        },
++        result => {
++          if (stopped || current !== revision) return false;
++          const version = result?.data?.versionNumber;
++          try {
++            const graph = JSON.parse(result?.data?.data);
++            if (!Array.isArray(graph.nodes) || typeof result?.data?.taskStatus !== 'string') return false;
++          } catch { return false; }
++          if (!isTrustedCanvasVersion(version)) return false;
++          store.getState().actions.setVersionNumber(version);
++          return true;
++        });
++      if (stopped || current !== revision) return;
++      const data = response.data;
++      const graph = JSON.parse(data.data);
++      if (!Array.isArray(graph.nodes) || typeof data.taskStatus !== 'string') throw new Error('Invalid canvas task result');
++      errors = 0;
++      const failed = store.getState().actions.updateNodesMap(graph.nodes);
++      // Set status last: the context subscription may stop this controller immediately.
++      store.getState().actions.setStatus(data.taskStatus);
++      if (failed || data.taskStatus === 'SUCCESS') {
++        refreshPoints();
++        const refund = setTimeout(() => { refunds.delete(refund); refreshPoints(); }, 5000);
++        refunds.add(refund);
++      }
++      if (data.taskStatus === 'RUNNING' && !stopped) schedule(3000);
++    } catch (error) {
++      if (stopped || current !== revision) return;
++      errors++;
++      // Notify readiness without treating local monitoring failure as proven backend failure.
++      store.setState({});
++      if (errors >= 6) {
++        store.getState().actions.updateAllNodeStatus();
++        store.getState().actions.setStatus('FAILURE');
++        refreshPoints();
++      } else schedule(10000);
++    } finally {
++      inFlight = false;
++      if (!stopped && !timer && store.getState().status === 'RUNNING') schedule(200);
++    }
++  }
++  return {
++    reconcile: () => {
++      if (store.getState().status !== 'RUNNING') { if (!stopped) { stopped = true; revision++; clearTimeout(timer); timer = undefined; } return; }
++      if (stopped) { stopped = false; errors = 0; revision++; }
++      if (!timer && !inFlight) schedule(200);
++    },
++    isUnconfirmed: () => barrier.isUncertain(),
++    stop,
++  };
++}
+--- before/canvas-app/src/canvas-service-binding.ts
+
++++ after/canvas-app/src/canvas-service-binding.ts
+
+@@ -0,0 +1,44 @@
+
++import type { FrameReadiness } from '../../src/shared/canvas-agent-protocol';
++import type { CanvasContext } from './canvas-context';
++import type { PointStoreApi } from '../legacy/src/store/pointStore';
++
++export interface NativeUiFeedback {
++  error(message: string): void;
++  showCapacityLimit(): void | Promise<void>;
++  notifyAuthExpired(): void;
++  notifyCanvasLoadError(): void;
++}
++export interface CanvasViewBinding {
++  canvasId: string;
++  contextId: string;
++  viewId: string;
++  store: CanvasContext['store'];
++  guard: CanvasContext['guard'];
++  barrier: CanvasContext['barrier'];
++  points: PointStoreApi;
++  getCanvasMetadata: CanvasContext['getCanvasMetadata'];
++  getInitialization: CanvasContext['getInitialization'];
++  getReadiness(): FrameReadiness;
++  subscribeReadiness(listener: (state: FrameReadiness) => void): () => void;
++  mountEditorRoot(root: HTMLElement): () => void;
++  setFeedback(feedback: NativeUiFeedback): () => void;
++  createEditorDebounce<T extends (...args: any[]) => any>(editorId: string, commit: T, wait: number): ((...args: Parameters<T>) => void) & { cancel(): void; flush(...args: Parameters<T>): void; isPending(): boolean };
++  onRelease(cleanup: () => void): () => void;
++  loadUiData(): Promise<void>;
++  reloadFromUi(): Promise<void>;
++  release(): void;
++}
++
++// Set before React render, in this iframe's realm. Never imports parent React hooks.
++let binding: CanvasViewBinding | undefined;
++export const getCanvasViewBinding = () => binding;
++export function bindCanvasView(value: CanvasViewBinding): (retainForPending?: boolean) => void {
++  if (binding) throw new Error('Canvas view already bound');
++  binding = value;
++  return (retainForPending = false) => {
++    // A destroyed iframe's queued callbacks still resolve its Store hook through this module.
++    // Retire the view, but keep its exact binding; falling back would save into an empty UI Store.
++    if (!retainForPending && binding === value) binding = undefined;
++    value.release();
++  };
++}
+--- before/canvas-app/src/agent-edit-guard.ts
+
++++ after/canvas-app/src/agent-edit-guard.ts
+
+@@ -1,3 +1,4 @@
+
++import { getCanvasViewBinding } from './canvas-service-binding';
+ import { CanvasAgentError } from '../../src/shared/canvas-agent-protocol';
+ 
+ export interface AgentEditGuard {
+@@ -208,12 +209,12 @@
+
+ }
+ 
+ export const defaultAgentEditGuard = createAgentEditGuard({ legacyDocumentFocus: true, invalidateOnDetach: true });
+-export const markAgentEditorBusy = defaultAgentEditGuard.markEditorBusy;
+-export const isAgentEditorBusy = defaultAgentEditGuard.isEditorBusy;
+-export const isAgentOperationBusy = defaultAgentEditGuard.isOperationBusy;
+-export const subscribeAgentOperationBusy = defaultAgentEditGuard.subscribeBusy;
+-export const assertAgentOperationActive = defaultAgentEditGuard.assertOperationActive;
+-export const withAgentEditGuard = defaultAgentEditGuard.run;
++export const markAgentEditorBusy = (id: string, busy: boolean) => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).markEditorBusy(id, busy);
++export const isAgentEditorBusy = () => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).isEditorBusy();
++export const isAgentOperationBusy = () => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).isOperationBusy();
++export const subscribeAgentOperationBusy = (listener: () => void) => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).subscribeBusy(listener);
++export const assertAgentOperationActive = () => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).assertOperationActive();
++export const withAgentEditGuard: AgentEditGuard['run'] = (operation, awaitIdle) => (getCanvasViewBinding()?.guard ?? defaultAgentEditGuard).run(operation, awaitIdle);
+ let defaultViewId = 0;
+ export const installAgentCanvasEditGuard = (root: HTMLElement): (() => void) =>
+   defaultAgentEditGuard.attachRoot(`standalone:${++defaultViewId}`, root);
+--- before/canvas-app/src/agent-editor-debounce.ts
+
++++ after/canvas-app/src/agent-editor-debounce.ts
+
+@@ -1,24 +1,32 @@
+
+-import { debounce } from '../legacy/src/utils';
++import { getCanvasViewBinding } from './canvas-service-binding';
++import { debounce } from '../legacy/src/utils/debounce';
+ import { markAgentEditorBusy } from './agent-edit-guard';
+ 
+ let instanceId = 0;
+ 
+ /** Keep the native timer/flush behavior; a retired editor's pending callback still owns its marker. */
+ export function createAgentEditorDebounce<T extends (...args: any[]) => any>(editorId: string, commit: T, wait: number) {
++  const binding = getCanvasViewBinding();
++  if (binding) return binding.createEditorDebounce(editorId, commit, wait);
++  let pending = false;
+   const pendingId = `${editorId}:debounce:${++instanceId}`;
+   const debounced = debounce((...args: Parameters<T>): ReturnType<T> => {
++    pending = false;
+     const result = commit(...args);
+     markAgentEditorBusy(pendingId, false);
+     return result;
+   }, wait);
+   const tracked = (...args: Parameters<T>) => {
++    pending = true;
+     markAgentEditorBusy(pendingId, true);
+     return debounced(...args);
+   };
+   tracked.cancel = () => {
++    pending = false;
+     debounced.cancel();
+     markAgentEditorBusy(pendingId, false);
+   };
+   tracked.flush = (...args: Parameters<T>) => debounced.flush(...args);
++  tracked.isPending = () => pending;
+   return tracked;
+ }
+--- before/canvas-app/src/canvas-context.ts
+
++++ after/canvas-app/src/canvas-context.ts
+
+@@ -1,3 +1,8 @@
+
++import { createPointStoreApi, type PointStoreApi } from '../legacy/src/store/pointStore';
++import { createWorkflowTabOwnership } from '../legacy/src/hooks/workflowTabOwnership';
++import { createCanvasGenerationMonitor } from './canvas-generation-monitor';
++import { createCanvasEditorTimers } from './canvas-editor-timers';
++import type { NativeUiFeedback } from './canvas-service-binding';
+ import { CanvasAgentError, type ErrorCode, type Failure, type FrameReadiness } from '../../src/shared/canvas-agent-protocol';
+ import { parseCanvasId } from '../../src/shared/protocol';
+ import { createFlowStoreApi, type FlowStoreApi } from '../legacy/src/store/flowStoreCore';
+@@ -24,6 +29,11 @@
+
+   readonly contextId: string;
+   readonly store: FlowStoreApi;
+   readonly guard: ReturnType<typeof createAgentEditGuard>;
++  readonly points: PointStoreApi;
++  readonly timers: ReturnType<typeof createCanvasEditorTimers>;
++  readonly monitor: ReturnType<typeof createCanvasGenerationMonitor>;
++  acquireOwnership(explicit?: boolean): Promise<void>;
++  setFeedback(feedback?: NativeUiFeedback): void;
+   readonly barrier: ReturnType<typeof createCanvasVersionBarrier>;
+   initialize(capability: Capability, signal?: AbortSignal): Promise<ContextInfo>;
+   reload(capability: Capability, signal?: AbortSignal): Promise<ContextInfo>;
+@@ -44,7 +54,11 @@
+
+ 
+ function waitForCaller<T>(promise: Promise<T>, signal?: AbortSignal, reason = failure('CANCELLED_BEFORE_DISPATCH', '调用方已停止等待画布准备')): Promise<T> {
+   if (!signal) return promise;
+-  if (signal.aborted) return Promise.reject(errorFrom(reason));
++  if (signal.aborted) {
++    // The shared work may have rejected synchronously while revoking authentication.
++    void promise.catch(() => undefined);
++    return Promise.reject(errorFrom(reason));
++  }
+   return new Promise<T>((resolve, reject) => {
+     const cancel = () => { reject(errorFrom(reason)); };
+     signal.addEventListener('abort', cancel, { once: true });
+@@ -52,10 +66,13 @@
+
+   });
+ }
+ 
+-export function createCanvasContext(canvasId: string): CanvasContext {
++export function createCanvasContext(canvasId: string, points = createPointStoreApi(() => canvasId, () => ({ silentError: true }))): CanvasContext {
+   if (!parseCanvasId(canvasId)) throw errorFrom(failure('INVALID_ARGUMENT', '画布 ID 无效'));
+   const contextId = crypto.randomUUID();
+   const guard = createAgentEditGuard(); const barrier = createCanvasVersionBarrier();
++  const timers = createCanvasEditorTimers(guard);
++  let feedback: NativeUiFeedback | undefined;
++  let ownershipController: ReturnType<typeof createWorkflowTabOwnership> | undefined;
+   let disposed = false; let authorized = true; let epoch = 0;
+   let ownership: 'checking' | 'active' | 'inactive' = 'checking';
+   let graphLoaded = false; let loadedWritable = false; let initialized = false; let preparing = false;
+@@ -69,7 +86,10 @@
+
+     tones: { status: 'idle' }, prices: { status: 'idle' },
+   };
+   const listeners = new Set<(state: CanvasContextReadiness) => void>();
+-  const store = createFlowStoreApi({ guard, barrier, isContextActive: () => !disposed && authorized });
++  const store = createFlowStoreApi({ guard, barrier, requireConfirmedNativeVersion: true, isContextActive: () => !disposed && authorized,
++    feedback: { error: message => feedback?.error(message), showCapacityLimit: () => feedback?.showCapacityLimit() },
++    requestOptions: () => ({ silentError: true, onAuthExpired: invalidateAuth, onCanvasLoadError: () => feedback?.notifyCanvasLoadError() }),
++  });
+   store.setState({ canvasId, readOnly: true });
+ 
+   const assertAlive = (expectedEpoch = epoch) => {
+@@ -107,13 +127,16 @@
+
+       catch (error) { console.error('Canvas readiness subscriber failed:', error); }
+     });
+   };
+-  const unsubscribeStore = store.subscribe(publish);
+-  const invalidateAuth = () => {
++  let monitor: ReturnType<typeof createCanvasGenerationMonitor>;
++  const unsubscribeStore = store.subscribe(() => { publish(); if (!preparing) monitor?.reconcile(); });
++  const invalidateAuth = (event?: Event) => {
+     if (disposed || !authorized) return;
+-    authorized = false; loadedWritable = false; store.getState().actions.setReadOnly(true); controller.abort(); publish();
++    authorized = false; loadedWritable = false; store.getState().actions.setReadOnly(true); controller.abort(); timers.dispose(); monitor?.stop(); points.getState().actions.resetUserPoint('session-invalidated'); feedback?.notifyAuthExpired(); publish();
++    if (!event && typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+   };
+   if (typeof window !== 'undefined') window.addEventListener(AUTH_EXPIRED_EVENT, invalidateAuth);
+-  const options = (): CanvasRequestOptions => ({ signal: controller.signal, silentError: true, onAuthExpired: invalidateAuth, onCanvasLoadError: () => undefined });
++  monitor = createCanvasGenerationMonitor(store, barrier, points, invalidateAuth);
++  const options = (): CanvasRequestOptions => ({ signal: controller.signal, silentError: true, onAuthExpired: invalidateAuth, onCanvasLoadError: () => feedback?.notifyCanvasLoadError() });
+   const requireCapability = (capability: Capability): ContextInfo => {
+     assertAlive();
+     const info = getInfo();
+@@ -190,7 +213,7 @@
+
+       if (stages.graph.status === 'loading') stages.graph = { status: 'failed', error: loadFailure };
+       throw errorFrom(loadFailure);
+     } finally {
+-      if (currentEpoch === epoch && !disposed) { preparing = false; initialized = true; publish(); }
++      if (currentEpoch === epoch && !disposed) { preparing = false; initialized = true; publish(); monitor.reconcile(); }
+     }
+   }
+ 
+@@ -256,7 +279,18 @@
+
+   }
+ 
+   return {
+-    canvasId, contextId, store, guard, barrier, initialize, reload, getInfo, loadUiData,
++    canvasId, contextId, store, guard, barrier, points, timers, monitor, initialize, reload, getInfo, loadUiData,
++    setFeedback: value => { feedback = value; },
++    acquireOwnership: async (explicit = false) => {
++      assertAlive();
++      ownershipController ??= createWorkflowTabOwnership(canvasId, status => {
++        ownership = status;
++        if (status !== 'active') { loadedWritable = false; store.getState().actions.setReadOnly(true); }
++        publish();
++      }, true);
++      if (explicit) ownershipController.claim();
++      await ownershipController.ready; assertAlive();
++    },
+     getCanvasMetadata: () => { assertAlive(); return { ...metadata }; },
+     getInitialization: () => Object.fromEntries(Object.entries(stages).map(([key, stage]) => [key, { ...stage, ...(stage.error ? { error: { ...stage.error } } : {}) }])) as CanvasInitialization,
+     subscribeReadiness: listener => {
+@@ -271,7 +305,7 @@
+
+     },
+     dispose: () => {
+       if (disposed) return;
+-      disposed = true; epoch++; controller.abort(); guard.dispose(); unsubscribeStore();
++      disposed = true; epoch++; controller.abort(); timers.dispose(); monitor.stop(); ownershipController?.dispose(); guard.dispose(); unsubscribeStore(); feedback = undefined;
+       if (typeof window !== 'undefined') window.removeEventListener(AUTH_EXPIRED_EVENT, invalidateAuth);
+       store.getState().actions.reset(); publish(); listeners.clear();
+     },
+--- before/canvas-app/src/agent-node-policy.ts
+
++++ after/canvas-app/src/agent-node-policy.ts
+
+@@ -2,9 +2,9 @@
+
+ import type { useFlowStore } from '../legacy/src/store/flowStore';
+ import util, { applyEmptyMediaNodeDimensions, type SelectParam } from '../legacy/src/components/canvasFlow/utils/util';
+ import { buildMediaNodeParamState, isMediaParamValueUnavailable, validateMediaNodesForRun,
+-  type MediaModelsMap, type MediaNodeType } from '../legacy/src/components/canvasFlow/utils/mediaNodeModelUtil';
++  getImageSvgUnsupportedReason, getImageModelTypeMismatchReason, getVideoModelTypeMismatchReason, getAudioModelTypeMismatchReason, type MediaModelsMap, type MediaNodeType } from '../legacy/src/components/canvasFlow/utils/mediaNodeModelUtil';
+ import { getChoiceFlag, isChoiceUsable, isModelSelectable, validateBasicNodesParamsForRun } from '../legacy/src/components/canvasFlow/utils/modelPermission';
+-import { validateNodeTitle } from '../legacy/src/components/canvasFlow/utils/nodeNaming';
++import { preserveNodeTitle, validateNodeTitle } from '../legacy/src/components/canvasFlow/utils/nodeNaming';
+ import { isNonGenerativeMedia } from '../legacy/src/components/canvasFlow/utils/type';
+ import { CanvasAgentError, STANDARD_NODE_TYPES, FORBIDDEN_PARAM_FIELDS,
+   MAX_TITLE_LENGTH, MAX_CONTENT_LENGTH, assertCanvasMessageSize, parseNodeChanges, parseNodeDraft,
+@@ -103,7 +103,8 @@
+
+     const patch = resolveAgentNodePatch({ ...state, nodes: [...state.nodes, node] }, node, draft.changes);
+     node.data = { ...node.data, ...patch.data };
+   }
+-  return applyEmptyMediaNodeDimensions(node);
++  const sized = applyEmptyMediaNodeDimensions(node);
++  return draft.changes?.title !== undefined ? preserveNodeTitle(sized) : sized;
+ }
+ 
+ export function getAgentGenerationCounts(state: AgentNodeState, node: Node): GenerationCounts | null {
+@@ -115,6 +116,31 @@
+
+   }
+   const count = positiveCount(paramsOf(node).gen_count)!;
+   return node.type === 'image' ? { images: count, videos: 0 } : { images: 0, videos: count };
++}
++
++/** Same prompt/input-mode prerequisites used by native PromptModel panels, without mounting them. */
++export function validateAgentRunInputs(state: AgentNodeState, node: Node): void {
++  const params = paramsOf(node);
++  const model = String(params.model ?? '');
++  const configured = node.type === 'text'
++    ? state.modelsMap.text?.some((item: any) => item.value === model)
++    : state.modelsMap[node.type ?? '']?.some((mode: any) => mode.value === params.modelType && mode.params?.some((item: any) => item.value === model));
++  if (!model || !configured || !isModelSelectable(state.modelNodePermission, node.type ?? '', model)) throw new CanvasAgentError('RUN_REJECTED', '节点缺少可用模型，请先在画布中配置');
++  const { texts, images, videos, audios } = util.getSourceMap(state.nodes, state.edges, node.id);
++  const nonTextCount = images.length + videos.length + audios.length;
++  const mismatch = node.type === 'image' ? getImageModelTypeMismatchReason(String(params.modelType ?? ''), images.length)
++    : node.type === 'video' ? getVideoModelTypeMismatchReason(String(params.modelType ?? ''), images.length, videos.length > 0 || audios.length > 0)
++    : node.type === 'audio' ? getAudioModelTypeMismatchReason(String(params.modelType ?? ''), nonTextCount, audios.length) : undefined;
++  if (mismatch) throw new CanvasAgentError('RUN_REJECTED', mismatch);
++  const svgTip = node.type === 'image' ? getImageSvgUnsupportedReason(model, images) : undefined;
++  if (svgTip) throw new CanvasAgentError('RUN_REJECTED', svgTip);
++  if (node.type === 'audio' && params.modelType === 'text' && !params.voiceId) throw new CanvasAgentError('RUN_REJECTED', '请先选择音色');
++  if (!String(params.prompt ?? '').trim() && !texts.some(item => item.value?.trim()) && nonTextCount === 0) throw new CanvasAgentError('RUN_REJECTED', '请提供提示词或有效的上游素材');
++  const senior = params.seniorParams as Record<string, unknown> | undefined;
++  if (node.type === 'audio' && senior?.customMode) {
++    if (!String(senior.title ?? '').trim()) throw new CanvasAgentError('RUN_REJECTED', '请输入歌曲标题');
++    if (!senior.instrumental && !String(senior.lyrics ?? '').trim()) throw new CanvasAgentError('RUN_REJECTED', '请输入歌词');
++  }
+ }
+ 
+ function outputUrl(value: unknown): string | null {
+--- before/canvas-app/src/agent-adapter.ts
+
++++ after/canvas-app/src/agent-adapter.ts
+
+@@ -0,0 +1,93 @@
+
++import { CanvasAgentError, parseCanvasOperation, assertCanvasMessageSize, MAX_NODE_IDS,
++  type CanvasOperation, type CanvasOperationResult, type Failure, type ErrorCode } from '../../src/shared/canvas-agent-protocol';
++import type { CanvasContext } from './canvas-context';
++import { createAgentNode, describeAgentNode, resolveAgentNodePatch, getAgentGenerationCounts, validateAgentRunInputs } from './agent-node-policy';
++import { isTrustedCanvasVersion } from './canvas-initialization';
++import { isNonGenerativeMedia } from '../legacy/src/components/canvasFlow/utils/type';
++import { STANDARD_NODE_TYPES } from '../../src/shared/canvas-agent-protocol';
++
++export function createCanvasAgentAdapter(context: CanvasContext) {
++  const version = () => { const value = context.store.getState().versionNumber; return isTrustedCanvasVersion(value) ? String(value) : null; };
++  function fail(code: ErrorCode, message: string): never { throw Object.assign(new CanvasAgentError(code, message), { requestPhase: 'not_sent' }); }
++  const supported = (node: { type?: string; data: Record<string, unknown> }) => STANDARD_NODE_TYPES.some(type => type === node.type) && !isNonGenerativeMedia(String(node.data.type ?? ''));
++  const requireConfiguration = () => {
++    const stages = context.getInitialization();
++    if ([stages.models, stages.modelPermission].some(stage => stage.status !== 'ready')) fail('CONFIGURATION_ERROR', '模型或权限配置加载失败，请刷新后重试');
++  };
++  return {
++    async execute(input: CanvasOperation, signal?: AbortSignal): Promise<CanvasOperationResult> {
++      let operation = input;
++      try {
++        operation = structuredClone(parseCanvasOperation(input));
++        if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
++        await context.initialize(operation.action === 'canvas.read' ? 'read' : operation.action === 'node.run' ? 'run' : 'edit', signal);
++        const state = context.store.getState();
++        if (operation.action === 'canvas.read') {
++          const ids = operation.nodeIds ?? state.nodes.slice(0, MAX_NODE_IDS).map(node => node.id);
++          const result: CanvasOperationResult = { status: 'read', canvasId: context.canvasId, version: version(),
++            consistency: !version() || state.actions.hasPendingMutations() || context.guard.isEditorBusy() || context.guard.isOperationBusy() || state.agentPersistenceIssue || state.versionConflict || context.barrier.isUncertain() ? 'unconfirmed' : 'confirmed',
++            nodeCount: state.nodes.length, nodes: ids.flatMap(id => { const node = state.nodes.find(item => item.id === id); return node ? [describeAgentNode(state, node)] : []; }),
++            missingNodeIds: ids.filter(id => !state.nodes.some(node => node.id === id)) };
++          assertCanvasMessageSize(result); return result;
++        }
++        if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
++        const options = { expectedVersion: operation.expectedVersion, strictReceipt: true as const, signal };
++        if (operation.action === 'node.run') {
++          const targetId = operation.nodeId;
++          const node = state.nodes.find(node => node.id === targetId);
++          if (!node) fail('NODE_NOT_FOUND', '目标节点不存在');
++          if (!supported(node)) fail('UNSUPPORTED_NODE', '本期只开放普通节点单点执行');
++          requireConfiguration();
++          validateAgentRunInputs(state, node);
++          const response = await state.actions.excuteSingle(operation.nodeId, { ...options, strictTransportErrors: true, approvedGeneration: operation.approvedGeneration });
++          if (response.type !== 'success') fail('RUN_REJECTED', response.content || '当前节点未通过原生执行检查');
++          void context.points.getState().actions.updateUserPoint();
++          if (typeof response.taskId !== 'string' || !response.taskId.trim() || response.taskId.length > 200 || !isTrustedCanvasVersion(response.versionNumber)) {
++            throw Object.assign(new CanvasAgentError('SUBMISSION_UNKNOWN', '执行已接受，但任务 ID 或版本不完整'), { requestPhase: 'sent_unknown', raw: response });
++          }
++          return { status: 'submitted', canvasId: context.canvasId, version: String(response.versionNumber), nodeId: operation.nodeId, taskId: response.taskId, generation: operation.approvedGeneration };
++        }
++        let outcome;
++        if (operation.action === 'node.add') {
++          const draft = operation.node;
++          if (draft.type !== 'text') requireConfiguration();
++          outcome = await state.actions.addNode(current => {
++            const node = createAgentNode(current, draft);
++            const params = node.data.params as Record<string, unknown>;
++            if (draft.type !== 'text' && (!params.model || ((draft.type === 'image' || draft.type === 'video') && !getAgentGenerationCounts(current, node)))) fail('CONFIGURATION_ERROR', '当前节点类型没有可用的原生默认模型或参数');
++            return [node];
++          }, options);
++        } else if (operation.action === 'node.update') {
++          const changes = operation.changes;
++          if (changes.params) requireConfiguration();
++          outcome = await state.actions.updateNode(operation.nodeId, (current, node) => {
++            if (signal?.aborted) fail('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未执行');
++            return resolveAgentNodePatch(current, node, changes);
++          }, true, true, options);
++        } else {
++          for (const id of operation.nodeIds) {
++            const node = state.nodes.find(node => node.id === id);
++            if (!node) fail('NODE_NOT_FOUND', '删除目标不存在');
++            if (!supported(node)) fail('UNSUPPORTED_NODE', '本期只开放普通节点删除');
++          }
++          outcome = await state.actions.deleteNodes(operation.nodeIds, options);
++        }
++        if (!outcome) fail('SAVE_REJECTED', '保存没有返回严格回执');
++        return { status: 'saved', canvasId: context.canvasId, version: outcome.version, affectedNodeIds: outcome.affectedNodeIds, unchanged: outcome.unchanged === true };
++      } catch (error: any) {
++        if (error?.requestPhase === 'sent_unknown') {
++          const failure: Failure = { code: 'SUBMISSION_UNKNOWN', message: error.message || '请求结果未确认，请先读取核对', retry: 'read_first' };
++          context.store.setState({ agentPersistenceIssue: failure });
++          const nodeId = 'nodeId' in operation ? operation.nodeId : undefined;
++          const taskId = typeof error.raw?.taskId === 'string' && error.raw.taskId.trim() && error.raw.taskId.length <= 200 ? error.raw.taskId : undefined;
++          return { status: 'submission_unknown', canvasId: context.canvasId, phase: operation.action === 'node.run' ? 'run' : 'save', version: version(),
++            affectedNodeIds: error.affectedNodeIds ?? ('nodeIds' in operation ? operation.nodeIds ?? [] : nodeId ? [nodeId] : []), error: failure,
++            ...(operation.action === 'node.run' ? { nodeId: operation.nodeId, generation: operation.approvedGeneration, ...(taskId ? { taskId } : {}) } : {}) };
++        }
++        const code: ErrorCode = error instanceof CanvasAgentError ? error.code : String(error?.code ?? error?.raw?.code) === '5011' ? 'VERSION_CONFLICT' : error?.status === 401 || error?.status === 403 ? 'AUTH_REQUIRED' : operation?.action === 'node.run' ? 'RUN_REJECTED' : 'SAVE_REJECTED';
++        return { status: 'rejected', canvasId: context.canvasId, version: version(), effect: 'none',
++          error: { code, message: error?.message || error?.msg || '画布操作未执行', retry: code === 'INVALID_ARGUMENT' || code === 'UNSUPPORTED_NODE' ? 'after_input' : 'read_first' } };
++      }
++    },
++  };
++}
+--- before/canvas-app/legacy/src/utils/debounce.ts
+
++++ after/canvas-app/legacy/src/utils/debounce.ts
+
+@@ -0,0 +1,55 @@
+
++type DebouncedFunction<T extends (...args: any[]) => any> = ((...args: Parameters<T>) => ReturnType<T> | undefined) & {
++  cancel: () => void;
++  flush: (...args: Parameters<T>) => ReturnType<T> | undefined;
++};
++
++export function debounce<T extends (...args: any[]) => any>(func: T, wait: number, immediate: boolean = false): DebouncedFunction<T> {
++  let timeout: number | null;
++  let result: ReturnType<T> | undefined;
++
++  const debouncedFunction = function (this: any, ...args: Parameters<T>): ReturnType<T> | undefined {
++    // 清除之前的定时器
++    if (timeout !== null) {
++      clearTimeout(timeout);
++    }
++
++    // 如果设置立即执行
++    if (immediate) {
++      // 如果没有待执行的定时器，则立即执行
++      const callNow = timeout === null;
++      timeout = window.setTimeout(() => {
++        timeout = null;
++      }, wait);
++
++      if (callNow) {
++        result = func.apply(this, args);
++      }
++    } else {
++      // 否则延后执行
++      timeout = window.setTimeout(() => {
++        result = func.apply(this, args);
++      }, wait);
++    }
++
++    return result;
++  };
++
++  // 添加取消功能
++  debouncedFunction.cancel = function () {
++    if (timeout !== null) {
++      clearTimeout(timeout);
++      timeout = null;
++    }
++  };
++
++  // 添加立即执行功能
++  debouncedFunction.flush = function (...args: Parameters<T>): ReturnType<T> | undefined {
++    debouncedFunction.cancel();
++    result = func.apply(this, args);
++    return result;
++  };
++
++  return debouncedFunction;
++}
++
++// get 请求特殊字符[、]接口查询异常
+--- before/canvas-app/legacy/src/utils/index.ts
+
++++ after/canvas-app/legacy/src/utils/index.ts
+
+@@ -1,60 +1,7 @@
+
+ import dayjs from 'dayjs';
+ 
+-type DebouncedFunction<T extends (...args: any[]) => any> = ((...args: Parameters<T>) => ReturnType<T> | undefined) & {
+-  cancel: () => void;
+-  flush: (...args: Parameters<T>) => ReturnType<T> | undefined;
+-};
+-
+-export function debounce<T extends (...args: any[]) => any>(func: T, wait: number, immediate: boolean = false): DebouncedFunction<T> {
+-  let timeout: number | null;
+-  let result: ReturnType<T> | undefined;
+-
+-  const debouncedFunction = function (this: any, ...args: Parameters<T>): ReturnType<T> | undefined {
+-    // 清除之前的定时器
+-    if (timeout !== null) {
+-      clearTimeout(timeout);
+-    }
+-
+-    // 如果设置立即执行
+-    if (immediate) {
+-      // 如果没有待执行的定时器，则立即执行
+-      const callNow = timeout === null;
+-      timeout = window.setTimeout(() => {
+-        timeout = null;
+-      }, wait);
+-
+-      if (callNow) {
+-        result = func.apply(this, args);
+-      }
+-    } else {
+-      // 否则延后执行
+-      timeout = window.setTimeout(() => {
+-        result = func.apply(this, args);
+-      }, wait);
+-    }
+-
+-    return result;
+-  };
+-
+-  // 添加取消功能
+-  debouncedFunction.cancel = function () {
+-    if (timeout !== null) {
+-      clearTimeout(timeout);
+-      timeout = null;
+-    }
+-  };
+-
+-  // 添加立即执行功能
+-  debouncedFunction.flush = function (...args: Parameters<T>): ReturnType<T> | undefined {
+-    debouncedFunction.cancel();
+-    result = func.apply(this, args);
+-    return result;
+-  };
+-
+-  return debouncedFunction;
+-}
+-
+-// get 请求特殊字符[、]接口查询异常
++export { debounce } from './debounce';
++
+ export const encodeReplace = (data: any) => {
+   for (const key in data) {
+     if (typeof data[key] === 'string') {
+--- before/canvas-app/legacy/src/hooks/workflowTabOwnership.ts
+
++++ after/canvas-app/legacy/src/hooks/workflowTabOwnership.ts
+
+@@ -0,0 +1,61 @@
+
++export type WorkflowTabStatus = 'checking' | 'active' | 'inactive';
++interface Owner { tabId: string; claimId: string; claimedAt: number }
++type Message = { type: 'query' } | { type: 'claim' | 'owner'; owner: Owner };
++const compare = (a: Owner, b: Owner) => a.claimedAt - b.claimedAt || a.claimId.localeCompare(b.claimId);
++
++/** Native latest-claim ownership; background services query before claiming. */
++export function createWorkflowTabOwnership(workflowId: string, onStatus: (status: WorkflowTabStatus) => void, background = false) {
++  let status: WorkflowTabStatus = 'checking';
++  let owner: Owner | null = null;
++  let self: Owner | null = null;
++  let disposed = false;
++  let channel: BroadcastChannel | undefined;
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  let resolveReady!: () => void;
++  const ready = new Promise<void>(resolve => { resolveReady = resolve; });
++  const supported = typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined';
++  const query = () => channel?.postMessage({ type: 'query' } satisfies Message);
++  const visible = () => { if (document.visibilityState === 'visible') query(); };
++  const stopListening = () => {
++    clearTimeout(timer);
++    channel?.removeEventListener('message', receive); channel?.close(); channel = undefined;
++    if (supported) { window.removeEventListener('focus', query); document.removeEventListener('visibilitychange', visible); }
++  };
++  const apply = (next: Owner) => {
++    if (owner && compare(next, owner) < 0) return;
++    owner = next; status = next.claimId === self?.claimId ? 'active' : 'inactive';
++    onStatus(status); resolveReady();
++    // Preserve native inactive-tab behaviour: it must not advertise a dead owner's claim.
++    if (status === 'inactive') stopListening();
++  };
++  function receive(event: MessageEvent<Message>) {
++    if (disposed) return;
++    const message = event.data;
++    if (message?.type === 'query') {
++      if (owner) channel?.postMessage({ type: 'owner', owner } satisfies Message);
++    } else if ((message?.type === 'claim' || message?.type === 'owner') && message.owner
++      && typeof message.owner.claimId === 'string' && Number.isFinite(message.owner.claimedAt)) apply(message.owner);
++  }
++  const listen = () => {
++    if (!supported || channel) return;
++    channel = new window.BroadcastChannel(`workflow:active-tab:${workflowId}`);
++    channel.addEventListener('message', receive);
++    window.addEventListener('focus', query); document.addEventListener('visibilitychange', visible);
++  };
++  const claim = () => {
++    if (disposed || status === 'active') return;
++    listen();
++    let tabId: string = crypto.randomUUID();
++    try { tabId = window.sessionStorage.getItem('workflow:tab-id') || tabId; window.sessionStorage.setItem('workflow:tab-id', tabId); } catch { /* Storage is optional. */ }
++    self = { tabId, claimId: crypto.randomUUID(), claimedAt: typeof performance === 'undefined' ? Date.now() : performance.timeOrigin + performance.now() };
++    owner = null; apply(self); channel?.postMessage({ type: 'claim', owner: self } satisfies Message);
++  };
++  listen();
++  if (background && supported) {
++    query();
++    if (!owner) timer = setTimeout(() => { if (!owner && !disposed) claim(); }, 100);
++  } else claim();
++  return { ready, getStatus: () => status, claim,
++    dispose: () => { if (disposed) return; disposed = true; stopListening(); resolveReady(); },
++  };
++}
+--- before/canvas-app/legacy/src/hooks/useWorkflowTabGuard.ts
+
++++ after/canvas-app/legacy/src/hooks/useWorkflowTabGuard.ts
+
+@@ -1,117 +1,11 @@
+
+-import { useEffect, useMemo, useRef, useState } from 'react';
+-
+-type WorkflowTabStatus = 'checking' | 'active' | 'inactive';
+-
+-interface WorkflowTabOwner {
+-  tabId: string;
+-  claimId: string;
+-  claimedAt: number;
+-}
+-
+-type WorkflowTabMessage = { type: 'claim' | 'owner'; owner: WorkflowTabOwner } | { type: 'query' };
+-
+-const WORKFLOW_TAB_ID_KEY = 'workflow:tab-id';
+-const WORKFLOW_TAB_CHANNEL_PREFIX = 'workflow:active-tab:';
+-
+-const getOrCreateTabId = () => {
+-  try {
+-    const existingTabId = window.sessionStorage.getItem(WORKFLOW_TAB_ID_KEY);
+-    if (existingTabId) return existingTabId;
+-
+-    const tabId = window.crypto.randomUUID();
+-    window.sessionStorage.setItem(WORKFLOW_TAB_ID_KEY, tabId);
+-    return tabId;
+-  } catch {
+-    return window.crypto.randomUUID();
+-  }
+-};
+-
+-const compareOwners = (left: WorkflowTabOwner, right: WorkflowTabOwner) => {
+-  if (left.claimedAt !== right.claimedAt) {
+-    return left.claimedAt - right.claimedAt;
+-  }
+-
+-  return left.claimId.localeCompare(right.claimId);
+-};
++import { useEffect, useState } from 'react';
++import { createWorkflowTabOwnership, type WorkflowTabStatus } from './workflowTabOwnership';
+ 
+ export function useWorkflowTabGuard(workflowId: string) {
+-  const [tabId] = useState(getOrCreateTabId);
+   const [status, setStatus] = useState<WorkflowTabStatus>('checking');
+-  const ownerRef = useRef<WorkflowTabOwner | null>(null);
+-  const self = useMemo<WorkflowTabOwner>(
+-    () => ({
+-      tabId,
+-      claimId: window.crypto.randomUUID(),
+-      claimedAt: window.performance.timeOrigin + window.performance.now(),
+-    }),
+-    [tabId, workflowId]
+-  );
+-
+   useEffect(() => {
+-    if (typeof window.BroadcastChannel === 'undefined') {
+-      setStatus('active');
+-      return;
+-    }
+-
+-    const channel = new BroadcastChannel(`${WORKFLOW_TAB_CHANNEL_PREFIX}${workflowId}`);
+-    let stopped = false;
+-    ownerRef.current = null;
+-
+-    function stopListening() {
+-      if (stopped) return;
+-
+-      stopped = true;
+-      window.removeEventListener('focus', queryOwner);
+-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+-      channel.removeEventListener('message', handleMessage);
+-      channel.close();
+-    }
+-
+-    function applyOwner(owner: WorkflowTabOwner) {
+-      const currentOwner = ownerRef.current;
+-      if (currentOwner && compareOwners(owner, currentOwner) < 0) return;
+-
+-      ownerRef.current = owner;
+-      const isActive = owner.claimId === self.claimId;
+-      setStatus(isActive ? 'active' : 'inactive');
+-
+-      if (!isActive) {
+-        stopListening();
+-      }
+-    }
+-
+-    function handleMessage(event: MessageEvent<WorkflowTabMessage>) {
+-      const message = event.data;
+-
+-      if (message.type === 'query') {
+-        if (ownerRef.current) {
+-          channel.postMessage({ type: 'owner', owner: ownerRef.current } satisfies WorkflowTabMessage);
+-        }
+-        return;
+-      }
+-
+-      applyOwner(message.owner);
+-    }
+-
+-    function queryOwner() {
+-      channel.postMessage({ type: 'query' } satisfies WorkflowTabMessage);
+-    }
+-
+-    function handleVisibilityChange() {
+-      if (document.visibilityState === 'visible') {
+-        queryOwner();
+-      }
+-    }
+-
+-    channel.addEventListener('message', handleMessage);
+-    window.addEventListener('focus', queryOwner);
+-    document.addEventListener('visibilitychange', handleVisibilityChange);
+-
+-    applyOwner(self);
+-    channel.postMessage({ type: 'claim', owner: self } satisfies WorkflowTabMessage);
+-
+-    return stopListening;
+-  }, [self, workflowId]);
+-
++    const owner = createWorkflowTabOwnership(workflowId, setStatus);
++    return owner.dispose;
++  }, [workflowId]);
+   return status;
+ }
+--- before/canvas-app/legacy/src/hooks/useFileUpload.ts
+
++++ after/canvas-app/legacy/src/hooks/useFileUpload.ts
+
+@@ -1,3 +1,5 @@
+
++import { getCanvasViewBinding } from '../../../src/canvas-service-binding';
++import { markAgentEditorBusy } from '../../../src/agent-edit-guard';
+ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+ import { toast } from 'sonner';
+ import { getFileType } from '@/utils/index';
+@@ -187,9 +189,15 @@
+
+     return config[type] || { accept: '*', maxSize: maxSize || 20 };
+   }, [type, maxSize, maxDuration, acceptedExtensions]);
+ 
++  const selectionMarker = useRef(`upload-selection:${crypto.randomUUID()}`).current;
++  const detachedRef = useRef(false);
+   // 2. 稳定 handleFileSelect
+   const handleFileSelect = useCallback(
+     async (file: File) => {
++      if (detachedRef.current) return;
++      let accepted = false;
++      markAgentEditorBusy(selectionMarker, true);
++      try {
+       const isMediaType = type === 'audio' || type === 'video' || type === 'image';
+       if (isMediaType) {
+         const validation = await validateUploadFile(type, file, {
+@@ -206,6 +214,7 @@
+
+         return;
+       }
+ 
++      if (detachedRef.current) return;
+       const newFile: MediaFile = {
+         file,
+         status: 'preview',
+@@ -215,7 +224,9 @@
+
+         newFile.preview = URL.createObjectURL(file);
+       }
+ 
++      accepted = true;
+       setMediaFile(newFile);
++      } finally { if (!accepted) markAgentEditorBusy(selectionMarker, false); }
+     },
+     [acceptConfig, acceptedExtensions, type]
+   );
+@@ -227,6 +238,10 @@
+
+       uploadAbortControllerRef.current?.abort();
+       const abortController = new AbortController();
+       uploadAbortControllerRef.current = abortController;
++      const activityId = `upload:${assetLibrarySync?.nodeId ?? 'canvas'}:${crypto.randomUUID()}`;
++      markAgentEditorBusy(activityId, true);
++      markAgentEditorBusy(selectionMarker, false);
++      const removeCleanup = getCanvasViewBinding()?.onRelease(() => abortController.abort());
+       updateUploading?.(true);
+ 
+       // 立即更新状态为上传中，进度从 0 开始
+@@ -254,6 +269,7 @@
+
+         const duration = fileType === 'video' || fileType === 'audio' ? await getMediaDuration(targetFile) : undefined;
+ 
+         clearProgressInterval();
++        if (abortController.signal.aborted || detachedRef.current) return;
+ 
+         if (url) {
+           setMediaFile(prev => (prev ? { ...prev, url, progress: 100, status: 'done' } : null));
+@@ -279,6 +295,8 @@
+
+         if (uploadAbortControllerRef.current === abortController) {
+           uploadAbortControllerRef.current = null;
+         }
++        removeCleanup?.();
++        markAgentEditorBusy(activityId, false);
+         updateUploading?.(false);
+       }
+     },
+@@ -292,13 +310,16 @@
+
+     }
+   }, [mediaFile?.status, mediaFile?.file, handleAutoUpload]);
+ 
+-  useEffect(
+-    () => () => {
+-      clearProgressInterval();
+-      uploadAbortControllerRef.current?.abort();
+-    },
+-    [clearProgressInterval]
+-  );
++  useEffect(() => {
++    detachedRef.current = false;
++    const cleanup = () => {
++      detachedRef.current = true;
++      markAgentEditorBusy(selectionMarker, false);
++      clearProgressInterval(); uploadAbortControllerRef.current?.abort();
++    };
++    const unregister = getCanvasViewBinding()?.onRelease(cleanup);
++    return () => { unregister?.(); cleanup(); };
++  }, [clearProgressInterval, selectionMarker]);
+ 
+   // 处理外部传入的临时文件
+   useEffect(() => {
+@@ -319,6 +340,7 @@
+
+   );
+ 
+   const handleDelete = useCallback(() => {
++    markAgentEditorBusy(selectionMarker, false);
+     uploadAbortControllerRef.current?.abort();
+     if (mediaFile?.preview) {
+       URL.revokeObjectURL(mediaFile.preview);
+--- before/canvas-app/legacy/src/api/workflow.ts
+
++++ after/canvas-app/legacy/src/api/workflow.ts
+
+@@ -155,7 +155,7 @@
+
+ }
+ 
+ interface TemplateReportParams {
+-  id: number;
++  id: number | string;
+ }
+ 
+ interface TemplateFavoriteParams {
+--- before/canvas-app/legacy/src/api/order.ts
+
++++ after/canvas-app/legacy/src/api/order.ts
+
+@@ -258,8 +258,8 @@
+
+  * @return {*}
+  * @note: 注意点
+  */
+-export const accountBalance = (data: AccountBalanceParams) => {
+-  return request<AccountBalanceData>(`account-service/api/account/balance`, data) as Promise<AccountBalanceResponse>;
++export const accountBalance = (data: AccountBalanceParams, options?: import('./workflow').CanvasRequestOptions) => {
++  return request<AccountBalanceData>(`account-service/api/account/balance`, data, options) as Promise<AccountBalanceResponse>;
+ };
+ 
+ /**
+--- before/canvas-app/legacy/src/api/asset.ts
+
++++ after/canvas-app/legacy/src/api/asset.ts
+
+@@ -146,12 +146,12 @@
+
+   });
+ };
+ 
+-export const getAvailableCapacity = () => {
++export const getAvailableCapacity = (options: import('./workflow').CanvasRequestOptions = {}) => {
+   return request(
+     'material-server/asset/getAvailableCapacity',
+     {},
+     {
+-      method: 'GET',
++      ...options, method: 'GET',
+     }
+   );
+ };
+--- before/canvas-app/legacy/src/store/flowStoreCore.ts
+
++++ after/canvas-app/legacy/src/store/flowStoreCore.ts
+
+@@ -1,3 +1,4 @@
+
++import { getAgentGenerationCounts, validateAgentRunInputs } from '../../../src/agent-node-policy';
+ import { createStore, type StoreApi } from 'zustand/vanilla';
+ import { createAgentEditGuard, type AgentEditGuard } from '../../../src/agent-edit-guard';
+ import { isEqual, isPlainObject } from 'lodash-es';
+@@ -113,6 +114,10 @@
+
+   width: number;
+   height: number;
+ }
++
++export interface AgentMutationOutcome { version: string; affectedNodeIds: string[]; unchanged?: boolean }
++export type AgentNodeUpdate = NodeUpdate | ((state: FlowState, node: Node) => NodeUpdate);
++export type AgentNodeCreate = Node[] | ((state: FlowState) => Node[]);
+ 
+ export type NodeUpdate = Omit<Partial<Node>, 'id'>;
+ 
+@@ -175,7 +180,7 @@
+
+     setStoryboardDropPreview: (preview: StoryboardDropPreview | null) => void;
+     reset: () => void;
+     init: (data: Data, migration?: ProcessNodesMigrationInput | null, options?: FlowInitializationOptions) => boolean;
+-    partialUpdate: (canvasId: string, payload: ParamsContent, options?: AgentWriteOptions) => Promise<void>;
++    partialUpdate: (canvasId: string, payload: ParamsContent, options?: AgentWriteOptions) => Promise<AgentMutationOutcome | void>;
+     awaitMutationsIdle: () => Promise<void>;
+     hasPendingMutations: () => boolean;
+     saveFlow: (params: CanvasData) => Promise<any>;
+@@ -186,12 +191,12 @@
+
+     // 画布操作
+     addTemplate: (nodes: Node[], edges: Edge[]) => Promise<void>;
+     // 节点操作
+-    addNode: (nodes: Node[], options?: AgentWriteOptions) => Promise<void>;
++    addNode: (nodes: AgentNodeCreate, options?: AgentWriteOptions) => Promise<AgentMutationOutcome | void>;
+     dragAddNode: (newNode: Node, newEdge: Edge, options?: { selectNewNode?: boolean }) => Promise<void>;
+     dragAddNodes: (newNodes: Node[], newEdges: Edge[], options?: { selectNewNode?: boolean }) => Promise<void>;
+     deleteNodes: {
+       (ids: string[]): void;
+-      (ids: string[], options: AgentWriteOptions): Promise<void>;
++      (ids: string[], options: AgentWriteOptions): Promise<AgentMutationOutcome>;
+     };
+     deleteGroupNode: (id: string) => void;
+     copyNode: (id: string) => Promise<void>;
+@@ -205,11 +210,11 @@
+
+     renameNode: (id: string, title: string) => NodeTitleValidationResult;
+     updateNode: {
+       (id: string, update: NodeUpdate, isRecord?: boolean, isSubmit?: boolean): void;
+-      (id: string, update: NodeUpdate, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<void>;
++      (id: string, update: AgentNodeUpdate, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
+     };
+     updateNodeData: {
+       (id: string, data: any, isRecord?: boolean, isSubmit?: boolean): void;
+-      (id: string, data: any, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<void>;
++      (id: string, data: any, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
+     };
+     updateNodeStatus: (id: string, status: string, errorMsg?: string) => void;
+     updateAllNodeStatus: () => void;
+@@ -247,7 +252,7 @@
+
+ type FlowMediaDimensionCoordinator = ReturnType<typeof createFlowMediaDimensionCoordinator>;
+ 
+ interface CanvasMutationHandlers {
+-  partialUpdate: (canvasId: string, payload: ParamsContent, options?: AgentWriteOptions) => Promise<void>;
++  partialUpdate: (canvasId: string, payload: ParamsContent, options?: AgentWriteOptions) => Promise<AgentMutationOutcome | void>;
+   awaitMutationsIdle: () => Promise<void>;
+   hasPendingMutations: () => boolean;
+   saveCanvas: (canvasId: string, nodes: Node[], edges: Edge[]) => Promise<void>;
+@@ -267,6 +272,7 @@
+
+   retry: 'read_first',
+ });
+ const assertAgentWrite = (state: FlowState, canvasId: string, options: AgentWriteOptions) => {
++  if (options.signal?.aborted) throw agentError('CANCELLED_BEFORE_DISPATCH', '调用已取消，尚未发送');
+   if (!parseCanvasId(canvasId)) throw agentError('FRAME_NOT_READY', '目标画布尚未初始化');
+   if (state.canvasId !== canvasId) throw agentError('FRAME_GONE', '目标画布已切换');
+   if (state.readOnly) throw agentError('READ_ONLY', '画布不可编辑');
+@@ -319,7 +325,8 @@
+
+   { partialUpdate, awaitMutationsIdle, hasPendingMutations, saveCanvas, saveFlow, executeWorkflow }: CanvasMutationHandlers,
+   guard: AgentEditGuard,
+   feedback: FlowStoreFeedback,
+-  onReadOnlyChange?: (readOnly: boolean) => void
++  onReadOnlyChange?: (readOnly: boolean) => void,
++  requestOptions?: () => import('@/api/workflow').CanvasRequestOptions
+ ): FlowState => {
+   const guardAgentOperation = <T>(operation: () => T | Promise<T>): Promise<T> => {
+     const canvasId = get().canvasId;
+@@ -329,12 +336,19 @@
+
+     }, awaitMutationsIdle);
+   };
+ 
++  const prepareNativeRun = async <T>(operation: () => Promise<T>): Promise<T> => {
++    const marker = `native-run:${crypto.randomUUID()}`;
++    guard.markEditorBusy(marker, true);
++    try { return await operation(); }
++    finally { guard.markEditorBusy(marker, false); }
++  };
++
+   function deleteNodes(ids: string[]): void;
+-  function deleteNodes(ids: string[], options: AgentWriteOptions): Promise<void>;
+-  function deleteNodes(ids: string[], options?: AgentWriteOptions): void | Promise<void> {
+-    if (options) return guardAgentOperation(applyDelete);
++  function deleteNodes(ids: string[], options: AgentWriteOptions): Promise<AgentMutationOutcome>;
++  function deleteNodes(ids: string[], options?: AgentWriteOptions): void | Promise<AgentMutationOutcome> {
++    if (options) return guardAgentOperation<AgentMutationOutcome | void>(applyDelete) as Promise<AgentMutationOutcome>;
+     applyDelete();
+-    function applyDelete(): void | Promise<void> {
++    function applyDelete(): void | Promise<AgentMutationOutcome> {
+       const { nodes, edges, canvasId } = get();
+       if (options) {
+         assertAgentWrite(get(), canvasId, options);
+@@ -354,7 +368,7 @@
+
+           allEdges: newEdges,
+         }, options), options);
+       if (!options) { get().actions.recordSnapshot(); return; }
+-      return operation.then(() => { if (get().canvasId === canvasId) get().actions.recordSnapshot(); }, error => {
++      return operation.then(outcome => { if (get().canvasId === canvasId) get().actions.recordSnapshot(); return outcome as AgentMutationOutcome; }, error => {
+         if (get().canvasId === canvasId) {
+           if (!isUnknownWrite(error)) {
+             const restoredNodes = restoreDeletedElements(nodes, get().nodes, new Set(allDeleteIds));
+@@ -367,26 +381,31 @@
+
+           }
+           get().actions.recordSnapshot();
+         }
+-        throw error;
++        throw Object.assign(error, { affectedNodeIds: allDeleteIds });
+       });
+     }
+   }
+ 
+   function updateNode(id: string, update: NodeUpdate, isRecord?: boolean, isSubmit?: boolean): void;
+-  function updateNode(id: string, update: NodeUpdate, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<void>;
+-  function updateNode(id: string, update: NodeUpdate, isRecord = true, isSubmit = true, options?: AgentWriteOptions): void | Promise<void> {
+-    if (options) return guardAgentOperation(applyUpdate);
++  function updateNode(id: string, update: AgentNodeUpdate, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
++  function updateNode(id: string, input: AgentNodeUpdate, isRecord = true, isSubmit = true, options?: AgentWriteOptions): void | Promise<AgentMutationOutcome> {
++    if (options) return guardAgentOperation<AgentMutationOutcome | void>(applyUpdate) as Promise<AgentMutationOutcome>;
+     applyUpdate();
+-    function applyUpdate(): void | Promise<void> {
++    function applyUpdate(): void | Promise<AgentMutationOutcome> {
+       const { nodes, edges, canvasId, readOnly } = get();
+       if (options) {
+         assertAgentWrite(get(), canvasId, options);
+-        if (!isSubmit || Object.keys(update).length === 0) throw agentError('INVALID_ARGUMENT', '严格更新必须包含需要保存的字段');
++        if (!isSubmit) throw agentError('INVALID_ARGUMENT', '严格更新必须保存');
+       }
+       const currentNode = nodes.find(node => node.id === id);
+       if (options && !currentNode) throw agentError('NODE_NOT_FOUND', '目标节点不存在');
+       if (options) assertAgentNodesIdle(nodes, [id]);
+-      if (!currentNode || Object.keys(update).length === 0) return;
++      if (!currentNode) return;
++      const update = typeof input === 'function' ? input(get(), currentNode) : input;
++      if (Object.keys(update).length === 0 || (options && Object.entries(update).every(([key, value]) => isEqual((currentNode as any)[key], key === 'data' ? { ...currentNode.data, ...(value as any) } : value)))) {
++        if (options) return Promise.resolve({ version: String(get().versionNumber), affectedNodeIds: [id], unchanged: true });
++        return;
++      }
+ 
+       const { data: dataUpdate, ...nodeUpdate } = update;
+       const preparedMediaData = dataUpdate !== undefined ? mediaDimensions.prepareNodeData(currentNode, options ? { ...currentNode.data, ...dataUpdate } : dataUpdate, nodes, edges, readOnly) : null;
+@@ -434,7 +453,7 @@
+
+       if (options) {
+         const optimisticNode = newNodes.find(node => node.id === id)!;
+         return mediaDimensions.persistNodeData(canvasId, id, updateContent, preparedMediaData?.shouldQueuePersistence ?? false, options)
+-          .then(() => { if (isRecord && get().canvasId === canvasId) get().actions.recordSnapshot(); }, error => {
++          .then(outcome => { if (isRecord && get().canvasId === canvasId) get().actions.recordSnapshot(); return outcome as AgentMutationOutcome; }, error => {
+             if (get().canvasId === canvasId) {
+               if (!isUnknownWrite(error)) {
+                 const latestNode = get().nodes.find(node => node.id === id);
+@@ -453,8 +472,8 @@
+
+   }
+ 
+   function updateNodeData(id: string, data: any, isRecord?: boolean, isSubmit?: boolean): void;
+-  function updateNodeData(id: string, data: any, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<void>;
+-  function updateNodeData(id: string, data: any, isRecord = true, isSubmit = true, options?: AgentWriteOptions): void | Promise<void> {
++  function updateNodeData(id: string, data: any, isRecord: boolean, isSubmit: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
++  function updateNodeData(id: string, data: any, isRecord = true, isSubmit = true, options?: AgentWriteOptions): void | Promise<AgentMutationOutcome> {
+     if (options) return get().actions.updateNode(id, { data }, isRecord, isSubmit, options);
+     get().actions.updateNode(id, { data }, isRecord, isSubmit);
+   }
+@@ -669,9 +688,11 @@
+
+       },
+ 
+       // 新增节点
+-      addNode: async (newNodes: Node[], options?: AgentWriteOptions) => {
++      addNode: async (input: AgentNodeCreate, options?: AgentWriteOptions) => {
+         const applyAdd = async () => {
+           const targetCanvasId = get().canvasId;
++          if (options) assertAgentWrite(get(), targetCanvasId, options);
++          const newNodes = typeof input === 'function' ? input(get()) : input;
+           if (options) {
+             assertAgentWrite(get(), targetCanvasId, options);
+             if (!newNodes.length || newNodes.some(node => get().nodes.some(existing => existing.id === node.id))) throw agentError('INVALID_ARGUMENT', '新增节点为空或 ID 已存在');
+@@ -697,10 +718,11 @@
+
+           if (!options) get().actions.recordSnapshot();
+           // 容错回退机制
+           try {
+-            await partialUpdate(canvasId, {
++            const outcome = await partialUpdate(canvasId, {
+               addNodes: nodesToAdd,
+             }, options);
+             if (options && get().canvasId === canvasId) get().actions.recordSnapshot();
++            return outcome;
+           } catch (error) {
+             if (!options || (get().canvasId === canvasId && !isUnknownWrite(error))) {
+               rollbackAddedElements(get, set, nodesToAdd.map(node => node.id));
+@@ -719,7 +741,7 @@
+
+             }
+             if (options) {
+               if (get().canvasId === canvasId) get().actions.recordSnapshot();
+-              throw error;
++              throw Object.assign(notSentError(error), { affectedNodeIds: nodesToAdd.map(node => node.id) });
+             }
+           }
+         };
+@@ -1270,11 +1292,11 @@
+
+     },
+ 
+     // 执行组
+-    excuteGroup: async (id: string) => {
++    excuteGroup: (id: string) => prepareNativeRun(async () => {
+       const { nodes, edges, canvasId, modelMaxPromptMap, modelNodePermission, modelsMap } = get();
+       const excuteNodes = getGroupAllChild(nodes, id);
+       const excuteEdges = getEdgesByNodes(excuteNodes, edges);
+-      const { isAllow, message } = await isAllowRun(excuteNodes, excuteEdges, modelMaxPromptMap, nodes, edges, 'total', modelNodePermission, '', modelsMap);
++      const { isAllow, message } = await isAllowRun(excuteNodes, excuteEdges, modelMaxPromptMap, nodes, edges, 'total', modelNodePermission, '', modelsMap, () => isAllowCapacity(feedback.showCapacityLimit, requestOptions?.()));
+       if (!isAllow) {
+         return message;
+       }
+@@ -1295,13 +1317,13 @@
+
+         });
+       }
+       return res;
+-    },
++    }),
+ 
+     // 临时执行
+-    excuteTemp: async (nodes: Node[]) => {
++    excuteTemp: (nodes: Node[]) => prepareNativeRun(async () => {
+       const { nodes: allNodes, edges, canvasId, modelMaxPromptMap, modelNodePermission, modelsMap } = get();
+       const excuteEdges = getEdgesByNodes(nodes, edges);
+-      const { isAllow, message } = await isAllowRun(nodes, excuteEdges, modelMaxPromptMap, allNodes, edges, 'total', modelNodePermission, '', modelsMap);
++      const { isAllow, message } = await isAllowRun(nodes, excuteEdges, modelMaxPromptMap, allNodes, edges, 'total', modelNodePermission, '', modelsMap, () => isAllowCapacity(feedback.showCapacityLimit, requestOptions?.()));
+       if (!isAllow) {
+         return message;
+       }
+@@ -1321,7 +1343,7 @@
+
+         });
+       }
+       return res;
+-    },
++    }),
+ 
+     // 单点执行
+     excuteSingle: async (id: string, options?: AgentRunOptions) => {
+@@ -1332,7 +1354,7 @@
+
+             assertAgentWrite(get(), targetCanvasId, options);
+             assertAgentNodesIdle(get().nodes, [id]);
+           }
+-          const allowCapacity = await isAllowCapacity(feedback.showCapacityLimit ?? (() => undefined));
++          const allowCapacity = await isAllowCapacity(options ? (() => undefined) : (feedback.showCapacityLimit ?? (() => undefined)), options ? { ...requestOptions?.(), signal: options.signal, silentError: true } : requestOptions?.());
+           if (!allowCapacity) {
+             return capacityWarning;
+           }
+@@ -1347,24 +1369,26 @@
+
+           const excuteNodes = payload.workflowData.nodes;
+           const excuteEdges = payload.workflowData.edges;
+ 
+-          const { isAllow, message } = await isAllowRun(excuteNodes, excuteEdges, modelMaxPromptMap, nodes, edges, 'single', modelNodePermission, id, modelsMap);
++          const { isAllow, message } = await isAllowRun(excuteNodes, excuteEdges, modelMaxPromptMap, nodes, edges, 'single', modelNodePermission, id, modelsMap, options ? async () => true : () => isAllowCapacity(feedback.showCapacityLimit, requestOptions?.()));
+           if (!isAllow) {
+             return message;
+           }
+ 
+           const res = await executeWorkflow(payload, options);
+           if (res.type === 'success') {
+-            set({
+-              status: 'RUNNING',
+-            });
++            if (options) get().actions.updateNodeStatus(id, 'running');
++            set({ status: 'RUNNING' });
+           }
+           return res;
+         } catch (error) {
+-          if (options) throw notSentError(error);
++          if (options) {
++            if ((error as any)?.raw?.__accepted) { get().actions.updateNodeStatus(id, 'running'); set({ status: 'RUNNING' }); }
++            throw notSentError(error);
++          }
+           throw error;
+         }
+       };
+-      return options ? guardAgentOperation(run) : run();
++      return options ? guardAgentOperation(run) : prepareNativeRun(run);
+     },
+   },
+ };
+@@ -1381,11 +1405,13 @@
+
+   feedback?: FlowStoreFeedback;
+   onReadOnlyChange?: (readOnly: boolean) => void;
+   isContextActive?: () => boolean;
++  requireConfirmedNativeVersion?: boolean;
++  requestOptions?: () => import('@/api/workflow').CanvasRequestOptions;
+ }
+ 
+ export function createFlowStoreApi({
+   barrier = createCanvasVersionBarrier(), guard = createAgentEditGuard(),
+-  feedback = {}, onReadOnlyChange, isContextActive,
++  feedback = {}, onReadOnlyChange, isContextActive, requestOptions, requireConfirmedNativeVersion,
+ }: FlowStoreOptions = {}): FlowStoreApi {
+   return createStore<FlowState>((set, get) => {
+     let mutationQueue: Promise<void> = Promise.resolve();
+@@ -1426,11 +1452,22 @@
+
+             const valid = typeof version === 'string' ? version.trim().length > 0 && version.length <= 100
+               : typeof version === 'number' && Number.isSafeInteger(version) && version >= 0;
+             if (!valid || get().canvasId !== canvasId) {
++              if ((response as any)?.type === 'success' && get().canvasId === canvasId) {
++                (response as any).__accepted = true;
++              }
+               throw Object.assign(new CanvasAgentError('SUBMISSION_UNKNOWN', '请求已返回，但缺少可信版本或目标画布已切换'), { requestPhase: 'sent_unknown', raw: response });
+             }
+             // A strict receipt preserves the exact server version; never compare Long strings via Number.
+             set({ versionNumber: version });
+-          } else updateVersionNumber(canvasId, response);
++          } else {
++            const version = (response as any)?.versionNumber ?? (response as any)?.data?.versionNumber;
++            const trusted = typeof version === 'string' ? version.trim().length > 0 && version.length <= 100
++              : typeof version === 'number' && Number.isSafeInteger(version) && version >= 0;
++            if (requireConfirmedNativeVersion && !trusted && get().canvasId === canvasId) {
++              // Preserve native UI success/return behaviour; fence future Agent writes until reload.
++              set({ agentPersistenceIssue: { code: 'SUBMISSION_UNKNOWN', message: '原生保存或执行已返回，但缺少可信版本，请刷新核对', retry: 'read_first' } });
++            } else updateVersionNumber(canvasId, response);
++          }
+           return response;
+         })
+         .catch(error => {
+@@ -1443,7 +1480,7 @@
+
+           }
+           if (get().canvasId === canvasId && !isUnknownWrite(error) && isVersionConflict(error)) {
+             set({ versionConflict: true });
+-          } else if (error?.raw?.msg) {
++          } else if (!options && error?.raw?.msg) {
+             feedback.error?.(error.message);
+           }
+           throw error;
+@@ -1460,13 +1497,16 @@
+
+       enqueueMutation(canvasId, async () => {
+         const currentVersion = get().canvasId === canvasId ? get().versionNumber : undefined;
+         if (options) assertAgentNodesIdle(get().nodes, [...(payload.updateNodes ?? []).map(node => node.id), ...(payload.deleteNodeIds ?? [])]);
+-        return partialUpdateRequest(canvasId, payload, currentVersion, options ? { receiptMode: 'agent' } : undefined, get().readOnly);
+-      }, options).then(() => undefined);
++        return partialUpdateRequest(canvasId, payload, currentVersion, { ...requestOptions?.(), ...(options ? { receiptMode: 'agent' as const, signal: options.signal } : {}) }, get().readOnly);
++      }, options).then(response => options ? {
++        version: String((response as any)?.versionNumber ?? (response as any)?.data?.versionNumber),
++        affectedNodeIds: [...new Set([...(payload.addNodes ?? []).map(node => node.id), ...(payload.updateNodes ?? []).map(node => node.id), ...(payload.deleteNodeIds ?? [])])],
++      } : undefined);
+ 
+     const saveCanvas = (canvasId: string, nodes: Node[], edges: Edge[]) => {
+       return enqueueMutation(canvasId, () => {
+         const versionNumber = get().canvasId === canvasId ? get().versionNumber : undefined;
+-        return saveCanvasRequest(canvasId, nodes, edges, versionNumber, undefined, get().readOnly);
++        return saveCanvasRequest(canvasId, nodes, edges, versionNumber, requestOptions?.(), get().readOnly);
+       }).then(() => undefined);
+     };
+ 
+@@ -1474,21 +1514,28 @@
+
+       const canvasId = params.id || get().canvasId;
+       return enqueueMutation(canvasId, () => {
+         const versionNumber = get().canvasId === canvasId ? get().versionNumber : undefined;
+-        return saveFlowRequest({ ...params, versionNumber }, { silentError: true });
++        return saveFlowRequest({ ...params, versionNumber }, { silentError: true, ...requestOptions?.() });
+       });
+     };
+ 
+     const executeWorkflow = (params: WorkFlowExcute, options?: AgentRunOptions) =>
+       enqueueMutation(params.canvasId, () => {
+         const currentVersion = get().canvasId === params.canvasId ? get().versionNumber : undefined;
+-        if (options) assertAgentNodesIdle(get().nodes, params.runningNodeIds ?? []);
+-        return excute({ ...params, versionNumber: currentVersion }, options ? { receiptMode: 'agent' } : undefined);
++        if (options) {
++          const ids = params.runningNodeIds ?? [];
++          assertAgentNodesIdle(get().nodes, ids);
++          const target = get().nodes.find(node => node.id === ids[0]);
++          const counts = target && getAgentGenerationCounts(get(), target);
++          if (target) validateAgentRunInputs(get(), target);
++          if (!counts || counts.images !== options.approvedGeneration.images || counts.videos !== options.approvedGeneration.videos) throw agentError('COUNT_CHANGED', '生成数量或参数已变化，请重新预检');
++        }
++        return excute({ ...params, versionNumber: currentVersion }, { ...requestOptions?.(), ...(options ? { receiptMode: 'agent' as const, signal: options.signal } : {}) });
+       }, options);
+ 
+     const mediaDimensions = createFlowMediaDimensionCoordinator({
+       getState: get,
+       setNodes: nodes => set({ nodes }),
+-      partialUpdate,
++      partialUpdate, isContextActive,
+     });
+     const awaitMutationsIdle = async () => {
+       let previous: Promise<void>;
+@@ -1499,6 +1546,6 @@
+
+       } while (previous !== mutationQueue);
+     };
+     const hasPendingMutations = () => pendingMutations > 0 || mediaDimensions.hasPendingPersistence();
+-    return createFlowState(set, get, mediaDimensions, { partialUpdate, awaitMutationsIdle, hasPendingMutations, saveCanvas, saveFlow, executeWorkflow }, guard, feedback, onReadOnlyChange);
++    return createFlowState(set, get, mediaDimensions, { partialUpdate, awaitMutationsIdle, hasPendingMutations, saveCanvas, saveFlow, executeWorkflow }, guard, feedback, onReadOnlyChange, requestOptions);
+   });
+ }
+--- before/canvas-app/legacy/src/store/pointStore.ts
+
++++ after/canvas-app/legacy/src/store/pointStore.ts
+
+@@ -1,4 +1,6 @@
+
+-import { create } from 'zustand';
++import { useStore } from 'zustand';
++import { createStore, type StoreApi } from 'zustand/vanilla';
++import { getCanvasViewBinding, type CanvasViewBinding } from '../../../src/canvas-service-binding';
+ import { accountBalance, type AccountBalanceData, type GiftPointVo } from '@/api/order';
+ import { readStoredAccessToken } from '@/utils/authSession';
+ 
+@@ -18,7 +20,7 @@
+
+   giftPointVoList: GiftPointVo[];
+ }
+ 
+-interface PointStore {
++export interface PointStore {
+   point: number;
+   needPoint: number;
+   rechargeBalance: number;
+@@ -45,11 +47,6 @@
+
+ 
+ export const BALANCE_STALE_TIME_MS = 10_000;
+ 
+-let inFlightBalanceRequest: Promise<PointBalance | null> | null = null;
+-let inFlightOwnerKey: string | null = null;
+-let inFlightForce = false;
+-let inFlightRequestId = 0;
+-
+ const getBalanceOwnerKey = () => {
+   try {
+     return readStoredAccessToken()?.value || 'anonymous';
+@@ -103,9 +100,16 @@
+
+   return '获取积分失败';
+ };
+ 
+-export const usePointStore = create<PointStore>((set, get) => {
++export type PointStoreApi = StoreApi<PointStore>;
++export function createPointStoreApi(getOwnerKey = getBalanceOwnerKey, requestOptions?: () => import('@/api/workflow').CanvasRequestOptions): PointStoreApi {
++let inFlightBalanceRequest: Promise<PointBalance | null> | null = null;
++let inFlightOwnerKey: string | null = null;
++let inFlightForce = false;
++let inFlightRequestId = 0;
++
++  return createStore<PointStore>((set, get) => {
+   const fetchUserPoint = async (options: RefreshOptions = {}): Promise<PointBalance | null> => {
+-    const ownerKey = getBalanceOwnerKey();
++    const ownerKey = getOwnerKey();
+     const state = get();
+     const staleTime = options.staleTime ?? BALANCE_STALE_TIME_MS;
+     const now = Date.now();
+@@ -129,9 +133,9 @@
+
+     inFlightRequestId = requestId;
+     inFlightOwnerKey = ownerKey;
+     inFlightForce = shouldForce;
+-    inFlightBalanceRequest = accountBalance({ timestamp: getBalanceRequestTimestamp() })
++    inFlightBalanceRequest = accountBalance({ timestamp: getBalanceRequestTimestamp() }, requestOptions?.())
+       .then(res => {
+-        if (inFlightRequestId !== requestId) {
++        if (inFlightRequestId !== requestId || getOwnerKey() !== ownerKey) {
+           return getCurrentSnapshot(get());
+         }
+ 
+@@ -160,7 +164,7 @@
+
+         return balance;
+       })
+       .catch(error => {
+-        if (inFlightRequestId === requestId) {
++        if (inFlightRequestId === requestId && getOwnerKey() === ownerKey) {
+           set({
+             pointError: getErrorMessage(error),
+             lastFetchedAt: Date.now(),
+@@ -170,7 +174,7 @@
+
+         return getCurrentSnapshot(get());
+       })
+       .finally(() => {
+-        if (inFlightRequestId === requestId) {
++        if (inFlightRequestId === requestId && getOwnerKey() === ownerKey) {
+           set({ pointLoading: false });
+           inFlightBalanceRequest = null;
+           inFlightOwnerKey = null;
+@@ -229,4 +233,34 @@
+
+       },
+     },
+   };
++  });
++}
++const defaultPoints = createPointStoreApi();
++// A subscription facade delegates to the same vanilla Store, and scopes UI listeners to its view.
++const viewPointApis = new WeakMap<CanvasViewBinding, PointStoreApi>();
++function currentPointApi(): PointStoreApi {
++  const binding = getCanvasViewBinding();
++  if (!binding) return defaultPoints;
++  let api = viewPointApis.get(binding);
++  if (!api) {
++    api = { ...binding.points, subscribe: listener => {
++      const unsubscribe = binding.points.subscribe(listener);
++      const untrack = binding.onRelease(unsubscribe);
++      return () => { untrack(); unsubscribe(); };
++    } };
++    viewPointApis.set(binding, api);
++  }
++  return api;
++}
++
++function usePoints(): PointStore;
++function usePoints<T>(selector: (state: PointStore) => T): T;
++function usePoints<T>(selector?: (state: PointStore) => T): PointStore | T {
++  return useStore<PointStoreApi, PointStore | T>(currentPointApi(), selector ?? (state => state));
++}
++export const usePointStore = Object.assign(usePoints, {
++  getState: () => (currentPointApi()).getState(),
++  getInitialState: () => (currentPointApi()).getInitialState(),
++  setState: ((...args: any[]) => (currentPointApi()).setState(...args as [any])) as PointStoreApi['setState'],
++  subscribe: (listener: Parameters<PointStoreApi['subscribe']>[0]) => (currentPointApi()).subscribe(listener),
+ });
+--- before/canvas-app/legacy/src/store/flowMediaDimensionCoordinator.ts
+
++++ after/canvas-app/legacy/src/store/flowMediaDimensionCoordinator.ts
+
+@@ -1,3 +1,4 @@
+
++import type { AgentMutationOutcome } from './flowStoreCore';
+ import type { Edge, Node } from '@xyflow/react';
+ import type { AgentWriteOptions } from '../../../../src/shared/canvas-agent-protocol';
+ import { loadIntrinsicMediaDimensions } from '@/components/canvasFlow/utils/mediaDimensionLoader';
+@@ -27,9 +28,10 @@
+
+ }
+ 
+ interface FlowMediaDimensionDependencies {
++  isContextActive?: () => boolean;
+   getState: () => FlowMediaDimensionState;
+   setNodes: (nodes: Node[]) => void;
+-  partialUpdate: (canvasId: string, payload: PartialUpdatePayload, options?: AgentWriteOptions) => Promise<void>;
++  partialUpdate: (canvasId: string, payload: PartialUpdatePayload, options?: AgentWriteOptions) => Promise<AgentMutationOutcome | void>;
+ }
+ 
+ interface MediaDimensionResolutionContext {
+@@ -164,10 +166,11 @@
+
+   });
+ };
+ 
+-export const createFlowMediaDimensionCoordinator = ({ getState, setNodes, partialUpdate }: FlowMediaDimensionDependencies) => {
++export const createFlowMediaDimensionCoordinator = ({ getState, setNodes, partialUpdate, isContextActive }: FlowMediaDimensionDependencies) => {
+   const revisions = new Map<string, number>();
+   const persistences = new Map<string, Promise<unknown>>();
+   let nextRevision = 0;
++  const preparations = new Set<Promise<unknown>>();
+ 
+   const invalidate = (ids: string[]) => {
+     ids.forEach(id => revisions.delete(id));
+@@ -186,7 +189,7 @@
+
+     clearPersistenceQueue();
+   };
+ 
+-  const queuePersistence = (ids: string[], persist: () => Promise<unknown>, options?: { strictReceipt?: true }) => {
++  const queuePersistence = <T>(ids: string[], persist: () => Promise<T>, options?: { strictReceipt?: true }) => {
+     const uniqueIds = [...new Set(ids)];
+     const barriers = uniqueIds.map(id => persistences.get(id)).filter((persistence): persistence is Promise<unknown> => Boolean(persistence));
+     const operation = Promise.all(barriers).then(persist);
+@@ -204,7 +207,7 @@
+
+   };
+ 
+   const waitPersistenceIdle = async () => {
+-    while (persistences.size > 0) await Promise.all([...persistences.values()]);
++    while (persistences.size > 0 || preparations.size > 0) await Promise.allSettled([...persistences.values(), ...preparations]);
+   };
+ 
+   const persistResolvedNode = (canvasId: string, node: Node) => {
+@@ -246,7 +249,7 @@
+
+     revisions.set(request.id, revision);
+ 
+     void loadIntrinsicMediaDimensions(policy.mediaType, value).then(intrinsic => {
+-      if (revisions.get(request.id) !== revision) return;
++      if (revisions.get(request.id) !== revision || (isContextActive && !isContextActive())) return;
+ 
+       const currentState = getState();
+       const currentNode = currentState.nodes.find(item => item.id === request.id);
+@@ -284,7 +287,16 @@
+
+     requests.forEach(scheduleResolution);
+   };
+ 
+-  const prepareNodesForCreate = (nodes: Node[]) => Promise.all(nodes.map(prepareMediaNodeForCreate));
++  const prepareNodesForCreate = (nodes: Node[]) => {
++    const canvasId = getState().canvasId;
++    const task = Promise.all(nodes.map(prepareMediaNodeForCreate)).then(result => {
++      if (getState().canvasId !== canvasId || (isContextActive && !isContextActive())) throw Object.assign(new Error('目标画布上下文已失效'), { code: 'FRAME_GONE', requestPhase: 'not_sent' });
++      return result;
++    });
++    preparations.add(task);
++    task.then(() => preparations.delete(task), () => preparations.delete(task));
++    return task;
++  };
+ 
+   const prepareNodesForInitialization = (nodes: Node[], edges: Edge[], persist = true): PreparedMediaNodes => {
+     const pendingRequests: MediaDimensionResolutionRequest[] = [];
+@@ -468,14 +480,14 @@
+
+   };
+ 
+   function persistNodeData(canvasId: string, id: string, updateContent: Pick<Node, 'id'> & Omit<Partial<Node>, 'id'>, shouldQueuePersistence: boolean): void;
+-  function persistNodeData(canvasId: string, id: string, updateContent: Pick<Node, 'id'> & Omit<Partial<Node>, 'id'>, shouldQueuePersistence: boolean, options: AgentWriteOptions): Promise<void>;
+-  function persistNodeData(canvasId: string, id: string, updateContent: Pick<Node, 'id'> & Omit<Partial<Node>, 'id'>, shouldQueuePersistence: boolean, options?: AgentWriteOptions): void | Promise<void> {
++  function persistNodeData(canvasId: string, id: string, updateContent: Pick<Node, 'id'> & Omit<Partial<Node>, 'id'>, shouldQueuePersistence: boolean, options: AgentWriteOptions): Promise<AgentMutationOutcome>;
++  function persistNodeData(canvasId: string, id: string, updateContent: Pick<Node, 'id'> & Omit<Partial<Node>, 'id'>, shouldQueuePersistence: boolean, options?: AgentWriteOptions): void | Promise<AgentMutationOutcome> {
+     const persist = () =>
+       partialUpdate(canvasId, {
+         updateNodes: [updateContent],
+       }, options);
+ 
+-    if (options?.strictReceipt) return queuePersistence([id], persist, options).then(() => undefined);
++    if (options?.strictReceipt) return queuePersistence([id], persist, options).then(outcome => outcome as AgentMutationOutcome);
+ 
+     if (shouldQueuePersistence) {
+       void queuePersistence([id], persist);
+@@ -662,7 +674,7 @@
+
+     prepareNodesForInitialization,
+     queuePersistence,
+     waitPersistenceIdle,
+-    hasPendingPersistence: () => persistences.size > 0,
++    hasPendingPersistence: () => persistences.size > 0 || preparations.size > 0,
+     reconcilePolledNodes,
+     reset,
+     scheduleRequests,
+--- before/canvas-app/legacy/src/store/flowStore.ts
+
++++ after/canvas-app/legacy/src/store/flowStore.ts
+
+@@ -1,3 +1,4 @@
+
++import { getCanvasViewBinding, type CanvasViewBinding } from '../../../src/canvas-service-binding';
+ import { useStore } from 'zustand';
+ import { toast } from 'sonner';
+ import { createFlowStoreApi, type FlowState, type FlowStoreApi } from './flowStoreCore';
+@@ -19,12 +20,34 @@
+
+   onReadOnlyChange: setCanvasReadOnlyFlag,
+ });
+ 
++// A subscription facade delegates to the same vanilla Store, and scopes UI listeners to its view.
++const viewFlowApis = new WeakMap<CanvasViewBinding, FlowStoreApi>();
++function currentFlowApi(): FlowStoreApi {
++  const binding = getCanvasViewBinding();
++  if (!binding) return defaultFlowStore;
++  let api = viewFlowApis.get(binding);
++  if (!api) {
++    api = { ...binding.store, subscribe: listener => {
++      const unsubscribe = binding.store.subscribe(listener);
++      const untrack = binding.onRelease(unsubscribe);
++      return () => { untrack(); unsubscribe(); };
++    } };
++    viewFlowApis.set(binding, api);
++  }
++  return api;
++}
++
+ function useDefaultFlowStore(): FlowState;
+ function useDefaultFlowStore<T>(selector: (state: FlowState) => T): T;
+ function useDefaultFlowStore<T>(selector?: (state: FlowState) => T): FlowState | T {
+-  return useStore<FlowStoreApi, FlowState | T>(defaultFlowStore, selector ?? (state => state));
++  return useStore<FlowStoreApi, FlowState | T>(currentFlowApi(), selector ?? (state => state));
+ }
+-export const useFlowStore: typeof useDefaultFlowStore & FlowStoreApi = Object.assign(useDefaultFlowStore, defaultFlowStore);
++export const useFlowStore: typeof useDefaultFlowStore & FlowStoreApi = Object.assign(useDefaultFlowStore, {
++  getState: () => (currentFlowApi()).getState(),
++  getInitialState: () => (currentFlowApi()).getInitialState(),
++  setState: ((...args: any[]) => (currentFlowApi()).setState(...args as [any])) as FlowStoreApi['setState'],
++  subscribe: ((listener: Parameters<FlowStoreApi['subscribe']>[0]) => (currentFlowApi()).subscribe(listener)),
++});
+ 
+ export const syncCanvasVersionNumber = (canvasId: string, versionNumber?: CanvasVersionNumber) => {
+   if (typeof versionNumber !== 'number' && typeof versionNumber !== 'string') return;
+--- before/canvas-app/legacy/src/components/canvasFlow/index.tsx
+
++++ after/canvas-app/legacy/src/components/canvasFlow/index.tsx
+
+@@ -1,3 +1,4 @@
+
++import { getCanvasViewBinding } from '../../../../src/canvas-service-binding';
+ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+ import {
+   ReactFlow,
+@@ -190,7 +191,7 @@
+
+   const [name, setName] = useState('');
+   const [temp, setTemp] = useState(false); // 是否缓存画布
+   const [thumbnailUrl, setThumbnailUrl] = useState(''); // 画布封面图
+-  const [templateId, setTemplateId] = useState<number>(0);
++  const [templateId, setTemplateId] = useState<number | string>(0);
+   const [shouldConfirmBeforeUnload, setShouldConfirmBeforeUnload] = useState(false);
+   const [contextMenu, setContextMenu] = useState<{
+     x: number;
+@@ -302,8 +303,29 @@
+
+     };
+   }, [shouldConfirmBeforeUnload]);
+ 
++  // Owned views consume the Client's native initialization and never reset its Store.
++  const ownedBinding = !readOnly && !embeddedPreview ? getCanvasViewBinding() : undefined;
++  useEffect(() => {
++    if (!ownedBinding) return;
++    const syncMetadata = () => {
++      const metadata = ownedBinding.getCanvasMetadata();
++      setName(metadata.name); setTemp(metadata.temp); setThumbnailUrl(metadata.thumbnailUrl); setTemplateId(metadata.templateId);
++      setShouldConfirmBeforeUnload(metadata.temp); setLoading(ownedBinding.getReadiness().phase === 'loading');
++    };
++    syncMetadata();
++    const stages = ownedBinding.getInitialization();
++    if (stages.models.status === 'failed') toast.error('获取模型参数失败');
++    if (stages.graph.replacedSubscriptionModel) toast.success('检测到画布中使用了您未订阅的模型，已自动帮您替换到相似效果的模型');
++    const unsubscribe = ownedBinding.subscribeReadiness(syncMetadata);
++    void ownedBinding.loadUiData().then(() => {
++      if (ownedBinding.getInitialization().prices.status === 'failed') toast.error('获取价格表失败');
++    }).catch(error => console.error('Canvas auxiliary data failed:', error));
++    return unsubscribe;
++  }, [ownedBinding]);
++
+   // 获取工作流信息
+   useEffect(() => {
++    if (ownedBinding) return;
+     setCanvasId(embeddedPreview ? '' : routeParams.id);
+     const getCanavasData = async () => {
+       const params = {
+@@ -866,7 +888,7 @@
+
+             size='sm'
+             variant='secondary'
+             className='h-8 shrink-0 rounded-lg bg-neutral-700 px-4 text-sm font-semibold hover:bg-neutral-600'
+-            onClick={() => window.location.reload()}
++            onClick={() => { if (ownedBinding) void ownedBinding.reloadFromUi().catch(error => toast.error(error.message)); else window.location.reload(); }}
+           >
+             刷新
+           </Button>
+--- before/canvas-app/legacy/src/components/canvasFlow/hooks.ts
+
++++ after/canvas-app/legacy/src/components/canvasFlow/hooks.ts
+
+@@ -1,3 +1,6 @@
+
++import { getCanvasViewBinding } from '../../../../src/canvas-service-binding';
++import { createCanvasGenerationMonitor } from '../../../../src/canvas-generation-monitor';
++import { defaultCanvasVersionBarrier } from '@/lib/canvasVersionBarrier';
+ import { createAgentEditorDebounce } from '../../../../src/agent-editor-debounce';
+ import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+@@ -6,10 +9,8 @@
+
+ import type { MediaInputItem, TextInputItem } from './utils/util';
+ import toolUtil from './utils/toolUtil';
+ import type { MediaNodeMeasuredSize } from './utils/toolUtil';
+-import { getFlowData } from '@/api/workflow';
+ import { calculateWorkflowCost } from '@/api/order';
+-import { useFlowStore, buildSingleWorkflowPayload, syncCanvasVersionNumber, type StoryboardDropPreview } from '@/store/flowStore';
+-import { runCanvasVersionPolling } from '@/lib/canvasVersionBarrier';
++import { useFlowStore, buildSingleWorkflowPayload, type StoryboardDropPreview } from '@/store/flowStore';
+ import { type titleStyleData } from './components/nodeControl/NodeTitle';
+ import { debounce, copyToClipboard } from '@/utils';
+ import { resolveUploadMediaType, partitionUploadMediaFiles, validateUploadFile, UNSUPPORTED_MEDIA_FILE_TOAST, type UploadMediaType } from '@/hooks/useFileUpload';
+@@ -689,77 +690,13 @@
+
+ 
+ // 处理轮询逻辑
+ const usePolling = (status: string, canvasId: string) => {
+-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+-  const errorCountRef = useRef<number>(0); // 连续错误次数计数器
+-  const { updateAllNodeStatus, updateNodesMap, setStatus } = useFlowStore(state => state.actions);
+-  const { updateUserPoint } = usePointStore(state => state.actions);
+-
++  const binding = getCanvasViewBinding();
+   useEffect(() => {
+-    if (status === 'RUNNING') {
+-      // 开始轮询
+-      const poll = async () => {
+-        try {
+-          const params = {
+-            id: canvasId,
+-          };
+-          // 调用轮询接口
+-          const result: any = await runCanvasVersionPolling(
+-            () => getFlowData(params),
+-            (response: any) => {
+-              const versionNumber = response?.data?.versionNumber;
+-              syncCanvasVersionNumber(canvasId, versionNumber);
+-              return typeof versionNumber === 'number' || typeof versionNumber === 'string';
+-            }
+-          );
+-          const data = result.data;
+-          setStatus(data.taskStatus);
+-
+-          // 重置错误计数器
+-          errorCountRef.current = 0;
+-
+-          if (data.taskStatus === 'RUNNING') {
+-            intervalRef.current = setTimeout(poll, 3000);
+-          }
+-          const canvasData = JSON.parse(data.data);
+-          const isChanegFailure = updateNodesMap(canvasData.nodes);
+-          // 生成失败或画布无执行节点时更新余额
+-          if (isChanegFailure || data.taskStatus === 'SUCCESS') {
+-            updateUserPoint();
+-            // 赛点返还存在延迟，赛点查询兜底
+-            setTimeout(() => {
+-              updateUserPoint();
+-            }, 5000);
+-          }
+-          // 打印轮询日志用于测试
+-          if (import.meta.env.MODE !== 'production') {
+-            console.log('轮询', canvasData.nodes);
+-          }
+-        } catch (error) {
+-          console.log('error', error);
+-          errorCountRef.current++;
+-
+-          // 如果连续错误超过6次，则设置为FAILURE
+-          if (errorCountRef.current >= 6) {
+-            setStatus('FAILURE');
+-            updateAllNodeStatus();
+-            updateUserPoint();
+-          } else {
+-            // 否则继续轮询
+-            intervalRef.current = setTimeout(poll, 10000);
+-          }
+-        }
+-      };
+-      intervalRef.current = setTimeout(poll, 200);
+-    }
+-
+-    // 清理函数
+-    return () => {
+-      if (intervalRef.current) {
+-        clearTimeout(intervalRef.current);
+-        intervalRef.current = null;
+-      }
+-    };
+-  }, [status, canvasId, setStatus, updateNodesMap]);
++    if (binding) return; // Client context already owns this canvas's poller.
++    const monitor = createCanvasGenerationMonitor(useFlowStore, defaultCanvasVersionBarrier, usePointStore);
++    monitor.reconcile();
++    return monitor.stop;
++  }, [status, canvasId, binding]);
+ };
+ 
+ // 处理节点尺寸变化
+@@ -804,12 +741,14 @@
+
+   };
+ 
+   const handleChangePrompt = (prompt: string) => {
++    const currentData = useFlowStore.getState().nodes.find(node => node.id === id)?.data;
++    if (!currentData) return;
+     updateNodeData(
+       id,
+       {
+-        ...data,
++        ...currentData,
+         params: {
+-          ...data.params,
++          ...(currentData.params as object),
+           prompt: prompt,
+         },
+       },
+@@ -1635,10 +1574,7 @@
+
+   const [prompt, setPrompt] = useState(nodePrompt || '');
+   const modelMaxPromptMap = useFlowStore(state => state.modelMaxPromptMap);
+ 
+-  useEffect(() => {
+-    setPrompt(nodePrompt || '');
+-    // 仅初始化一次，避免外部 prompt 更新导致输入被打断
+-  }, []);
++
+ 
+   const currentTextLen = useMemo(() => {
+     const inputTextLen = inputTextsForLen.reduce((sum, t) => sum + (t?.length ?? 0), 0);
+@@ -1687,6 +1623,16 @@
+
+       updateValueRef.current(content);
+     }, debounceMs);
+   }, [debounceMs, nodeId]);
++
++  useEffect(() => {
++    const binding = getCanvasViewBinding();
++    if (!binding) return;
++    const sync = () => {
++      const active = document.hasFocus() && document.activeElement?.closest('input, textarea, [contenteditable]');
++      if (!debouncedUpdateValue.isPending() && !binding.guard.isEditorBusy() && !active) setPrompt(nodePrompt || '');
++    };
++    sync(); return binding.guard.subscribeEditors(sync);
++  }, [nodePrompt, debouncedUpdateValue]);
+ 
+   const flushPrompt = useCallback(() => debouncedUpdateValue.flush(prompt), [debouncedUpdateValue, prompt]);
+ 
+--- before/canvas-app/legacy/src/components/canvasFlow/utils/toolUtil.ts
+
++++ after/canvas-app/legacy/src/components/canvasFlow/utils/toolUtil.ts
+
+@@ -411,9 +411,9 @@
+
+   openStorageLimitDialog();
+ };
+ 
+-const isAllowCapacity = async (showCapacityLimit: () => void | Promise<void> = showStorageCapacityLimit) => {
++const isAllowCapacity = async (showCapacityLimit: () => void | Promise<void> = showStorageCapacityLimit, options?: CanvasRequestOptions) => {
+   let isAllow = false;
+-  const res: any = await getAvailableCapacity();
++  const res: any = await getAvailableCapacity(options);
+   if (res.code === 'SUCCESS') {
+     const { usedCapacity, limitCapacity } = res.data;
+     if (usedCapacity < limitCapacity) {
+--- before/canvas-app/legacy/src/components/canvasFlow/utils/util.ts
+
++++ after/canvas-app/legacy/src/components/canvasFlow/utils/util.ts
+
+@@ -1301,7 +1301,8 @@
+
+   executeStrategy: 'total' | 'single' = 'total',
+   modelPermission: NormalizedModelPermission | null = null,
+   runningNodeId = '',
+-  modelsMap: MediaModelsMap = {}
++  modelsMap: MediaModelsMap = {},
++  capacityCheck: () => Promise<boolean> = isAllowCapacity
+ ) => {
+   let isAllow = true;
+   let message = {
+@@ -1379,7 +1380,7 @@
+
+     };
+   } else {
+     // 在做需调用接口的判断
+-    const allowCapacity = await isAllowCapacity();
++    const allowCapacity = await capacityCheck();
+     if (!allowCapacity) {
+       isAllow = false;
+       message = {
+--- before/canvas-app/legacy/src/components/canvasFlow/components/canvasControl/Header.tsx
+
++++ after/canvas-app/legacy/src/components/canvasFlow/components/canvasControl/Header.tsx
+
+@@ -26,7 +26,7 @@
+
+   temp: boolean;
+   id: string;
+   thumbnailUrl: string;
+-  templateId?: number;
++  templateId?: number | string;
+ }
+ 
+ interface ConfirmDialogState {
+--- before/canvas-app/legacy/src/components/canvasFlow/customNode/audio/index.tsx
+
++++ after/canvas-app/legacy/src/components/canvasFlow/customNode/audio/index.tsx
+
+@@ -52,7 +52,9 @@
+
+   const previewUrls = useMemo(() => (value ? [value] : []), [value]);
+ 
+   const handleSelectChange = (key: string, value: string | number | boolean | object) => {
+-    let params = { ...data.params };
++    const currentData = useFlowStore.getState().nodes.find(node => node.id === id)?.data;
++    if (!currentData) return;
++    let params: Record<string, any> = { ...(currentData.params as object) };
+     if (key === 'modelType') {
+       params = creareDefaultParamsV2(modelsMap, nodeType, String(value), undefined, modelNodePermission);
+       params.prompt = data.params.prompt;
+@@ -68,7 +70,7 @@
+
+       params[key] = value;
+     }
+     updateNodeData(id, {
+-      ...data,
++      ...currentData,
+       params,
+     });
+   };
+--- before/canvas-app/legacy/src/components/canvasFlow/customNode/text/index.tsx
+
++++ after/canvas-app/legacy/src/components/canvasFlow/customNode/text/index.tsx
+
+@@ -57,11 +57,12 @@
+
+   const nodeControlVisible = useTopNodeToolbarVisible(!focus && !isSelection && selected);
+   const debouncedUpdateValue = useMemo(() => {
+     return createAgentEditorDebounce(`${id}:text`, (content: string) => {
+-      if (content === value) return;
++      const current = useFlowStore.getState().nodes.find(node => node.id === id);
++      if (!current || content === current.data.value) return;
+       updateNodeData(
+         id,
+         {
+-          ...data,
++          ...current.data,
+           value: content,
+         },
+         false
+--- before/src/shared/canvas-service-runtime.ts
+
++++ after/src/shared/canvas-service-runtime.ts
+
+@@ -1,11 +1,19 @@
+
+-import type { FrameReadiness } from './canvas-agent-protocol'
++import type { CanvasOperation, CanvasOperationResult, FrameReadiness } from './canvas-agent-protocol'
+ 
+ export type CanvasCapability = 'read' | 'edit' | 'run'
+ export interface CanvasContextInfo { canvasId: string; contextId: string; readiness: FrameReadiness }
+ export interface CanvasContextInput { canvasId: string; capability: CanvasCapability; signal?: AbortSignal }
+ 
+-/** Implemented runtime foundation. View binding and execute are added in later tasks. */
+-export interface CanvasServiceRuntimeBase {
++export interface CanvasExecuteInput { canvasId: string; operation: CanvasOperation; signal?: AbortSignal }
++export interface CanvasViewRegistration { canvasId: string; viewId: string; frame: HTMLIFrameElement }
++export interface CanvasViewInput { canvasId: string; viewId: string; viewWindow: Window; viewDocument: Document }
++
++/** Browser service; view references are internal and never Agent tool arguments. */
++export interface CanvasServiceRuntimeBase<ViewBinding = unknown> {
++  execute(input: CanvasExecuteInput): Promise<CanvasOperationResult>
++  registerView(input: CanvasViewRegistration): () => void
++  attachView(input: CanvasViewInput): Promise<ViewBinding>
++  detachView(viewId: string): void
+   ensureContext(input: CanvasContextInput): Promise<CanvasContextInfo>
+   getContextInfo(canvasId: string): CanvasContextInfo | null
+   subscribeReadiness(canvasId: string, listener: (state: FrameReadiness) => void): () => void
+@@ -13,7 +21,10 @@
+
+   closeContext(canvasId: string): Promise<void>
+   dispose(): void
+ }
+-export interface CanvasRuntimeHandle { readonly ready: Promise<CanvasServiceRuntimeBase> }
++export interface CanvasRuntimeHandle {
++  readonly ready: Promise<CanvasServiceRuntimeBase>
++  registerView(input: CanvasViewRegistration): () => void
++}
+ 
+ declare global {
+   interface Window { __INSIGHT_CANVAS_RUNTIME_V1__?: CanvasRuntimeHandle }
+--- before/src/shared/canvas-agent-protocol.ts
+
++++ after/src/shared/canvas-agent-protocol.ts
+
+@@ -91,7 +91,7 @@
+
+ }
+ export type CanvasOperationResult = ReadReceipt | SaveReceipt | RunReceipt | UnknownReceipt | RejectedReceipt;
+ export type CanvasOperation =
+-  | { action: 'canvas.read'; nodeIds: string[] }
++  | { action: 'canvas.read'; nodeIds?: string[] }
+   | { action: 'node.add'; expectedVersion: Version; node: NodeDraft }
+   | { action: 'node.update'; expectedVersion: Version; nodeId: string; changes: NodeChanges }
+   | { action: 'node.delete'; expectedVersion: Version; nodeIds: string[] }
+@@ -101,7 +101,7 @@
+
+   capabilities: { read: boolean; edit: boolean; run: boolean };
+   version: Version | null; reason?: Failure;
+ }
+-export interface AgentWriteOptions { expectedVersion: Version; strictReceipt: true }
++export interface AgentWriteOptions { expectedVersion: Version; strictReceipt: true; signal?: AbortSignal }
+ export interface AgentRunOptions extends AgentWriteOptions {
+   strictTransportErrors: true; approvedGeneration: GenerationCounts;
+ }
+@@ -182,7 +182,7 @@
+
+ const counts = shape({ images: integer, videos: integer });
+ const failure = shape({ code: oneOf(ERROR_CODES), message: string(MAX_CONTENT_LENGTH, 1), retry: oneOf(['read_first', 'after_ready', 'after_input', 'developer_fix', 'user_decision', 'never_auto']) });
+ const operationChecks: Record<CanvasOperation['action'], Check> = {
+-  'canvas.read': shape({ action: oneOf(['canvas.read']), nodeIds }),
++  'canvas.read': shape({ action: oneOf(['canvas.read']) }, { nodeIds }),
+   'node.add': shape({ action: oneOf(['node.add']), expectedVersion: version, node: draft }),
+   'node.update': shape({ action: oneOf(['node.update']), expectedVersion: version, nodeId, changes }),
+   'node.delete': shape({ action: oneOf(['node.delete']), expectedVersion: version, nodeIds }),
+@@ -239,7 +239,7 @@
+
+ export function parseNodeDraft(value: unknown): NodeDraft { return parse(value, draft, '新增节点'); }
+ export function parseCanvasOperation(value: unknown): CanvasOperation {
+   const parsed = parse<CanvasOperation>(value, operation, '画布操作');
+-  return 'nodeIds' in parsed ? { ...parsed, nodeIds: [...new Set(parsed.nodeIds)] } : parsed;
++  return 'nodeIds' in parsed && parsed.nodeIds ? { ...parsed, nodeIds: [...new Set(parsed.nodeIds)] } : parsed;
+ }
+ function normalizeCommand<T extends HostEvent | ParentToFrame>(message: T): T {
+   return message.type === 'canvas.command' ? { ...message, payload: parseCanvasOperation(message.payload) } : message;
+--- before/src/client/canvas-service.ts
+
++++ after/src/client/canvas-service.ts
+
+@@ -1,5 +1,5 @@
+
+ import { CanvasAgentError } from '../shared/canvas-agent-protocol'
+-import type { CanvasRuntimeHandle, CanvasServiceRuntimeBase } from '../shared/canvas-service-runtime'
++import type { CanvasRuntimeHandle, CanvasServiceRuntimeBase, CanvasViewRegistration } from '../shared/canvas-service-runtime'
+ 
+ interface RuntimeHost {
+   location: { origin: string }
+@@ -20,7 +20,14 @@
+
+   let ready: Promise<CanvasServiceRuntimeBase> | undefined
+   let runtime: CanvasServiceRuntimeBase | undefined
+   let cancelLoading: (() => void) | undefined
++  const views = new Map<string, { input: CanvasViewRegistration; release?: () => void }>()
+   const handle: CanvasRuntimeHandle = {
++    registerView(input) {
++      if (disposed || views.has(input.viewId)) throw unavailable()
++      const entry = { input, release: runtime?.registerView(input) }
++      views.set(input.viewId, entry)
++      return () => { if (views.get(input.viewId) === entry) { try { entry.release?.() } finally { views.delete(input.viewId) } } }
++    },
+     get ready() {
+       if (disposed) return Promise.reject(unavailable())
+       return ready ??= new Promise<CanvasServiceRuntimeBase>((resolve, reject) => {
+@@ -32,12 +39,13 @@
+
+           if (disposed) throw unavailable()
+           if (typeof module?.createCanvasServiceRuntime !== 'function') throw unavailable()
+           const loaded = module.createCanvasServiceRuntime()
+-          const methods = ['ensureContext', 'getContextInfo', 'subscribeReadiness', 'reloadContext', 'closeContext', 'dispose'] as const
++          const methods = ['ensureContext', 'getContextInfo', 'subscribeReadiness', 'reloadContext', 'closeContext', 'execute', 'registerView', 'attachView', 'detachView', 'dispose'] as const
+           if (!loaded || methods.some(method => typeof loaded[method] !== 'function')) {
+             loaded?.dispose?.()
+             throw unavailable()
+           }
+           runtime = loaded
++          views.forEach(entry => { entry.release = loaded.registerView(entry.input) })
+           resolve(loaded)
+         }).catch(error => reject(error instanceof CanvasAgentError ? error : Object.assign(unavailable(), { cause: error })))
+       }).finally(() => { cancelLoading = undefined })
+@@ -48,7 +56,7 @@
+
+     if (disposed) return
+     disposed = true
+     cancelLoading?.()
+-    try { runtime?.dispose() }
++    try { views.forEach(entry => { try { entry.release?.() } catch (error) { console.error('Canvas view cleanup failed:', error) } }); views.clear(); runtime?.dispose() }
+     finally { if (host.__INSIGHT_CANVAS_RUNTIME_V1__ === handle) delete host.__INSIGHT_CANVAS_RUNTIME_V1__ }
+   }
+ }
+--- before/src/client/CanvasTab.tsx
+
++++ after/src/client/CanvasTab.tsx
+
+@@ -1,4 +1,4 @@
+
+-import { useEffect, useRef } from 'react'
++import { useEffect, useRef, useMemo, useCallback } from 'react'
+ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+ import { canvasIdFromAddress } from '../shared/protocol'
+ import { parseNodeSelection } from './message'
+@@ -10,7 +10,13 @@
+
+   const draft = useInput((state: { draft: string }) => state.draft)
+   const draftRef = useRef(draft)
+   draftRef.current = draft
+-  const frame = useRef<HTMLIFrameElement>(null)
++  const frame = useRef<HTMLIFrameElement | null>(null)
++  const viewId = useMemo(() => crypto.randomUUID(), [id])
++  const releaseView = useRef<(() => void) | undefined>()
++  const registerFrame = useCallback((node: HTMLIFrameElement | null) => {
++    releaseView.current?.(); releaseView.current = undefined; frame.current = node
++    if (id && node) releaseView.current = window.__INSIGHT_CANVAS_RUNTIME_V1__?.registerView({ canvasId: id, viewId, frame: node })
++  }, [id, viewId])
+ 
+   useEffect(() => {
+     const receive = (event: MessageEvent): void => {
+@@ -28,9 +34,9 @@
+
+ 
+   if (!id) return <div>无效的画布地址</div>
+   return <iframe
+-    ref={frame}
++    ref={registerFrame}
+     title={`画布 ${id}`}
+-    src={`/desktop-canvas/view?id=${encodeURIComponent(id)}`}
++    src={`/desktop-canvas/view?id=${encodeURIComponent(id)}&viewId=${encodeURIComponent(viewId)}`}
+     style={{ display: 'block', width: '100%', height: '100%', border: 0, background: '#111318' }}
+   />
+ }

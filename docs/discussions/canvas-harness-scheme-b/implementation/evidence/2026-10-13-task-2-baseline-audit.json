@@ -1,0 +1,77 @@
+{
+  "web_type_diagnostics": [
+    {
+      "file": "legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+      "line": 52,
+      "column": 101,
+      "code": "TS2345",
+      "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'."
+    },
+    {
+      "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+      "line": 74,
+      "column": 111,
+      "code": "TS2345",
+      "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+    },
+    {
+      "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+      "line": 79,
+      "column": 9,
+      "code": "TS2345",
+      "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'."
+    },
+    {
+      "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+      "line": 155,
+      "column": 93,
+      "code": "TS2345",
+      "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+    },
+    {
+      "file": "legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+      "line": 149,
+      "column": 26,
+      "code": "TS2322",
+      "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"type\" | \"source\" | \"label\" | \"duration\" | \"sourceType\" | \"fileFormat\">'."
+    },
+    {
+      "file": "legacy/src/components/community/coverCrop/coverCropMedia.ts",
+      "line": 102,
+      "column": 18,
+      "code": "TS2367",
+      "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap."
+    },
+    {
+      "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+      "line": 431,
+      "column": 19,
+      "code": "TS2531",
+      "message": "Object is possibly 'null'."
+    },
+    {
+      "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+      "line": 433,
+      "column": 20,
+      "code": "TS2531",
+      "message": "Object is possibly 'null'."
+    },
+    {
+      "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+      "line": 434,
+      "column": 20,
+      "code": "TS2531",
+      "message": "Object is possibly 'null'."
+    }
+  ],
+  "new_diagnostics": 0,
+  "baseline_files_checked": 43,
+  "changed_baseline_files": [
+    "canvas-app/src/canvas-service.ts",
+    "canvas-app/test/agent-runtime-complete.test.ts",
+    "scripts/verify-isolated.mjs",
+    "src/shared/canvas-agent-protocol.ts",
+    "src/shared/canvas-service-runtime.ts"
+  ],
+  "unexpected_baseline_changes": []
+}

@@ -1,0 +1,306 @@
+[
+  {
+    "id": "@insight-ai/desktop-canvas-plugin@0.3.0-alpha.9",
+    "name": "@insight-ai/desktop-canvas-plugin",
+    "version": "0.3.0-alpha.9",
+    "size": 14443589,
+    "unpackedSize": 42817608,
+    "shasum": "f6645d08a6a78099b6a1f6b257edbc241cd7389b",
+    "integrity": "sha512-Ou+GiXOcvMtsGCM1prVDTZ0nktxARzuQk8LwQwB7sPiotLZqXDdzH0ZujDialuDVFO9gQxNE83OFDTaljjX4mg==",
+    "filename": "insight-ai-desktop-canvas-plugin-0.3.0-alpha.9.tgz",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 3699,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/_commonjs-dynamic-modules-TDtrdbi3.js",
+        "size": 239,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/AssetHistory-DNIyrWka.js",
+        "size": 125688,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/audio_bg-DyznFdYi.png",
+        "size": 62888,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/audio-iI3g0XfB.png",
+        "size": 285193,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/basePlugin-BJF3L_3t.js",
+        "size": 36856,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/calendar-clock-DWkIcLFe.js",
+        "size": 559,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/canvas-router-CN60zd2-.js",
+        "size": 4829711,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/canvas-router-q7PQQouI.css",
+        "size": 47043,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/default_flow-BABMqfiB.png",
+        "size": 157259,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/driver-CTZuBZOi.css",
+        "size": 3042,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/driver.js-Dj4CfABu.js",
+        "size": 25413,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/excute_btn-BPt2M8tP.png",
+        "size": 4552,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/ffmpeg-core-CgUfceKH.wasm",
+        "size": 32232419,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/ffmpeg-core-CI9Irx9p.js",
+        "size": 111804,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/ffmpeg-core-DwrD951U.js",
+        "size": 81,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/ffmpeg-core-Wd_ovYGN.js",
+        "size": 79,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/iconfont-DJCWDcrV.woff2",
+        "size": 11924,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/image_bg-BahlhtzP.png",
+        "size": 59598,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-607UPNXL.js",
+        "size": 1793,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-BjiV7Ugf.css",
+        "size": 37000,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-C1OUzuo2.js",
+        "size": 361948,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-D0m1qXZS.js",
+        "size": 3126,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-DCQbm-TW.js",
+        "size": 4842,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-DDNIeb7b.js",
+        "size": 528828,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-gWhyKiZ_.css",
+        "size": 212356,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-kW3zyplA.js",
+        "size": 37477,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/index-pJAiFqAa.js",
+        "size": 404108,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/interrupt_btn-B09piEcK.png",
+        "size": 5443,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/jszip.min-CeA-6S9y.js",
+        "size": 97102,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/shopPayment_zh_cn-B-TN6Kcn.html",
+        "size": 294267,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/storageLimitManager-DJw-QzmW.js",
+        "size": 3631,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/TemplateList-Vixtkyul.js",
+        "size": 11163,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/text_bg-yESA_ie8.png",
+        "size": 65906,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/tool_bg-BjWhaFM3.png",
+        "size": 66448,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/ToolList-XX0-TTvh.js",
+        "size": 4250,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/userPrivacy_zh_cn-Bz6avefy.html",
+        "size": 503355,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/userService_zh_cn-CK4U9vfY.html",
+        "size": 467987,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/video_bg-CR7IYaN6.png",
+        "size": 65337,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/worker-D4R0sPVE.js",
+        "size": 74,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/worker-DYSz7Krg.js",
+        "size": 2506,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/assets/workflowTabOwnership-DLSIjWJ6.js",
+        "size": 303429,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/canvas-service-manifest.json",
+        "size": 199,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/canvas-service.js",
+        "size": 19261,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/inter-latin.woff2",
+        "size": 48432,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/material-symbols.woff2",
+        "size": 1104576,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/noto-serif-sc-400.woff2",
+        "size": 58,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/noto-serif-sc-700.woff2",
+        "size": 58,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/noto-serif-sc-900.woff2",
+        "size": 58,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/fonts/playfair-latin.woff2",
+        "size": 38460,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/GameAI.png",
+        "size": 1926,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/index.html",
+        "size": 939,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/inflowLogo.svg",
+        "size": 2601,
+        "mode": 420
+      },
+      {
+        "path": "canvas-app/dist/insight.png",
+        "size": 6507,
+        "mode": 420
+      },
+      {
+        "path": "cordis.patch.yml",
+        "size": 98,
+        "mode": 420
+      },
+      {
+        "path": "lib/client.js",
+        "size": 41656,
+        "mode": 420
+      },
+      {
+        "path": "lib/index.js",
+        "size": 70804,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 1552,
+        "mode": 420
+      }
+    ],
+    "entryCount": 58,
+    "bundled": []
+  }
+]

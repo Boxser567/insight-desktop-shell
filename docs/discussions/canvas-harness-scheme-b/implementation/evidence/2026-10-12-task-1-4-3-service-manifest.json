@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entry": "canvas-service.js",
+  "exports": [
+    "createCanvasServiceRuntime"
+  ],
+  "staticChunks": [
+    "assets/canvas-initialization-BnyvZ_TV.js",
+    "canvas-service.js"
+  ]
+}

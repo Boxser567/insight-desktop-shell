@@ -1,0 +1,165 @@
+{
+  "date": "2026-10-14",
+  "version": "0.3.0-alpha.13",
+  "status": "DONE_WITH_CONCERNS",
+  "scope": "Cold context authority refresh and healthy graph configuration failure isolation; tool guidance for normal reads, nested add changes and explicit stop rules",
+  "tests": {
+    "plugin": {
+      "passed": 173,
+      "total": 173
+    },
+    "web": {
+      "passed": 276,
+      "total": 276,
+      "files": 22
+    },
+    "reproduction": {
+      "coldRefreshFailedBeforeFix": 2,
+      "configurationRefreshFailedBeforeFix": 3
+    },
+    "completeHostClientAssetFixture": "passed; cold refresh, models 502, canvas_node reuse, separate attachment reuse, one PUT, three strict saves, iframe 0, generation 0",
+    "visibleViewFixture": "passed; same Context/Store/Binding, one graph initialization, three saved updates, no loading readiness"
+  },
+  "types": {
+    "host": "pass",
+    "actualShellCore": "pass",
+    "web": {
+      "baseline": "2026-10-13-graph-web-type-comparison.json",
+      "existingDiagnostics": 9,
+      "newDiagnostics": [],
+      "sameDiagnosticSet": true,
+      "diagnostics": [
+        {
+          "file": "legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+          "line": 52,
+          "column": 101,
+          "code": "TS2345",
+          "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'."
+        },
+        {
+          "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 74,
+          "column": 111,
+          "code": "TS2345",
+          "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+        },
+        {
+          "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 79,
+          "column": 9,
+          "code": "TS2345",
+          "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'."
+        },
+        {
+          "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 155,
+          "column": 93,
+          "code": "TS2345",
+          "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+        },
+        {
+          "file": "legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+          "line": 149,
+          "column": 26,
+          "code": "TS2322",
+          "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"source\" | \"type\" | \"label\" | \"duration\" | \"sourceType\" | \"fileFormat\">'."
+        },
+        {
+          "file": "legacy/src/components/community/coverCrop/coverCropMedia.ts",
+          "line": 102,
+          "column": 18,
+          "code": "TS2367",
+          "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap."
+        },
+        {
+          "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 431,
+          "column": 19,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'."
+        },
+        {
+          "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 433,
+          "column": 20,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'."
+        },
+        {
+          "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 434,
+          "column": 20,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'."
+        }
+      ]
+    }
+  },
+  "build": "passed",
+  "package": {
+    "archive": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/insight-ai-desktop-canvas-plugin-0.3.0-alpha.13.tgz",
+    "sha256": "640f6874cb54153a88fdc76b6bcf7091c4214f9c1282486605c1412a759cb263",
+    "bytes": 14463227,
+    "files": 58,
+    "mismatches": [],
+    "allFilesMatch": true
+  },
+  "sourceAudit": {
+    "baseline": "/private/tmp/canvas-alpha13-baseline",
+    "baselineFiles": 634,
+    "changed": [
+      "src/host/canvas-asset-tools.ts",
+      "src/host/canvas-tools.ts",
+      "canvas-app/src/canvas-context.ts",
+      "canvas-app/src/canvas-service.ts",
+      "test/canvas-tools.test.mjs",
+      "canvas-app/test/agent-context-initialization.test.ts",
+      "canvas-app/test/agent-runtime-complete.test.ts",
+      "canvas-app/test/agent-service.test.ts",
+      "README.md",
+      "package.json",
+      "package-lock.json"
+    ],
+    "dependenciesUnchanged": true,
+    "uiSourcesChanged": [],
+    "backendChanged": false
+  },
+  "review": {
+    "independentServiceAndContextReview": "passed",
+    "finalBaselineDiff": "reviewed",
+    "unresolvedBlockingCodeFindings": 0
+  },
+  "isolated": {
+    "status": "passed",
+    "toolCount": 7,
+    "authenticationRegistrationSseSessionDetach": "passed",
+    "installationAndRemoval": "passed",
+    "businessCommands": false
+  },
+  "realAccount": {
+    "currentInstalledVersion": "0.3.0-alpha.12",
+    "alpha13Installed": false,
+    "canvasId": "103161",
+    "canvasModifiedByThisTurn": false,
+    "generationSubmitted": false,
+    "userReport": {
+      "P01": "created three nodes after opening sidebar; first headless request rejected",
+      "P02": "field updates succeeded; 2-3 full reloads observed",
+      "P03": "specific result not supplied",
+      "P04": "specific result not supplied",
+      "P05": "two rejected imports; no saved new asset, confirmed terminal version 19"
+    },
+    "pending": [
+      "alpha13 installation and new dialogue tool/runtime check",
+      "R01 cold read with canvas closed",
+      "R02 native visible UI continuity",
+      "R03 existing image reuse",
+      "P03/P04 and remaining graph/model manual matrix"
+    ]
+  },
+  "concerns": [
+    "Real initial FRAME_NOT_READY raw arguments were not supplied; cold refresh defect reproduced but not proven sole cause",
+    "Remote model configuration 502 is not fixed by this plugin change",
+    "Tool descriptions guide the Agent; do not forcibly implement user-specific failure stopping"
+  ]
+}

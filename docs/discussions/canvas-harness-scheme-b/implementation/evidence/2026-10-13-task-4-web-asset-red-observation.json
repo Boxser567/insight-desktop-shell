@@ -1,0 +1,16 @@
+{
+  "kind": "observed_tool_output_summary",
+  "note": "初始红测已实际执行；此文件为工具输出摘要，非未经处理的原始stdout日志。",
+  "command": "bundled-node node_modules/vitest/vitest.mjs run --config vitest.agent.config.ts test/agent-asset.test.ts",
+  "cwd": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/canvas-app",
+  "run_started_at_local": "2026-10-13 12:18:05",
+  "exit_code": 1,
+  "test_files_failed": 1,
+  "tests_failed": 8,
+  "tests_passed": 0,
+  "observed_failures": [
+    {"tests": 2, "cause": "createAgentAssetNode is not a function"},
+    {"tests": 6, "cause": "asset.add 尚未在共享协议接受；预期保存/版本/编辑/unknown结果实际返回INVALID_ARGUMENT，或等待尺寸API未被调用"}
+  ],
+  "final_green_log": "2026-10-13-task-4-web-asset-focused.log"
+}

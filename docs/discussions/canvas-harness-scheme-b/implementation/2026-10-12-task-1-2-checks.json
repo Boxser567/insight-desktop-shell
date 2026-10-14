@@ -1,0 +1,36 @@
+{
+  "task": "1.2",
+  "date": "2026-10-12",
+  "status": "implemented_and_automatically_verified",
+  "runtime": "Node 24.19.0",
+  "plugin_tests": {
+    "passed": 48,
+    "failed": 0
+  },
+  "web_tests": {
+    "passed": 41,
+    "failed": 0,
+    "new": 28
+  },
+  "host_client_types": "passed",
+  "web_types": {
+    "exit_code": 2,
+    "remaining_legacy_diagnostics": 9,
+    "new_diagnostics": 0,
+    "resolved": "flowStore enqueueMutation callback TS2345"
+  },
+  "web_build": "passed (Vite 11.19s; existing large chunk warning)",
+  "evidence": {
+    "web-tests": "evidence/2026-10-12-task-1-2-web-tests.log",
+    "plugin-tests": "evidence/2026-10-12-task-1-2-plugin-tests.log",
+    "web-types": "evidence/2026-10-12-task-1-2-web-types.log",
+    "web-build": "evidence/2026-10-12-task-1-2-web-build.log",
+    "red-tests": "evidence/2026-10-12-task-1-2-red-tests.log"
+  },
+  "not_verified": [
+    "real backend / generation",
+    "live native UI smoke",
+    "isolated installation",
+    "Shell exact packaged runtime"
+  ]
+}

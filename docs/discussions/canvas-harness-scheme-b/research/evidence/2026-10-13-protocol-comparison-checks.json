@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-13",
+  "scope": "Protocol-only comparison; Mock runtime excluded from design ranking",
+  "workflowBranch": "feature/workflow-op",
+  "workflowCommit": "2f162eac46952ea2ff39d53f33161d128dfc1e78",
+  "remoteFetchedThisTurn": true,
+  "alphaVersion": "0.3.0-alpha.12",
+  "alphaBaseline": {
+    "comparedAgainst": "2026-10-13-workflow-op-comparison-checks.json",
+    "filesCompared": 16,
+    "mismatches": []
+  },
+  "tests": {
+    "file": "2026-10-13-protocol-comparison-probes.test.ts.txt",
+    "passed": 10,
+    "failed": 0,
+    "mockBackendImported": false,
+    "networkCalls": 0,
+    "storeOperations": 0,
+    "meaning": "Verified representability and constraints of existing protocol schemas, not implementation correctness"
+  },
+  "findingsVerified": [
+    "Typed batch and temporary edge references supported by workflow",
+    "Literal text and default model behavior differ",
+    "Nested parameter patch versus alpha scalar restriction",
+    "Workflow create/update extra-parameter asymmetry",
+    "Workflow choices restricted to strings",
+    "Closed versus discovered mode identifiers",
+    "Queued submit versus run query mismatch",
+    "Alpha version and unknown result semantics",
+    "Workflow error path and operationIndex",
+    "Workflow operation array unbounded and contradictory applied/valid accepted by schema"
+  ],
+  "changes": [
+    "New protocol comparison report",
+    "Prior report scope clarification",
+    "Discussion index",
+    "Protocol probes and evidence"
+  ],
+  "businessCodeChanged": false,
+  "proposedMergedProtocolImplemented": false,
+  "command": "node node_modules/vitest/vitest.mjs run test/protocol-comparison-review.test.ts",
+  "environment": {
+    "node": "v24.9.0",
+    "dependencies": "Reused current Shell node_modules and build/core-runtime/node_modules by temporary snapshot symlinks; did not install branch lockfile",
+    "vitest": "4.1.10",
+    "zod": "4.5.4"
+  }
+}

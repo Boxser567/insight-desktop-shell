@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-13",
+  "requested_action": "quick_replace_alpha8_with_alpha9_for_task3_validation",
+  "uninstall_failure": {
+    "log": "operation-FnGNZl/pnpm.log",
+    "error": "/usr/local/bin/pnpm: line 2: exec: /Users/boxser.shi/.nvm/versions/node/v24.4.1/bin/node: cannot execute: No such file or directory",
+    "permanent_uninstall_path_fix": false
+  },
+  "installation": {
+    "method": "existing_Shell_Import_Local_Plugin_menu",
+    "version": "0.3.0-alpha.9",
+    "sha256": "762abd3a19165dd7f9ce3bc92937915d6e273437a031543c5330332047401f62",
+    "bundle_enabled": true,
+    "component_enabled": true,
+    "UI_component_status": "running_observed",
+    "installed_Host_matches_final_build": true,
+    "compiled_tool_definitions": {
+      "canvas_create": 1,
+      "canvas_get": 1,
+      "canvas_node_edit": 1
+    },
+    "runtime_tool_catalog_query": "not_performed_live",
+    "Harness_restart": "ready_observed",
+    "SSE_protocolVersion": 3,
+    "SSE_keepalive": "observed",
+    "other_plugins_changed": false,
+    "real_canvas_nodes_changed": false
+  },
+  "real_Agent_dialogue_acceptance": "pending"
+}

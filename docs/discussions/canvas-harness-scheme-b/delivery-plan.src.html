@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>方案 B 首期交付评审</title></head><body><aside style="padding:16px 22px;background:#fff1cd;color:#3d2b09;border-bottom:2px solid #dba943;font:17px/1.6 sans-serif;position:relative;z-index:99"><strong>历史设计，已被替代。</strong>用户已确认原有画布具备模板一键执行与依赖等待。本页新增调度与媒体运行时不作为首期编码依据。<a style="color:#164f9e" href="dialogue-bridge.html">阅读修订版交互说明与 8 项编码任务 →</a></aside>
+<header><p class="eyebrow">方案 B · insight-desktop-shell · 设计评审，尚未实施</p><h1>从商品图交付可修改成片</h1><p class="lead">模板、高层工具、API/SSE、持久结果与局部恢复共同构成首期。<a href="index.html">返回完整交互案例</a>。</p><ve-why><ve-quote via="prompt" from="用户">每一步需要达到什么目标，提前发现问题，避免产出半成品，让Harness调用时更轻便。</ve-quote></ve-why></header>
+<figure class="hero"><svg viewBox="0 0 560 350" role="img" aria-label="商品图进入Agent的业务调用，由插件确定计划，既有API和SSE提供生成事实，独立媒体端合成后保存并支持局部修改"><defs><marker id="plan-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs><g fill="none" stroke="currentColor" stroke-width="1.5"><path d="M120 70H220M350 70H425M485 104V200M425 235H350M220 235H120M65 200V105" marker-end="url(#plan-arrow)"/><rect x="10" y="35" width="110" height="70" rx="4"/><rect x="220" y="35" width="130" height="70" rx="4" data-ref="claim-1 claim-5"/><rect x="425" y="35" width="125" height="70" rx="4" data-ref="claim-4"/><rect x="425" y="200" width="125" height="70" rx="4" data-ref="claim-2"/><rect x="220" y="200" width="130" height="70" rx="4" data-ref="claim-2"/><rect x="10" y="200" width="110" height="70" rx="4" data-ref="claim-3"/></g><g fill="currentColor" font-family="'IBM Plex Sans','PingFang SC',sans-serif" font-size="14"><text x="26" y="62">商品图 + 需求</text><text x="26" y="87">用户表达目标</text><text x="236" y="62">插件确定计划</text><text x="236" y="87">① 一次业务调用</text><text x="440" y="62">既有API / SSE</text><text x="440" y="87">④ 提交 / 归并</text><text x="440" y="228">独立媒体端</text><text x="440" y="253">② 合成与保存</text><text x="235" y="228">持久成片</text><text x="235" y="253">可播放 / 保存</text><text x="24" y="228">定向修改</text><text x="24" y="253">③ 复用上游</text><text x="140" y="60">提交</text><text x="366" y="60">执行</text><text x="495" y="162">固定分镜</text><text x="368" y="225">保存</text><text x="136" y="225">修正</text><text x="72" y="162">继续</text><text x="20" y="324">当前方案采用后端既有能力；此页不调用生成API。</text></g></svg><figcaption><span class="fig-n">Fig. 1</span>首期交付包含生成、保存与修正，分镜成功只是中间成果。</figcaption></figure>
+<ve-plan>
+<ve-claim evidence="inferred" check="只提供商品图和明确需求，可使用已发布默认人物与姿势得到确定计划，正常生成只调用一次业务工具。"><p>用户提供商品图，即可启动完整视频场景。</p><ve-code title="业务调用 · 设计示意" lang="json"><script type="text/plain">{
+  "sceneId": "product.trendy-video",
+  "inputs": {"product": "attachment:product-photo"},
+  "businessOptions": {"outputProfile": "video_complete"}
+}</script></ve-code><ve-ask id="default-output" q="首屏演示默认展示哪种交付？"><ve-opt value="video" default>完整视频：5图、5分镜和成片</ve-opt><ve-opt value="assets" note="激活可选素材分支">视频素材包：21图、5分镜和成片</ve-opt></ve-ask><ve-claim evidence="inferred" check="每个输入都有角色、来源与内容版本；缺失项合并询问，模板配置错误不转成用户技术问卷。"><p>默认素材、参数与依赖由发布模板确定。</p><ve-code src="docs/discussions/canvas-harness-scheme-b/plans/2026-10-10-canvas-scheme-b-reference/product-trendy-video/SKILL.md" lines="10-16"/></ve-claim></ve-claim>
+<ve-claim evidence="inferred" check="关闭CanvasTab后仍能编码；上传、关联和结果节点保存成功后，运行卡展示可用成片；重启从明确检查点恢复。"><p>成片由独立媒体端合成，并保存为持久结果。</p><ve-code title="交付检查点 · 设计示意" lang="text"><script type="text/plain">固定当前轮 V1–V5
+→ encoded
+→ uploaded
+→ associated
+→ graph_saved
+→ delivered
+
+关闭画布：继续
+退出客户端：本地暂停，重启校准恢复</script></ve-code><ve-ask id="keyframe-checkpoint" q="对严格商品一致性的演示，是否插入关键帧确认？"><ve-opt value="automatic" default>默认自动继续，保留修正入口</ve-opt><ve-opt value="checkpoint" note="只在发布了此配置时启用">严格模式先确认关键帧，再生视频</ve-opt></ve-ask></ve-claim>
+<ve-claim evidence="inferred" check="选中V3并修改动作，仅生成V3和重新合成；替换M3姿势仅影响M3、V4、V5和成片。"><p>节点业务修改只重做受影响的产物。</p><ve-code title="修改闭包 · 设计示意" lang="text"><script type="text/plain">V3 动作 → V3 → final_video
+M3 姿势 → M3 → V4 / V5 → final_video
+旁路变体 → 对应图片
+布局 / 标题 → 不生成
+
+当前尝试确认结束后更新；历史产物保留。</script></ve-code></ve-claim>
+<ve-claim evidence="inferred" check="正常运行没有周期get；同步断线不标生成失败；提交未知不重发；确定失败可定向恢复。"><p>API提交动作，SSE和权威读取归并执行事实。</p><ve-code title="执行与恢复 · 设计示意" lang="text"><script type="text/plain">compile → 固定区域或单点串行路径
+record → 保存提交意图
+invoke → 保存接受回执与taskId
+SSE → 关联attempt / 输入 / 产物
+advance → 满足完成条件才进入下一阶段
+
+断线：重连 + 一次校准
+未知：恢复事实，不盲目重发</script></ve-code></ve-claim>
+<ve-claim evidence="inferred" check="用户只请求视频时不提交16张可选变体；两版视频合并计数为10段，触发大批量确认；可选失败不取消已保存成片。"><p>产物范围决定执行闭包和真实数量确认。</p><ve-code title="数量规则 · 设计示意" lang="text"><script type="text/plain">video_complete = 5图 + 5视频 + 本地合成
+video_with_assets = 21图 + 5视频 + 本地合成
+
+同一次用户意图合并所有计划与恢复尝试。
+图片 > 30 或视频 > 6 → 真实用户确认。
+模板不能覆盖Host阈值；无付费确认。</script></ve-code></ve-claim>
+<ve-claim aux="shared"><p>共享：确定计划、物理映射和Host运行账本。</p><ve-code title="共同事实 · 设计示意" lang="text"><script type="text/plain">SceneTemplate：发布包内业务定义
+ExecutionPlan：固定输入、参数、范围与摘要
+MaterializationMap：逻辑操作到实际节点 / 媒体位置
+Run：阶段、attempt、taskId、产物与恢复检查点
+CanvasGraph：既有后端的合法基础图与媒体</script></ve-code></ve-claim>
+<ve-claim aux="scope"><p>边界：后端保持不改，页面仅整理设计反馈。</p><ul><li>首期包含A–E；F模板扩展后续进行。</li><li>不承诺远端恰好一次或跨设备自动编排接管。</li><li>不运行Agent任意代码，不宣称自动视觉复核已提供。</li><li>选择讨论选项不会部署、生成或授权任何远端动作。</li></ul></ve-claim>
+</ve-plan>
+</body></html>

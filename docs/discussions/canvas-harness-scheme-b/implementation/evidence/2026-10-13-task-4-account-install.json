@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-13",
+  "method": "native_shell_import_local_tgz_existing_plugin_update",
+  "plugin": "@insight-ai/desktop-canvas-plugin",
+  "version": "0.3.0-alpha.10",
+  "bundle_enabled": true,
+  "component_enabled_confirmed_by_actual_tool_execution": true,
+  "Harness_restored": true,
+  "staged_archive_matches_final_package": true,
+  "sha256": "a8c571962f77331f2a756726b9c9ee3adc263fbcb734f42e96315237fc04ab3e",
+  "critical_file_checks": [
+    {
+      "path": "lib/index.js",
+      "matches_build": true
+    },
+    {
+      "path": "lib/client.js",
+      "matches_build": true
+    },
+    {
+      "path": "canvas-app/dist/canvas-service-manifest.json",
+      "matches_build": true
+    },
+    {
+      "path": "canvas-app/dist/assets/workflowTabOwnership-Cs6xKYa4.js",
+      "matches_build": true
+    },
+    {
+      "path": "canvas-app/dist/canvas-service.js",
+      "matches_build": true
+    }
+  ],
+  "previous_running_work_interrupted": false,
+  "pre_update_background_job_checked": "one_already_ended_SIGTERM_job",
+  "permanent_global_pnpm_uninstall_path_fixed": false
+}

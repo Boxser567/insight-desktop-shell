@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "preparedOn": "2026-10-10",
+  "reportCreatedAt": "2026-10-10T10:32:58.197Z",
+  "scope": "Preflight only; no business code edits, dependency installation, or real generation requests.",
+  "source": {
+    "repository": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin",
+    "commit": "bd2a7b663ec78c004ffbad00c32a035a379229e9",
+    "version": "0.3.0-alpha.8",
+    "worktreeBeforeChecks": "clean",
+    "worktreeAfterChecks": "clean"
+  },
+  "runtimeUsedForChecks": {
+    "executable": "/Users/boxser.shi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "version": "v24.19.0",
+    "defaultShellNodeVersion": "20.10.0",
+    "minimumPluginNode": ">=22.12.0"
+  },
+  "deliveryTarget": {
+    "manifest": "/Users/boxser.shi/Documents/harness/insight-desktop-shell/build/runtime-manifest.json",
+    "core": {
+      "source": "release",
+      "repository": "Boxser567/insight-harness-core",
+      "version": "0.2.1-alpha.1",
+      "commit": "c3aaab2e76ddfad6163478687287774ad7233374",
+      "releaseTag": "insight-runtime-v0.2.1-alpha.1-insight.3"
+    },
+    "node": {
+      "version": "24.9.0"
+    },
+    "target": {
+      "platform": "darwin",
+      "arch": "arm64"
+    },
+    "exactTargetRuntimeTested": false
+  },
+  "dependencyTypeVersions": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-host-webserver": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-tools": "0.1.6-alpha.2"
+  },
+  "checks": [
+    {
+      "id": "plugin-tests",
+      "command": [
+        "/Users/boxser.shi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "--import",
+        "tsx",
+        "--test",
+        "--test-reporter=tap",
+        "test/*.test.mjs"
+      ],
+      "workdir": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin",
+      "exitCode": 0,
+      "status": "passed",
+      "evidence": "evidence/2026-10-10-plugin-tests.tap",
+      "evidenceSha256": "7a0be81482f7f59c05771ef9237acc138cfff1397362f0dbbeb80032e06f94c4",
+      "evidenceBytes": 8702,
+      "tapSummary": {
+        "tests": 41,
+        "suites": 0,
+        "pass": 41,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0,
+        "duration_ms": 595.034875
+      }
+    },
+    {
+      "id": "host-client-typecheck",
+      "command": [
+        "/Users/boxser.shi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "workdir": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin",
+      "exitCode": 0,
+      "status": "passed",
+      "evidence": "evidence/2026-10-10-host-typecheck.log",
+      "evidenceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidenceBytes": 0,
+      "diagnostics": [],
+      "diagnosticCount": 0
+    },
+    {
+      "id": "web-typecheck",
+      "command": [
+        "/Users/boxser.shi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "canvas-app/node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "-p",
+        "canvas-app/tsconfig.json"
+      ],
+      "workdir": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin",
+      "exitCode": 2,
+      "status": "baseline_failed",
+      "evidence": "evidence/2026-10-10-web-typecheck.log",
+      "evidenceSha256": "8a3a911f4507c46d72da3330c002f8d81db942b83c5b6b2b1505fbf9334cef4e",
+      "evidenceBytes": 3230,
+      "diagnostics": [
+        {
+          "file": "canvas-app/legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+          "line": 52,
+          "column": 101,
+          "code": "TS2345",
+          "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 73,
+          "column": 111,
+          "code": "TS2345",
+          "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 78,
+          "column": 9,
+          "code": "TS2345",
+          "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+          "line": 154,
+          "column": 93,
+          "code": "TS2345",
+          "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+          "line": 149,
+          "column": 26,
+          "code": "TS2322",
+          "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"duration\" | \"label\" | \"source\" | \"type\" | \"sourceType\" | \"fileFormat\">'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/components/community/coverCrop/coverCropMedia.ts",
+          "line": 102,
+          "column": 18,
+          "code": "TS2367",
+          "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 431,
+          "column": 19,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 433,
+          "column": 20,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/routes/editor/core/ExtensionEngine.ts",
+          "line": 434,
+          "column": 20,
+          "code": "TS2531",
+          "message": "Object is possibly 'null'.",
+          "directlyTouchedByTask1": false
+        },
+        {
+          "file": "canvas-app/legacy/src/store/flowStore.ts",
+          "line": 1219,
+          "column": 31,
+          "code": "TS2345",
+          "message": "Argument of type '() => Promise<void> | MyResponse<any>' is not assignable to parameter of type '() => Promise<void>'.",
+          "directlyTouchedByTask1": true
+        }
+      ],
+      "diagnosticCount": 10
+    }
+  ],
+  "notRun": [
+    "plugin build",
+    "isolated installation",
+    "live Harness tool registration",
+    "real canvas creation or generation",
+    "exact delivery Node 24.9.0 validation"
+  ],
+  "decisions": [
+    "Use buildMediaNodeParamState, limited to image/video; getMediaNodeParamState is not exported.",
+    "gen_count choices are in timeParam and require explicit validation.",
+    "Keep text/audio native technical defaults; reject changes.params for those nodes in tasks 1–3.",
+    "Do not treat swallowed promises, init boolean, or iframe load as confirmed save/readiness.",
+    "Preserve successful-empty model permission semantics; distinguish from failed retrieval.",
+    "Above-threshold confirmation requires live runtime root; unavailable/delegated callers cannot invoke.",
+    "Address existing flowStore TS2345 at its root when task 1.2 changes that callback; do not silently classify baseline as passed."
+  ]
+}

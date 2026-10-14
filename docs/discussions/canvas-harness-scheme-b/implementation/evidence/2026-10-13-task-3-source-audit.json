@@ -1,0 +1,89 @@
+{
+  "records": [
+    {
+      "file": "src/host/index.ts",
+      "before": "3da6b9b7d4bd9b22c4aacf0fa59d51720adda008526dccc4d0747bc0ec286402",
+      "after": "9d598a6b8e0357f7edc690c6257a565f2fefcae656419caaa8630473a2b795aa",
+      "changed": true
+    },
+    {
+      "file": "src/host/canvas-get.ts",
+      "before": "5a82458f987b659fed2e0996d3b28fb176273ee5e75760567faac2304c787540",
+      "after": "cb38c39c7784613153f6cfc455b916168e4374c0478dffe993f7ab9197cb453c",
+      "changed": true
+    },
+    {
+      "file": "src/shared/canvas-agent-protocol.ts",
+      "before": "b13436f88c7a03d008048c5432b2cdbe61674df8a97e7874753491f31ea79954",
+      "after": "ec2e3495328ec621165346cd9039ba30a80d09af59d38efadc626634e03c6943",
+      "changed": true
+    },
+    {
+      "file": "src/host/canvas-bridge.ts",
+      "before": "6fba63d03fe9a5ea3111d6c302a78dcdc889da95b2c59359e800b0051cb90090",
+      "after": "6fba63d03fe9a5ea3111d6c302a78dcdc889da95b2c59359e800b0051cb90090",
+      "changed": false
+    },
+    {
+      "file": "src/client/index.tsx",
+      "before": "46c8d5b571255b2919d053d6f825e3ec822c5f7d6712d1646c52e4992fc054a5",
+      "after": "46c8d5b571255b2919d053d6f825e3ec822c5f7d6712d1646c52e4992fc054a5",
+      "changed": false
+    },
+    {
+      "file": "package.json",
+      "before": "e4dc266da8732bce35b93eb704fb24e6a63f2f1fab308b9100c4238e5a4ecab3",
+      "after": "9108ec7ad4c4bb95f3cc5fe7b77804cd96f512a419e9f44fd8ca66fc6c484662",
+      "changed": true
+    },
+    {
+      "file": "package-lock.json",
+      "before": "b72cbfb0da6dab59fbde0108c8c3e7f2689cf70234bb050c6c92ae17baac69d8",
+      "after": "ad81c7563151c65c29c9e9e7022a2ae41674aed0e4c8962ddcb56a23bc547ac6",
+      "changed": true
+    },
+    {
+      "file": "README.md",
+      "before": "95bb58d9450e5ea09d655dadcc71ffb1eca488750026a5ffcb6cd7058c7bce3b",
+      "after": "b42225561dfc6e9a5416abd29bafc9a8d685b5f47c6a4bced08179007360f8d6",
+      "changed": true
+    },
+    {
+      "file": "scripts/verify-isolated.mjs",
+      "before": "50d4065b71d1e6957067e93cc39dc517e0e84bb43d7967e886dd028cf9c26e94",
+      "after": "aca5011b0442ca51510bd2abec268b320690f1f40d883a11b813f8a41b507c05",
+      "changed": true
+    },
+    {
+      "file": "test/canvas-get.test.mjs",
+      "before": "08222dd3c777a44307a117da50ef174f917bc1f2ee28bae6486d39d7f497e90d",
+      "after": "a02b78cea75d8857024718c55d37dc2a327a153b223cc3fba428bad5bf50d2d8",
+      "changed": true
+    },
+    {
+      "file": "canvas-app/test/agent-runtime-complete.test.ts",
+      "before": "e63181df7cf57acb1dbdabdb4d621de2379f2669839741b09c52e879d5ce766b",
+      "after": "205dc40decc33bfc8705f1b7cd900a004a884aa0fcddd8d789f196011499350a",
+      "changed": true
+    }
+  ],
+  "new_files": [
+    {
+      "file": "src/host/canvas-api.ts",
+      "sha256": "e1fbb052f346423055a6de6bebd4224540be29f96fc962ccf16c99c0b5bc9626"
+    },
+    {
+      "file": "src/host/canvas-tools.ts",
+      "sha256": "4b6699209edec6f9512fdc2c8fafd995c5cca7f9289dd065b45919aa76174626"
+    },
+    {
+      "file": "test/canvas-api.test.mjs",
+      "sha256": "2efede88232d9759d6dc9e2184394c4ede98efe48c812e4b374d06e8813aa7f6"
+    },
+    {
+      "file": "test/canvas-tools.test.mjs",
+      "sha256": "77c9d3bf68083f1d3ca0474cc2a8793986866651fad4550adbfd9ea3ef3b2c33"
+    }
+  ],
+  "bridge_and_client_source_unchanged": true
+}

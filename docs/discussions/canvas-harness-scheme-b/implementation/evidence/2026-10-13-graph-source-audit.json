@@ -1,0 +1,34 @@
+{
+  "changed": [
+    "README.md",
+    "canvas-app/legacy/src/store/flowStoreCore.ts",
+    "canvas-app/src/agent-adapter.ts",
+    "canvas-app/src/agent-node-policy.ts",
+    "canvas-app/test/agent-node-policy.test.ts",
+    "canvas-app/test/agent-runtime-complete.test.ts",
+    "package-lock.json",
+    "package.json",
+    "scripts/verify-isolated.mjs",
+    "src/client/canvas-command-endpoint.ts",
+    "src/host/canvas-bridge.ts",
+    "src/host/canvas-tools.ts",
+    "src/host/index.ts",
+    "src/shared/canvas-agent-protocol.ts",
+    "src/shared/canvas-bridge-protocol.ts",
+    "test/canvas-bridge-protocol.test.mjs",
+    "test/canvas-bridge.test.mjs",
+    "test/canvas-command-endpoint.test.mjs"
+  ],
+  "created": [
+    "canvas-app/src/agent-edge-policy.ts",
+    "canvas-app/src/agent-graph-read.ts",
+    "canvas-app/src/agent-model-policy.ts",
+    "canvas-app/test/agent-edge-policy.test.ts",
+    "canvas-app/test/agent-edge-store.test.ts",
+    "canvas-app/test/agent-model-policy.test.ts",
+    "src/host/canvas-graph-tools.ts",
+    "test/canvas-graph-protocol.test.mjs",
+    "test/canvas-graph-tools.test.mjs"
+  ],
+  "dependenciesUnchanged": true
+}

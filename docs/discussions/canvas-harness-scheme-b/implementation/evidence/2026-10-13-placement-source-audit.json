@@ -1,0 +1,23 @@
+{
+  "changed": [
+    "README.md",
+    "canvas-app/legacy/src/store/flowStoreCore.ts",
+    "canvas-app/src/agent-adapter.ts",
+    "canvas-app/src/agent-node-policy.ts",
+    "canvas-app/test/agent-runtime-complete.test.ts",
+    "package-lock.json",
+    "package.json",
+    "scripts/verify-isolated.mjs",
+    "src/host/canvas-asset-tools.ts",
+    "src/host/canvas-tools.ts",
+    "src/shared/canvas-agent-protocol.ts",
+    "test/canvas-agent-protocol.test.mjs",
+    "test/canvas-asset-tools.test.mjs",
+    "test/canvas-tools.test.mjs"
+  ],
+  "created": [
+    "canvas-app/src/agent-node-placement.ts",
+    "canvas-app/test/agent-node-placement.test.ts"
+  ],
+  "dependenciesUnchanged": true
+}

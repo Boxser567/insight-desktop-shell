@@ -2,6 +2,8 @@
 
 因赛AI客户端是锁定 Insight Harness Core Runtime 的跨平台 Electron 宿主。
 
+[业务能力全景与实现盘点](docs/analysis/2026-10-08-business-capability-inventory.md)按业务全貌、具体实现、验证缺口和迁移核对项组织，供审核与后续 Agent 追踪。
+
 ## Runtime 策略
 
 客户端不会在运行时从 npm registry 安装或升级 `@deepseek-ai/dsh`。`core-runtime.lock.json` 锁定独立发布的 Core Runtime；正式安装包内置该制品及默认的 Better Sidebar Profile。

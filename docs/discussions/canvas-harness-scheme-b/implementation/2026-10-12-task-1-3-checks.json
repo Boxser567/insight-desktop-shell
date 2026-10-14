@@ -1,0 +1,191 @@
+{
+  "task": "1.3",
+  "date": "2026-10-12",
+  "status": "implemented_and_automatically_verified",
+  "runtime": "Node 24.19.0",
+  "base_plugin_head": "bd2a7b663ec78c004ffbad00c32a035a379229e9",
+  "new_tests": 21,
+  "web_tests": {
+    "passed": 62,
+    "failed": 0,
+    "files": 7
+  },
+  "plugin_tests": {
+    "passed": 48,
+    "failed": 0
+  },
+  "host_client_types": "passed",
+  "web_types": {
+    "exit_code": 2,
+    "diagnostics": [
+      {
+        "file": "legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+        "line": 52,
+        "column": 101,
+        "code": "TS2345",
+        "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 74,
+        "column": 111,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 79,
+        "column": 9,
+        "code": "TS2345",
+        "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 155,
+        "column": 93,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+        "line": 149,
+        "column": 26,
+        "code": "TS2322",
+        "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"type\" | \"label\" | \"source\" | \"duration\" | \"sourceType\" | \"fileFormat\">'."
+      },
+      {
+        "file": "legacy/src/components/community/coverCrop/coverCropMedia.ts",
+        "line": 102,
+        "column": 18,
+        "code": "TS2367",
+        "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 431,
+        "column": 19,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 433,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 434,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      }
+    ],
+    "new_diagnostics": 0,
+    "comparison": "same file/code counts as 1.2; CombinedParamSelection locations shift +1"
+  },
+  "web_build": "passed",
+  "frozen_offline_install": "passed; existing jsdom 29.1.1 snapshot declared as dev dependency",
+  "evidence": {
+    "web-tests": "evidence/2026-10-12-task-1-3-web-tests.log",
+    "plugin-tests": "evidence/2026-10-12-task-1-3-plugin-tests.log",
+    "host-client-types": "evidence/2026-10-12-task-1-3-host-client-types.log",
+    "web-types": "evidence/2026-10-12-task-1-3-web-types.log",
+    "web-build": "evidence/2026-10-12-task-1-3-web-build.log",
+    "test-dependencies": "evidence/2026-10-12-task-1-3-test-dependencies.log",
+    "initial-red": "evidence/2026-10-12-task-1-3-initial-red.log"
+  },
+  "files": [
+    {
+      "path": "canvas-app/src/agent-edit-guard.ts",
+      "sha256": "945cc6504820ff96599d719d44bf23c48b40d4f9fbfc15b290f749c970cd2018"
+    },
+    {
+      "path": "canvas-app/src/agent-editor-debounce.ts",
+      "sha256": "8db6a8a46c4c732dc116f85aff3c489e8dd9531993a8871f066bb0745888035d"
+    },
+    {
+      "path": "canvas-app/src/desktop-canvas.tsx",
+      "sha256": "2ea94df0ce6f4e585ec758c0dd2ec228c69357ff8acde6ad7497b777c32ac20a"
+    },
+    {
+      "path": "canvas-app/legacy/src/store/flowStore.ts",
+      "sha256": "8188a8a602bb72ca7fe67e3398d9826633c3cebed29bbdefb1f8871c448d6394"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/hooks.ts",
+      "sha256": "4fd5593053b4e6c6d63e6bdcefae1c80ad9378353f5be6307a869ff7f8cfee8b"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/text/index.tsx",
+      "sha256": "8606910ceddaa3e1ad3b3159a9febf7f5439832c322c3ff45de3db22e5936d0d"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/audio/SeniorParams.tsx",
+      "sha256": "24734e3cdfe7e2fd28c8d1d31769fedf148bbf99f5a602e6d6dfbed6b8fbbb2d"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/components/promptControl/DurationSliderControl.tsx",
+      "sha256": "64390228844e0fe5585c0549f6fa68950a56000ced848f9fefe095f103d5fcb6"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+      "sha256": "e3292caa0e9688b0c50372c76c4b5a40389b7fb3d0f2638ec188c4a9a49e2b95"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/image/ImagePromptModel.tsx",
+      "sha256": "0df5dec98e4088968be666bc9dbc0eb6cd5d57a002999b3f7ab7cc164f0c3b00"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/video/VideoPromptModel.tsx",
+      "sha256": "c6ca94c1234c171ce1d376dd9fb144f106e113a4caccc3fe4550158499e574a1"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/text/TextPromptModel.tsx",
+      "sha256": "47965528b3f34a6c3f96fcb390978f5d90f4ca98b06f131f3c0c42f1454e9a3e"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/customNode/audio/AudioPromptModel.tsx",
+      "sha256": "200b1fb4488c03ed22daf1e1e4236baf583b91b6a18abdfd475a77cb4dac4164"
+    },
+    {
+      "path": "canvas-app/test/agent-edit-guard.test.ts",
+      "sha256": "02da738bf36c312dc7cc0b1dada3bea062423532828021ae60e7a4b9b567c3e5"
+    },
+    {
+      "path": "canvas-app/test/agent-desktop-edit-guard.test.ts",
+      "sha256": "9e8e68cb063bf0eff3cae711c444333a43a8806b6cd5f36ccc2edb7374fdedf8"
+    },
+    {
+      "path": "canvas-app/test/agent-native-editors.test.ts",
+      "sha256": "438a92faae569e6257fb3bd0c1b144f7a660d439b5aa355892744bc599862226"
+    },
+    {
+      "path": "canvas-app/test/agent-native-text.test.ts",
+      "sha256": "14e47ebd4097f247f1bd6bb11453d27f3c4d11e014360ab50b8feb4d64ba3677"
+    },
+    {
+      "path": "canvas-app/test/agent-save-receipt.test.ts",
+      "sha256": "381626a734c23ac9d73cce9dd244505afa8cf911fea0e1577bef911ae9ef82f9"
+    },
+    {
+      "path": "canvas-app/package.json",
+      "sha256": "dd4117d174869766530384aaf86e055b58cd70a3d5f4d6c443ccf714c351ca3d"
+    },
+    {
+      "path": "canvas-app/pnpm-lock.yaml",
+      "sha256": "b4d1b7b8a6f2a9f96ba79e4dab307d338ee851e287b91be1cde8530de75a8246"
+    }
+  ],
+  "not_verified": [
+    "real API / generation",
+    "real browser / packaged Shell smoke",
+    "isolated installation and exact Node 24.9.0 runtime"
+  ],
+  "not_implemented": [
+    "1.4 readiness / complete adapter / accepted run side effects",
+    "2 bridge",
+    "3 tools"
+  ]
+}

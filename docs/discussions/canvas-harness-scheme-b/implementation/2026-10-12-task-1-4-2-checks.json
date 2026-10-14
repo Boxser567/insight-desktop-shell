@@ -1,0 +1,185 @@
+{
+  "task": "1.4.2",
+  "date": "2026-10-12",
+  "status": "implemented_and_automatically_verified",
+  "runtime": "Node 24.19.0",
+  "base_plugin_head": "bd2a7b663ec78c004ffbad00c32a035a379229e9",
+  "new_tests": 34,
+  "web_tests": {
+    "passed": 113,
+    "failed": 0,
+    "files": 13
+  },
+  "plugin_tests": {
+    "passed": 48,
+    "failed": 0
+  },
+  "host_client_types": "passed",
+  "web_types": {
+    "exit_code": 2,
+    "diagnostics": [
+      {
+        "file": "legacy/src/components/canvasFlow/components/nodeControl/ProductList.tsx",
+        "line": 52,
+        "column": 101,
+        "code": "TS2345",
+        "message": "Argument of type 'MouseEvent<Element, MouseEvent> | undefined' is not assignable to parameter of type 'MouseEvent<Element, MouseEvent>'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 74,
+        "column": 111,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 79,
+        "column": 9,
+        "code": "TS2345",
+        "message": "Argument of type '{ key: string; label: string; option: CombinedOption[]; }[]' is not assignable to parameter of type 'SelectParam[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/promptControl/CombinedParamSelection.tsx",
+        "line": 155,
+        "column": 93,
+        "code": "TS2345",
+        "message": "Argument of type 'CombinedOption[]' is not assignable to parameter of type 'Choice[]'."
+      },
+      {
+        "file": "legacy/src/components/canvasFlow/components/uploadControl/HistoryUpload.tsx",
+        "line": 149,
+        "column": 26,
+        "code": "TS2322",
+        "message": "Type 'AssetItem' is not assignable to type 'Pick<AssetItem, \"type\" | \"label\" | \"source\" | \"duration\" | \"sourceType\" | \"fileFormat\">'."
+      },
+      {
+        "file": "legacy/src/components/community/coverCrop/coverCropMedia.ts",
+        "line": 102,
+        "column": 18,
+        "code": "TS2367",
+        "message": "This comparison appears to be unintentional because the types '10' and '1' have no overlap."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 431,
+        "column": 19,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 433,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      },
+      {
+        "file": "legacy/src/routes/editor/core/ExtensionEngine.ts",
+        "line": 434,
+        "column": 20,
+        "code": "TS2531",
+        "message": "Object is possibly 'null'."
+      }
+    ],
+    "new_diagnostics": 0,
+    "comparison": "exact file/line/column/code/message match with task 1.4.1"
+  },
+  "web_build": {
+    "status": "passed",
+    "duration_seconds": 9.56,
+    "warnings": [
+      "existing large chunks"
+    ],
+    "scope": "existing UI entry and shared loaders; service ESM entry is task 1.4.3"
+  },
+  "dependencies": "unchanged",
+  "scope_review": {
+    "tracked_changes_only_in_task_scope": true,
+    "changed_tracked_paths": [
+      "canvas-app/legacy/src/api/workflow.ts",
+      "canvas-app/legacy/src/components/canvasFlow/index.tsx",
+      "canvas-app/legacy/src/components/canvasFlow/utils/modelPermission.ts",
+      "canvas-app/legacy/src/store/flowMediaDimensionCoordinator.ts",
+      "canvas-app/src/request.ts"
+    ],
+    "tracked_and_scoped_new_files_whitespace": "passed; existing source checked against task 1.4.1 baseline, no unrelated old whitespace cleanup",
+    "default_ui": "native configuration normalization shared; default loading/catch/paint/reset path preserved",
+    "reviewed": "six existing source diffs against task 1.4.1 plus two new initialization modules"
+  },
+  "scope_clarifications": [
+    "Context defaults to checking ownership; setOwnership is a trusted internal controller input; native controller wired in 1.4.4",
+    "Concurrent initialization deduplication is per context; Client/canvasId registry is 1.4.3",
+    "Owned UI init/reset migration remains 1.4.4",
+    "Coarse edit capability permits safe text edits; per-node/media stage checks belong to 1.4.6"
+  ],
+  "evidence": {
+    "initial-red": "evidence/2026-10-12-task-1-4-2-initial-red.log",
+    "web-tests": "evidence/2026-10-12-task-1-4-2-web-tests.log",
+    "plugin-tests": "evidence/2026-10-12-task-1-4-2-plugin-tests.log",
+    "host-client-types": "evidence/2026-10-12-task-1-4-2-host-client-types.log",
+    "web-types": "evidence/2026-10-12-task-1-4-2-web-types.log",
+    "web-build": "evidence/2026-10-12-task-1-4-2-web-build.log"
+  },
+  "files": [
+    {
+      "path": "canvas-app/src/canvas-context.ts",
+      "sha256": "4dcc954143d3ffd2f0ead20a47a751e0050ef91eba0ab40f0912e030ac43033e"
+    },
+    {
+      "path": "canvas-app/src/canvas-initialization.ts",
+      "sha256": "d04eaf71d77d1f119f8900e4160c1ee3f535c876505c06821fd8a4862110bd23"
+    },
+    {
+      "path": "canvas-app/src/request.ts",
+      "sha256": "264c0e82bc16d864359559c36579026336e1a71e5327bbefa6d256126b0afa22"
+    },
+    {
+      "path": "canvas-app/legacy/src/api/workflow.ts",
+      "sha256": "95065d98546c5a90959486fe1d7eec1fed0212e9a57221933769f6a8ad0cabcb"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/utils/modelPermission.ts",
+      "sha256": "0adad479db7fab5049c7a59aae18fbb808e9c53b9001310ceb0ffef067ff8160"
+    },
+    {
+      "path": "canvas-app/legacy/src/components/canvasFlow/index.tsx",
+      "sha256": "d9d17ca7aaf155a66bfd09102d8dbbf42adb13cc00527add2b1563ca1495a765"
+    },
+    {
+      "path": "canvas-app/legacy/src/store/flowStoreCore.ts",
+      "sha256": "09ba1a53b1289d12ef5e5c0938c8ad5c5f8fc0bea1b03706150b382b313be2f6"
+    },
+    {
+      "path": "canvas-app/legacy/src/store/flowMediaDimensionCoordinator.ts",
+      "sha256": "6ed08994208b4cdad12c6c5962dd3627bba48768f9de617f013eb68c33e6a323"
+    },
+    {
+      "path": "canvas-app/test/agent-context-initialization.test.ts",
+      "sha256": "51be800adca2912c6581f96ed693e65ffe1e4079dae77c145a6bea6b9826cc35"
+    },
+    {
+      "path": "canvas-app/test/agent-initialization-api.test.ts",
+      "sha256": "1234b6361c6d7b0298bd28cf4682571e14ff184c60e64af2887649483f9a5912"
+    },
+    {
+      "path": "canvas-app/test/agent-initialization-feedback.test.ts",
+      "sha256": "a49285e3e0be721132c29a990f1bba182ca5bbe0d24bc95e88ba624f76a86072"
+    }
+  ],
+  "not_verified": [
+    "real API / generation / actual model configuration",
+    "real browser / Shell ownership competition",
+    "packaged service installation and exact Node 24.9.0 runtime"
+  ],
+  "not_implemented": [
+    "1.4.3 Client service entry / registry",
+    "1.4.4 ownership controller / shared UI binding / point API",
+    "1.4.5 timer/editor ownership migration",
+    "1.4.6 complete adapter / strict metadata",
+    "1.4.7 generation monitor",
+    "1.4.8 full-service manual acceptance",
+    "2 bridge",
+    "3 tools"
+  ]
+}

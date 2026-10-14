@@ -1,0 +1,124 @@
+{
+  "date": "2026-10-13",
+  "version": "0.3.0-alpha.12",
+  "status": "code_review_automatic_checks_package_and_isolated_core_complete_real_account_pending",
+  "scope": "Graph reads, ordinary node update/delete, real edge edits and legal image/video configuration; save only",
+  "tests": {
+    "plugin": {
+      "passed": 172,
+      "total": 172
+    },
+    "web": {
+      "passed": 266,
+      "total": 266,
+      "files": 22
+    }
+  },
+  "types": {
+    "host": "pass",
+    "actualShellCore": "pass",
+    "web": {
+      "exitCode": 2,
+      "existingDiagnostics": 9,
+      "newDiagnostics": 0,
+      "sameDiagnosticSet": true,
+      "cosmeticMessageOrderDifferences": 1
+    }
+  },
+  "package": {
+    "archive": "/Users/boxser.shi/Documents/harness/desktop-canvas-plugin/insight-ai-desktop-canvas-plugin-0.3.0-alpha.12.tgz",
+    "sha256": "a6d1737a2070bd32a4c7fbe4aa9ea6f483878d0546ad7f5f9e732d7042e34dda",
+    "bytes": 14462662,
+    "files": 58,
+    "mismatches": [],
+    "allFilesMatch": true
+  },
+  "sourceAudit": {
+    "changed": [
+      "README.md",
+      "canvas-app/legacy/src/store/flowStoreCore.ts",
+      "canvas-app/src/agent-adapter.ts",
+      "canvas-app/src/agent-node-policy.ts",
+      "canvas-app/test/agent-node-policy.test.ts",
+      "canvas-app/test/agent-runtime-complete.test.ts",
+      "package-lock.json",
+      "package.json",
+      "scripts/verify-isolated.mjs",
+      "src/client/canvas-command-endpoint.ts",
+      "src/host/canvas-bridge.ts",
+      "src/host/canvas-tools.ts",
+      "src/host/index.ts",
+      "src/shared/canvas-agent-protocol.ts",
+      "src/shared/canvas-bridge-protocol.ts",
+      "test/canvas-bridge-protocol.test.mjs",
+      "test/canvas-bridge.test.mjs",
+      "test/canvas-command-endpoint.test.mjs"
+    ],
+    "created": [
+      "canvas-app/src/agent-edge-policy.ts",
+      "canvas-app/src/agent-graph-read.ts",
+      "canvas-app/src/agent-model-policy.ts",
+      "canvas-app/test/agent-edge-policy.test.ts",
+      "canvas-app/test/agent-edge-store.test.ts",
+      "canvas-app/test/agent-model-policy.test.ts",
+      "src/host/canvas-graph-tools.ts",
+      "test/canvas-graph-protocol.test.mjs",
+      "test/canvas-graph-tools.test.mjs"
+    ],
+    "dependenciesUnchanged": true
+  },
+  "review": {
+    "fixed": [
+      "Generic read errors distinguished from save failures",
+      "Deletion of last source reports surviving target input warnings",
+      "Empty cascade options reject before native TypeError",
+      "Empty media dimensions updated for ordinary update params",
+      "Reconnect rollback cannot restore a missing old endpoint"
+    ],
+    "unresolvedBlockingFindings": 0
+  },
+  "isolated": {
+    "status": "passed",
+    "installedInTemporaryProfile": true,
+    "toolCount": 7,
+    "nodeActions": [
+      "add",
+      "update",
+      "delete",
+      "configure"
+    ],
+    "edgeActions": [
+      "add",
+      "delete",
+      "reconnect",
+      "reorder"
+    ],
+    "bridgePass": true,
+    "removed": true,
+    "businessCommands": 0
+  },
+  "realAccount": {
+    "installedByThisTurn": true,
+    "installedVersion": "0.3.0-alpha.12",
+    "bundleEnabledInProfile": true,
+    "componentEnableOverride": true,
+    "installedFilesMatch": true,
+    "runtimeVerification": "new_dialogue_tools_pending",
+    "graphAcceptance": "pending",
+    "clientRestartObserved": true,
+    "partialUserFeedback": {
+      "date": "2026-10-14",
+      "canvasId": "103161",
+      "P01": "three nodes created only after opening canvas; headless first request rejected",
+      "P02": "updates succeeded with observed full UI reloads",
+      "P03": "not specifically reported",
+      "P04": "not specifically reported",
+      "P05": "blocked by models502, zero new saved nodes, confirmed version19",
+      "failureStoppingDeviation": "Agent changed import source after rejected despite user stop rule",
+      "followup": "2026-10-14-alpha12-feedback-and-alpha13-fixes.md"
+    }
+  },
+  "backendChanged": false,
+  "nativeUiDefaultBehaviorChanged": false,
+  "dependenciesChanged": false
+}

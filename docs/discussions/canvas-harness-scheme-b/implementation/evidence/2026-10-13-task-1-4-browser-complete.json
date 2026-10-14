@@ -1,0 +1,200 @@
+{
+  "passed": true,
+  "packageSha256": "b553160510ee5a1f7241237f2ab7db7b26f00e0368bba72e8f16a13335b6143f",
+  "browser": "154.0.8037.98",
+  "core": "0.2.1-alpha.1",
+  "node": "v24.9.0",
+  "api": "fixture only; external traffic blocked",
+  "mainCsp": null,
+  "initial": {
+    "before": 0,
+    "after": 0,
+    "info": {
+      "canvasId": "2873",
+      "contextId": "08cfd32e-55a9-4146-8cc2-057a248a6ab7",
+      "readiness": {
+        "phase": "ready",
+        "capabilities": {
+          "read": true,
+          "edit": true,
+          "run": true
+        },
+        "version": "18"
+      }
+    },
+    "read": {
+      "status": "read",
+      "canvasId": "2873",
+      "version": "18",
+      "consistency": "confirmed",
+      "nodeCount": 0,
+      "nodes": [],
+      "missingNodeIds": []
+    },
+    "add": {
+      "status": "saved",
+      "canvasId": "2873",
+      "version": "19",
+      "affectedNodeIds": [
+        "2c4923ca-3b82-4e37-96b9-d6d891f6ba6c"
+      ],
+      "unchanged": false
+    },
+    "update": {
+      "status": "saved",
+      "canvasId": "2873",
+      "version": "20",
+      "affectedNodeIds": [
+        "2c4923ca-3b82-4e37-96b9-d6d891f6ba6c"
+      ],
+      "unchanged": false
+    }
+  },
+  "protectedWrite": {
+    "status": "rejected",
+    "canvasId": "2873",
+    "version": "20",
+    "effect": "none",
+    "error": {
+      "code": "EDITOR_BUSY",
+      "message": "用户正在编辑或有待提交内容，请编辑完成后重试",
+      "retry": "read_first"
+    }
+  },
+  "finalInput": {
+    "status": "read",
+    "canvasId": "2873",
+    "version": "21",
+    "consistency": "confirmed",
+    "nodeCount": 1,
+    "nodes": [
+      {
+        "id": "2c4923ca-3b82-4e37-96b9-d6d891f6ba6c",
+        "type": "text",
+        "title": "验收文本",
+        "contentType": null,
+        "text": "关闭界面前的最后输入",
+        "prompt": "",
+        "params": {
+          "model": "fixture",
+          "gen_count": 1,
+          "prompt": ""
+        },
+        "paramHints": [],
+        "status": "success",
+        "inputs": [],
+        "outputs": [],
+        "generation": {
+          "images": 0,
+          "videos": 0
+        },
+        "truncatedFields": []
+      }
+    ],
+    "missingNodeIds": []
+  },
+  "generated": {
+    "added": {
+      "status": "saved",
+      "canvasId": "2873",
+      "version": "22",
+      "affectedNodeIds": [
+        "a2fe2775-2e54-4753-a5f9-752efa269df7"
+      ],
+      "unchanged": false
+    },
+    "run": {
+      "status": "submitted",
+      "canvasId": "2873",
+      "version": "23",
+      "nodeId": "a2fe2775-2e54-4753-a5f9-752efa269df7",
+      "taskId": "fixture-task",
+      "generation": {
+        "images": 1,
+        "videos": 0
+      }
+    },
+    "frames": 0
+  },
+  "generatedRead": {
+    "status": "read",
+    "canvasId": "2873",
+    "version": "26",
+    "consistency": "confirmed",
+    "nodeCount": 2,
+    "nodes": [
+      {
+        "id": "a2fe2775-2e54-4753-a5f9-752efa269df7",
+        "type": "image",
+        "title": "图片1",
+        "contentType": null,
+        "text": null,
+        "prompt": "本地 fixture 验收",
+        "params": {
+          "modelType": "text_to_image",
+          "model": "fixture",
+          "gen_count": 1,
+          "prompt": "本地 fixture 验收"
+        },
+        "paramHints": [
+          {
+            "field": "gen_count",
+            "editable": true,
+            "choices": [
+              1,
+              2
+            ]
+          }
+        ],
+        "status": "success",
+        "inputs": [],
+        "outputs": [
+          "http://127.0.0.1:55521/fixture-output.png"
+        ],
+        "generation": {
+          "images": 1,
+          "videos": 0
+        },
+        "truncatedFields": []
+      }
+    ],
+    "missingNodeIds": []
+  },
+  "counts": {
+    "get": 2,
+    "model": 1,
+    "partial": 6,
+    "invoke": 1
+  },
+  "operations": [
+    {
+      "action": "save",
+      "inputVersion": "18"
+    },
+    {
+      "action": "save",
+      "inputVersion": "19"
+    },
+    {
+      "action": "save",
+      "inputVersion": "20"
+    },
+    {
+      "action": "save",
+      "inputVersion": "21"
+    },
+    {
+      "action": "invoke",
+      "inputVersion": "22"
+    },
+    {
+      "action": "save",
+      "inputVersion": "24"
+    },
+    {
+      "action": "save",
+      "inputVersion": "25"
+    }
+  ],
+  "errors": []
+}
