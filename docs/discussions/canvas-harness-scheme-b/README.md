@@ -6,7 +6,8 @@
 
 ## 阅读入口
 
-- [插件内独立契约模块：步骤1–2实施计划](plans/2026-10-14-plugin-tool-contracts-phase-1-2-plan.md)：当前获准的下一项开发计划，以alpha.13源码为基线；先固定七工具兼容基线，再新增一个纯声明模块并调整三个Host文件。含文件边界、开发步骤、验证命令与C01–C11验收；本轮仅归档，尚未修改业务代码。
+- [插件内契约模块：实施、Review与验收](implementation/2026-10-14-plugin-tool-contracts.md)：步骤1–2已完成，七工具目录不变，176项测试、默认/实际Core类型与临时Host构建通过；插件和Shell开发前快照、本地分支、代码提交及回滚说明。未发包安装，真实账号手测仍待后续交付。
+- [插件内独立契约模块：步骤1–2实施计划](plans/2026-10-14-plugin-tool-contracts-phase-1-2-plan.md)：以alpha.13源码为基线；固定七工具兼容基线，新增纯声明模块并调整三个Host文件；开发清单及C01–C11已完成，保留具体文件、命令和后续人工验收步骤。
 - [七工具契约映射](plans/2026-10-14-plugin-tool-contracts-map.md)：完整输入分支、输出差异、原生命令/方法及通信兼容规则；配套[冻结目录](preflight/2026-10-14-canvas-tool-contracts-baseline.json)和[计划参考检查记录](preflight/2026-10-14-canvas-tool-contracts-plan-checks.json)。
 - [alpha.12反馈、alpha.13修复及三步复测](implementation/2026-10-14-alpha12-feedback-and-alpha13-fixes.md)：103161实账事实、冷刷新/502/重载根因与边界；R01冷读取、R02可见连续编辑、R03复用原图可复制Prompt。
 - [alpha.13检查摘要](implementation/2026-10-14-alpha13-checks.json)：173/276、类型基线、包SHA、独立Review、隔离实际Core及仍待真实验收项。

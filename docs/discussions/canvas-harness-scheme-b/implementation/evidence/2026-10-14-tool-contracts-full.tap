@@ -1,0 +1,1066 @@
+TAP version 13
+# Subtest: only current visible user images authorize reads, duplicate images retain recent order
+ok 1 - only current visible user images authorize reads, duplicate images retain recent order
+  ---
+  duration_ms: 0.913084
+  type: 'test'
+  ...
+# Subtest: a missing or offloaded attachment fails before provider read, without filesystem fallback
+ok 2 - a missing or offloaded attachment fails before provider read, without filesystem fallback
+  ---
+  duration_ms: 0.1875
+  type: 'test'
+  ...
+# Subtest: passes the actual ref and signal to the verified attachment provider without using request variants
+ok 3 - passes the actual ref and signal to the verified attachment provider without using request variants
+  ---
+  duration_ms: 0.100792
+  type: 'test'
+  ...
+# Subtest: provider failure is sanitized; pre-read cancellation never calls the provider
+ok 4 - provider failure is sanitized; pre-read cancellation never calls the provider
+  ---
+  duration_ms: 0.111833
+  type: 'test'
+  ...
+# Subtest: route rejects authentication before reading request body or registry
+ok 5 - route rejects authentication before reading request body or registry
+  ---
+  duration_ms: 0.532083
+  type: 'test'
+  ...
+# Subtest: real local HTTP route freezes origin/key, serves one SSE stream, and bounds JSON
+ok 6 - real local HTTP route freezes origin/key, serves one SSE stream, and bounds JSON
+  ---
+  duration_ms: 41.453375
+  type: 'test'
+  ...
+# Subtest: SSE backpressure drains buffered commands in order and overflow settles a dispatched write as unknown
+ok 7 - SSE backpressure drains buffered commands in order and overflow settles a dispatched write as unknown
+  ---
+  duration_ms: 129.386417
+  type: 'test'
+  ...
+# Subtest: v2 commands preserve Long IDs and versions without affecting v1
+ok 8 - v2 commands preserve Long IDs and versions without affecting v1
+  ---
+  duration_ms: 1.091625
+  type: 'test'
+  ...
+# Subtest: all five operations parse; read/delete IDs are deduplicated in order
+ok 9 - all five operations parse; read/delete IDs are deduplicated in order
+  ---
+  duration_ms: 0.174166
+  type: 'test'
+  ...
+# Subtest: unknown/conditional fields, empty changes and unsafe parameters are rejected
+ok 10 - unknown/conditional fields, empty changes and unsafe parameters are rejected
+  ---
+  duration_ms: 0.299625
+  type: 'test'
+  ...
+# Subtest: routing envelopes validate identity, type, protocol and size
+ok 11 - routing envelopes validate identity, type, protocol and size
+  ---
+  duration_ms: 5.136167
+  type: 'test'
+  ...
+# Subtest: state and ack receipts validate complete shapes and same canvas
+ok 12 - state and ack receipts validate complete shapes and same canvas
+  ---
+  duration_ms: 0.302541
+  type: 'test'
+  ...
+# Subtest: Client lifecycle/open events are distinct from iframe messages
+ok 13 - Client lifecycle/open events are distinct from iframe messages
+  ---
+  duration_ms: 0.151083
+  type: 'test'
+  ...
+# Subtest: read/submitted/rejected/unknown results retain distinct persistence facts
+ok 14 - read/submitted/rejected/unknown results retain distinct persistence facts
+  ---
+  duration_ms: 0.160833
+  type: 'test'
+  ...
+# Subtest: image assets preserve HTTPS URLs, optional fields and the 4096 character boundary
+ok 15 - image assets preserve HTTPS URLs, optional fields and the 4096 character boundary
+  ---
+  duration_ms: 0.408375
+  type: 'test'
+  ...
+# Subtest: asset inputs reject non-HTTPS URLs, credentials, fragments and unsupported fields before dispatch
+ok 16 - asset inputs reject non-HTTPS URLs, credentials, fragments and unsupported fields before dispatch
+  ---
+  duration_ms: 0.336541
+  type: 'test'
+  ...
+# Subtest: placement modes preserve auto, exact zero and after without rewriting legacy coordinates
+ok 17 - placement modes preserve auto, exact zero and after without rewriting legacy coordinates
+  ---
+  duration_ms: 0.157667
+  type: 'test'
+  ...
+# Subtest: placement rejects unsupported modes, mixed fields, nonfinite coordinates and invalid anchors
+ok 18 - placement rejects unsupported modes, mixed fields, nonfinite coordinates and invalid anchors
+  ---
+  duration_ms: 0.383583
+  type: 'test'
+  ...
+# Subtest: read details accept validated geometry while retaining compatibility with old receipts
+ok 19 - read details accept validated geometry while retaining compatibility with old receipts
+  ---
+  duration_ms: 0.28875
+  type: 'test'
+  ...
+# Subtest: create uses the existing empty canvas payload, fixed environment and current desktop identity
+ok 20 - create uses the existing empty canvas payload, fixed environment and current desktop identity
+  ---
+  duration_ms: 45.217417
+  type: 'test'
+  ...
+# Subtest: create preserves exact Long strings, scalar IDs and optional versions
+ok 21 - create preserves exact Long strings, scalar IDs and optional versions
+  ---
+  duration_ms: 2.484625
+  type: 'test'
+  ...
+# Subtest: create refuses invalid names before any credential lookup or request
+ok 22 - create refuses invalid names before any credential lookup or request
+  ---
+  duration_ms: 0.323125
+  type: 'test'
+  ...
+# Subtest: cancellation and login failure before send cannot create a canvas or expose credential error text
+ok 23 - cancellation and login failure before send cannot create a canvas or expose credential error text
+  ---
+  duration_ms: 0.161958
+  type: 'test'
+  ...
+# Subtest: unsafe or missing creation IDs and malformed successful envelopes are unknown, with no retry
+ok 24 - unsafe or missing creation IDs and malformed successful envelopes are unknown, with no retry
+  ---
+  duration_ms: 0.7535
+  type: 'test'
+  ...
+# Subtest: creation transport loss and 5xx are unknown; explicit HTTP or business denials reject without retry
+ok 25 - creation transport loss and 5xx are unknown; explicit HTTP or business denials reject without retry
+  ---
+  duration_ms: 0.477583
+  type: 'test'
+  ...
+# Subtest: registers two controlled tools; available and missing-image list do not upload or prepare
+ok 26 - registers two controlled tools; available and missing-image list do not upload or prepare
+  ---
+  duration_ms: 2.4695
+  type: 'test'
+  ...
+# Subtest: imports through the native asset operation, returns real IDs/version and independent registration
+ok 27 - imports through the native asset operation, returns real IDs/version and independent registration
+  ---
+  duration_ms: 1.104542
+  type: 'test'
+  ...
+# Subtest: same call deduplicates concurrent import and registration; changed parameters reject without more writes
+ok 28 - same call deduplicates concurrent import and registration; changed parameters reject without more writes
+  ---
+  duration_ms: 0.59075
+  type: 'test'
+  ...
+# Subtest: confirmed upload is reused on a distinct explicit call, scoped to same identity and session
+ok 29 - confirmed upload is reused on a distinct explicit call, scoped to same identity and session
+  ---
+  duration_ms: 0.934083
+  type: 'test'
+  ...
+# Subtest: invalid inputs and stale version stop before material upload; absent source fails before byte read
+ok 30 - invalid inputs and stale version stop before material upload; absent source fails before byte read
+  ---
+  duration_ms: 0.704584
+  type: 'test'
+  ...
+# Subtest: changed identity after upload refuses canvas dispatch but preserves uploaded material
+ok 31 - changed identity after upload refuses canvas dispatch but preserves uploaded material
+  ---
+  duration_ms: 0.839875
+  type: 'test'
+  ...
+# Subtest: unknown upload is retained across new calls, never dispatches or registers
+ok 32 - unknown upload is retained across new calls, never dispatches or registers
+  ---
+  duration_ms: 6.389375
+  type: 'test'
+  ...
+# Subtest: unknown native save keeps IDs and never_auto; new explicit read/recovery belongs to native fence
+ok 33 - unknown native save keeps IDs and never_auto; new explicit read/recovery belongs to native fence
+  ---
+  duration_ms: 1.092666
+  type: 'test'
+  ...
+# Subtest: registration failure never changes saved or repeats the node; malformed write receipt remains unknown
+ok 34 - registration failure never changes saved or repeats the node; malformed write receipt remains unknown
+  ---
+  duration_ms: 3.503792
+  type: 'test'
+  ...
+# Subtest: authorized canvas image reuse does not read/upload attachments and demands a specific output when ambiguous
+ok 35 - authorized canvas image reuse does not read/upload attachments and demands a specific output when ambiguous
+  ---
+  duration_ms: 20.612334
+  type: 'test'
+  ...
+# Subtest: generic error after a write attempt is unknown and sanitized; cancelled or disposed tool sends no upload
+ok 36 - generic error after a write attempt is unknown and sanitized; cancelled or disposed tool sends no upload
+  ---
+  duration_ms: 0.816041
+  type: 'test'
+  ...
+# Subtest: asset tool exposes only placement and preserves auto, exact zero and anchor modes
+ok 37 - asset tool exposes only placement and preserves auto, exact zero and anchor modes
+  ---
+  duration_ms: 2.241083
+  type: 'test'
+  ...
+# Subtest: asset model raw position and invalid placement stop before identity, prepare, read or upload
+ok 38 - asset model raw position and invalid placement stop before identity, prepare, read or upload
+  ---
+  duration_ms: 4.278792
+  type: 'test'
+  ...
+# Subtest: asset placement participates in same-call fingerprint without repeating upload or node save
+ok 39 - asset placement participates in same-call fingerprint without repeating upload or node save
+  ---
+  duration_ms: 9.322959
+  type: 'test'
+  ...
+# Subtest: identity uses current desktop token and fixed test/production GET with no redirects
+ok 40 - identity uses current desktop token and fixed test/production GET with no redirects
+  ---
+  duration_ms: 15.241292
+  type: 'test'
+  ...
+# Subtest: identity success forms and Long JSON tokens are preserved exactly
+ok 41 - identity success forms and Long JSON tokens are preserved exactly
+  ---
+  duration_ms: 0.61775
+  type: 'test'
+  ...
+# Subtest: invalid environment and cancelled token lookup never send a request
+ok 42 - invalid environment and cancelled token lookup never send a request
+  ---
+  duration_ms: 0.449417
+  type: 'test'
+  ...
+# Subtest: identity rejects invalid account IDs and hides auth error text
+ok 43 - identity rejects invalid account IDs and hides auth error text
+  ---
+  duration_ms: 0.738916
+  type: 'test'
+  ...
+# Subtest: upload uses native STS payload, trusted MIME extension and public URL rather than provider URLs
+ok 44 - upload uses native STS payload, trusted MIME extension and public URL rather than provider URLs
+  ---
+  duration_ms: 2.9645
+  type: 'test'
+  ...
+# Subtest: each supported MIME selects its own extension; invalid sizes and metadata start no request
+ok 45 - each supported MIME selects its own extension; invalid sizes and metadata start no request
+  ---
+  duration_ms: 13.174417
+  type: 'test'
+  ...
+# Subtest: STS rejects foreign users, invalid destination, expired or incomplete credentials before PUT
+ok 46 - STS rejects foreign users, invalid destination, expired or incomplete credentials before PUT
+  ---
+  duration_ms: 8.475791
+  type: 'test'
+  ...
+# Subtest: large Long IDs remain raw numeric JSON tokens in STS and registration payloads
+ok 47 - large Long IDs remain raw numeric JSON tokens in STS and registration payloads
+  ---
+  duration_ms: 0.448084
+  type: 'test'
+  ...
+# Subtest: PUT transport loss or malformed success is unknown and no operation retries automatically
+ok 48 - PUT transport loss or malformed success is unknown and no operation retries automatically
+  ---
+  duration_ms: 0.661041
+  type: 'test'
+  ...
+# Subtest: cancellation before PUT does not dispatch; cancellation after PUT is unknown and stops waiting
+ok 49 - cancellation before PUT does not dispatch; cancellation after PUT is unknown and stops waiting
+  ---
+  duration_ms: 0.409708
+  type: 'test'
+  ...
+# Subtest: HTTP/business refusal and STS transport failures stay sanitized and start no PUT
+ok 50 - HTTP/business refusal and STS transport failures stay sanitized and start no PUT
+  ---
+  duration_ms: 0.414541
+  type: 'test'
+  ...
+# Subtest: registration uses fixed native body, separates rejection from unknown, and never repeats PUT
+ok 51 - registration uses fixed native body, separates rejection from unknown, and never repeats PUT
+  ---
+  duration_ms: 1.034584
+  type: 'test'
+  ...
+# Subtest: invalid registration destinations, IDs and pre-cancellation start no request
+ok 52 - invalid registration destinations, IDs and pre-cancellation start no request
+  ---
+  duration_ms: 0.209833
+  type: 'test'
+  ...
+# Subtest: identity reads the body envelope used by desktop login services
+ok 53 - identity reads the body envelope used by desktop login services
+  ---
+  duration_ms: 0.116125
+  type: 'test'
+  ...
+# Subtest: identity and STS transport or parse failures report no upload dispatch
+ok 54 - identity and STS transport or parse failures report no upload dispatch
+  ---
+  duration_ms: 0.323709
+  type: 'test'
+  ...
+# Subtest: trusted legal business CDN URLs can register without altering the URL
+ok 55 - trusted legal business CDN URLs can register without altering the URL
+  ---
+  duration_ms: 0.100791
+  type: 'test'
+  ...
+# Subtest: OSS PUT rejected by an explicit HTTP 403 reports rejection without retrying
+ok 56 - OSS PUT rejected by an explicit HTTP 403 reports rejection without retrying
+  ---
+  duration_ms: 0.146
+  type: 'test'
+  ...
+# Subtest: OSS PUT resolved with an explicit HTTP 403 reports rejection without retrying
+ok 57 - OSS PUT resolved with an explicit HTTP 403 reports rejection without retrying
+  ---
+  duration_ms: 0.121916
+  type: 'test'
+  ...
+# Subtest: service protocol preserves IDs, rejects legacy frame fields and generation operations
+ok 58 - service protocol preserves IDs, rejects legacy frame fields and generation operations
+  ---
+  duration_ms: 1.182
+  type: 'test'
+  ...
+# Subtest: client receipts require matching canvas, strict fields and versioned session snapshots
+ok 59 - client receipts require matching canvas, strict fields and versioned session snapshots
+  ---
+  duration_ms: 0.277708
+  type: 'test'
+  ...
+# Subtest: fingerprints normalize key order and parsers own their input snapshot
+ok 60 - fingerprints normalize key order and parsers own their input snapshot
+  ---
+  duration_ms: 0.120292
+  type: 'test'
+  ...
+# Subtest: asset.add retains ownership of nested asset fields and generation remains prohibited
+ok 61 - asset.add retains ownership of nested asset fields and generation remains prohibited
+  ---
+  duration_ms: 0.606167
+  type: 'test'
+  ...
+# Subtest: service bridge rejects unsafe asset URLs and extra envelope or asset fields
+ok 62 - service bridge rejects unsafe asset URLs and extra envelope or asset fields
+  ---
+  duration_ms: 0.169333
+  type: 'test'
+  ...
+# Subtest: graph/model dispatched read disconnects never become unknown writes
+ok 63 - graph/model dispatched read disconnects never become unknown writes
+  ---
+  duration_ms: 8.26325
+  type: 'test'
+  ...
+# Subtest: Host accepts only matching graph/model read statuses and preserves saved edge IDs
+ok 64 - Host accepts only matching graph/model read statuses and preserves saved edge IDs
+  ---
+  duration_ms: 2.3825
+  type: 'test'
+  ...
+# Subtest: Host routes prepare and one write to one fixed context, deduplicates call IDs and validates late ACKs
+ok 65 - Host routes prepare and one write to one fixed context, deduplicates call IDs and validates late ACKs
+  ---
+  duration_ms: 2.91425
+  type: 'test'
+  ...
+# Subtest: two registered clients for one session are ambiguous and never broadcast; stale session revisions cannot restore unbound sessions
+ok 66 - two registered clients for one session are ambiguous and never broadcast; stale session revisions cannot restore unbound sessions
+  ---
+  duration_ms: 2.724834
+  type: 'test'
+  ...
+# Subtest: a dispatched write becomes unknown on disconnect; reconnect never replays it and a late exact ACK updates its cached receipt
+ok 67 - a dispatched write becomes unknown on disconnect; reconnect never replays it and a late exact ACK updates its cached receipt
+  ---
+  duration_ms: 1.663458
+  type: 'test'
+  ...
+# Subtest: cancel before dispatch sends nothing; a dispatched cancellation is unknown and never promises rollback
+ok 68 - cancel before dispatch sends nothing; a dispatched cancellation is unknown and never promises rollback
+  ---
+  duration_ms: 0.911708
+  type: 'test'
+  ...
+# Subtest: prepare/command target cannot change after context replacement; explicit refresh uses prepare without opening UI
+ok 69 - prepare/command target cannot change after context replacement; explicit refresh uses prepare without opening UI
+  ---
+  duration_ms: 0.752916
+  type: 'test'
+  ...
+# Subtest: read/prepare timeouts are bounded and do not resend; identity/auth mismatches are rejected
+ok 70 - read/prepare timeouts are bounded and do not resend; identity/auth mismatches are rejected
+  ---
+  duration_ms: 31.4365
+  type: 'test'
+  ...
+# Subtest: a released session cannot route new work but its already dispatched write can still settle
+ok 71 - a released session cannot route new work but its already dispatched write can still settle
+  ---
+  duration_ms: 0.623542
+  type: 'test'
+  ...
+# Subtest: completed prepare identity cannot be overwritten by a conflicting duplicate receipt
+ok 72 - completed prepare identity cannot be overwritten by a conflicting duplicate receipt
+  ---
+  duration_ms: 0.317292
+  type: 'test'
+  ...
+# Subtest: Host in-flight limit refuses a new command instead of dropping earlier uncertain writes
+ok 73 - Host in-flight limit refuses a new command instead of dropping earlier uncertain writes
+  ---
+  duration_ms: 0.654667
+  type: 'test'
+  ...
+# Subtest: Host routes an asset write through the existing context and caches its saved receipt once
+ok 74 - Host routes an asset write through the existing context and caches its saved receipt once
+  ---
+  duration_ms: 0.78325
+  type: 'test'
+  ...
+# Subtest: a disconnected asset write stays unknown and is never resent; only its exact late receipt settles it
+ok 75 - a disconnected asset write stays unknown and is never resent; only its exact late receipt settles it
+  ---
+  duration_ms: 0.361875
+  type: 'test'
+  ...
+# Subtest: same command executes once, changed payload rejects, settled receipt survives transport replay
+ok 76 - same command executes once, changed payload rejects, settled receipt survives transport replay
+  ---
+  duration_ms: 6.458875
+  type: 'test'
+  ...
+# Subtest: replaced context, unbound session and expired deadline never call runtime.execute
+ok 77 - replaced context, unbound session and expired deadline never call runtime.execute
+  ---
+  duration_ms: 2.621125
+  type: 'test'
+  ...
+# Subtest: prepare invokes existing ensure/reload and publishes actual context readiness, without creating a view
+ok 78 - prepare invokes existing ensure/reload and publishes actual context readiness, without creating a view
+  ---
+  duration_ms: 0.89075
+  type: 'test'
+  ...
+# Subtest: deadline and context are checked again after the lazy runtime resolves
+ok 79 - deadline and context are checked again after the lazy runtime resolves
+  ---
+  duration_ms: 0.629333
+  type: 'test'
+  ...
+# Subtest: a malformed/throwing native write never becomes an effect:none rejection; replay does not execute twice
+ok 80 - a malformed/throwing native write never becomes an effect:none rejection; replay does not execute twice
+  ---
+  duration_ms: 2.677333
+  type: 'test'
+  ...
+# Subtest: session IDs with separators release only their own readiness subscription; send failure does not undo saving
+ok 81 - session IDs with separators release only their own readiness subscription; send failure does not undo saving
+  ---
+  duration_ms: 8.886
+  type: 'test'
+  ...
+# Subtest: Client passes asset.add to the existing runtime once and returns its exact saved receipt
+ok 82 - Client passes asset.add to the existing runtime once and returns its exact saved receipt
+  ---
+  duration_ms: 1.312542
+  type: 'test'
+  ...
+# Subtest: asset execution errors and malformed receipts are unknown after start and replay never executes twice
+ok 83 - asset execution errors and malformed receipts are unknown after start and replay never executes twice
+  ---
+  duration_ms: 2.706166
+  type: 'test'
+  ...
+# Subtest: an asset failure explicitly known to precede submission is rejected without promising rollback
+ok 84 - an asset failure explicitly known to precede submission is rejected without promising rollback
+  ---
+  duration_ms: 5.091375
+  type: 'test'
+  ...
+# Subtest: invalid asset input is rejected before Client execution or ACK emission
+ok 85 - invalid asset input is rejected before Client execution or ACK emission
+  ---
+  duration_ms: 0.547333
+  type: 'test'
+  ...
+# Subtest: graph/model read failures after start are read rejections, never submission_unknown
+ok 86 - graph/model read failures after start are read rejections, never submission_unknown
+  ---
+  duration_ms: 1.100084
+  type: 'test'
+  ...
+# Subtest: graph reads only require read readiness and mismatched saved receipts cannot pass as read success
+ok 87 - graph reads only require read readiness and mismatched saved receipts cannot pass as read success
+  ---
+  duration_ms: 1.221666
+  type: 'test'
+  ...
+# Subtest: edge writes retain unknown affectedEdgeIds and replay never starts a second native write
+ok 88 - edge writes retain unknown affectedEdgeIds and replay never starts a second native write
+  ---
+  duration_ms: 2.305208
+  type: 'test'
+  ...
+# Subtest: canvas/get parses string graph without changing the requested canvas ID
+ok 89 - canvas/get parses string graph without changing the requested canvas ID
+  ---
+  duration_ms: 3.194875
+  type: 'test'
+  ...
+# Subtest: canvas/get rejects node IDs that cannot round-trip through selection messages
+ok 90 - canvas/get rejects node IDs that cannot round-trip through selection messages
+  ---
+  duration_ms: 0.22125
+  type: 'test'
+  ...
+# Subtest: canvas/get uses current Token and the fixed test Gateway
+ok 91 - canvas/get uses current Token and the fixed test Gateway
+  ---
+  duration_ms: 20.350917
+  type: 'test'
+  ...
+# Subtest: canvas/get in a packaged client uses the production Gateway and Web origin
+ok 92 - canvas/get in a packaged client uses the production Gateway and Web origin
+  ---
+  duration_ms: 0.2485
+  type: 'test'
+  ...
+# Subtest: canvas/get never calls Gateway when desktop credentials are unavailable
+ok 93 - canvas/get never calls Gateway when desktop credentials are unavailable
+  ---
+  duration_ms: 0.126
+  type: 'test'
+  ...
+# Subtest: canvas/get stops before Gateway when cancelled during credential lookup
+ok 94 - canvas/get stops before Gateway when cancelled during credential lookup
+  ---
+  duration_ms: 0.15625
+  type: 'test'
+  ...
+# Subtest: summary prefers native data.title, preserves legacy titles and total count after clipping
+ok 95 - summary prefers native data.title, preserves legacy titles and total count after clipping
+  ---
+  duration_ms: 0.251083
+  type: 'test'
+  ...
+# Subtest: graph save/read operations strictly preserve branch fields, and only read variants are read
+ok 96 - graph save/read operations strictly preserve branch fields, and only read variants are read
+  ---
+  duration_ms: 2.828083
+  type: 'test'
+  ...
+# Subtest: configuration rejects unknown, nested and reserved keys while retaining scalar value types
+ok 97 - configuration rejects unknown, nested and reserved keys while retaining scalar value types
+  ---
+  duration_ms: 0.283416
+  type: 'test'
+  ...
+# Subtest: pagination requires snapshot revisions and finite bounded integer offsets/limits
+ok 98 - pagination requires snapshot revisions and finite bounded integer offsets/limits
+  ---
+  duration_ms: 0.161958
+  type: 'test'
+  ...
+# Subtest: edge arrays require unique bounded IDs; operations reject unrelated fields and missing handles
+ok 99 - edge arrays require unique bounded IDs; operations reject unrelated fields and missing handles
+  ---
+  duration_ms: 1.451625
+  type: 'test'
+  ...
+# Subtest: graph/model receipts preserve bounded pages and true ports, never transport credentials
+ok 100 - graph/model receipts preserve bounded pages and true ports, never transport credentials
+  ---
+  duration_ms: 0.371
+  type: 'test'
+  ...
+# Subtest: refresh is read-only; edit prepare cannot force backend reload over user edits
+ok 101 - refresh is read-only; edit prepare cannot force backend reload over user edits
+  ---
+  duration_ms: 0.205917
+  type: 'test'
+  ...
+# Subtest: graph tools register save/read extensions and expose no generation or routing authority
+ok 102 - graph tools register save/read extensions and expose no generation or routing authority
+  ---
+  duration_ms: 2.200541
+  type: 'test'
+  ...
+# Subtest: graph reads preserve independent offsets, page version and explicit authority refresh
+ok 103 - graph reads preserve independent offsets, page version and explicit authority refresh
+  ---
+  duration_ms: 1.377917
+  type: 'test'
+  ...
+# Subtest: model reads send selected mode/model and catalog-bound paging through read capability
+ok 104 - model reads send selected mode/model and catalog-bound paging through read capability
+  ---
+  duration_ms: 4.749
+  type: 'test'
+  ...
+# Subtest: node update/delete/configure strictly dispatch to native methods and preserve edge IDs
+ok 105 - node update/delete/configure strictly dispatch to native methods and preserve edge IDs
+  ---
+  duration_ms: 1.017708
+  type: 'test'
+  ...
+# Subtest: edge add/delete/reconnect/reorder pass IDs and full input order without raw graph writes
+ok 106 - edge add/delete/reconnect/reorder pass IDs and full input order without raw graph writes
+  ---
+  duration_ms: 5.731291
+  type: 'test'
+  ...
+# Subtest: invalid branch fields, unsafe config, unversioned pages and forged routing stop before bridge
+ok 107 - invalid branch fields, unsafe config, unversioned pages and forged routing stop before bridge
+  ---
+  duration_ms: 2.497709
+  type: 'test'
+  ...
+# Subtest: read failures never claim unknown writes and writes after dispatch never leak provider errors
+ok 108 - read failures never claim unknown writes and writes after dispatch never leak provider errors
+  ---
+  duration_ms: 0.618458
+  type: 'test'
+  ...
+# Subtest: known precondition rejection stays none and unknown edge receipts retain IDs without mutation
+ok 109 - known precondition rejection stays none and unknown edge receipts retain IDs without mutation
+  ---
+  duration_ms: 0.980916
+  type: 'test'
+  ...
+# Subtest: build audit follows static dependency closure, rejects missing exports/chunks and eager UI bootstrap
+ok 110 - build audit follows static dependency closure, rejects missing exports/chunks and eager UI bootstrap
+  ---
+  duration_ms: 0.864834
+  type: 'test'
+  ...
+# Subtest: build audit does not eagerly follow optional UI chunks, while preserving the service factory export
+ok 111 - build audit does not eagerly follow optional UI chunks, while preserving the service factory export
+  ---
+  duration_ms: 0.083417
+  type: 'test'
+  ...
+# Subtest: real Client apply owns the service effect independently of tabs/input slots and does not open a canvas
+ok 112 - real Client apply owns the service effect independently of tabs/input slots and does not open a canvas
+  ---
+  duration_ms: 49.172459
+  type: 'test'
+  ...
+# Subtest: existing authenticated page handler serves the fixed service script without a canvas/view request
+ok 113 - existing authenticated page handler serves the fixed service script without a canvas/view request
+  ---
+  duration_ms: 13.443791
+  type: 'test'
+  ...
+# Subtest: real Client registers session via scoped inject; duplicate input mounts share one bridge and teardown opens no canvas
+ok 114 - real Client registers session via scoped inject; duplicate input mounts share one bridge and teardown opens no canvas
+  ---
+  duration_ms: 12.052625
+  type: 'test'
+  ...
+# Subtest: Client installs one lazy handle and loads the fixed same-origin service URL once
+ok 115 - Client installs one lazy handle and loads the fixed same-origin service URL once
+  ---
+  duration_ms: 4.52175
+  type: 'test'
+  ...
+# Subtest: disposal before any request does not import or create a runtime
+ok 116 - disposal before any request does not import or create a runtime
+  ---
+  duration_ms: 0.3875
+  type: 'test'
+  ...
+# Subtest: a late import after Client disposal cannot create or install a runtime
+ok 117 - a late import after Client disposal cannot create or install a runtime
+  ---
+  duration_ms: 0.15675
+  type: 'test'
+  ...
+# Subtest: module loading failure stays observable and never silently retries
+ok 118 - module loading failure stays observable and never silently retries
+  ---
+  duration_ms: 0.118458
+  type: 'test'
+  ...
+# Subtest: duplicate installation cannot overwrite another owner; stale cleanup cannot remove a replacement
+ok 119 - duplicate installation cannot overwrite another owner; stale cleanup cannot remove a replacement
+  ---
+  duration_ms: 0.092083
+  type: 'test'
+  ...
+# Subtest: a malformed module is rejected instead of exposing a partial or fake ready service
+ok 120 - a malformed module is rejected instead of exposing a partial or fake ready service
+  ---
+  duration_ms: 0.126917
+  type: 'test'
+  ...
+# Subtest: reinstalling in the same window uses a fresh ESM URL while keeping the fixed service path
+ok 121 - reinstalling in the same window uses a fresh ESM URL while keeping the fixed service path
+  ---
+  duration_ms: 0.133833
+  type: 'test'
+  ...
+# Subtest: seven registered tool contracts preserve the pre-refactor catalog exactly
+ok 122 - seven registered tool contracts preserve the pre-refactor catalog exactly
+  ---
+  duration_ms: 31.006042
+  type: 'test'
+  ...
+# Subtest: seven tools preserve string output and the existing text renderer
+ok 123 - seven tools preserve string output and the existing text renderer
+  ---
+  duration_ms: 6.635584
+  type: 'test'
+  ...
+# Subtest: public tool contract data has no runtime dependency or Host import
+ok 124 - public tool contract data has no runtime dependency or Host import
+  ---
+  duration_ms: 13.88325
+  type: 'test'
+  ...
+# Subtest: registers exactly three tools and retains legacy summary shape without Agent or Client
+ok 125 - registers exactly three tools and retains legacy summary shape without Agent or Client
+  ---
+  duration_ms: 5.979916
+  type: 'test'
+  ...
+# Subtest: create defaults name, prepares service and returns exact ID/version without opening any UI
+ok 126 - create defaults name, prepares service and returns exact ID/version without opening any UI
+  ---
+  duration_ms: 2.757916
+  type: 'test'
+  ...
+# Subtest: successful creation survives service preparation failure without creating again
+ok 127 - successful creation survives service preparation failure without creating again
+  ---
+  duration_ms: 2.588791
+  type: 'test'
+  ...
+# Subtest: same create call is deduplicated concurrently, changed contents rejected, separate sessions isolated
+ok 128 - same create call is deduplicated concurrently, changed contents rejected, separate sessions isolated
+  ---
+  duration_ms: 2.903458
+  type: 'test'
+  ...
+# Subtest: create_unknown is cached and never retried; generic failures cannot leak credential text
+ok 129 - create_unknown is cached and never retried; generic failures cannot leak credential text
+  ---
+  duration_ms: 2.427708
+  type: 'test'
+  ...
+# Subtest: nodes read can obtain an empty graph/version, select IDs, and request explicit backend refresh
+ok 130 - nodes read can obtain an empty graph/version, select IDs, and request explicit backend refresh
+  ---
+  duration_ms: 1.078792
+  type: 'test'
+  ...
+# Subtest: add preserves expected version, exact native receipts, cancellation and distinct step IDs
+ok 131 - add preserves expected version, exact native receipts, cancellation and distinct step IDs
+  ---
+  duration_ms: 6.376417
+  type: 'test'
+  ...
+# Subtest: strict extra-field and native draft validation stop invalid input before API/bridge
+ok 132 - strict extra-field and native draft validation stop invalid input before API/bridge
+  ---
+  duration_ms: 1.839167
+  type: 'test'
+  ...
+# Subtest: writes and detail reads require Agent context and stop on pre-dispatch cancellation
+ok 133 - writes and detail reads require Agent context and stop on pre-dispatch cancellation
+  ---
+  duration_ms: 0.524125
+  type: 'test'
+  ...
+# Subtest: unexpected errors after attempting a write are unknown rather than claiming no effect
+ok 134 - unexpected errors after attempting a write are unknown rather than claiming no effect
+  ---
+  duration_ms: 0.340375
+  type: 'test'
+  ...
+# Subtest: create request cache has bounded concurrency and never evicts past writes to accept a new one
+ok 135 - create request cache has bounded concurrency and never evicts past writes to accept a new one
+  ---
+  duration_ms: 111.75975
+  type: 'test'
+  ...
+# Subtest: node tool exposes only placement and preserves each mode in the native command
+ok 136 - node tool exposes only placement and preserves each mode in the native command
+  ---
+  duration_ms: 8.298917
+  type: 'test'
+  ...
+# Subtest: node model entry rejects obsolete raw position before preparing or dispatching
+ok 137 - node model entry rejects obsolete raw position before preparing or dispatching
+  ---
+  duration_ms: 0.467375
+  type: 'test'
+  ...
+# Subtest: tool guidance uses confirmed service reads for normal edits and respects user stop rules
+ok 138 - tool guidance uses confirmed service reads for normal edits and respects user stop rules
+  ---
+  duration_ms: 0.471583
+  type: 'test'
+  ...
+# Subtest: SSE parses UTF8/CRLF/multiple data across chunks, discards incomplete events and rejects oversized input
+ok 139 - SSE parses UTF8/CRLF/multiple data across chunks, discards incomplete events and rejects oversized input
+  ---
+  duration_ms: 19.532584
+  type: 'test'
+  ...
+# Subtest: Client real SSE/POST binds session without canvas, executes once, and preserves accepted write across reconnect
+ok 140 - Client real SSE/POST binds session without canvas, executes once, and preserves accepted write across reconnect
+  ---
+  duration_ms: 231.072291
+  type: 'test'
+  ...
+# Subtest: oversized comment-only SSE events are bounded and malformed UTF8 never reaches a command handler
+ok 141 - oversized comment-only SSE events are bounded and malformed UTF8 never reaches a command handler
+  ---
+  duration_ms: 8.568583
+  type: 'test'
+  ...
+# Subtest: desktop token aborts pending IPC and removes its listener
+ok 142 - desktop token aborts pending IPC and removes its listener
+  ---
+  duration_ms: 0.957375
+  type: 'test'
+  ...
+# Subtest: gateway authenticates before reading a request or obtaining credentials
+ok 143 - gateway authenticates before reading a request or obtaining credentials
+  ---
+  duration_ms: 1.449792
+  type: 'test'
+  ...
+# Subtest: gateway rejects unsupported methods and unsafe paths before obtaining a token
+ok 144 - gateway rejects unsupported methods and unsafe paths before obtaining a token
+  ---
+  duration_ms: 0.780458
+  type: 'test'
+  ...
+# Subtest: gateway forwards exact JSON and query with the current desktop Token
+ok 145 - gateway forwards exact JSON and query with the current desktop Token
+  ---
+  duration_ms: 40.187167
+  type: 'test'
+  ...
+# Subtest: gateway forwards canvas business APIs without per-endpoint registration
+ok 146 - gateway forwards canvas business APIs without per-endpoint registration
+  ---
+  duration_ms: 13.0775
+  type: 'test'
+  ...
+# Subtest: gateway uses the fixed production host and preserves a JSON conflict response
+ok 147 - gateway uses the fixed production host and preserves a JSON conflict response
+  ---
+  duration_ms: 4.529959
+  type: 'test'
+  ...
+# Subtest: gateway maps missing desktop login, timeout and non-JSON upstream errors
+ok 148 - gateway maps missing desktop login, timeout and non-JSON upstream errors
+  ---
+  duration_ms: 0.716125
+  type: 'test'
+  ...
+# Subtest: gateway rejects an oversized upstream response before reading its body
+ok 149 - gateway rejects an oversized upstream response before reading its body
+  ---
+  duration_ms: 0.233917
+  type: 'test'
+  ...
+# Subtest: gateway aborts the upstream request when the browser closes
+ok 150 - gateway aborts the upstream request when the browser closes
+  ---
+  duration_ms: 0.536416
+  type: 'test'
+  ...
+# Subtest: node selection accepts only the active canvas and protocol
+ok 151 - node selection accepts only the active canvas and protocol
+  ---
+  duration_ms: 1.708292
+  type: 'test'
+  ...
+# Subtest: node selection rejects incomplete or unbounded payloads
+ok 152 - node selection rejects incomplete or unbounded payloads
+  ---
+  duration_ms: 0.083916
+  type: 'test'
+  ...
+# Subtest: model params route requires the browser session before contacting the CDN
+ok 153 - model params route requires the browser session before contacting the CDN
+  ---
+  duration_ms: 0.450666
+  type: 'test'
+  ...
+# Subtest: model params route reads only the fixed CDN for the selected environment
+ok 154 - model params route reads only the fixed CDN for the selected environment
+  ---
+  duration_ms: 10.705
+  type: 'test'
+  ...
+# Subtest: model params route rejects alternate paths and methods and does not relay bad CDN data
+ok 155 - model params route rejects alternate paths and methods and does not relay bad CDN data
+  ---
+  duration_ms: 0.256542
+  type: 'test'
+  ...
+# Subtest: model params route rejects an oversized CDN response
+ok 156 - model params route rejects an oversized CDN response
+  ---
+  duration_ms: 0.15375
+  type: 'test'
+  ...
+# Subtest: selected canvas node uses the existing bounded Harness message protocol
+ok 157 - selected canvas node uses the existing bounded Harness message protocol
+  ---
+  duration_ms: 1.276917
+  type: 'test'
+  ...
+# Subtest: page route authenticates before touching the bundle
+ok 158 - page route authenticates before touching the bundle
+  ---
+  duration_ms: 1.017291
+  type: 'test'
+  ...
+# Subtest: page route serves Vite HTML and asset types with a restrictive CSP
+ok 159 - page route serves Vite HTML and asset types with a restrictive CSP
+  ---
+  duration_ms: 21.376166
+  type: 'test'
+  ...
+# Subtest: canvas page exposes the current public share origin, not the local server
+ok 160 - canvas page exposes the current public share origin, not the local server
+  ---
+  duration_ms: 10.844875
+  type: 'test'
+  ...
+# Subtest: page route rejects invalid IDs, methods, missing files, traversal and escaped assets
+ok 161 - page route rejects invalid IDs, methods, missing files, traversal and escaped assets
+  ---
+  duration_ms: 10.506417
+  type: 'test'
+  ...
+# Subtest: canvas resource identity preserves signed Long IDs
+ok 162 - canvas resource identity preserves signed Long IDs
+  ---
+  duration_ms: 0.461166
+  type: 'test'
+  ...
+# Subtest: canvas identity rejects ambiguous and out-of-range input
+ok 163 - canvas identity rejects ambiguous and out-of-range input
+  ---
+  duration_ms: 0.064291
+  type: 'test'
+  ...
+# Subtest: canvas request keeps the full response and sends no iframe token
+ok 164 - canvas request keeps the full response and sends no iframe token
+  ---
+  duration_ms: 29.083542
+  type: 'test'
+  ...
+# Subtest: canvas request forwards the legacy editor PUT as JSON through the desktop gateway
+ok 165 - canvas request forwards the legacy editor PUT as JSON through the desktop gateway
+  ---
+  duration_ms: 0.323667
+  type: 'test'
+  ...
+# Subtest: canvas request preserves business conflict response for the legacy save queue
+ok 166 - canvas request preserves business conflict response for the legacy save queue
+  ---
+  duration_ms: 0.744792
+  type: 'test'
+  ...
+# Subtest: canvas request exposes an HTTP 409 business code to the legacy mutation queue
+ok 167 - canvas request exposes an HTTP 409 business code to the legacy mutation queue
+  ---
+  duration_ms: 1.0465
+  type: 'test'
+  ...
+# Subtest: canvas request reports expired desktop login and rejects direct remote URL
+ok 168 - canvas request reports expired desktop login and rejects direct remote URL
+  ---
+  duration_ms: 0.325959
+  type: 'test'
+  ...
+# Subtest: canvas request treats a successful HTTP response with expired business session as logged out
+ok 169 - canvas request treats a successful HTTP response with expired business session as logged out
+  ---
+  duration_ms: 0.2065
+  type: 'test'
+  ...
+# Subtest: canvas get rejects a null canvas before the legacy route can navigate away
+ok 170 - canvas get rejects a null canvas before the legacy route can navigate away
+  ---
+  duration_ms: 0.373125
+  type: 'test'
+  ...
+# Subtest: share response code becomes a complete environment-specific Web URL
+ok 171 - share response code becomes a complete environment-specific Web URL
+  ---
+  duration_ms: 0.414583
+  type: 'test'
+  ...
+# Subtest: share link requires the share code and configured Web origin
+ok 172 - share link requires the share code and configured Web origin
+  ---
+  duration_ms: 0.296666
+  type: 'test'
+  ...
+# Subtest: clipboard fallback copies the complete link when iframe clipboard access is denied
+ok 173 - clipboard fallback copies the complete link when iframe clipboard access is denied
+  ---
+  duration_ms: 0.237375
+  type: 'test'
+  ...
+# Subtest: snapshot route checks browser session before fetching remote canvas
+ok 174 - snapshot route checks browser session before fetching remote canvas
+  ---
+  duration_ms: 0.444583
+  type: 'test'
+  ...
+# Subtest: snapshot route validates ID and returns only adapter data
+ok 175 - snapshot route validates ID and returns only adapter data
+  ---
+  duration_ms: 0.478959
+  type: 'test'
+  ...
+# Subtest: tool previews stay HTTPS inside the HTTP desktop canvas frame
+ok 176 - tool previews stay HTTPS inside the HTTP desktop canvas frame
+  ---
+  duration_ms: 1.234333
+  type: 'test'
+  ...
+1..176
+# tests 176
+# suites 0
+# pass 176
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 785.591584

@@ -1,6 +1,6 @@
 # 插件内独立契约模块：步骤 1–2 Implementation Plan
 
-> 执行边界：本轮只完成实施计划和基线归档。以下开发复选框均为待执行；后续获准编码后按顺序实施，不自动合并 Overu 分支、不安装插件、不操作真实账号。
+> 状态更新（2026-10-14）：用户后续已授权编码，步骤1–2已完成，C01–C11通过；结果见[实施、Review与验收归档](../implementation/2026-10-14-plugin-tool-contracts.md)。插件开发前快照7965b07，测试提交04f002c，抽取提交a86115c。未合并 Overu 分支、发包、安装或操作真实账号；M01–M06仍待后续安装时执行。
 
 **Goal:** 将现有七工具的公开声明集中到插件内纯数据模块，保持输入、输出、校验顺序、调用链与原生行为等价。
 
@@ -26,7 +26,7 @@
 3. [完整声明提取参考](2026-10-14-plugin-tool-contracts-reference/canvas-tool-contracts.ts.txt)：从当前三份源文件 AST 提取的七工具声明和共用参数常量，可在编码阶段复制为新增模块。
 4. [完整兼容测试参考](2026-10-14-plugin-tool-contracts-reference/canvas-tool-contracts.test.mjs.txt)：编码阶段复制到插件 test 目录，固定整理前目录和字符串渲染行为。
 
-两个 `.txt` 是可审阅的计划参考，未放入业务源目录、未接入构建，不表示实施完成。冻结目录只注册工具，未调用 execute，业务 API 调用为0。
+两个 `.txt` 保留为计划编写时的审阅参考；后续已按计划在插件内落地源码和测试，实际实现以插件提交为准。原冻结目录只注册工具，未调用 execute，业务 API 调用为0。
 
 ## 一、文件边界
 
@@ -79,11 +79,11 @@ export const canvasToolContracts = {
 
 **输出：** 插件内固定 fixture + 两项目录/渲染兼容测试；基线差异清单必须为空，或在编码前明确记录新的合法基线。
 
-- [ ] **1.1 检查源基线。** 按冻结 JSON 的 sourceSha256 核对实际源码。若期间已有其他功能修改，先逐项更新映射与基线，不把新差异当作本次可顺手修复的内容。保护用户已有工作。
-- [ ] **1.2 阅读映射。** 逐项核对3种 get view、4种 node action、4种 edge action、2种 import source；确认 summary 无 Agent 例外、nodeIds 去重、SDK 与 Host 双错误通道。
-- [ ] **1.3 添加 fixture 和两项测试。** 从本计划参考复制到上表两个目标位置。fixture 必须来源于整理前捕获，不能从新模块导入常量生成期望值。
-- [ ] **1.4 运行兼容测试和已有三个工具测试。** 此处属于行为刻画，整理前就应通过，不人为制造失败。
-- [ ] **1.5 检查本步差异。** 除 fixture/test 外没有生产文件变更，记录实际测试结果；通过后才进入步骤2。
+- [x] **1.1 检查源基线。** 按冻结 JSON 的 sourceSha256 核对实际源码。若期间已有其他功能修改，先逐项更新映射与基线，不把新差异当作本次可顺手修复的内容。保护用户已有工作。
+- [x] **1.2 阅读映射。** 逐项核对3种 get view、4种 node action、4种 edge action、2种 import source；确认 summary 无 Agent 例外、nodeIds 去重、SDK 与 Host 双错误通道。
+- [x] **1.3 添加 fixture 和两项测试。** 从本计划参考复制到上表两个目标位置。fixture 必须来源于整理前捕获，不能从新模块导入常量生成期望值。
+- [x] **1.4 运行兼容测试和已有三个工具测试。** 此处属于行为刻画，整理前就应通过，不人为制造失败。
+- [x] **1.5 检查本步差异。** 除 fixture/test 外没有生产文件变更，记录实际测试结果；通过后才进入步骤2。
 
 执行目录为插件根目录，使用工作区实际 Node：
 
@@ -102,8 +102,8 @@ TASK_NODE=/Users/boxser.shi/Documents/harness/insight-desktop-shell/build/core-r
 
 **输出：** 一个新共享模块，三处 Host 引用；无新业务命令、无第二套模型 Schema、无新的运行时服务。
 
-- [ ] **2.1 新增纯数据模块。** 将完整声明参考复制到 `src/shared/canvas-tool-contracts.ts`。不增加 import、副作用、环境判断、动态可用模型值、SDK 注册或缓存。
-- [ ] **2.2 修改基础工具注册。** 在 canvas-tools.ts 引入两个导出，将三个 defineTool 的 name/timeoutMs/description/parameters 原地替换成对应成员展开；保留同一个 output 变量及 execute 代码。删除已迁出的三个旧参数常量。
+- [x] **2.1 新增纯数据模块。** 将完整声明参考复制到 `src/shared/canvas-tool-contracts.ts`。不增加 import、副作用、环境判断、动态可用模型值、SDK 注册或缓存。
+- [x] **2.2 修改基础工具注册。** 在 canvas-tools.ts 引入两个导出，将三个 defineTool 的 name/timeoutMs/description/parameters 原地替换成对应成员展开；保留同一个 output 变量及 execute 代码。删除已迁出的三个旧参数常量。
 
 ```ts
 import { canvasToolContracts, canvasToolOutputSchema } from '../shared/canvas-tool-contracts'
@@ -131,9 +131,9 @@ ctx.tools.register(defineTool({
 
 get/node_edit 只将相同四项元数据替换为 `...canvasToolContracts.canvas_get` / `...canvasToolContracts.canvas_node_edit`，对应 execute 整块从旧代码原样保留。不要把三项注册改成通用循环，否则会引入不必要的类型/执行映射。
 
-- [ ] **2.3 修改图工具注册。** import canvasToolContracts；分别用 `...canvasToolContracts.canvas_edges` 和 `...canvasToolContracts.canvas_models` 替换四项声明。仍用原 canvasToolOutput；不改 action→operation 构造、分页、配置、dispatchCanvasWrite 或结果拼装。
-- [ ] **2.4 修改素材工具注册。** import 两个导出；移除旧 nodePlacementParameterSpec import；assets/import 分别展开对应成员。仅将本地 output.schema 改为 canvasToolOutputSchema，renderer 不动。完整保留 parseArgs、importImage、上传/回执缓存及调用顺序。
-- [ ] **2.5 增加纯模块检查。** 在新测试文件追加下列测试；它验证新模块可被浏览器单独构建，且没有引入 Host/SDK/Store 依赖，不增加新的业务模拟。
+- [x] **2.3 修改图工具注册。** import canvasToolContracts；分别用 `...canvasToolContracts.canvas_edges` 和 `...canvasToolContracts.canvas_models` 替换四项声明。仍用原 canvasToolOutput；不改 action→operation 构造、分页、配置、dispatchCanvasWrite 或结果拼装。
+- [x] **2.4 修改素材工具注册。** import 两个导出；移除旧 nodePlacementParameterSpec import；assets/import 分别展开对应成员。仅将本地 output.schema 改为 canvasToolOutputSchema，renderer 不动。完整保留 parseArgs、importImage、上传/回执缓存及调用顺序。
+- [x] **2.5 增加纯模块检查。** 在新测试文件追加下列测试；它验证新模块可被浏览器单独构建，且没有引入 Host/SDK/Store 依赖，不增加新的业务模拟。
 
 ```js
 test('public tool contract data has no runtime dependency or Host import', async () => {
@@ -151,15 +151,15 @@ test('public tool contract data has no runtime dependency or Host import', async
 })
 ```
 
-- [ ] **2.6 执行等价校验。** 先跑步骤1命令，再跑插件全部测试和 Host 类型检查。SDK 参数推导若不兼容，修正 const/导入使用方式；不能用 any 跳过检查，也不能修改契约内容迎合类型报错。
-- [ ] **2.7 验证实际 Core 类型与 Host 构建。** 使用下节命令；产物放临时目录，不覆盖已打包文件、不安装客户端。新模块自动被 Host bundle 包含。
-- [ ] **2.8 更新插件 README、归档和 review。** README 只说明声明位置、现有业务 parser 与桥仍是原边界；审查三个 execute/素材流水线均未变化、七项声明没有第二份。记录检查结果与未做的手测，不把计划中的预期写成已通过。
+- [x] **2.6 执行等价校验。** 先跑步骤1命令，再跑插件全部测试和 Host 类型检查。SDK 参数推导若不兼容，修正 const/导入使用方式；不能用 any 跳过检查，也不能修改契约内容迎合类型报错。
+- [x] **2.7 验证实际 Core 类型与 Host 构建。** 使用下节命令；产物放临时目录，不覆盖已打包文件、不安装客户端。新模块自动被 Host bundle 包含。
+- [x] **2.8 更新插件 README、归档和 review。** README 只说明声明位置、现有业务 parser 与桥仍是原边界；审查三个 execute/素材流水线均未变化、七项声明没有第二份。记录检查结果与未做的手测，不把计划中的预期写成已通过。
 
 **验收：** 新模块两个导出由三个 Host 文件消费；七工具目录与冻结 fixture 完全一致，实际输出仍为 string；原生方法/通信/错误/重试/权限行为不变；未改变列表以源码差异核对。
 
 ## 五、验证命令与范围
 
-所有命令均是后续编码阶段执行，本轮没有运行插件全量测试或重建插件。
+以下命令已在实施阶段执行：插件全量176项通过，默认/实际Core类型检查通过，Host构建只输出临时目录。首次受限环境的两项本地监听EPERM及完整重跑结果见验收归档；未完整重建或打包插件。
 
 在插件根目录：
 
@@ -250,7 +250,7 @@ JS
 
 当步骤2完成并通过 C01–C11，即停止本项。下一步公开契约改进需另立变更：结构化对象输出、条件入参优化、能力目录、批量 patch 等不能混入本次提交。
 
-本轮已做：核对当前七工具/共享 parser/原生方法；采集真实注册目录（0业务调用）；准备完整声明及测试参考；核对文档链接和参考声明与冻结目录的一致性。未做：生产代码修改、实际测试文件落地、步骤1/2开发执行、全量测试、发包/安装、账号写入。
+计划编写阶段已做：核对当前七工具/共享 parser/原生方法；采集真实注册目录（0业务调用）；准备完整声明及测试参考；核对文档链接和参考声明与冻结目录的一致性。当时未改生产代码或执行开发步骤；后续获准实施结果见顶部状态和验收归档。
 
 [计划参考检查记录](../preflight/2026-10-14-canvas-tool-contracts-plan-checks.json)：七项声明经现有 defineTool 投影后与冻结目录完全一致；两项测试参考在隔离临时目录通过；23份源文件哈希无变化。此结果只证明计划参考与当前源码一致，不代表上述开发步骤或真实账号验收已完成。
 
