@@ -25,35 +25,36 @@ const size = object({
   height: z.number().positive().describe('期望高度。')
 }).describe('节点尺寸。')
 const taskInfo = object({
-  status,
+  status: status.describe('新建节点为 success，生成中为 running，失败为 failed。'),
   errorMsg: z.string().optional().describe('失败原因。')
 }).describe('节点任务状态。')
 const dataBase = {
   title: z.string().describe('节点显示标题。'),
-  value: z.union([z.string(), z.array(z.string())]).describe('节点保存的文本或产物引用列表。'),
+  value: z.union([z.string(), z.array(z.string())]).optional().describe('生成物或预览图的 URL；尚无资源时可省略。'),
   taskInfo
 }
+const mediaDataBase = { ...dataBase, type: tagged('upload', '用户上传的资源，不执行生成。').optional() }
 const baseParams = {
-  model,
+  model: model.optional().describe('已选模型 ID；画布中未配置模型的节点可省略。'),
   prompt: z.string().describe('提供给模型的提示词。')
 }
 const seniorParams = object({
   customMode: z.boolean().optional().describe('是否启用自定义模式。'),
   instrumental: z.boolean().optional().describe('是否仅生成伴奏。'),
   styleWeight: z.number().optional().describe('风格权重；有效范围以模型配置为准。'),
-  vocalGender: z.number().optional().describe('人声性别参数；有效取值以模型配置为准。'),
+  vocalGender: z.string().optional().describe('人声性别参数；有效取值以模型配置为准。'),
   weirdnessConstraint: z.number().optional().describe('创意程度约束；有效范围以模型配置为准。')
 }).describe('音频高级参数。')
 const textParams = object({ ...baseParams, search_resource: z.boolean().describe('是否检索资源。') }).describe('已保存的文本节点参数。')
 const imageParams = object({
-  ...baseParams, modelType: imageModelType,
+  ...baseParams, modelType: imageModelType.optional(),
   aspect_ratio: z.string().optional().describe('画面比例；可用值由模型配置决定。'),
   gen_count: z.number().int().positive().optional().describe('生成数量；上限由模型配置决定。'),
   quality: z.string().optional().describe('图像质量；可用值由模型配置决定。'),
   resolution: z.string().optional().describe('图像分辨率；可用值由模型配置决定。')
 }).describe('已保存的图像节点参数。')
 const videoParams = object({
-  ...baseParams, modelType: videoModelType,
+  ...baseParams, modelType: videoModelType.optional(),
   aspect_ratio: z.string().optional().describe('视频画面比例；可用值由模型配置决定。'),
   duration: z.number().positive().optional().describe('视频时长，单位秒；可用范围由模型配置决定。'),
   enableAudio: z.boolean().optional().describe('是否同时生成音轨。'),
@@ -61,7 +62,7 @@ const videoParams = object({
   resolution: z.string().optional().describe('视频分辨率；可用值由模型配置决定。')
 }).describe('已保存的视频节点参数。')
 const audioParams = object({
-  ...baseParams, modelType: audioModelType,
+  ...baseParams, modelType: audioModelType.optional(),
   gen_count: z.number().int().positive().optional().describe('生成数量；上限由模型配置决定。'),
   seniorParams: seniorParams.optional().describe('音频高级参数。')
 }).describe('已保存的音频节点参数。')
@@ -72,9 +73,9 @@ const nodeBase = {
 }
 const node = z.discriminatedUnion('type', [
   object({ ...nodeBase, type: tagged('text', '文本节点。'), data: object({ ...dataBase, params: textParams }).describe('文本节点数据。') }),
-  object({ ...nodeBase, type: tagged('image', '图像节点。'), data: object({ ...dataBase, params: imageParams }).describe('图像节点数据。') }),
-  object({ ...nodeBase, type: tagged('audio', '音频节点。'), data: object({ ...dataBase, params: audioParams }).describe('音频节点数据。') }),
-  object({ ...nodeBase, type: tagged('video', '视频节点。'), data: object({ ...dataBase, params: videoParams }).describe('视频节点数据。') }),
+  object({ ...nodeBase, type: tagged('image', '图像节点。'), data: object({ ...mediaDataBase, params: imageParams }).describe('图像节点数据。') }),
+  object({ ...nodeBase, type: tagged('audio', '音频节点。'), data: object({ ...mediaDataBase, params: audioParams }).describe('音频节点数据。') }),
+  object({ ...nodeBase, type: tagged('video', '视频节点。'), data: object({ ...mediaDataBase, params: videoParams }).describe('视频节点数据。') }),
   object({ ...nodeBase, type: tagged('poseTool', '姿态工具节点。'), data: object({ ...dataBase, params: jsonObject.optional().describe('姿态工具参数。') }).describe('姿态工具节点数据。') }),
   object({ ...nodeBase, type: tagged('highDefinitionTool', '高清工具节点。'), data: object({ ...dataBase, params: jsonObject.optional().describe('高清工具参数。') }).describe('高清工具节点数据。') })
 ]).describe('节点完整数据；type 决定 data.params 的结构。')
@@ -241,20 +242,6 @@ const toolError = object({
   operationIndex: z.number().int().nonnegative().optional().describe('出错操作在 operations 中的零基索引。'),
   retryable: z.boolean().optional().describe('是否可以重试。')
 }).describe('工具错误或警告。')
-const nodeRun = object({
-  nodeId, status,
-  progress: z.number().int().min(0).max(100).optional().describe('节点执行进度百分比。'),
-  artifactIds: z.array(id).optional().describe('产物引用 ID。'),
-  error: toolError.optional().describe('节点执行失败原因。')
-}).describe('一次运行中单节点的状态。')
-const run = object({
-  runId: id.describe('运行 ID。'), workflowId, status,
-  progress: z.number().int().min(0).max(100).optional().describe('整体执行进度百分比。'),
-  nodes: z.array(nodeRun).describe('各节点运行状态。'),
-  error: toolError.optional().describe('整体执行失败原因。'),
-  mock: z.boolean().optional().describe('true 表示仅为模拟运行，没有生成真实媒体。')
-}).describe('工作流运行详情。')
-
 const getWorkflowOutput = z.discriminatedUnion('view', [
   object({ view: tagged('summary', '仅返回工作流摘要。'), workflow: workflowSummary }),
   object({ view: tagged('structure', '返回摘要及图结构。'), workflow: workflowSummary, nodes: z.array(nodeSummary).describe('节点摘要。'), edges: z.array(edge).describe('连线结构。') }),
@@ -313,12 +300,19 @@ export const workflowSchemas = {
     }).describe('原子修改结果。')
   },
   execute_workflow: {
-    input: object({ workflowId, idempotencyKey: z.string().optional().describe('重试时复用同一键，防止重复执行。'), confirmationToken: z.string().optional().describe('真实执行需要单独授权时由宿主签发；不要自行编造。') }).describe('启动工作流。'),
-    output: object({ runId: id.describe('后续查询运行状态使用。'), workflowId, status: z.enum(['queued', 'running']).describe('已入队或运行中。'), mock: z.boolean().optional().describe('true 表示没有真实执行。') }).describe('运行 ID 和初始状态。')
+    input: object({
+      workflowId,
+      runningNodeIds: z.array(nodeId).describe('本次需要执行的节点 ID。'),
+      workflowData: object({
+        edges: z.array(edge).describe('执行时的画布连线。'),
+        nodes: z.array(node).describe('执行时的完整节点。')
+      }).describe('执行时的完整画布快照。')
+    }).describe('按节点 ID 和画布快照启动工作流。'),
+    output: object({ workflowId, taskId: id.describe('用于后续查询运行状态的任务 ID。') }).describe('新任务的 ID。')
   },
   get_workflow_run: {
-    input: object({ runId: id.describe('execute_workflow 返回的运行 ID。') }).describe('查询一次工作流运行。'),
-    output: object({ run }).describe('运行状态、进度、节点错误和产物引用。')
+    input: object({ workflowId, taskId: id.describe('execute_workflow 返回的任务 ID。') }).describe('查询一次工作流运行。'),
+    output: object({ workflowId, status: z.enum(['queued', 'running', 'success', 'failed']).describe('任务已入队、运行中、成功或失败。') }).describe('工作流任务状态。')
   }
 } satisfies { [K in keyof WorkflowToolContracts]: {
   input: z.ZodType<WorkflowToolContracts[K]['input']>
@@ -333,10 +327,10 @@ export const workflowResultGuides = {
   list_workflows: 'workflows 是 ID、名称及节点/连线数量摘要。',
   get_workflow: 'view=summary 返回 workflow 摘要；structure 还返回 nodes 摘要与 edges；full 返回完整 workflow。',
   list_nodes: 'view=summary 返回 nodes 摘要；full 返回包含 data.params 的完整节点。',
-  get_node: 'node 是完整节点，data.params 随 type 不同而变化，data.taskInfo 给出执行状态。',
+  get_node: 'node 是完整节点；data.value 存放生成物或预览图 URL，data.type=upload 标记上传资源，data.taskInfo 给出执行状态。',
   apply_workflow_patch: 'applied 表示已提交，valid 表示校验通过；createdNodes/createdEdges 按新增操作顺序列出实现方生成的 ID，errors/warnings 给出问题。',
-  execute_workflow: 'runId 用于查询运行，status 为 queued 或 running，mock=true 表示没有真实生成。',
-  get_workflow_run: 'run 含 status、progress、nodes 和可选 error；nodes[].artifactIds 是节点产物引用；mock=true 表示模拟状态。'
+  execute_workflow: '传入 runningNodeIds 和包含 nodes、edges 的 workflowData；返回的 taskId 用于查询状态。',
+  get_workflow_run: '传入 workflowId 和 taskId，返回 queued、running、success 或 failed 状态。'
 } satisfies Record<keyof WorkflowToolContracts, string>
 
 // Keep the schemas for non-tool DTOs accessible to contract tests and future canvas integration.
@@ -346,5 +340,5 @@ export const workflowTypes = {
   node, edge, workflow, workflowSummary, nodeSummary, parameter, parameterSummary,
   capability, modelSetting, modelSettingSummary, nodeDefinition,
   queryValue, queryFilter, query, modelQuery, nodeCreate, parameterPatch, nodeChanges,
-  operation, toolError, nodeRun, run
+  operation, toolError
 }

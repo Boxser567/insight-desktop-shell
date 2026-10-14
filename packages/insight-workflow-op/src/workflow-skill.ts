@@ -1,6 +1,6 @@
 export const workflowSkillContent = `# 工作流操作
 
-工作流的保存与执行能力以当前工具说明和返回结果为准。返回 mock=true 时，不要声称已生成真实媒体。
+工作流的保存能力以当前工具说明和返回结果为准。当前远端画布 API 尚不支持执行或查询运行状态；调用 workflow_execute_workflow 或 workflow_get_workflow_run 会报错，不要声称已生成媒体。
 
 ## 操作示例
 
@@ -18,9 +18,9 @@ export const workflowSkillContent = `# 工作流操作
 
 ### 修改与运行
 
-优先使用当前工作流摘要中的 id 作为 workflowId；用户给出其他 ID 时，先用 workflow_get_workflow 验证；没有可用工作流则调用 workflow_create_workflow。修改前按需用 workflow_get_workflow 的 summary、structure 或 full 视图读取现状。用 workflow_apply_workflow_patch 的 operations 按顺序原子提交，任一操作失败则不提交。新增节点和连线的 ID 由实现方生成，按操作顺序从 createdNodes/createdEdges 的 id 读取；add_edge 的 source/target 填已有节点 ID。要连接本次新增的节点，先提交节点，再用返回的 ID 提交连线。更新或删除节点、连线时用 id 字段。远端画布尚无端口定义，新增连线须显式提供 sourceHandle 和 targetHandle。模型节点只能修改具名参数；工具节点的参数补丁 set 替换顶层键，unset 删除顶层键。远端画布不支持在同一次提交中同时重命名和修改图结构，需要分别提交。
+优先使用当前工作流摘要中的 id 作为 workflowId；用户给出其他 ID 时，先用 workflow_get_workflow 验证；没有可用工作流则调用 workflow_create_workflow。修改前按需用 workflow_get_workflow 的 summary、structure 或 full 视图读取现状。workflow_apply_workflow_patch 只传 workflowId 和 operations，不要传 dryRun；该工具不支持预检。operations 按顺序原子提交，任一操作失败则不提交。新增节点和连线的 ID 由实现方生成，按操作顺序从 createdNodes/createdEdges 的 id 读取；add_edge 的 source/target 填已有节点 ID。要连接本次新增的节点，先提交节点，再用返回的 ID 提交连线。更新或删除节点、连线时用 id 字段。远端画布尚无端口定义，新增连线须显式提供 sourceHandle 和 targetHandle。模型节点只能修改具名参数；工具节点的参数补丁 set 替换顶层键，unset 删除顶层键。远端画布不支持在同一次提交中同时重命名和修改图结构，需要分别提交。
 
-执行工具可用时，提交后可调用 workflow_execute_workflow，并用 workflow_get_workflow_run 查询状态。工具返回 mock=true 时，告知用户尚未生成真实媒体。
+当前不要调用 workflow_execute_workflow 或 workflow_get_workflow_run；远端画布 API 尚未提供这两个能力。节点的 data.value 保存生成物或预览资源 URL；image、audio、video 节点的 data.type=upload 表示用户上传资源，不执行生成。
 
 ### 图片生成
 

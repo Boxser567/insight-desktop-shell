@@ -266,8 +266,9 @@ export function createCanvasApi(
         } catch { throw new CanvasRequestError('REQUEST_FAILED') }
         if (!response.ok) throw new CanvasRequestError('REQUEST_FAILED', response.status)
         let value: unknown
-        value = await response.json()
-        return value as ModelParamsData
+        try { value = await response.json() }
+        catch { throw new CanvasRequestError('INVALID_RESPONSE', response.status) }
+        return parseModelParams(value)
       } finally {
         controllers.delete(controller)
       }

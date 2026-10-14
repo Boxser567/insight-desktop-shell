@@ -49,6 +49,26 @@ function canvas() {
 }
 
 describe('remote workflow backend', () => {
+  it('reads an unconfigured model node and can select its model later', async () => {
+    const { api, graph } = canvas()
+    graph.nodes.push({ id: 'unconfigured-video', type: 'video', position: { x: 40, y: 40 },
+      data: { title: '未配置视频', params: { model: null, modelType: null, prompt: '待选择模型' } } })
+    const backend = new RemoteWorkflowBackend(api)
+    expect(await backend.execute('get_workflow', { workflowId: '42', view: 'full' })).toMatchObject({
+      view: 'full', workflow: { nodes: [expect.objectContaining({ id: 'video' }),
+        expect.objectContaining({ id: 'unconfigured-video', data: expect.objectContaining({ params: { prompt: '待选择模型' } }) })] }
+    })
+    expect(await backend.execute('list_nodes', { workflowId: '42' })).toMatchObject({
+      nodes: [expect.objectContaining({ id: 'video' }), expect.objectContaining({ id: 'unconfigured-video' })]
+    })
+    expect(api.updateCanvas).not.toHaveBeenCalled()
+    expect(await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'update_node', id: 'unconfigured-video',
+        changes: { type: 'video', model: 'real-video', modelType: 'text_to_video' } }
+    ] })).toMatchObject({ applied: true, valid: true })
+    expect(api.updateCanvas).toHaveBeenCalledOnce()
+  })
+
   it('lists canvases even when an existing node cannot be parsed as a full workflow node', async () => {
     const { api, graph } = canvas()
     graph.nodes.push({ id: 'legacy-image', type: 'image', position: { x: 1, y: 2 },
@@ -111,6 +131,9 @@ describe('remote workflow backend', () => {
     expect(api.updateCanvas).toHaveBeenCalledTimes(1)
     expect(api.updateCanvas).toHaveBeenCalledWith(expect.objectContaining({ id: '42', versionNumber: 3,
       edges: expect.arrayContaining([expect.objectContaining({ id: 'group-edge', animated: true })]) }))
+    const added = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].addNodes![0]!)
+    expect(added.data).toMatchObject({ taskInfo: { status: 'success' } })
+    expect(added.data).not.toHaveProperty('value')
     const missingHandles = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
       { op: 'add_edge', source: 'video', target: result.createdNodes[0]!.id }
     ] })
@@ -126,6 +149,33 @@ describe('remote workflow backend', () => {
     expect(graph.nodes.some(node => node.id === 'group')).toBe(true)
     expect(graph.edges).toHaveLength(2)
     expect(backend.currentSummary('42')?.nodeCount).toBe(2)
+  })
+
+  it('does not write a partially applied patch when a later operation is invalid', async () => {
+    const { api, graph } = canvas()
+    const backend = new RemoteWorkflowBackend(api)
+    const result = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'update_node', id: 'video', changes: { type: 'video', prompt: '不能保存' } },
+      { op: 'delete_node', id: 'missing' }
+    ] })
+    expect(result).toMatchObject({ applied: false, valid: false, createdNodes: [], createdEdges: [], errors: [{ code: 'INVALID_PATCH' }] })
+    expect(api.updateCanvas).not.toHaveBeenCalled()
+    expect(graph.nodes[1]!.data.params).toMatchObject({ prompt: '原始提示词' })
+  })
+
+  it('places multiple new nodes without overlapping when position is omitted', async () => {
+    const { api, graph } = canvas()
+    graph.nodes[0]!.position.x = 1000 // Group nodes are not part of the protocol projection.
+    graph.nodes[0]!.measured = { width: 0, height: 400 }
+    const backend = new RemoteWorkflowBackend(api)
+    const result = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'add_node', node: { type: 'poseTool' } },
+      { op: 'add_node', node: { type: 'highDefinitionTool' } }
+    ] })
+    expect(result).toMatchObject({ applied: true, valid: true })
+    const added = vi.mocked(api.updateCanvas).mock.calls[0]![0].addNodes!.map(value => JSON.parse(value))
+    expect(added[0].position.x).toBeGreaterThanOrEqual(1400)
+    expect(added[1].position.x).toBeGreaterThanOrEqual(added[0].position.x + 400)
   })
 
   it('preserves raw task metadata when updating a projected node', async () => {
@@ -178,7 +228,59 @@ describe('remote workflow backend', () => {
       { op: 'update_node', id: 'video', changes: { type: 'video', modelType: 'image_to_video' } }
     ] })
     expect(invalid).toMatchObject({ applied: false, valid: false, errors: [{ code: 'MODEL_NOT_FOUND' }] })
-    await expect(backend.execute('execute_workflow', { workflowId: '42' })).rejects.toThrow('暂不支持')
+    await expect(backend.execute('execute_workflow', {
+      workflowId: '42', runningNodeIds: ['video'], workflowData: {
+        nodes: [{ id: 'video', type: 'video', position: { x: 20, y: 20 }, data: {
+          title: '视频', taskInfo: { status: 'success' },
+          params: { model: 'real-video', modelType: 'text_to_video', prompt: '原始提示词' }
+        } }],
+        edges: []
+      }
+    })).rejects.toThrow('暂不支持')
+    await expect(backend.execute('get_workflow_run', { workflowId: '42', taskId: 'task-1' })).rejects.toThrow('暂不支持')
   })
 
+  it('projects uploaded media nodes without inventing an artifact value', async () => {
+    const { api, graph } = canvas()
+    graph.nodes.push({
+      id: 'a1c33110-f357-4efe-bbe0-e10c4f33e17a',
+      position: { x: 1473.44, y: -1009.93 },
+      measured: { width: 400, height: 400 },
+      type: 'image',
+      data: {
+        title: '用户产品上传',
+        type: 'upload',
+        taskInfo: {},
+        params: { model: 'real-image', modelType: 'text_to_image', prompt: '产品图片' }
+      }
+    })
+    const backend = new RemoteWorkflowBackend(api)
+    const result = await backend.execute('get_workflow', { workflowId: '42', view: 'full' })
+    expect(result).toMatchObject({
+      view: 'full',
+      workflow: {
+        nodes: [
+          expect.objectContaining({ id: 'video' }),
+          expect.objectContaining({
+            id: 'a1c33110-f357-4efe-bbe0-e10c4f33e17a',
+            data: { title: '用户产品上传', type: 'upload', taskInfo: { status: 'success' },
+              params: { model: 'real-image', modelType: 'text_to_image', prompt: '产品图片' } }
+          })
+        ]
+      }
+    })
+    expect(await backend.execute('list_nodes', { workflowId: '42' })).toMatchObject({
+      nodes: [expect.objectContaining({ id: 'video' }),
+        expect.objectContaining({ id: 'a1c33110-f357-4efe-bbe0-e10c4f33e17a', status: 'success' })]
+    })
+    const patched = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'update_node', id: 'a1c33110-f357-4efe-bbe0-e10c4f33e17a',
+        changes: { type: 'image', title: '更新后的上传资源' } }
+    ] })
+    expect(patched.errors).toEqual([])
+    expect(patched).toMatchObject({ applied: true, valid: true })
+    const saved = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].updateNodes![0]!)
+    expect(saved.data).toMatchObject({ title: '更新后的上传资源', type: 'upload' })
+    expect(saved.data).not.toHaveProperty('value')
+  })
 })

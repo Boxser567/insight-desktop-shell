@@ -115,7 +115,7 @@ export function apply(ctx: Context, injectedBackend?: WorkflowBackend): void {
             remembered.set(exec.agent.id, id)
           }
         }
-        return result
+        return JSON.parse(JSON.stringify(result))
       }
     }
     ctx.tools.register(definition)

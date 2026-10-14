@@ -40,16 +40,14 @@ const flowData = {
 }
 
 describe('first-party canvas API', () => {
-  it('calls the five fixed endpoints with a fresh account token and matching bodies', async () => {
+  it('calls the canvas endpoints with a fresh account token and matching bodies', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) =>
-      success(url.endsWith('/canvas/get') ? flowData : url.endsWith('/workflow/listNodeSetting')
-        ? [{ config: '{}' }] : { id: 12 }))
+      success(url.endsWith('/canvas/get') ? flowData : { id: 12 }))
     const transport = credentialTransport()
     const api = createCanvasApi(transport, fetch)
     const cases = [
       [() => api.saveFlow({ version: 'v1', name: '画布' }), '/canvas/saveOrUpdate'],
       [() => api.getFlowData({ id: '12' }), '/canvas/get'],
-      [() => api.getModelParams(), '/v2/workflow/listNodeSetting'],
       [() => api.updateCanvas({ id: '12', versionNumber: 3, addNodes: ['{"id":"n"}'] }), '/canvas/partialUpdate'],
       [() => api.getFlowsList({ page: 1, size: 20 }), '/canvas/list']
     ] as const
@@ -62,7 +60,7 @@ describe('first-party canvas API', () => {
       expect(init.signal).toBeInstanceOf(AbortSignal)
     }
     expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ version: 'v1', name: '画布' })
-    expect(JSON.parse(fetch.mock.calls[3]![1].body)).toEqual({
+    expect(JSON.parse(fetch.mock.calls[2]![1].body)).toEqual({
       id: '12', versionNumber: 3, addNodes: ['{"id":"n"}']
     })
     expect(JSON.parse(fetch.mock.lastCall![1].body)).toEqual({
@@ -148,31 +146,42 @@ describe('first-party canvas API', () => {
     api.dispose()
   })
 
-  it('parses serialized model config and rejects malformed rows', async () => {
+  it('reads production model config from the CDN and rejects malformed rows', async () => {
+    vi.stubEnv('INSIGHT_DESKTOP_SERVICE_ENVIRONMENT', 'production')
     const config = { video: { text_to_video: { models: { modelA: { model_name: 'A' } } } } }
     const fetch = vi.fn()
-      .mockResolvedValueOnce(success([{ config: JSON.stringify(config) }]))
-      .mockResolvedValueOnce(success([{ config: '{broken' }]))
-      .mockResolvedValueOnce(success([]))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ config: JSON.stringify(config) }])))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ config: '{broken' }])))
+      .mockResolvedValueOnce(new Response(JSON.stringify([])))
     const api = createCanvasApi(credentialTransport(), fetch)
-    expect((await api.getModelParams()).data).toEqual(config)
-    await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
-    await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
-    api.dispose()
+    try {
+      expect(await api.getModelParams()).toEqual(config)
+      expect(fetch.mock.calls[0]?.[0]).toBe('https://game-ai-admin-test-cdn.idealead.com/model_node_setting/model_params_with_sort.json')
+      expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'GET' })
+      expect(fetch.mock.calls[0]?.[1].headers).toBeUndefined()
+      await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+      await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    } finally {
+      api.dispose()
+      vi.unstubAllEnvs()
+    }
   })
 
   it('reads test model config from the CDN without sending the account token', async () => {
     vi.stubEnv('INSIGHT_DESKTOP_SERVICE_ENVIRONMENT', 'test')
     const config = { video: { text_to_video: { models: {} } } }
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ config: JSON.stringify(config) }])))
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ config: JSON.stringify(config) }])))
+      .mockResolvedValueOnce(new Response('{broken'))
     const api = createCanvasApi(credentialTransport(), fetch)
     try {
-      expect((await api.getModelParams()).data).toEqual(config)
+      expect(await api.getModelParams()).toEqual(config)
       expect(fetch).toHaveBeenCalledWith(
         'https://game-ai-admin-test-cdn.idealead.com/model_node_setting/model_params_with_sort.json',
         expect.objectContaining({ method: 'GET', redirect: 'error' })
       )
       expect(fetch.mock.calls[0]![1].headers).toBeUndefined()
+      await expect(api.getModelParams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
     } finally {
       api.dispose()
       vi.unstubAllEnvs()

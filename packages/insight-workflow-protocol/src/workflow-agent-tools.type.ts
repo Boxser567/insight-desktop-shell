@@ -47,10 +47,8 @@ export interface Size {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. 持久化与查询数据模型（不直接用作 Agent 创建参数）
 // ─────────────────────────────────────────────────────────────────────────────
-export type ExecutionStatus =
-  | 'running'
-  | 'success'
-  | 'failed';
+/** 节点新建时为 success；开始生成后进入 running。 */
+export type ExecutionStatus = 'running' | 'success' | 'failed';
 export interface NodeTaskInfo {
   status: ExecutionStatus;
   errorMsg?: string;
@@ -58,22 +56,23 @@ export interface NodeTaskInfo {
 
 export interface NodeDataBase {
   title: string;
-  value: string | string[];
+  /** 生成物或预览图的 URL；尚无资源时可省略。 */
+  value?: string | string[];
   taskInfo: NodeTaskInfo;
 }
-/** 模型节点的通用已保存参数；需结合模型配置元数据进行业务校验。 */
+/** 模型节点的通用已保存参数；画布中尚未选模型的节点可缺少 model。 */
 export interface BasicNodeParams {
-  model: string;
+  model?: string;
   prompt: string;
 }
 
 /** 文本节点沿用通用的 model/prompt，并增加资源搜索开关。 */
 export interface TextNodeParams extends BasicNodeParams {
-  search_resource: boolean
+  search_resource: boolean;
 }
 
 export interface ImageNodeParams extends BasicNodeParams {
-  modelType: ImageModelType;
+  modelType?: ImageModelType;
   aspect_ratio?: string;
   gen_count?: number;
   quality?: string;
@@ -82,7 +81,7 @@ export interface ImageNodeParams extends BasicNodeParams {
 
 /** 视频节点参数 */
 export interface VideoNodeParams extends BasicNodeParams {
-  modelType: VideoModelType;
+  modelType?: VideoModelType;
   aspect_ratio?: string;
   duration?: number;
   enableAudio?: boolean;
@@ -92,23 +91,26 @@ export interface VideoNodeParams extends BasicNodeParams {
 
 /** 音频节点参数 */
 export interface AudioNodeParams extends BasicNodeParams {
-  modelType: AudioModelType;
+  modelType?: AudioModelType;
   gen_count?: number;
   seniorParams?: {
     customMode?: boolean;
     instrumental?: boolean;
     styleWeight?: number;
-    vocalGender?: number;
+    vocalGender?: string;
     weirdnessConstraint?: number;
-  }
+  };
 }
 
 export interface NodeBase {
   id: string;
   position: Position;
-  /** 由画布渲染层维护的测量尺寸, 默认 400 * 400。 */
+  /** 由画布渲染层维护的测量尺寸，默认 400 × 400。 */
   measured?: Size;
 }
+
+/** 标记用户上传的资源节点；适用于图像、视频和音频节点。 */
+export type NonGenerationNode = { type?: 'upload' };
 
 export interface TextNode extends NodeBase {
   type: 'text';
@@ -117,17 +119,17 @@ export interface TextNode extends NodeBase {
 
 export interface ImageNode extends NodeBase {
   type: 'image';
-  data: NodeDataBase & { params: ImageNodeParams };
+  data: NodeDataBase & NonGenerationNode & { params: ImageNodeParams };
 }
 
 export interface VideoNode extends NodeBase {
   type: 'video';
-  data: NodeDataBase & { params: VideoNodeParams };
+  data: NodeDataBase & NonGenerationNode & { params: VideoNodeParams };
 }
 
 export interface AudioNode extends NodeBase {
   type: 'audio';
-  data: NodeDataBase & { params: AudioNodeParams };
+  data: NodeDataBase & NonGenerationNode & { params: AudioNodeParams };
 }
 
 export interface PoseToolNode extends NodeBase {
@@ -431,7 +433,7 @@ interface BasicCreateBase extends NodeCreateBase {
 /** 文本节点创建参数。 */
 export interface TextNodeCreateInput extends BasicCreateBase {
   type: 'text';
-  search_resource?: boolean
+  search_resource?: boolean;
 }
 
 /** 图像节点创建参数。 */
@@ -464,9 +466,9 @@ export interface AudioNodeCreateInput extends BasicCreateBase {
     customMode?: boolean;
     instrumental?: boolean;
     styleWeight?: number;
-    vocalGender?: number;
+    vocalGender?: string;
     weirdnessConstraint?: number;
-  }
+  };
 }
 
 export interface PoseToolNodeCreateInput extends NodeCreateBase {
@@ -624,46 +626,29 @@ export interface ApplyWorkflowPatchOutput {
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ExecuteWorkflowInput {
   workflowId: string;
-  /** 幂等键：避免传输重试触发重复执行及额外费用。 */
-  idempotencyKey?: string;
-  /** 宿主系统签发的确认令牌；用于需要用户单独授权的执行任务。 */
-  confirmationToken?: string;
+  /** 本次需要执行的节点 ID。 */
+  runningNodeIds: string[];
+  /** 执行时的完整画布快照。 */
+  workflowData: {
+    edges: Edge[];
+    nodes: Node[];
+  };
 }
 
 export interface ExecuteWorkflowOutput {
-  runId: string;
   workflowId: string;
-  status: 'queued' | 'running';
-  /** true 表示当前仅为 mock 执行，没有生成真实媒体。 */
-  mock?: boolean;
-}
-
-export interface NodeRunSummary {
-  nodeId: string;
-  status: ExecutionStatus;
-  progress?: number;
-  artifactIds?: string[];
-  error?: ToolError;
-}
-
-export interface WorkflowRun {
-  runId: string;
-  workflowId: string;
-  status: ExecutionStatus;
-  /** 整体进度百分比，取值为 0～100；仅在可计算时提供。 */
-  progress?: number;
-  nodes: NodeRunSummary[];
-  error?: ToolError;
-  /** true 表示当前仅为 mock 运行记录。 */
-  mock?: boolean;
+  /** 用于后续查询运行状态。 */
+  taskId: string;
 }
 
 export interface GetWorkflowRunInput {
-  runId: string;
+  taskId: string;
+  workflowId: string;
 }
 
 export interface GetWorkflowRunOutput {
-  run: WorkflowRun;
+  workflowId: string;
+  status: 'queued' | ExecutionStatus;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. Agent 工具契约
@@ -692,6 +677,6 @@ export const WORKFLOW_TOOL_DESCRIPTIONS = {
   list_nodes: '按查询条件获取指定工作流的节点摘要或完整节点。',
   get_node: '获取指定工作流节点的完整配置。',
   apply_workflow_patch: '批量新增、局部更新、删除节点和连线，或重命名工作流。',
-  execute_workflow: '启动非空工作流并返回运行 ID；真实执行可能需要宿主系统授权。',
-  get_workflow_run: '查询工作流执行状态、进度、节点错误及生成产物引用。',
+  execute_workflow: '按节点 ID 和画布快照启动工作流，返回任务 ID。',
+  get_workflow_run: '按工作流 ID 和任务 ID 查询执行状态。',
 } as const satisfies Record<keyof WorkflowToolContracts, string>;
