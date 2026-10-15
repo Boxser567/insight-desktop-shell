@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-本 Runbook 是因赛AI Desktop 在 Core Runtime、Shell、默认 Profile、Better Sidebar、Electron/Node/pnpm、原生依赖、签名流程或 upstream Shell 更新后的当前构建规范。2026-08-27 的完整故障过程见 [Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)。当历史复盘与当前脚本不一致时，以本 Runbook、当前 `package.json` 和 `.github/workflows/release.yml` 为准。
+本 Runbook 是因赛AI Desktop 在 Core Runtime、Shell、默认 Profile、原生侧栏集成、Electron/Node/pnpm、原生依赖、签名流程或 upstream Shell 更新后的当前构建规范。2026-08-27 的完整故障过程见 [Core Runtime 与 Better Sidebar 构建复盘](incidents/2026-08-27-core-runtime-sidebar-build.md)。当历史复盘与当前脚本不一致时，以本 Runbook、当前 `package.json` 及当前 v2 工作流、[发布手册](release-runbook.md)为准。
 
 目标不是一次性跨过所有构建步骤，而是用从低成本到高成本的证据尽早发现错误。任一阶段失败即停止；修复后从该修复所影响的最便宜阶段恢复，不用重复已经成立且未被变更影响的阶段。
 
@@ -10,11 +10,11 @@
 
 - Shell 自主锁定 Core Runtime。升级只通过审核后的 `core-runtime.lock.json` 发生，不因 `@deepseek-ai/dsh` registry 或 Core upstream 更新而自动发生。
 - Core Runtime 提供可执行 Harness、Node、pnpm 和生产依赖闭包；Shell 提供产品身份、Electron 生命周期、用户数据隔离、默认 Profile、插件恢复和安装包。
-- Better Sidebar 是内置产品能力。文件存在、Profile 已复制、Utility Process 能加载、Markdown/HTML 能在 Sidebar 打开是四项独立证据。
-- `dshmarket` 与 `dsh-genui` 由当前 Harness/Core Runtime 提供，不再由 Shell 的默认 Profile 重复内置；Shell 只固定交付仍由 Shell 负责的社区插件，并在旧 Profile 迁移时移除旧版 Shell 内置副本。
+- 当前文件浏览/预览由 Core 原生侧栏提供。Profile 资源完整、Runtime 能启动、集成能加载和真实文件能打开是独立证据；不按早期 Better Sidebar 插件验收。
+- Shell 默认 Profile 不再声明 `dshmarket`、`dsh-genui` 或 Better Sidebar。当前 Core 原生能力按实际 Runtime 验收；Shell 只固定交付仍由其负责的集成与社区插件，并移除退休的内置声明/安装锁，不恢复用户主动卸载的插件。
 - 登录后产品界面必须遵守 [单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：Harness 侧栏是唯一导航，产品入口只依赖正式扩展槽和受限账号桥接。
 - 日常跨仓调试遵守 [本地组合开发架构](local-composed-development.md)：允许在派生 DEV Runtime/Profile 中投影局部制品，但正式 build 和 package 必须从锁定输入重新生成并拒绝所有 DEV 覆盖。
-- 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；候选区允许按平台重建和覆盖，已公开版本的正式资产与渠道指针不得覆盖。
+- 桌面更新以一个经过产品签名的完整 Release 为单位。macOS Apple Silicon、macOS Intel、Windows x64、平台更新元数据、`insight-update.json` 和 `insight-update.json.sig` 缺一不可；v2 源码与制品身份冻结后按平台补齐，不能用不同字节覆盖同名资产；渠道指针仅按受控推广流程前进。
 - GitHub Actions 成功只证明 job 和产物生成完成，不能替代本地行为或最终安装包验收。
 - 每轮验收必须说明 Shell commit、Core Runtime tag/commit、应用绝对路径、目标平台/架构和用户数据目录。Electron 单实例机制不得把旧进程冒充为新构建。
 - 用户数据操作必须精确、可恢复。不得用宽泛删除命令清理会话、工作区、设置或插件；任何测试 Profile 变更前先记录并备份确切目录。
@@ -28,12 +28,12 @@
 | 仅文档 | 阶段 2 | 文档链接、命令存在性和 `git diff --check`；不构建应用 |
 | 不涉及 Runtime 或打包的 Shell UI | 阶段 2 | 当前开发平台；定向 UI 测试后执行受影响的普通 build/DEV 行为 |
 | Shell main/preload 或用户数据行为 | 阶段 2 | 当前开发平台，并覆盖受影响的 macOS/Windows 路径；必须验证既有用户数据不丢失 |
-| 默认 Profile、Core-owned 插件或 Better Sidebar 集成 | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
+| 默认 Profile、Core-owned 插件或原生侧栏集成 | 阶段 2 | macOS 本地 DEV 功能门禁；发布前再覆盖 darwin-arm64、darwin-x64、win32-x64 的包内结构 |
 | Core Runtime 依赖、启动或 loader | 阶段 3 | 先在 Core 源码证明，再由三个原生 target runner 生成 Runtime；Shell 从阶段 5 接入 |
 | Electron、Node、pnpm、原生依赖、签名或 workflow | 阶段 1 | 先审计平台与工具链；只在对应原生 runner 验证平台特性，发布范围决定是否扩到三平台 |
 | upstream Shell 变更审计或定向采用 | 阶段 1 | 先完成差异审计，再按被触及类别选择后续阶段，不直接从安装包开始 |
 
-upstream Shell 变更的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和 Better Sidebar 初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项会被候选变更覆盖，都先完成本地适配并测试，再进入打包。
+upstream Shell 变更的差异审计必须明确保护：Core Runtime 的锁定与资源路径、默认 Profile 和原生侧栏集成初始化、用户数据隔离、App ID、产品名/安装包命名、未登录全屏 Shell、登录后全窗口 Harness View、第一方集成插件及其受限账号桥接，以及 `package.json` 中 build、DEV 与各平台 package scripts。任何一项会被候选变更覆盖，都先完成本地适配并测试，再进入打包。
 
 Core Runtime 锁更新和 Shell upstream 定向采用必须拆成两个独立提交与验证批次。Core 侧栏扩展槽或设置控制服务发生变化时，先通过集成契约测试和本地 DEV 单侧栏验收，再更新 Runtime 锁；不得用 DOM 注入、模拟点击或修改 Harness 布局源码临时兼容。
 
@@ -189,8 +189,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 - `Resources/runtime/runtime.json` 与锁中的 Core commit、包版本、Node、pnpm、平台和架构一致；
 - Runtime loader 包含预期修复或与已验证 Core 产物字节等价；
 - Profile 不含 `dsh-better-sidebar` 的依赖、bundle 或安装目录；Runtime 提供原生 Sidebar、文件浏览和预览；
-- `Resources/bundled-profile/web/package.json` 的 `insightDesktop.defaultProfileVersion` 为 `7`，且默认依赖只包含 Shell 负责交付的社区插件与桌面集成；
-- `Resources/bundled-profile/web/package.json` 和 lockfile 不包含 `dshmarket`、`@changfenhuang/dsh-genui`；Core Runtime 自带能力应通过 Harness 启动与 UI 验收确认；
+- `Resources/bundled-profile/web/package.json` 的 `insightDesktop.defaultProfileVersion` 为 `8`，且默认依赖只包含 Shell 负责交付的社区插件与桌面集成；
+- `Resources/bundled-profile/web/package.json` 和 lockfile 不包含 `dshmarket`、`@changfenhuang/dsh-genui`；实际 Core 原生能力应通过 Harness 启动与 UI 验收确认；
 - 应用名、App ID/channel、绝对路径和输出目录正确。
 - macOS 包内主 App 的 `CFBundleIdentifier` 与上述固定身份一致，所有 Helper 使用相同主 ID 派生的 `.helper*` 前缀，且与包内 `insightDesktopAppId` 一致；旧 ID 包的签名/安装证据不得作为新身份的验收结果。
 
@@ -206,8 +206,8 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 - 退出同 App ID/channel 的旧实例；启动指定路径，确认进程没有被单实例机制转交给旧应用。
 - 使用全新 Profile 验证首次启动；使用既有 Profile 验证升级，不得丢失会话、工作区、设置和用户插件。
-- 检查复制后的新用户 Profile：模板版本 7、第一方集成、Shell 负责的社区插件归档以及 `.install-complete` 均存在；升级旧 Profile 后 Better Sidebar、旧版 `dshmarket` 和旧版 GenUI 不再由 Shell 注册或恢复。
-- 在设置中确认 Core Runtime 提供的市场与 GenUI 能力仍可用；对旧 Profile 验证用户自装的其他版本插件不被 Shell 误删，用户会话、工作区、设置和社区插件选择保持不变。
+- 检查复制后的新用户 Profile：模板版本 8、第一方集成、Shell 负责的社区插件归档以及 `.install-complete` 均存在；升级旧 Profile 后 Better Sidebar、旧版 `dshmarket` 和旧版 GenUI 不再由 Shell 注册或恢复。
+- 按当前 Runtime 确认原生文件预览、技能入口和插件管理可用；对旧 Profile 验证用户自装的其他版本插件不被 Shell 误删，用户会话、工作区、设置和社区插件选择保持不变。
 - 新建或打开会话，实际点击 Markdown 和 HTML 文件，确认均在 Sidebar 内打开。
 - 确认没有插件恢复窗口或无限启动页，插件列表中没有内置 Better Sidebar。首页显示因赛 Logo 和“以专业为引擎，让团队与AI共成长”，无预览标签；Windows 任务栏与 Alt+Tab 标题为“因赛 AI”。
 - 原生右侧栏提供文件浏览/预览；better-sidebar 独有的编辑器、终端、Git 和嵌入式浏览器面板不再随客户端预装，不按旧插件按钮验收。
@@ -219,39 +219,13 @@ npm exec electron-builder -- --dir --config electron-builder.dev.cjs --config.di
 
 ### 阶段 9：GitHub Desktop 安装包构建
 
-> 实现状态：截至 2026-09-14，客户端真实更新协议、版本化资产、GitHub Draft、签名 Manifest、GitHub OIDC/STS OSS 发布器和 CDN 复验门禁均已实现。RC9 已完成全平台 build、stage 和 Candidate promote；`candidate/current.json` 已返回 `1.0.0-rc.9`。仍缺 Windows 旧版到 RC9、`/Applications` 中 macOS RC7 到 RC9、同源整包兜底和最终 Stable 制品的人工证据。未完成阶段 10 前不得执行 Stable `promote`。
+**输入：** 阶段1–8证据、明确的人工通过结论、冻结Shell/Core身份和三平台发布范围。
 
-**输入：** 阶段 1–8 的记录、明确人工通过结论，以及已验证的 `https://updates.insight-aigc.com`、私有 Bucket `insight-desktop-updates`、OSS/CDN 配置、成功的 `upload_oss_test` 目录级 STS 证据和 GitHub `desktop-release` Environment。
+**执行：** 日常最终SemVer按 [v2操作清单](releases/update-v2-operator-checklist.md) 运行 `Build desktop v2 installers`（`release-v2.yml`，`version`与`platform=all`）和 `Publish desktop v2 updates`（`publish-update-v2.yml`）。先冻结tag/源代码、验证各目标Draft资产，再以同一批字节投放Candidate；三平台安装和恢复人工通过后才推广Stable。单平台补救不得变更已冻结输入或覆盖同名不同摘要资产。
 
-**执行：**
+发布只能使用实际目标平台构建、签名/公证和摘要验证。Core锁、版本、数据schema与打包输入必须明确，DEV实例或workflow成功不能替代安装/恢复证据。权限、OIDC/STS、CDN、不可变资产和渠道最后提交规则按 [发布说明](release-runbook.md) 与当前脚本执行；旧RC流程只用于明确的legacy桥接，不以2026-09的渠道指针作为当前状态。
 
-- Candidate 从 `Release desktop installers` 手工触发，输入严格的 `candidate_tag`，格式为 `vX.Y.Z-rc.N`，且该 tag 必须尚不存在；Stable 只由已存在的 `vX.Y.Z` tag push 触发。触发前，`package.json` 与 lockfile 版本、`build/update-release-policy.json` 的版本和 channel 必须与 tag 完全一致。
-- 正式构建由 Codex 先询问构建范围，选项为 `all`（默认）、`macos-arm64`、`macos-x64`、`windows-x64` 和 `failed-only`；Codex 根据当前提交、Runtime lock 与上一轮已验证产物给出建议，用户确认后再触发 workflow。GitHub `release-preflight` 必须重复校验该选择，不接受仅由 Codex 判断的复用结论。
-- 只有当待复用产物与当前 Shell commit、Core Runtime lock、版本、策略和打包输入完全一致时，才允许 `failed-only` 或单平台构建；涉及安装包代码、资源、依赖、Runtime lock、版本策略或打包配置的变更，强制选择 `all`。仅测试、Workflow 或文档变更可复用未受影响平台。
-- 每个平台完成最终构建、签名/公证、格式和测试校验后，立即上传候选产物至可覆盖的 `desktop-candidates/<tag>/<commit>/<target>/`，再从 OSS 下载回验 SHA-256、大小、版本、Commit、Runtime 和平台；只有回验通过才生成该平台 `verified manifest`。发布组装只使用 verified manifest。正式 `desktop/releases/v<version>/` 及已公开更新资产仍不可覆盖。
-- 首个 `release-preflight` job 固定运行在 `ubuntu-24.04`，只用 Node 内置能力检查 tag/channel、包版本、发布策略、三个 Core Runtime target、共同 Core commit、workflow 拓扑和发布脚本语法。该 job 不运行 `npm ci`/Vitest，不下载 Runtime、不加载 Rollup/esbuild、不构建应用；预检失败时三个原生 job 均不得开始。
-- macOS Apple Silicon 与 Intel 分别在 `macos-15` 和 `macos-15-intel` 构建 Candidate 或 Stable。架构打包命令必须用 `finalize-mac-release.mjs` 根据最终 ZIP 和 blockmap 确定性生成 `latest-mac.yml`，不能依赖 electron-builder 的发布副作用。两者都必须使用 `Developer ID Application` 完整签名，提交 Apple 公证并 staple；随后用 `syspolicy_check distribution` 检查应用，用 `spctl` 检查 DMG，并验证 codesign、stapling，运行 `hdiutil verify` 与 `unzip -t`，检查 zip blockmap 和架构更新元数据。
-- 两个 macOS 构建 job 必须记录 runner 镜像、系统、Xcode 与 `codesign_allocate` 路径。Apple Silicon 产物上传后，独立的 `macos-sonoma-compatibility` job 在 `macos-14` 上只读挂载最终 DMG，并对镜像内应用重新运行严格 codesign、`syspolicy_check distribution` 和 stapling 检查；任一失败都阻止 publish。该 runner 只提供临时 Sonoma 兼容信号，不能替代当前 macOS 14.5 目标机的 quarantine 启动验收，runner 下线前必须迁移到受维护的真实消费端环境。
-- Windows x64 在 `windows-2022` 构建，不执行代码签名。runner 必须运行 `finalize-windows-release.mjs` 重建 installer blockmap 和 `latest.yml`，并用 `7z t` 验证安装包结构。研发阶段接受 SmartScreen 或“未知发布者”提示，但不接受安装包损坏、产品更新清单缺失或哈希不一致。
-- `publish` job 必须直接依赖预检、两个 macOS job、Windows job 和 Sonoma 兼容 job，且只在受保护的 `desktop-release` Environment 中读取 `DESKTOP_UPDATE_SIGNING_PRIVATE_KEY`。完整范围合并两个 macOS 元数据；`macos-arm64` Candidate 只规范化 ARM64 元数据。两者都按显式 scope 生成并验证精确制品清单与签名，创建包含相同字节的 GitHub Draft；不得读取 OSS AccessKey、公开 Draft 或修改渠道 `current.json`。
-- 独立 `Publish desktop updates` workflow 通过 GitHub OIDC 向固定测试 Gateway 以 `{}` 换取目录级 STS，下载 Draft 全部 Assets 并重新验证签名、文件集、版本和摘要，再上传不可变 `desktop/releases/v<version>/`。长期 AccessKey 不进入 GitHub、仓库、脚本参数、客户端或日志。
-- 200～600 MB 资产使用普通 `PutObject`；每个文件上传前检查 STS，剩余不足 180 秒就刷新。`SecurityTokenExpired` 或 `InvalidSecurityToken` 会刷新凭据并整文件重试一次，第二次失败立即终止且不修改 `current.json`。
-- Bucket 必须从未启用 Versioning，该项通过阿里云控制台一次性人工确认；发布 workflow 不请求 Bucket 控制面权限。
-- 从最终自有 CDN 域名验证版本目录的 HTTPS、HEAD、Range、缓存、大小和摘要；OSS 与 GitHub Draft 的对应文件摘要必须一致。
-- 候选 OSS 前缀允许覆盖，用于同一未公开 Candidate 的失败平台重建；覆盖前必须重新完成上传后下载回验，不得覆盖已公开版本目录。GitHub Draft 和正式 OSS 版本目录仍不得以不同字节覆盖；已公开 Candidate/Stable 发现问题时递增 RC/版本，不回写旧渠道指针。重跑优先复用同一 Commit 下已验证的平台 manifest。
-- Candidate 发布为 prerelease；Stable 发布为普通 Release。两者均包含两个 DMG、两个 zip 及 blockmap、一个 Windows installer 及 blockmap、`latest-mac.yml`、`latest.yml`、`insight-update.json` 与 `insight-update.json.sig`。
-- 观察失败发生在 preflight、install、Runtime/Profile preparation、builder、macOS 签名/公证、平台格式验证、manifest 验证、GitHub Draft upload、本地 OSS upload 还是 CDN verify；只修复并重跑最便宜的失效层。工作流不再提供单平台 DEV 发布或 Windows UKey 签名路径。
-
-Draft 创建后，在 GitHub Actions 从 `main` 手动运行 `Publish desktop updates`：
-
-- `command=stage`
-- `tag=<vX.Y.Z 或 vX.Y.Z-rc.N>`
-- `scope=all`；ARM64-only Candidate Draft 使用 `scope=macos-arm64`
-- `confirm_version` 留空
-
-**通过条件：** preflight、三个原生 job、Sonoma 兼容 job、GitHub Draft 与本地暂存全部成功；OSS 不可变版本目录、最终 CDN 和 GitHub Draft 的全部资产与已验证 `insight-update.json` 完全一致，渠道指针尚未改变，macOS 签名、公证、stapling、Sonoma 分发检查与 Gatekeeper 检查通过，Windows 安装包结构和更新元数据通过。
-
-**失败时：** 回到最便宜的失效阶段。能本地复现的错误先本地修复，不用 GitHub Actions 作为远程调试循环。
+**通过条件：** 三平台确切制品与Manifest可追溯，进入阶段10验收；尚未取得人工结果时不推广Stable、不重新构建已验收字节。
 
 ### 阶段 10：最终安装包验收
 
@@ -389,7 +363,7 @@ npm run package:mac:arm64
 
 - 本文只维护当前有效流程；一次事件的时间线和临时诊断写入 `docs/incidents/`。
 - 新故障若改变后续每次构建的操作、门禁或停止条件，就同步更新本文；否则只补充对应复盘。
-- 命令和 workflow 名必须以当前 `package.json`、Electron Builder 配置和 `.github/workflows/release.yml` 为准。
+- 命令和 workflow 名必须以当前 `package.json`、Electron Builder 配置及当前 v2 工作流、[发布手册](release-runbook.md)为准。
 - 删除或改名构建命令、资源路径、App ID、用户数据目录、Runtime manifest 字段时，在同一变更中更新本文。
 - 文档不得把猜测写成规则，也不得把某一平台、某一格式或某一 job 的通过扩大为整个发布通过。
 - 构建优化以减少重复下载、重复全量测试、重复原生构建和无效 CI 为目标，不以取消人工功能门禁换取速度。

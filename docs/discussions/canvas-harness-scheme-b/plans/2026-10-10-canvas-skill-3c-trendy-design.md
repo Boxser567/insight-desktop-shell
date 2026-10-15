@@ -1,10 +1,10 @@
 # 方案 B 首期落地设计：3C 潮流视频模板
 
-> **历史参考，已被修订。** 节点映射保留；当前首期设计以[对话接入修订版](2026-10-10-canvas-dialogue-bridge-design.md)为准。原有画布已具备依赖执行，本期补齐对话桥接。
+> **历史参考，已被修订。** 节点映射保留；当前首期设计以[对话接入修订版（历史归档）](../../../archive/README.md)为准。原有画布已具备依赖执行，本期补齐对话桥接。
 
 日期：2026-10-10，Asia/Shanghai。状态：可评审设计，未实施功能、未提交生成任务。沿用[前期调研](/Users/boxser.shi/Documents/harness/insight-desktop-shell/docs/discussions/canvas-harness-scheme-b/research/2026-10-09-canvas-harness-integration-research.md)中的接入结论，以本文件细化首期范围。
 
-后续设计见[方案 B 执行蓝图](/Users/boxser.shi/Documents/harness/insight-desktop-shell/docs/discussions/canvas-harness-scheme-b/plans/2026-10-10-canvas-scheme-b-execution-blueprint.md)：已更新为业务级统一入口、按产物选择执行范围、阶段执行和独立媒体运行端。本文件中的29节点旧例映射保留作参考，默认节点数和首期产品行为以执行蓝图为准。
+后续设计见[方案 B 执行蓝图（历史归档）](../../../archive/README.md)：已更新为业务级统一入口、按产物选择执行范围、阶段执行和独立媒体运行端。本文件中的29节点旧例映射保留作参考，默认节点数和首期产品行为以执行蓝图为准。
 
 ## 1. 交付与架构决策
 

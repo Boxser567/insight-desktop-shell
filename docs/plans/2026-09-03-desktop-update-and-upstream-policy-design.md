@@ -1,10 +1,12 @@
 # 桌面客户端更新与上游管理方案
 
+> 历史设计：版本策略、权限边界与定向采用原则继续保留；早期插件组合和 RC 操作已演进，现行操作以[发布手册](../release-runbook.md)、[v2 操作清单](../releases/update-v2-operator-checklist.md)和[架构](../architecture.md)为准。
+
 ## 状态
 
 本文确定因赛AI桌面客户端的整包更新、插件更新归属、版本回退边界，以及本项目与 `dataelement/dsh-desktop` 的长期关系。本文取代“Shell 应定期整体合并 DSH Desktop 主分支”的旧设想。
 
-第一阶段只实现整包更新检查、可信发布元数据、下载、安装、发布产物校验和上游变更筛选。历史版本回退不纳入本阶段；公共插件市场的后续预装决策见 [出厂插件市场设计](2026-09-04-bundled-plugin-market-design.md)。
+第一阶段只实现整包更新检查、可信发布元数据、下载、安装、发布产物校验和上游变更筛选。历史版本回退不纳入本阶段；公共插件市场的后续预装决策见 [出厂插件市场设计（历史归档）](../archive/README.md)。
 
 ## 产品决策
 
@@ -249,7 +251,7 @@ type UpdateStatus =
 
 当产品依赖 Better Sidebar、账号集成、未来画布桥接、基础文档或媒体预览时，它们属于必需第一方能力。PDF 或表格预览可以作为插件能力；dshmarket 只是一套插件发现、安装、更新、备份和诊断系统。
 
-当前产品继续支持本地导入插件，并在新 Profile 中预装锁定版本的 `dshmarket`。用户可以卸载或手动升级市场；市场无权更新 Shell、Core Runtime、Better Sidebar 或桌面集成。详细生命周期和验证要求由 [出厂插件市场设计](2026-09-04-bundled-plugin-market-design.md) 维护。
+当前产品继续支持本地导入插件，并在新 Profile 中预装锁定版本的 `dshmarket`。用户可以卸载或手动升级市场；市场无权更新 Shell、Core Runtime、Better Sidebar 或桌面集成。详细生命周期和验证要求由 [出厂插件市场设计（历史归档）](../archive/README.md) 维护。
 
 ## DSH Desktop 上游变更接收策略
 

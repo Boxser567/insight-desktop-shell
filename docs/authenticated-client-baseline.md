@@ -1,6 +1,6 @@
 # 因赛AI已认证客户端阶段基线
 
-> 状态：active（2026-08-28）
+> 状态：已实施认证基线与历史提交证据（2026-08-28）。插件版本/安装组合和发版状态以当前脚本、架构与发布手册为准，不沿用本页的早期快照。
 >
 > 本页记录登录、账号隔离、登录后单侧栏、统一设置入口和品牌资产统一完成后的工程现状。它是下一阶段业务开发及后续 upstream/Core Runtime 升级的交接入口；专题设计继续分别维护各自约束。
 
@@ -16,8 +16,8 @@
 - [登录后单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)：窗口所有权、第一方集成插件、账号菜单、设置和 upstream 约束。
 - [品牌资产统一设计](plans/2026-08-28-brand-assets-unification-design.md)：品牌源文件、派生图标、展示位置和构建规则。
 - [客户端构建 Runbook](client-build-runbook.md)：从定向检查到安装包和 GitHub Actions 的验证曲线。
-- [本地组合开发架构](local-composed-development.md)：未来的 Shell/Core/插件快速联调接口；其中命令尚未实现。
-- [出厂插件市场设计](plans/2026-09-04-bundled-plugin-market-design.md)：市场预装、卸载、更新权限和 Profile 生命周期。
+- [本地组合开发架构](local-composed-development.md)：Shell/Core/插件快速联调边界；当前已实现 `dev:local`，额外分层命令尚未实现。
+- [当前 Profile 与插件边界](architecture.md#profile-与插件)：已替代早期市场/Better Sidebar预装组合。
 
 ## 当前运行结构
 
@@ -179,7 +179,7 @@ Core Runtime 的 `@deepseek-ai/*` 技术包名和历史技术夹具不属于产�
 ## 已知范围与后续项
 
 - 注册、忘记密码、直接账号切换、企业切换、账号资料设置和 Design Tokens 不在本阶段范围。
-- `dshmarket` 随新 Profile 预装但可卸载、可手动升级；它无权升级 Shell、Core Runtime、Sidebar 或桌面集成。用户导入的插件代码按设备共享；插件配置、密钥、缓存和业务数据继续按账号隔离。
+- 默认插件及迁移以当前Profile脚本为准；不能沿用早期dshmarket/Better Sidebar预装列表。插件无权升级Shell或Core，配置、密钥、缓存和业务数据保持账号隔离。
 - 当前样式沿用 Harness 的双主题基础。统一视觉审计和跨 Shell/Core/插件 Design Tokens 后置，不阻塞业务接入。
 - [本地组合开发架构](local-composed-development.md) 已批准，但 `dev:shell`、`dev:core`、`dev:plugin`、`dev:reset` 和 `verify:release` 尚未实现，不能作为当前命令使用。
 - 现有账号服务已能支撑当前登录切片，但账号禁用、权限变化、跨设备和长期接口兼容仍需 Product 与 Backend 形成正式契约。

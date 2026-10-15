@@ -99,7 +99,7 @@
 
 ## 第一批实现与验证（历史记录）
 
-实施步骤见 [执行计划](../superpowers/plans/2026-09-14-upstream-intake.md)，接收入口见 [upstream intake](../upstream-intake.md)。
+实施步骤见 [执行计划（历史归档）](../archive/README.md)，接收入口见 [upstream intake](../upstream-intake.md)。
 
 - 新测试在旧实现上 10 项失败，包含 PATH 丢失、缺少 Windows detach 与缺少/过时 titlebar inset；修复后相关 5 文件 **85 项通过**。
 - 全量运行 96 文件、625 项：95 文件 / 623 项首次通过；Feishu 的 2 项因 `/opt/homebrew/bin/python3` 是空文件而报 `ENOEXEC`。使用 `PATH="/usr/bin:/bin:$PATH" npm test -- test/feishu-release-notes.test.ts` 后该文件 4 项全通过。因此全部测试已获通过证据，但不是一次原环境下全绿。未修改 Python 或无关发布测试。

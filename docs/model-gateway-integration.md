@@ -2,7 +2,7 @@
 
 更新日期：2026-09-09。状态：独立分支 `codex/enterprise-gateway-analysis` 已通过合并提交 `d7b36d8` 进入本地 `main`，身份规范提交为 `e18e6bc`。自动化、DEV 打包和正式身份 Candidate 目录包验证已完成，尚未使用真实账号请求模型，也未推送、打 tag 或发布安装资产。
 
-2026-10-08 本地 Core 升级补充：官方直连 DeepSeekAdapter 已移除 Chat Completions，本地 0.2.1 集成分支改用官方 PiAiAdapter 的 `openai-completions`，继续使用原 Gateway URL、用户中心 token、历史模型 ID 与推理档位；图片通过 inline 传输。正式 Runtime lock 仍为原发布资产，具体提交、验证和未完成发布资格见[升级结果](analysis/2026-10-08-core-upgrade-result.md)。下文保留原接入版本的验收记录。
+2026-10-08 本地 Core 升级补充：官方直连 DeepSeekAdapter 已移除 Chat Completions，本地 0.2.1 集成分支改用官方 PiAiAdapter 的 `openai-completions`，继续使用原 Gateway URL、用户中心 token、历史模型 ID 与推理档位；图片通过 inline 传输。该升级后来进入1.0.6的Runtime锁；本节仍保留当日实施证据，现行交付见[1.0.6记录](releases/1.0.6.md)，当日提交和验证见[升级结果](analysis/2026-10-08-core-upgrade-result.md)。下文保留原接入版本的验收记录。
 
 ## 1.0 最小实现
 

@@ -1,10 +1,10 @@
 # 因赛AI Desktop 本地组合开发架构
 
-状态：架构决策已批准，开发命令尚未实现。
+状态：后续架构决策已批准；当前已实现 `dev` 和显式本地 Runtime 的 `dev:local`，本文额外的分层命令尚未实现。
 
 本文是 Shell、Core 和独立插件协同开发的权威说明。它定义开发者应看到的命令、各仓库的职责、开发覆盖与正式制品的隔离，以及从快速验证进入发布验证的条件。实现脚本、修改开发流程或排查跨仓问题时，应先遵守本文；若实际实现需要改变这里的边界，应先更新并评审本文，不得让临时调试方式反向成为正式架构。
 
-当前 `package.json` 只有会完整准备锁定 Runtime 和 bundled Profile 的 `npm run dev`。本文中的 `dev:shell`、`dev:core`、`dev:plugin`、`dev:reset` 和 `verify:release` 是下一阶段要实现的目标接口。在对应 script 出现在 `package.json` 且通过本文验收前，不得在操作记录中声称它们已经可用。
+当前 `package.json` 提供完整准备锁定 Runtime/Profile 的 `npm run dev`，以及指定本地 Runtime 的 `npm run dev:local`。本文中的 `dev:shell`、`dev:core`、`dev:plugin`、`dev:reset` 和 `verify:release` 是下一阶段要实现的目标接口。在对应 script 出现在 `package.json` 且通过本文验收前，不得在操作记录中声称它们已经可用。
 
 ## 目标与非目标
 

@@ -1,12 +1,14 @@
 # 因赛AI Desktop
 
+[Documentation index](docs/README.md)
+
 因赛AI Desktop is a cross-platform Electron host for the pinned Insight Harness Core Runtime.
 
 The [business capability inventory](docs/analysis/2026-10-08-business-capability-inventory.md) records implemented behavior, source evidence, validation gaps, and inputs for reassessing the official Desktop platform.
 
 ## Runtime policy
 
-The application does not install or upgrade `@deepseek-ai/dsh` from the npm registry at runtime. `core-runtime.lock.json` pins an independently released Core Runtime, and packaged builds embed that artifact together with the default Better Sidebar profile.
+The application does not install or upgrade `@deepseek-ai/dsh` from the npm registry at runtime. `core-runtime.lock.json` pins an independently released Core Runtime, and packaged builds embed that artifact together with the managed bundled profile.
 
 Profiles, plugins, workspaces, and Harness sessions are stored outside the application installation directory. The product application data directory is stable across upgrades.
 
@@ -19,7 +21,7 @@ npm run dev
 
 Development prepares the locked Core Runtime, its manifest, and the bundled profile before starting Electron.
 
-For the Skill picker feature, use a locally assembled Core containing the selected-skill input API until its release is pinned:
+For pre-release Core integration, use a locally assembled Runtime without changing the official lock:
 
 ```bash
 # In the Core repository, using Node 24 with development headers:

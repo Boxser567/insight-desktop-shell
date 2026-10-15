@@ -1,5 +1,0 @@
-{
-  "status": "passed",
-  "runtime": "v24.9.0",
-  "proof": "actual npm-packed Client module factory/apply evaluated; lazy runtime lifecycle independent of tab body; no canvas opened"
-}

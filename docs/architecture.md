@@ -1,36 +1,37 @@
 # 因赛AI Desktop 架构
 
-因赛AI Desktop 是 Insight Harness Core Runtime 的 Electron 宿主。Shell 负责桌面窗口、受限 IPC、启动恢复、用户数据目录和安装包；Core Runtime 负责 Harness 运行时及其内部依赖。
+Shell 是锁定 Insight Harness Core Runtime 的 Electron 宿主。职责分开：Shell拥有桌面窗口、登录/账号隔离、受限IPC、启动恢复和安装更新；Core拥有Harness执行、会话及原生工作区；第一方集成/业务插件通过既有接口接入，不把插件业务回填到Shell。
 
-登录、账号隔离、单侧栏、统一设置入口和品牌统一完成后的工程现状、提交映射、验证证据及下一阶段入口见 [已认证客户端阶段基线](authenticated-client-baseline.md)。该页是后续业务开发和重大升级开始前的交接入口。
-
-业务阶段的目标架构（登录、受保护业务入口、账号范围数据隔离以及 Harness 工作区的接入边界）见 [业务阶段架构提案](business-stage-architecture.md)。该提案不改变本页记录的已实现 Runtime 边界。
-
-登录后的产品导航采用 Harness 单侧栏和客户端第一方集成插件；窗口所有权、稳定扩展槽、账号桥接及 upstream 约束见 [登录后单侧栏集成设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)。
-
-频繁修改 Shell、Core 模块和独立插件时，开发环境采用 [本地组合开发架构](local-composed-development.md)：Shell 作为唯一组合方，从只读 Runtime 基座派生 DEV Runtime/Profile，只投影选定 package 的构建制品，并在正式构建前完全移除覆盖。该流程缩短反馈时间，但不改变源码平面、Runtime 制品和正式 Profile 的所有权。
-
-## 运行时边界
-
-`core-runtime.lock.json` 锁定 GitHub Release 中不可变的 Core Runtime 制品。Shell 构建时下载并校验该制品，正式安装包将其复制到 `Resources/runtime`。因此 Shell 不在 `package.json` 中声明或升级 `@deepseek-ai/dsh` registry 依赖；Core 的升级必须显式更新锁定文件并完成验证。
+## 当前运行边界
 
 ```mermaid
 flowchart LR
-  MAIN["Electron Main"] --> WINDOW["Sandboxed BrowserWindow"]
-  MAIN --> CORE["Resources/runtime"]
-  CORE --> HARNESS["Harness on 127.0.0.1"]
-  WINDOW --> HARNESS
-  MAIN --> DATA["userData/harness"]
+  M[Electron Main] --> L[未认证 Shell 登录与恢复页]
+  M --> H[认证后 Harness WebContentsView]
+  M --> R[锁定 Core Runtime / 127.0.0.1]
+  H --> R
+  M --> D[账号范围 userData / Profile / Session]
+  R --> P[第一方集成与可选业务插件]
 ```
 
-macOS 通过 Electron UtilityProcess 启动 Harness，Windows 使用随 Core Runtime 打包的目标平台 Node.js。两者均不向渲染进程暴露 Node 权限。
+`core-runtime.lock.json` 是正式制品来源，构建校验Release资产/哈希并内置到 `Resources/runtime`。Shell不在运行时从npm升级DSH，也不把Core包或源码软链接加入正式依赖。macOS采用UtilityProcess，Windows采用随制品提供的目标Node；Renderer不暴露Node权限。
 
-## 数据与插件
+未登录、登录失效或没有授权工作区时不显示Harness。Main保管及校验凭据，受限账号桥按需提供业务登录态；公开UI不读取Token。认证约束见 [登录设计](plans/2026-08-28-desktop-auth-architecture-design.md)，唯一Harness侧栏和公开扩展槽约束见 [单侧栏设计](plans/2026-08-28-authenticated-sidebar-integration-design.md)。
 
-Profile、插件、工作区和会话都位于应用安装目录之外，升级不会覆盖它们。默认 Profile 只随安装包提供 Shell 仍负责交付的社区插件与桌面集成；`dsh-genui` 和 `dshmarket` 由当前 Harness/Core Runtime 提供，不再由 Shell 重复内置。用户仍可显式导入本地插件。Electron Shell 拥有 Harness 子进程生命周期，启动失败时，恢复流程和 Safe Mode 只处理 Profile，不删除用户工作区或会话。
+## Profile 与插件
 
-## 升级上游
+账号范围的Profile、插件、工作区和会话在安装目录之外，更新不覆盖用户数据。出厂组合与迁移代次以 `scripts/prepare-bundled-profile.mjs`、Profile政策及实际Runtime为准；当前generation8移除退休GenUI/Market声明和旧安装锁，不恢复用户主动卸载的插件。
 
-Shell 定期合并 `dataelement/dsh-desktop` 的宿主能力。解决冲突时必须保留 Core Runtime 锁定、`Resources/runtime` 资源路径、内置 Profile、用户数据隔离、未登录全屏 Shell、登录后全窗口 Harness View 和第一方集成插件；不恢复 Shell 对 registry DSH 包或其 `patch-package` 文件的直接依赖。
+当前工作区采用Core原生侧栏/文件预览，不再将早期Better Sidebar预装方案当成当前事实。Shell只装配仍由其交付的第一方集成与社区插件；Core原生能力不重复内置。可选画布插件自行维护Host/Client/原生Store桥，与Core及后端业务解耦，见 [画布专题](discussions/canvas-harness-scheme-b/README.md)。
 
-`dzm/` 分支及 `duzhimeng` 作者或提交者提供的代码不属于可合并上游，只允许只读参考其产品 Demo 所表达的意图。任何对应能力都必须从本项目当前 `main` 独立实现并重新验证；完整禁止规则及发布前审计要求见 [发布说明的分支管理](release-runbook.md#分支管理)。
+启动恢复/Safe Mode只处理对应Profile范围，不删除用户工作区或会话。账号变更不得把其他账号的配置、凭据和数据混入当前账号。
+
+## 开发、发布和参考上游
+
+当前可执行开发命令为 `dev`、`dev:local`；后续多层组合命令在 [本地组合设计](local-composed-development.md) 中单独标记未实现。DEV覆盖不改正式锁，安装包仍必须回到校验过的不可变Runtime和正式Profile。
+
+Shell将 `dataelement/dsh-desktop` 作为参考上游，按commit范围定向采用；不是定期整体合并。保护产品身份、账号隔离、Core lock、Profile、签名更新及第一方集成，见 [上游规范](upstream-intake.md)。Core升级与Shell宿主采用分别提交和验证。
+
+`dzm/` 分支及 `duzhimeng` 作者/提交者的Demo代码仅供只读产品意图参考；不得复制/合并，能力从当前main独立实现。完整发布约束见 [发布说明](release-runbook.md#分支管理)。
+
+当前维护入口见 [文档索引](README.md)；旧阶段2提案、后端候选和重复实施计划见 [历史归档](archive/README.md)，不覆盖当前代码与操作手册。

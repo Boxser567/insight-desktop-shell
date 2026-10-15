@@ -25,3 +25,6 @@ release-reports/
 .coaligne/
 .coaligneignore
 .gstack/
+
+# Recoverable local snapshot before documentation cleanup.
+/.local-archives/
