@@ -4,8 +4,23 @@
     "types": ["node", "electron-vite/node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
+      "@insight-ai/insight-workflow-protocol": [
+        "packages/insight-workflow-protocol/src/index.ts"
+      ],
       "@deepseek-ai/cordis": [
         "build/core-runtime/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-tools": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-tools/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-skill": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-skill/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-system-prompt": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-system-prompt/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-agent": [
+        "build/core-runtime/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts"
       ],
       "@deepseek-ai/dsh-api-remotes/client": [
         "build/core-runtime/node_modules/@deepseek-ai/dsh-api-remotes/lib/types/client/index.d.ts"

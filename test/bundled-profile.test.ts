@@ -15,13 +15,15 @@ describe('bundled profile initialization', () => {
   async function writeCurrentTemplate(template: string, clientBundle = 'bundle\n'): Promise<void> {
     const profile = join(template, 'web')
     await mkdir(join(profile, 'packages', 'insight-desktop-integration', 'lib'), { recursive: true })
+    await mkdir(join(profile, 'packages', 'insight-workflow-op', 'lib'), { recursive: true })
     await writeFile(join(profile, 'package.json'), JSON.stringify({
       dependencies: Object.fromEntries([
         ...communityPlugins.map((plugin) => [
           plugin.name,
           `file:.insight-bundled-plugins/${plugin.archive}`
         ]),
-        ['@insight-ai/desktop-integration', 'workspace:*']
+        ['@insight-ai/desktop-integration', 'workspace:*'],
+        ['@insight-ai/insight-workflow-op', 'workspace:*']
       ]),
       dsh: {
         profile: {
@@ -29,17 +31,21 @@ describe('bundled profile initialization', () => {
             '@deepseek-ai/dsh-base',
             '@deepseek-ai/dsh-web-app',
             ...communityPlugins.map((plugin) => plugin.name),
-            '@insight-ai/desktop-integration'
+            '@insight-ai/desktop-integration',
+            '@insight-ai/insight-workflow-op'
           ]
         }
       },
-      insightDesktop: { defaultProfileVersion: 8 }
+      insightDesktop: { defaultProfileVersion: 9 }
     }), 'utf8')
     await writeFile(
       join(profile, 'packages', 'insight-desktop-integration', 'package.json'),
       JSON.stringify({ name: '@insight-ai/desktop-integration' }),
       'utf8'
     )
+    await writeFile(join(profile, 'packages', 'insight-workflow-op', 'package.json'), JSON.stringify({ name: '@insight-ai/insight-workflow-op', dsh: { bundle: { patch: './cordis.patch.yml' } } }), 'utf8')
+    await writeFile(join(profile, 'packages', 'insight-workflow-op', 'lib', 'index.js'), 'workflow plugin\n', 'utf8')
+    await writeFile(join(profile, 'packages', 'insight-workflow-op', 'cordis.patch.yml'), '- insert:\n    - id: insight-workflow-op\n      name: "@insight-ai/insight-workflow-op"\n', 'utf8')
     for (const plugin of communityPlugins) {
       const installed = join(profile, 'node_modules', ...plugin.name.split('/'))
       await mkdir(installed, { recursive: true })
@@ -130,7 +136,8 @@ describe('bundled profile initialization', () => {
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const profile = join(dshHome, 'profiles', 'web')
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(9)
+    expect(manifest.dsh.profile.bundles).toContain('@insight-ai/insight-workflow-op')
     expect(manifest.dependencies).not.toHaveProperty('dshmarket')
     expect(manifest.dependencies).not.toHaveProperty('@changfenhuang/dsh-genui')
     expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
@@ -153,7 +160,10 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-    expect(manifest.insightDesktop.defaultProfileVersion).toBe(8)
+    expect(manifest.insightDesktop.defaultProfileVersion).toBe(9)
+    expect(manifest.dependencies['@insight-ai/insight-workflow-op']).toBe('workspace:*')
+    expect(await readFile(join(profile, 'packages', 'insight-workflow-op', 'lib', 'index.js'), 'utf8')).toBe('workflow plugin\n')
+    expect(await readFile(join(profile, 'packages', 'insight-workflow-op', 'cordis.patch.yml'), 'utf8')).toContain('insight-workflow-op')
     expect(manifest.dependencies.dshmarket).toBeUndefined()
     expect(manifest.dependencies['@changfenhuang/dsh-genui']).toBeUndefined()
     expect(manifest.dependencies['dsh-better-sidebar']).toBeUndefined()
@@ -215,7 +225,7 @@ describe('bundled profile initialization', () => {
     expect(migrated.dependencies['dsh-user-plugin']).toBe('1.2.3')
   })
 
-  it.each([2, 3, 4, 5, 6, 7])('migrates managed generation %s to Profile version 8', async (version) => {
+  it.each([2, 3, 4, 5, 6, 7, 8])('migrates managed generation %s to Profile version 9', async (version) => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     await writeCurrentTemplate(template)
@@ -227,7 +237,7 @@ describe('bundled profile initialization', () => {
 
     await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     const migrated = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(migrated.insightDesktop.defaultProfileVersion).toBe(8)
+    expect(migrated.insightDesktop.defaultProfileVersion).toBe(9)
     expect(migrated.dependencies.dshmarket).toBeUndefined()
   })
 

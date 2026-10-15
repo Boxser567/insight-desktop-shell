@@ -1,0 +1,21 @@
+{
+  "name": "@insight-ai/insight-workflow-op",
+  "description": "Built-in remote canvas workflow tools for the desktop agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml"
+  ]
+}
