@@ -209,7 +209,7 @@ function createNode(input: NodeCreateInput, models: ModelSetting[], nodes: Array
   if (input.type === 'poseTool' || input.type === 'highDefinitionTool') return { ...base, type: input.type, data: { ...base.data, params: input.parameters ?? {} } } as Node
   const { type, title: _title, position: _position, size: _size, value, ...params } = input
   return { ...base, type, data: { ...base.data,
-    ...(value !== undefined ? { value, type: 'upload' as const } : {}),
+    ...(type === 'text' ? { value: input.prompt ?? '' } : value !== undefined ? { value, type: 'upload' as const } : {}),
     params: { ...(selectedModel ? selectedModel.defaultParameters : {}), ...params, prompt: input.prompt ?? '', ...(type === 'text' ? { search_resource: input.search_resource ?? false } : {}) } } } as Node
 }
 
@@ -253,8 +253,11 @@ function applyOperation(workflow: Workflow, operation: WorkflowOperation, result
     }
     case 'add_edge': {
       const { source, target } = operation
-      if (!source || !target || source === target || !workflow.nodes.some(node => node.id === source) || !workflow.nodes.some(node => node.id === target)) throw new Error('连线节点无效')
-      const edge: Edge = { id: randomUUID(), source, target, sourceHandle: operation.sourceHandle ?? 'output', targetHandle: operation.targetHandle ?? 'input' }
+      const sourceNode = workflow.nodes.find(node => node.id === source)
+      const targetNode = workflow.nodes.find(node => node.id === target)
+      if (!source || !target || source === target || !sourceNode || !targetNode) throw new Error('连线节点无效')
+      const edge: Edge = { id: randomUUID(), source, target,
+        sourceHandle: `${sourceNode.type}_source`, targetHandle: `${targetNode.type}_target` }
       workflow.edges.push(edge)
       result.createdEdges.push({ id: edge.id })
       return
@@ -399,11 +402,6 @@ export class RemoteWorkflowBackend implements WorkflowBackend {
     const flow = await this.flow(input.workflowId)
     const before = project(flow)
     const models = await this.models()
-    if (input.operations.some(operation => operation.op === 'add_edge' &&
-      (!operation.sourceHandle?.trim() || !operation.targetHandle?.trim()))) return {
-      applied: false, valid: false, createdNodes: [], createdEdges: [], warnings: [],
-      errors: [{ code: 'INVALID_PATCH', message: '远端画布缺少端口定义，请显式提供 sourceHandle 和 targetHandle' }]
-    }
     const { result, after } = draftPatch(before, input, models, flow.data.nodes)
     if (!after) return result
     const touched = new Set([

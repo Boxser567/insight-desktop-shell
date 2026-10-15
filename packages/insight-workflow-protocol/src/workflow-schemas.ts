@@ -233,7 +233,7 @@ const operation = z.discriminatedUnion('op', [
   object({ op: tagged('add_node', '新增节点。'), node: nodeCreate }),
   object({ op: tagged('update_node', '修改已有节点。'), id: nodeId, changes: nodeChanges }),
   object({ op: tagged('delete_node', '删除已有节点。'), id: nodeId }),
-  object({ op: tagged('add_edge', '新增连线。'), source: nodeId.describe('已有源节点 ID；本批次新节点须待提交后才能引用。'), target: nodeId.describe('已有目标节点 ID；本批次新节点须待提交后才能引用。'), sourceHandle: z.string().optional().describe('源输出端口；省略时由后端解析并校验。'), targetHandle: z.string().optional().describe('目标输入端口；省略时由后端解析并校验。') }),
+  object({ op: tagged('add_edge', '新增连线。'), source: nodeId.describe('已有源节点 ID；本批次新节点须待提交后才能引用。'), target: nodeId.describe('已有目标节点 ID；本批次新节点须待提交后才能引用。') }),
   object({ op: tagged('delete_edge', '删除已有连线。'), id: id.describe('要删除的连线 ID。') }),
   object({ op: tagged('rename_workflow', '重命名工作流。'), name: z.string().min(1).describe('新工作流名称。') })
 ]).describe('原子补丁中的一项操作；按数组顺序执行，op 决定其余字段。')

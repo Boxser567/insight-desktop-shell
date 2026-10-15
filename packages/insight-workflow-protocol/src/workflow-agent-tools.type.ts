@@ -572,10 +572,6 @@ export interface AddEdgeOperation {
   source: string;
   /** 已存在节点的 ID；本批次新节点的 ID 要在提交后才能获取。 */
   target: string;
-  /** 可省略；由后端解析并校验源端口。 */
-  sourceHandle?: string;
-  /** 可省略；由后端解析并校验目标端口。 */
-  targetHandle?: string;
 }
 
 export interface DeleteEdgeOperation {

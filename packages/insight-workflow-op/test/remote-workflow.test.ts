@@ -135,18 +135,14 @@ describe('remote workflow backend', () => {
     expect(added.data).toMatchObject({ taskInfo: { status: 'success' } })
     expect(added.data).not.toHaveProperty('value')
     expect(added.data).not.toHaveProperty('type')
-    const missingHandles = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
-      { op: 'add_edge', source: 'video', target: result.createdNodes[0]!.id }
-    ] })
-    expect(missingHandles).toMatchObject({ applied: false, valid: false, errors: [{ code: 'INVALID_PATCH' }] })
-    expect(api.updateCanvas).toHaveBeenCalledTimes(1)
     const edgeResult = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
-      { op: 'add_edge', source: 'video', target: result.createdNodes[0]!.id,
-        sourceHandle: 'output', targetHandle: 'input' }
+      { op: 'add_edge', source: 'video', target: result.createdNodes[0]!.id }
     ] })
     expect(edgeResult).toMatchObject({ applied: true, createdNodes: [], createdEdges: [{ id: expect.any(String) }] })
     expect(api.updateCanvas).toHaveBeenCalledTimes(2)
     expect(api.updateCanvas).toHaveBeenLastCalledWith(expect.objectContaining({ versionNumber: 4 }))
+    expect(graph.edges).toContainEqual(expect.objectContaining({ source: 'video', target: result.createdNodes[0]!.id,
+      sourceHandle: 'video_source', targetHandle: 'video_target' }))
     expect(graph.nodes.some(node => node.id === 'group')).toBe(true)
     expect(graph.edges).toHaveLength(2)
     expect(backend.currentSummary('42')?.nodeCount).toBe(2)
@@ -166,6 +162,24 @@ describe('remote workflow backend', () => {
     expect(await backend.execute('get_node', { workflowId: '42', id: saved.id })).toMatchObject({
       node: { data: { type: 'upload', value: 'https://example.com/reference.mp4' } }
     })
+  })
+
+  it('populates prompt into value when creating a text node', async () => {
+    const { api } = canvas()
+    vi.mocked(api.getModelParams).mockResolvedValueOnce({
+      text: { models: { 'real-text': {
+        model_name: '真实文本模型', description: '文本', maxPrompt: 2000, sort: 1, parameters: {}
+      } } }
+    })
+    const backend = new RemoteWorkflowBackend(api)
+    const result = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
+      { op: 'add_node', node: { type: 'text', model: 'real-text', prompt: '测试提示词' } }
+    ] })
+    expect(result).toMatchObject({ applied: true, valid: true })
+    const saved = JSON.parse(vi.mocked(api.updateCanvas).mock.calls[0]![0].addNodes![0]!)
+    expect(saved.data).toMatchObject({ value: '测试提示词' })
+    expect(saved.data).not.toHaveProperty('type')
+    expect(saved.data.params).toMatchObject({ prompt: '测试提示词', search_resource: false })
   })
 
   it('does not write a partially applied patch when a later operation is invalid', async () => {
@@ -209,26 +223,40 @@ describe('remote workflow backend', () => {
     expect(saved.data.taskInfo).toEqual({ status: 'PENDING', taskId: 'task-7', artifact: { id: 'asset-2' } })
   })
 
-  it('requires explicit remote handles and preserves existing edges exactly', async () => {
+  it('derives remote handles from both node types and preserves existing edges exactly', async () => {
     const { api, graph } = canvas()
     graph.nodes.push({ id: 'image', type: 'image', position: { x: 10, y: 10 },
       data: { title: '图片', params: { model: 'legacy-image', modelType: 'text_to_image', prompt: '' } } })
+    graph.nodes.push({ id: 'text', type: 'text', position: { x: 30, y: 10 },
+      data: { title: '文本', params: { prompt: '' } } })
+    graph.nodes.push({ id: 'audio', type: 'audio', position: { x: 40, y: 10 },
+      data: { title: '音频', params: { prompt: '' } } })
+    graph.nodes.push({ id: 'pose', type: 'poseTool', position: { x: 50, y: 10 },
+      data: { title: '姿态', params: {} } })
+    graph.nodes.push({ id: 'hd', type: 'highDefinitionTool', position: { x: 60, y: 10 },
+      data: { title: '高清', params: {} } })
     graph.edges.push({ id: 'image-edge', source: 'image', target: 'group', sourceHandle: 'image_source' })
     const backend = new RemoteWorkflowBackend(api)
-    const missing = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
-      { op: 'add_edge', source: 'image', target: 'video' }
-    ] })
-    expect(missing).toMatchObject({ applied: false, valid: false, errors: [{ code: 'INVALID_PATCH' }] })
-    expect(api.updateCanvas).not.toHaveBeenCalled()
     const result = await backend.execute('apply_workflow_patch', { workflowId: '42', operations: [
-      { op: 'add_edge', source: 'image', target: 'video', sourceHandle: 'image_source', targetHandle: 'input' }
+      { op: 'add_edge', source: 'text', target: 'image' },
+      { op: 'add_edge', source: 'image', target: 'audio' },
+      { op: 'add_edge', source: 'audio', target: 'video' },
+      { op: 'add_edge', source: 'video', target: 'pose' },
+      { op: 'add_edge', source: 'pose', target: 'hd' },
+      { op: 'add_edge', source: 'hd', target: 'text' }
     ] })
     expect(result.applied).toBe(true)
     const update = vi.mocked(api.updateCanvas).mock.calls[0]![0]
     expect(update.edges).toContainEqual({ id: 'image-edge', source: 'image', target: 'group', sourceHandle: 'image_source' })
-    expect(update.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: 'image', target: 'video', sourceHandle: 'image_source', targetHandle: 'input' })
-    ]))
+    for (const [source, target, sourceType, targetType] of [
+      ['text', 'image', 'text', 'image'],
+      ['image', 'audio', 'image', 'audio'],
+      ['audio', 'video', 'audio', 'video'],
+      ['video', 'pose', 'video', 'poseTool'],
+      ['pose', 'hd', 'poseTool', 'highDefinitionTool'],
+      ['hd', 'text', 'highDefinitionTool', 'text']
+    ]) expect(update.edges).toContainEqual(expect.objectContaining({ source, target,
+      sourceHandle: `${sourceType}_source`, targetHandle: `${targetType}_target` }))
   })
 
   it('rejects mixed rename and graph writes and does not claim to execute media', async () => {

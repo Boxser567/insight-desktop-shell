@@ -21,6 +21,9 @@ describe('platform-independent workflow protocol', () => {
       ]
     }
     expect(workflowSchemas.apply_workflow_patch.input.safeParse(patch).success).toBe(true)
+    expect(workflowSchemas.apply_workflow_patch.input.safeParse({ ...patch, operations: [
+      { op: 'add_edge', source: 'existing-source', target: 'existing-target', sourceHandle: 'output' }
+    ] }).success).toBe(false)
     expect(workflowSchemas.apply_workflow_patch.input.safeParse({ ...patch, dryRun: true }).success).toBe(false)
     const unconfiguredNode = {
       id: 'unconfigured-video', type: 'video', position: { x: 0, y: 0 },
