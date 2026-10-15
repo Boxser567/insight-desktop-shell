@@ -58,18 +58,18 @@ Core Runtime 保持登录和视觉无关。Harness 在认证成功后作为 `Web
 
 首版使用已经确认的接口：
 
-| 能力 | 接口 |
-| --- | --- |
-| 发送登录验证码 | `/user-server/mobile/getSmsCode` |
-| 获取图形验证码 | `/user-server/captcha/captchaImage` |
-| 验证码或密码登录 | `/user-server/loginV3` |
-| 刷新会话 | `/user-server/refresh` |
-| 获取当前用户 | `/user-server/getUserDetail` |
-| 退出 | `/user-server/logout` |
+| 能力             | 接口                                |
+| ---------------- | ----------------------------------- |
+| 发送登录验证码   | `/user-server/mobile/getSmsCode`    |
+| 获取图形验证码   | `/user-server/captcha/captchaImage` |
+| 验证码或密码登录 | `/user-server/loginV3`              |
+| 刷新会话         | `/user-server/refresh`              |
+| 获取当前用户     | `/user-server/getUserDetail`        |
+| 退出             | `/user-server/logout`               |
 
 未打包运行和 `insightDesktopChannel: development` 的开发包固定使用 `https://gapi-test.insight-aigc.com`。正式包固定使用 `https://gapi.insight-aigc.com`。环境由构建通道决定，不提供用户可编辑开关；认证 Cookie 存储按环境分区，测试与生产不得共享会话。
 
-请求继续携带现有服务所需的 `extinfo: {"client_type":"PC"}`。Main 使用持久 Electron Session 处理 `credentials: include` 和 HttpOnly Cookie，并用 `safeStorage` 加密访问令牌后写入 Shell 拥有的认证状态文件。明文密码、短信验证码和图形验证码只存在于一次登录调用的内存中，不写磁盘或日志。
+请求继续携带现有服务所需的 `extinfo: {"client_type":"Desktop"}`。Main 使用持久 Electron Session 处理 `credentials: include` 和 HttpOnly Cookie，并用 `safeStorage` 加密访问令牌后写入 Shell 拥有的认证状态文件。明文密码、短信验证码和图形验证码只存在于一次登录调用的内存中，不写磁盘或日志。
 
 ## 状态机与启动流程
 

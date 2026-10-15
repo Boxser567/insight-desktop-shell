@@ -77,7 +77,7 @@ describe('desktop auth API client', () => {
       }
     })
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('extinfo')).toBe(
-      JSON.stringify({ client_type: 'PC' })
+      JSON.stringify({ client_type: 'Desktop' })
     )
     expect(fetch.mock.calls[0]?.[1]?.credentials).toBe('include')
   })

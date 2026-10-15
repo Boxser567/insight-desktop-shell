@@ -215,7 +215,7 @@ export class AuthApiClient {
     })
     if (options.body !== undefined) headers.set('content-type', 'application/json')
     if (options.loginRequest) {
-      headers.set('extinfo', JSON.stringify({ client_type: 'PC' }))
+      headers.set('extinfo', JSON.stringify({ client_type: 'Desktop' }))
     }
     const token = this.getAccessToken()
     if (token) headers.set('token', token)
