@@ -11,12 +11,13 @@
 | 变更应验证到什么阶段 | [客户端构建 Runbook](client-build-runbook.md) |
 | Candidate、恢复验收和 Stable | [发布说明](release-runbook.md) · [v2 操作清单](releases/update-v2-operator-checklist.md) |
 | 参考上游的定向采用 | [上游接收规范](upstream-intake.md) |
-| 最新仓库交付基线 | [1.0.6 发布记录](releases/1.0.6.md) |
+| 当前预发布与已交付基线 | [1.0.7 预发布准备](releases/1.0.7.md) · [1.0.6 正式发布记录](releases/1.0.6.md) |
 
 ## 能力与专题
 
 - [业务能力盘点](analysis/2026-10-08-business-capability-inventory.md)：源码证据与验证边界，区分客户端整包和独立插件。
 - [登录及账号隔离基线](authenticated-client-baseline.md)：已实施认证约束及历史提交证据。
+- [登录白名单 dev 验收](acceptance/desktop-login-whitelist.md)：测试环境启动、白名单拒绝/放行、密码兼容和请求核对。
 - [模型 Gateway](model-gateway-integration.md)、[技能代理](skill-proxy.md)、[技能展示](skill-display.md)、[FE 技能代理交接](技能请求转发-FE开发交接.md)。
 - [画布与 Harness 专题](discussions/canvas-harness-scheme-b/README.md)：最新插件交接、产品手测和后续模板/Skill。已完成阶段资料不再与当前计划混排。
 - [本地组合开发设计](local-composed-development.md)：获批的后续命令设计；当前已实现的是 `dev` 和 `dev:local`，其他命令只有进入 `package.json` 后才可执行。
