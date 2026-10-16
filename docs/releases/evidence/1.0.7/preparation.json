@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-10-16T08:01:33.050Z",
   "version": "1.0.7",
-  "status": "source_preparation_verified_manual_acceptance_pending",
+  "status": "dev_basic_acceptance_reported_candidate_build_authorized",
   "branch": "codex/candidate-1.0.7",
   "stable": {
     "tag": "v1.0.6",
@@ -207,7 +207,9 @@
     "whitelistBackendInProduction": true,
     "devCanvasStartupRecoveredAfterReinstall": true,
     "excludeWorkflowOpPr26": true,
-    "whitelistManualAcceptance": "incomplete; preparation only"
+    "whitelistManualAcceptance": "Operator reports local dev basic acceptance and requests the next step; per-case evidence not supplied",
+    "candidateBuildAndPublicationAuthorized": true,
+    "stablePromotionAuthorized": false
   },
   "boundaries": {
     "coreAndPluginSourcesChanged": false,
