@@ -99,15 +99,13 @@ export class AuthApiClient {
   async sendSmsCode(phone: string): Promise<void> {
     await this.request('/user-server/mobile/getSmsCode', {
       method: 'POST',
-      body: { scene: 'LOGIN', phoneNumber: phone },
-      loginRequest: true
+      body: { scene: 'LOGIN', phoneNumber: phone }
     })
   }
 
   async captcha(): Promise<CaptchaView> {
     const value = await this.request('/user-server/captcha/captchaImage', {
-      method: 'GET',
-      loginRequest: true
+      method: 'GET'
     })
     if (typeof value !== 'object' || value === null) {
       throw new AuthApiError('service-error', '图形验证码服务返回了无效结果。')
@@ -136,8 +134,7 @@ export class AuthApiClient {
       body: {
         type: 'PHONE_NUM',
         info: { phoneNo: input.phone, code: input.code }
-      },
-      loginRequest: true
+      }
     })
     return loginPayload(value)
   }
@@ -153,8 +150,7 @@ export class AuthApiClient {
           uuid: input.uuid,
           imgCode: input.imageCode
         }
-      },
-      loginRequest: true
+      }
     })
     return loginPayload(value)
   }
@@ -162,8 +158,7 @@ export class AuthApiClient {
   async refresh(): Promise<LoginPayload> {
     return loginPayload(
       await this.request('/user-server/refresh', {
-        method: 'GET',
-        loginRequest: true
+        method: 'GET'
       })
     )
   }
@@ -197,8 +192,7 @@ export class AuthApiClient {
 
   async logout(): Promise<void> {
     await this.request('/user-server/logout', {
-      method: 'GET',
-      loginRequest: true
+      method: 'GET'
     })
   }
 
@@ -207,16 +201,13 @@ export class AuthApiClient {
     options: {
       method: 'GET' | 'POST'
       body?: unknown
-      loginRequest?: boolean
     }
   ): Promise<unknown> {
     const headers = new Headers({
-      'accept-language': 'zh_CN'
+      'accept-language': 'zh_CN',
+      extinfo: JSON.stringify({ client_type: 'Desktop' })
     })
     if (options.body !== undefined) headers.set('content-type', 'application/json')
-    if (options.loginRequest) {
-      headers.set('extinfo', JSON.stringify({ client_type: 'Desktop' }))
-    }
     const token = this.getAccessToken()
     if (token) headers.set('token', token)
 

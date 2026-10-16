@@ -20,6 +20,72 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe('desktop auth API client', () => {
+  it.each([
+    { name: 'SMS code', path: '/mobile/getSmsCode', method: 'POST',
+      request: (client: AuthApiClient) => client.sendSmsCode('13800138000'), data: {} },
+    { name: 'captcha', path: '/captcha/captchaImage', method: 'GET',
+      request: (client: AuthApiClient) => client.captcha(), data: { uuid: 'captcha-uuid', img: 'image' } },
+    { name: 'SMS login', path: '/loginV3', method: 'POST',
+      request: (client: AuthApiClient) => client.loginSms({ phone: '13800138000', code: '123456' }),
+      data: { accessToken: 'sms-token' } },
+    { name: 'password login', path: '/loginV3', method: 'POST',
+      request: (client: AuthApiClient) => client.loginPassword({
+        phone: '13800138000', password: 'secret123', uuid: 'captcha-uuid', imageCode: 'abcd'
+      }), data: { accessToken: 'password-token' } },
+    { name: 'refresh', path: '/refresh', method: 'GET',
+      request: (client: AuthApiClient) => client.refresh(), data: { accessToken: 'fresh-token' } },
+    { name: 'current user', path: '/getUserDetail', method: 'GET',
+      request: (client: AuthApiClient) => client.currentUser(), data: { id: 42 } },
+    { name: 'logout', path: '/logout', method: 'GET',
+      request: (client: AuthApiClient) => client.logout(), data: {} }
+  ])('identifies $name requests as Desktop', async ({ path, method, request, data }) => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ code: 'SUCCESS', data }))
+    const client = new AuthApiClient(fetch, environment, () => 'stored-token')
+
+    await request(client)
+
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(fetch.mock.calls[0]?.[0]).toBe(`${environment.baseUrl}/user-server${path}`)
+    const init = fetch.mock.calls[0]?.[1] as RequestInit
+    expect(init.method).toBe(method)
+    expect(init.credentials).toBe('include')
+    const headers = new Headers(init.headers)
+    expect(headers.get('extInfo')).toBe(JSON.stringify({ client_type: 'Desktop' }))
+    expect(headers.get('token')).toBe('stored-token')
+    expect(headers.get('accept-language')).toBe('zh_CN')
+  })
+
+  it('sends the existing SMS request body and accepts an empty success payload', async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ code: 'SUCCESS', msg: '', data: {} }))
+    const client = new AuthApiClient(fetch, environment, () => undefined)
+
+    await expect(client.sendSmsCode('13800138000')).resolves.toBeUndefined()
+
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      scene: 'LOGIN', phoneNumber: '13800138000'
+    })
+    const headers = new Headers(fetch.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('extInfo')).toBe(JSON.stringify({ client_type: 'Desktop' }))
+    expect(headers.get('content-type')).toBe('application/json')
+    expect(headers.has('token')).toBe(false)
+  })
+
+  it.each([
+    { name: 'SMS code', request: (client: AuthApiClient) => client.sendSmsCode('13800138000') },
+    { name: 'SMS login', request: (client: AuthApiClient) => client.loginSms({ phone: '13800138000', code: '123456' }) }
+  ])('preserves the whitelist rejection for $name even with HTTP 200', async ({ request }) => {
+    const message = '您暂无权限使用此产品，请联系平台管理员方正东'
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({
+      code: 'NOT_IN_WHITELIST', msg: message, data: null
+    }))
+    const client = new AuthApiClient(fetch, environment, () => undefined)
+
+    await expect(request(client)).rejects.toMatchObject({
+      name: 'AuthApiError', kind: 'rejected', code: 'NOT_IN_WHITELIST', message
+    })
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it('logs a transport code without leaking error text or credentials', async () => {
     const diagnostic = vi.fn()
     const failure = new Error('net::ERR_CONNECTION_RESET https://host/?token=secret password=private')
