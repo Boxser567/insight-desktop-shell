@@ -206,7 +206,8 @@
   "operatorConfirmations": {
     "whitelistBackendInProduction": true,
     "devCanvasStartupRecoveredAfterReinstall": true,
-    "excludeWorkflowOpPr26": true
+    "excludeWorkflowOpPr26": true,
+    "whitelistManualAcceptance": "incomplete; preparation only"
   },
   "boundaries": {
     "coreAndPluginSourcesChanged": false,
@@ -216,7 +217,9 @@
     "existingTagsMoved": false,
     "installersBuilt": false,
     "candidatePublished": false,
-    "stablePromoted": false
+    "stablePromoted": false,
+    "immutableReleaseTagCreated": false,
+    "mergedIntoMain": false
   },
   "liveStable": {
     "checkedAt": "2026-10-16T08:02:39.471Z",
