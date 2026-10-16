@@ -37,6 +37,81 @@ function persistence(token: string | undefined = 'stored-token'): CredentialPers
 }
 
 describe('desktop auth session manager', () => {
+  it('returns the whitelist message when sending SMS is rejected and allows a later retry', async () => {
+    const message = '您暂无权限使用此产品，请联系测试环境管理员'
+    const service = api({
+      sendSmsCode: vi.fn()
+        .mockRejectedValueOnce(new AuthApiError('rejected', message, 'NOT_IN_WHITELIST'))
+        .mockResolvedValueOnce(undefined)
+    })
+    const store = persistence()
+    const tokens = vi.fn()
+    const manager = new AuthSessionManager(service, store, tokens)
+    const changed = vi.fn()
+    manager.subscribe(changed)
+
+    await expect(manager.sendSmsCode('13800138000')).resolves.toEqual({
+      ok: false, reason: 'rejected', message
+    })
+    expect(manager.current()).toEqual({ kind: 'unauthenticated' })
+    expect(changed).not.toHaveBeenCalled()
+    expect(service.loginSms).not.toHaveBeenCalled()
+    expect(store.save).not.toHaveBeenCalled()
+    expect(tokens).not.toHaveBeenCalled()
+
+    await expect(manager.sendSmsCode('13800138000')).resolves.toEqual({ ok: true })
+    expect(service.sendSmsCode).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects login after SMS was sent without saving a token or publishing an authenticated session', async () => {
+    const message = '桌面访问权限已取消，请联系管理员'
+    const service = api({
+      loginSms: vi.fn()
+        .mockRejectedValueOnce(new AuthApiError('rejected', message, 'NOT_IN_WHITELIST'))
+        .mockResolvedValueOnce({ accessToken: 'allowed-token' })
+    })
+    const store = persistence()
+    const tokens = vi.fn()
+    const manager = new AuthSessionManager(service, store, tokens)
+    const changed = vi.fn()
+    manager.subscribe(changed)
+
+    await expect(manager.sendSmsCode('13800138000')).resolves.toEqual({ ok: true })
+    await expect(manager.loginSms({ phone: '13800138000', code: '123456' })).resolves.toEqual({
+      ok: false, reason: 'rejected', message
+    })
+
+    expect(changed.mock.calls.map(([view]) => view)).toEqual([
+      { kind: 'authenticating', method: 'sms' },
+      { kind: 'unauthenticated' }
+    ])
+    expect(manager.activeAccount()).toBeUndefined()
+    expect(service.currentUser).not.toHaveBeenCalled()
+    expect(service.refresh).not.toHaveBeenCalled()
+    expect(store.save).not.toHaveBeenCalled()
+    expect(store.clear).toHaveBeenCalledOnce()
+    expect(tokens.mock.calls).toEqual([[undefined]])
+
+    // Access can be granted again by the server; the client must not cache a denial.
+    await expect(manager.loginSms({ phone: '13800138000', code: '654321' })).resolves.toEqual({ ok: true })
+    expect(manager.current()).toEqual({ kind: 'authenticated', account: account.summary })
+    expect(store.save).toHaveBeenCalledExactlyOnceWith('allowed-token')
+  })
+
+  it('still delegates password login to the server after an SMS whitelist rejection', async () => {
+    const service = api({
+      sendSmsCode: vi.fn().mockRejectedValue(new AuthApiError('rejected', '无短信登录权限', 'NOT_IN_WHITELIST'))
+    })
+    const manager = new AuthSessionManager(service, persistence(), () => {})
+    await manager.sendSmsCode('13800138000')
+    const input = { phone: '13800138000', password: 'secret123', uuid: 'captcha-uuid', imageCode: 'abcd' }
+
+    await expect(manager.loginPassword(input)).resolves.toEqual({ ok: true })
+
+    expect(service.loginPassword).toHaveBeenCalledExactlyOnceWith(input)
+    expect(manager.current().kind).toBe('authenticated')
+  })
+
   it('resets an offline login locally even when remote logout is unavailable', async () => {
     const service = api({ currentUser: vi.fn().mockRejectedValue(new AuthApiError('offline', 'offline')) })
     const store = persistence()
