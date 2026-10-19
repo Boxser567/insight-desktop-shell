@@ -11,6 +11,9 @@ importers:
       '@insight-ai/desktop-integration':
         specifier: workspace:*
         version: link:packages/insight-desktop-integration
+      '@insight-ai/insight-workflow-op':
+        specifier: workspace:*
+        version: link:packages/insight-workflow-op
       dsh-memory-evolve:
         specifier: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
         version: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
@@ -19,6 +22,8 @@ importers:
         version: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz
 
   packages/insight-desktop-integration: {}
+
+  packages/insight-workflow-op: {}
 
 packages:
 

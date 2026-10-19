@@ -6,9 +6,11 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  downloadRuntimeArchive,
   extractRuntimeArchive,
-  prepareLockedCoreRuntime,
+  hasPreparedRuntime,
   moveRuntimeDirectory,
+  prepareLockedCoreRuntime,
   removeInvalidBundledNodeShim
 } from '../scripts/prepare-core-runtime.mjs'
 
@@ -76,6 +78,65 @@ describe('Core Runtime preparation', () => {
     const calls = []
     await extractRuntimeArchive(archive, destination, async (...args) => { calls.push(args) })
     expect(calls).toEqual([['tar', ['-xzf', 'runtime.tar.gz', '-C', destination], directory]])
+  })
+
+  it('downloads and verifies the locked archive', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-test-'))
+    directories.push(directory)
+    const archive = join(directory, 'runtime.tar.gz')
+    const bytes = Buffer.from('runtime archive')
+    const runtime = {
+      url: `data:application/octet-stream;base64,${bytes.toString('base64')}`,
+      sha256: createHash('sha256').update(bytes).digest('hex')
+    }
+
+    await downloadRuntimeArchive(runtime, archive)
+    await expect(readFile(archive)).resolves.toEqual(bytes)
+    await expect(downloadRuntimeArchive({ ...runtime, sha256: '0'.repeat(64) }, archive))
+      .rejects.toThrow('SHA-256')
+  })
+
+  it('reports download progress', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-test-'))
+    directories.push(directory)
+    const bytes = Buffer.alloc(11 * 1024 * 1024)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bytes, {
+      headers: { 'content-length': String(bytes.length) }
+    }))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await downloadRuntimeArchive({
+        url: 'https://example.invalid/runtime.tar.gz',
+        sha256: createHash('sha256').update(bytes).digest('hex')
+      }, join(directory, 'runtime.tar.gz'))
+      expect(log).toHaveBeenCalledWith('Downloaded 11 MiB / 11 MiB')
+    } finally {
+      fetchMock.mockRestore()
+      log.mockRestore()
+    }
+  })
+
+  it('reuses only a matching Runtime with its required files', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-test-'))
+    directories.push(directory)
+    const runtime = {
+      core: { repository: 'core', version: '1.0.0', commit: 'abc' },
+      node: { version: '24.9.0' },
+      pnpm: { version: '11.7.0' }
+    }
+    const metadata = {
+      schemaVersion: 1, core: runtime.core, node: runtime.node, pnpm: runtime.pnpm,
+      target: { platform: 'darwin', arch: 'arm64' }, entry: 'entry.js'
+    }
+    await writeFile(join(directory, 'runtime.json'), JSON.stringify(metadata))
+    await mkdir(join(directory, 'node_modules', 'node', 'bin'), { recursive: true })
+    await mkdir(join(directory, 'node_modules', 'pnpm', 'bin'), { recursive: true })
+    await writeFile(join(directory, 'entry.js'), '')
+    await writeFile(join(directory, 'node_modules', 'node', 'bin', 'node'), '')
+    expect(await hasPreparedRuntime(directory, runtime, 'darwin-arm64')).toBe(false)
+    await writeFile(join(directory, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'), '')
+    expect(await hasPreparedRuntime(directory, runtime, 'darwin-arm64')).toBe(true)
+    expect(await hasPreparedRuntime(directory, { ...runtime, node: { version: '25.0.0' } }, 'darwin-arm64')).toBe(false)
   })
 
   it('copies the Runtime when moving across volumes raises EXDEV', async () => {

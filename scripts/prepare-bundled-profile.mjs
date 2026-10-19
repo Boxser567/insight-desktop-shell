@@ -9,7 +9,8 @@ import { patchBundledPromptEnhance } from './patch-bundled-prompt-enhance.mjs'
 
 const PROFILE = 'web'
 const DESKTOP_INTEGRATION_PACKAGE = '@insight-ai/desktop-integration'
-const DEFAULT_PROFILE_VERSION = 8
+const WORKFLOW_PACKAGE = '@insight-ai/insight-workflow-op'
+const DEFAULT_PROFILE_VERSION = 9
 const COMMUNITY_PLUGIN_DIRECTORY = '.insight-bundled-plugins'
 const COMMUNITY_PLUGIN_SPEC_PREFIX = 'file:.insight-bundled-plugins/'
 const COMMUNITY_PLUGIN_DESCRIPTOR = join(
@@ -48,6 +49,7 @@ const EXPECTED_COMMUNITY_PLUGINS = [
 ]
 const projectRoot = process.cwd()
 const desktopIntegrationSource = join(projectRoot, 'packages', 'insight-desktop-integration')
+const workflowSource = join(projectRoot, 'packages', 'insight-workflow-op')
 const bundledProfileRoot = join(projectRoot, 'build', 'bundled-profile')
 const bundledProfileDirectory = join(bundledProfileRoot, PROFILE)
 const coreRuntimeRoot = join(projectRoot, 'build', 'core-runtime')
@@ -69,7 +71,9 @@ async function removeHarnessHomeResidue() {
 
 function hasPinnedDefaultPlugins(manifest, communityPlugins) {
   return manifest.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] === 'workspace:*' &&
+    manifest.dependencies?.[WORKFLOW_PACKAGE] === 'workspace:*' &&
     manifest.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE) &&
+    manifest.dsh?.profile?.bundles?.includes(WORKFLOW_PACKAGE) &&
     !manifest.dependencies?.['dsh-at-file'] &&
     !manifest.dsh?.profile?.bundles?.includes('dsh-at-file') &&
     communityPlugins.every((plugin) =>
@@ -146,7 +150,9 @@ async function templateIsReady(communityPlugins) {
   if (!manifest || !hasPinnedDefaultPlugins(manifest, communityPlugins)) return false
   const requiredFilesExist = existsSync(join(bundledProfileDirectory, 'pnpm-lock.yaml')) &&
     existsSync(join(bundledProfileDirectory, 'node_modules', DESKTOP_INTEGRATION_PACKAGE, 'package.json')) &&
-    existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js'))
+    existsSync(join(bundledProfileDirectory, 'node_modules', WORKFLOW_PACKAGE, 'package.json')) &&
+    existsSync(join(bundledProfileDirectory, 'packages', 'insight-desktop-integration', 'lib', 'client.js')) &&
+    existsSync(join(bundledProfileDirectory, 'packages', 'insight-workflow-op', 'lib', 'index.js'))
   if (!requiredFilesExist) return false
   if (await sha256(join(bundledProfileDirectory, 'pnpm-lock.yaml')) !== await sha256(profileLockPath)) return false
 
@@ -231,11 +237,15 @@ async function configureDefaultProfile(directory) {
   if (!manifest) throw new Error('The bundled profile manifest could not be read.')
   manifest.dependencies ??= {}
   manifest.dependencies[DESKTOP_INTEGRATION_PACKAGE] = 'workspace:*'
+  manifest.dependencies[WORKFLOW_PACKAGE] = 'workspace:*'
   manifest.dsh ??= {}
   manifest.dsh.profile ??= {}
   manifest.dsh.profile.bundles ??= []
   if (!manifest.dsh.profile.bundles.includes(DESKTOP_INTEGRATION_PACKAGE)) {
     manifest.dsh.profile.bundles.push(DESKTOP_INTEGRATION_PACKAGE)
+  }
+  if (!manifest.dsh.profile.bundles.includes(WORKFLOW_PACKAGE)) {
+    manifest.dsh.profile.bundles.push(WORKFLOW_PACKAGE)
   }
   manifest.insightDesktop = { defaultProfileVersion: DEFAULT_PROFILE_VERSION }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
@@ -249,6 +259,12 @@ async function configureDefaultProfile(directory) {
       !source.includes(`${join('insight-desktop-integration', 'tests')}`) &&
       !source.includes(`${join('insight-desktop-integration', 'tsconfig.json')}`)
   })
+  const workflowDestination = join(directory, 'packages', 'insight-workflow-op')
+  await rm(workflowDestination, { recursive: true, force: true })
+  await mkdir(join(workflowDestination, 'lib'), { recursive: true })
+  await cp(join(workflowSource, 'package.json'), join(workflowDestination, 'package.json'))
+  await cp(join(workflowSource, 'lib', 'index.js'), join(workflowDestination, 'lib', 'index.js'))
+  await cp(join(workflowSource, 'cordis.patch.yml'), join(workflowDestination, 'cordis.patch.yml'))
 
   const workspacePath = join(directory, 'pnpm-workspace.yaml')
   let workspace = {}

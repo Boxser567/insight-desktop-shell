@@ -1,0 +1,3 @@
+- insert:
+    - id: insight-workflow-op
+      name: '@insight-ai/insight-workflow-op'
