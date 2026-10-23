@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initializeBundledProfile } from '../src/main/state/bundled-profile'
-import { isProfileInstallComplete } from '../src/main/state/profile-install-marker'
+import { isProfileInstallComplete, markProfileInstallComplete } from '../src/main/state/profile-install-marker'
 
 const communityPlugins = [
   { name: 'dsh-memory-evolve', version: '0.1.0', archive: 'dsh-memory-evolve-0.1.0.tgz' },
@@ -281,5 +281,59 @@ describe('bundled profile initialization', () => {
     const profile = join(dshHome, 'profiles', 'web')
     expect(await readFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
     expect(await readFile(join(profile, 'node_modules', '@insight-ai', 'desktop-integration', 'lib', 'client.js'), 'utf8')).toBe('new bundle\n')
+  })
+
+  it('refreshes only the desktop integration in a newer Profile without downgrading user data', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template, 'old bundle\n')
+    const installed = join('node_modules', '@insight-ai', 'desktop-integration')
+    await mkdir(join(template, 'web', installed, 'lib'), { recursive: true })
+    await writeFile(join(template, 'web', installed, 'package.json'), '{"peerDependencies":{"@deepseek-ai/dsh-llm":"old"}}')
+    await writeFile(join(template, 'web', installed, 'lib/client.js'), 'old bundle\n')
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles/web')
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest.insightDesktop = { defaultProfileVersion: 9, futureSetting: true }
+    manifest.dependencies['user-plugin'] = 'file:./user-plugin.tgz'
+    manifest.dsh.profile.bundles.push('user-plugin')
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    const preserved = [
+      ['package.json', JSON.stringify(manifest)],
+      ['pnpm-lock.yaml', 'user lock'],
+      ['pnpm-workspace.yaml', 'user workspace'],
+      ['cordis.patch.yml', 'user patch'],
+      ['node_modules/user-plugin/state.json', 'user plugin data'],
+      ['../../sessions/session.v4.jsonl', 'committed session data']
+    ] as const
+    for (const [path, contents] of preserved) {
+      await mkdir(join(profile, path, '..'), { recursive: true })
+      await writeFile(join(profile, path), contents)
+    }
+    await markProfileInstallComplete(dshHome)
+    await writeFile(join(template, 'web', 'packages/insight-desktop-integration/lib/client.js'), 'new bundle\n')
+    await writeFile(join(template, 'web', installed, 'lib/client.js'), 'new bundle\n')
+    await writeFile(join(template, 'web', installed, 'package.json'), '{"peerDependencies":{"@deepseek-ai/dsh-llm":"new"}}')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    for (const [path, contents] of preserved) expect(await readFile(join(profile, path), 'utf8')).toBe(contents)
+    expect(await readFile(join(profile, 'packages/insight-desktop-integration/lib/client.js'), 'utf8')).toBe('new bundle\n')
+    expect(await readFile(join(profile, installed, 'lib/client.js'), 'utf8')).toBe('new bundle\n')
+    expect(await readFile(join(profile, installed, 'package.json'), 'utf8')).toContain('"new"')
+    await expect(isProfileInstallComplete(dshHome)).resolves.toBe(true)
+  })
+
+  it('preserves a newer Profile that does not declare the desktop integration', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    await mkdir(join(dshHome, 'profiles/web'), { recursive: true })
+    const path = join(dshHome, 'profiles/web/package.json')
+    const contents = JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } }, insightDesktop: { defaultProfileVersion: 9 } })
+    await writeFile(path, contents)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
+    expect(await readFile(path, 'utf8')).toBe(contents)
   })
 })

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
@@ -8,6 +8,7 @@ import electronExecutable from 'electron'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AuthApiError } from '../src/main/auth/auth-api-client'
 import { bindModelCredentialBridge } from '../src/main/runtime/model-credential-bridge'
+import { linkRuntimePackages } from './fixtures/link-runtime-packages.mjs'
 
 let fixture: string
 const coreRoot = resolve(process.env.INSIGHT_TEST_CORE_RUNTIME ?? 'build/core-runtime')
@@ -16,7 +17,7 @@ const node = join(coreRoot, 'node_modules/node/bin', process.platform === 'win32
 beforeAll(async () => {
   if (!prepared) return
   fixture = await mkdtemp(join(tmpdir(), 'insight skill proxy 中文-'))
-  await symlink(join(coreRoot, 'node_modules'), join(fixture, 'node_modules'), 'dir')
+  await linkRuntimePackages(coreRoot, join(fixture, 'node_modules'))
   await cp('test/fixtures/skill-proxy-runtime.mjs', join(fixture, 'run.mjs'))
   // Existing Electron main fixture asserts two token requests over actual utilityProcess IPC.
   await cp('test/fixtures/model-gateway-electron.cjs', join(fixture, 'electron.cjs'))

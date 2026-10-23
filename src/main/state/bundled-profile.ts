@@ -374,6 +374,16 @@ export async function initializeBundledProfile(
     return true
   }
 
+  const generation = current.insightDesktop?.defaultProfileVersion
+  if (typeof generation === 'number' && generation > DEFAULT_PROFILE_VERSION) {
+    // A newer Profile owns its schema; refresh only the declared Shell-owned integration.
+    const declaresIntegration = current.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] !== undefined ||
+      current.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE)
+    if (!declaresIntegration) return false
+    await copyDesktopIntegration(source, destination)
+    return true
+  }
+
   if (await isUncustomizedPreMarketProfile(current, destination)) {
     await copyProfile(source, destination)
     await markProfileInstallComplete(dshHome)

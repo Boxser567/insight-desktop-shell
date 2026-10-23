@@ -1,13 +1,23 @@
 // Exercise the shipped JSONL provider in an isolated process; no network or user data.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { resolveRuntimePackages } from '../../scripts/core-runtime-resolution.mjs'
 
 const [runtime, root, phase, withPrevious] = process.argv.slice(2)
-const load = name => import(pathToFileURL(join(runtime, 'node_modules/@deepseek-ai', name, 'lib/index.js')))
+let packages
+const load = async name => {
+  const direct = join(runtime, 'node_modules/@deepseek-ai', name, 'lib/index.js')
+  if (existsSync(direct)) return import(pathToFileURL(direct))
+  packages ??= await resolveRuntimePackages(runtime)
+  const directory = packages.get(`@deepseek-ai/${name}`)
+  assert.ok(directory, `Core Runtime does not provide ${name}`)
+  return import(pathToFileURL(join(directory, 'lib/index.js')))
+}
 const { Context } = await load('cordis')
-const { default: Persistence } = await load('dsh-session-persistence-jsonl')
+const Persistence = await load('dsh-session-persistence-jsonl')
 const { SESSION_FORMAT_VERSION: version } = await load('dsh-session')
 const ctx = new Context()
 const historicalIds = ['migrated-recovery', 'failed-tool-recovery']
@@ -68,7 +78,7 @@ async function append(id, rows, create = false) {
 }
 
 try {
-  await ctx.plugin(Persistence, { root: join(root, 'sessions') })
+  await ctx.plugin(Persistence.default ?? Persistence, { root: join(root, 'sessions') }).await()
   if (phase === 'previous') {
     assert.equal(version, 3, 'Historical probe requires a real v3 writer')
     await append('migrated-recovery', turn(0, 1, { tools: true }), true)
