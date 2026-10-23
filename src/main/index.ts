@@ -459,7 +459,7 @@ function createHarnessWebContentsView(window: BrowserWindow, scope: string): Web
     if (!isHarnessUrl(sourceUrl)) return
     appendRendererPluginFailureLog(details.message)
   })
-  secureWebContents(view.webContents, isHarnessUrl, true)
+  secureWebContents(view.webContents, isHarnessUrl, true, () => runtime.snapshot().url)
   installWebContentsContextMenu(view.webContents, window, harnessLocale)
   installRendererRecovery(view.webContents, {
     gpuStatus: () => app.getGPUFeatureStatus(),

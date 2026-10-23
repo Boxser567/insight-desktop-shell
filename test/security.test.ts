@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import type { Session, WebContents } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import { secureWebContents } from '../src/main/security'
@@ -29,6 +30,13 @@ function permissions(allowHarnessPermissions = true, topLevelUrl = harnessUrl) {
 }
 
 describe('Harness fullscreen permissions', () => {
+  it('connects the active Runtime URL to the Harness view permission handlers', async () => {
+    const main = await readFile('src/main/index.ts', 'utf8')
+    expect(main).toContain(
+      'secureWebContents(view.webContents, isHarnessUrl, true, () => runtime.snapshot().url)'
+    )
+  })
+
   it.each([
     [harnessUrl, true, true],
     [canvasUrl, false, true],
