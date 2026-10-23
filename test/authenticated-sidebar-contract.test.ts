@@ -36,10 +36,7 @@ describe('authenticated single-sidebar integration contract', () => {
     expect(patch).toMatch(/id:\s*ui-brand-official\s+disabled:\s*true/u)
     expect(patch).toContain("name: '@insight-ai/desktop-integration'")
 
-    for (const path of Object.values<string[]>(tsconfig.compilerOptions.paths)) {
-      expect(path).toHaveLength(1)
-      expect(path[0]).toMatch(/^build\/core-runtime\//u)
-    }
+    expect(tsconfig.extends).toContain('../../build/core-runtime-types.json')
   })
 
   it('prepares a version-eight Profile with Core-owned built-ins', async () => {

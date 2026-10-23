@@ -19,10 +19,10 @@ describe('desktop integration package', () => {
     ]))
     expect(manifest.publishConfig).toBeUndefined()
     expect(manifest.peerDependencies).toEqual({
-      '@deepseek-ai/dsh-llm': '0.2.1-alpha.1',
-      '@deepseek-ai/dsh-llm-deepseek': '0.2.1-alpha.1',
-      '@deepseek-ai/dsh-llm-pi-ai': '0.2.1-alpha.1',
-      '@deepseek-ai/dsh-web-search-deepseek': '0.2.1-alpha.1'
+      '@deepseek-ai/dsh-llm': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-llm-deepseek': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-llm-pi-ai': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-web-search-deepseek': '0.2.1-rc.2'
     })
   })
 

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { cp, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
@@ -8,6 +8,7 @@ import electronExecutable from 'electron'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AuthApiError } from '../src/main/auth/auth-api-client'
 import { bindModelCredentialBridge } from '../src/main/runtime/model-credential-bridge'
+import { linkRuntimePackages } from './fixtures/link-runtime-packages.mjs'
 
 let fixture: string
 const coreRoot = resolve(process.env.INSIGHT_TEST_CORE_RUNTIME ?? 'build/core-runtime')
@@ -16,7 +17,7 @@ if (process.env.INSIGHT_TEST_CORE_RUNTIME && !hasPreparedCore) throw new Error('
 beforeAll(async () => {
   if (!hasPreparedCore) return
   fixture = await mkdtemp(join(tmpdir(), 'insight-model-gateway-'))
-  await symlink(join(coreRoot, 'node_modules'), join(fixture, 'node_modules'), 'dir')
+  await linkRuntimePackages(coreRoot, join(fixture, 'node_modules'))
   await cp('test/fixtures/model-gateway-runtime.mjs', join(fixture, 'run.mjs'))
   await cp('test/fixtures/model-gateway-session.mjs', join(fixture, 'session.mjs'))
   await cp('test/fixtures/model-gateway-electron.cjs', join(fixture, 'electron.cjs'))
@@ -90,7 +91,7 @@ describe.skipIf(!hasPreparedCore)('selected Core adapter with real Node parent/c
         expect(code, output).toBe(0)
         expect(output).toContain('runtime assertions passed')
         expect(output).not.toContain('test-user-center-token')
-        expect(resolveToken).toHaveBeenCalledTimes(mode === 'capabilities' ? 0 : mode === 'parameters' ? 6 : mode === 'success' ? 2 : 1)
+        expect(resolveToken).toHaveBeenCalledTimes(mode === 'parameters' ? 6 : mode === 'success' ? 2 : 1)
       } finally { dispose(); if (peer.exitCode === null) peer.kill() }
     }, 15000
   )

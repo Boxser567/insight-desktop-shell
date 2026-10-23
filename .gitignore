@@ -15,6 +15,7 @@ build/app-icon.iconset/
 build/icon-1024.png
 build/bundled-profile/
 build/core-runtime/
+build/core-runtime-types.json
 build/runtime-manifest.json
 dist-*-validation/
 release-reports/

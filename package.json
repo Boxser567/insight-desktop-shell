@@ -35,7 +35,7 @@
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "typecheck:desktop-integration": "tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
+    "typecheck:desktop-integration": "node scripts/prepare-runtime-types.mjs && tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never",

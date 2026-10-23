@@ -110,6 +110,7 @@ Core 模块或独立插件的开发覆盖只能证明待发布组合的本地行
 - 更新 `core-runtime.lock.json` 中 tag、URL、SHA-256、Core、Node 和 pnpm 身份。
 - 运行 `npm run build`。该命令已经执行 `prepare:core-runtime`、校验锁定归档并生成 Runtime manifest，除非单独隔离下载步骤，不要立即在它之前重复运行 `npm run prepare:core-runtime`。
 - 核对解压后的 `build/core-runtime/runtime.json` 与锁一致；Core loader 修复需确认归档内容包含预期变更，或与阶段 3 已验证产物字节等价。
+- 第一方集成类型检查通过 Core 公开的 `createRuntimeResolution` 包目录映射和各包的类型导出生成 `build/core-runtime-types.json`，不要求 Runtime 的传递依赖平铺到根 `node_modules`。生成文件只供本地编译，不进入安装包；独立运行测试也按该公开映射定位模块。
 
 **通过条件：** 下载归档哈希匹配，Runtime 元数据与目标完全一致，关键入口、Node 和 pnpm 文件存在。
 

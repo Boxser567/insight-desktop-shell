@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { desktopServiceEnvironment } from '../src/shared/service-environment'
 import { createEnterpriseWebSearchOptions, type WebSearchContext } from '../packages/insight-desktop-integration/src/web-search-options'
+import { resolveRuntimePackages } from '../scripts/core-runtime-resolution.mjs'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -33,12 +34,13 @@ describe('enterprise web search provider', () => {
     expect(resolveAccessToken).toHaveBeenCalledOnce()
   })
 
-  it.skipIf(!existsSync(resolve('build/core-runtime/node_modules/@deepseek-ai/dsh-web-search-deepseek/lib/index.js')))(
+  it.skipIf(!existsSync(resolve('build/core-runtime/runtime.json')))(
     'uses native search parsing, cancellation, and upstream error handling', async () => {
       const { append, options } = setup()
-      const { DeepSeekSearchProvider } = await import(pathToFileURL(resolve(
-        'build/core-runtime/node_modules/@deepseek-ai/dsh-web-search-deepseek/lib/index.js'
-      )).href)
+      const packages = await resolveRuntimePackages(resolve('build/core-runtime'))
+      const directory = packages.get('@deepseek-ai/dsh-web-search-deepseek')
+      if (!directory) throw new Error('Core Runtime does not provide the DeepSeek search provider.')
+      const { DeepSeekSearchProvider } = await import(pathToFileURL(resolve(directory, 'lib/index.js')).href)
       const fetcher = vi.fn(async () => Response.json({ content: [
         { type: 'web_search_tool_result', content: [
           { type: 'web_search_result', url: 'https://weather.example', title: 'Shanghai', page_age: 'today' }
