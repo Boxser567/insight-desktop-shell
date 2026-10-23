@@ -5,7 +5,8 @@ import { canGrantWindowPermission, isTrustedAppUrl } from './security-policy'
 export function secureWebContents(
   contents: WebContents,
   isTrustedUrl: (url: string) => boolean,
-  allowHarnessPermissions = false
+  allowHarnessPermissions = false,
+  getHarnessUrl?: () => string | undefined
 ): void {
   contents.setWindowOpenHandler(({ url }) => {
     if (isTrustedUrl(url)) return { action: 'allow' }
@@ -21,15 +22,31 @@ export function secureWebContents(
 
   contents.on('will-attach-webview', (event) => event.preventDefault())
   contents.session.setPermissionCheckHandler(
-    (_webContents, permission, requestingOrigin, details) =>
+    (webContents, permission, requestingOrigin, details) =>
       allowHarnessPermissions &&
-      canGrantWindowPermission(permission, details.requestingUrl ?? requestingOrigin, details.isMainFrame)
+      webContents === contents &&
+      !contents.isDestroyed() &&
+      canGrantWindowPermission(
+        permission,
+        details.requestingUrl ?? requestingOrigin,
+        details.isMainFrame,
+        contents.getURL(),
+        getHarnessUrl?.()
+      )
   )
   contents.session.setPermissionRequestHandler(
-    (_webContents, permission, callback, details) => {
+    (webContents, permission, callback, details) => {
       callback(
         allowHarnessPermissions &&
-        canGrantWindowPermission(permission, details.requestingUrl, details.isMainFrame)
+        webContents === contents &&
+        !contents.isDestroyed() &&
+        canGrantWindowPermission(
+          permission,
+          details.requestingUrl,
+          details.isMainFrame,
+          contents.getURL(),
+          getHarnessUrl?.()
+        )
       )
     }
   )

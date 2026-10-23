@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { createWriteStream, existsSync } from 'node:fs'
 import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { pipeline } from 'node:stream/promises'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outputDirectory = join(projectRoot, 'build', 'core-runtime')
 const lockPath = join(projectRoot, 'core-runtime.lock.json')
+const checksumFile = '.archive-sha256'
 
 export function runtimeTarget(platform = process.platform, arch = process.arch) {
   const target = `${platform}-${arch}`
@@ -27,10 +29,6 @@ export function selectCoreRuntime(lock, target) {
     throw new Error(`core-runtime.lock.json has no valid ${target} Runtime.`)
   }
   return runtime
-}
-
-function sha256(buffer) {
-  return createHash('sha256').update(buffer).digest('hex')
 }
 
 /** Move a prepared Runtime, copying only when the source and destination are on different volumes. */
@@ -102,24 +100,69 @@ async function assertRuntime(directory, runtime, target) {
   }
 }
 
+async function downloadRuntimeArchive(response, archive) {
+  if (!response.body) throw new Error('Core Runtime download has no response body.')
+  const total = Number(response.headers.get('content-length'))
+  const hasTotal = Number.isFinite(total) && total > 0
+  const hash = createHash('sha256')
+  let received = 0
+  let lastReported = Date.now()
+  const mib = bytes => (bytes / 1024 / 1024).toFixed(1)
+  const report = () => process.stdout.write('\r' + (hasTotal
+    ? `Core Runtime download: ${Math.min(100, Math.floor(received / total * 100))}% (${mib(received)} / ${mib(total)} MiB)`
+    : `Core Runtime download: ${mib(received)} MiB`))
+  report()
+  try {
+    await pipeline(response.body, async function* (source) {
+      for await (const chunk of source) {
+        hash.update(chunk)
+        received += chunk.length
+        if (Date.now() - lastReported >= 1000) {
+          report()
+          lastReported = Date.now()
+        }
+        yield chunk
+      }
+    }, createWriteStream(archive))
+    report()
+  } finally {
+    process.stdout.write('\n')
+  }
+  return hash.digest('hex')
+}
+
 /** Prepare a pinned native Runtime; a separate destination supports historical migration checks in CI. */
 export async function prepareLockedCoreRuntime({ runtimeLockPath = lockPath, destination = outputDirectory } = {}) {
   const lock = JSON.parse(await readFile(runtimeLockPath, 'utf8'))
   const target = runtimeTarget()
   const runtime = selectCoreRuntime(lock, target)
+  console.log(`Core Runtime URL: ${runtime.url}`)
+  console.log(`Core Runtime directory: ${resolve(destination)}`)
+  let cached = false
+  try {
+    await assertRuntime(destination, runtime, target)
+    // Only reuse an archive verified by this script, including when metadata stays unchanged.
+    cached = (await readFile(join(destination, checksumFile), 'utf8')).trim() === runtime.sha256
+  } catch {
+    // Missing, invalid or legacy caches must be prepared from the locked archive.
+  }
+  if (cached) {
+    await removeInvalidBundledNodeShim(destination)
+    console.log(`Using cached Core Runtime: ${target}`)
+    return
+  }
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'insight-core-runtime-'))
   try {
     const archive = join(temporaryDirectory, 'runtime.tar.gz')
     const response = await fetch(runtime.url)
     if (!response.ok) throw new Error(`Could not download locked Core Runtime: ${response.status} ${response.statusText}`)
-    const body = Buffer.from(await response.arrayBuffer())
-    if (sha256(body) !== runtime.sha256) throw new Error('Core Runtime archive SHA-256 does not match core-runtime.lock.json.')
-    await writeFile(archive, body)
+    if (await downloadRuntimeArchive(response, archive) !== runtime.sha256) throw new Error('Core Runtime archive SHA-256 does not match core-runtime.lock.json.')
     const extracted = join(temporaryDirectory, 'runtime')
     await mkdir(extracted)
     await extractRuntimeArchive(archive, extracted)
     await assertRuntime(extracted, runtime, target)
     await removeInvalidBundledNodeShim(extracted)
+    await writeFile(join(extracted, checksumFile), `${runtime.sha256}\n`)
     await rm(destination, { recursive: true, force: true })
     await moveRuntimeDirectory(extracted, destination)
     console.log(`Prepared locked Core Runtime: ${target}`)

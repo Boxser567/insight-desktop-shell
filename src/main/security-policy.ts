@@ -23,8 +23,27 @@ export function isTrustedAppUrl(rawUrl: string): boolean {
 export function canGrantWindowPermission(
   permission: string,
   requestingUrl: string | undefined,
-  isMainFrame: boolean
+  isMainFrame: boolean,
+  topLevelUrl?: string,
+  harnessUrl?: string
 ): boolean {
+  if (permission === 'fullscreen') {
+    if (
+      requestingUrl === undefined ||
+      topLevelUrl === undefined ||
+      harnessUrl === undefined ||
+      !isHarnessUrl(harnessUrl)
+    ) {
+      return false
+    }
+    try {
+      const origin = new URL(harnessUrl).origin
+      return new URL(topLevelUrl).origin === origin && new URL(requestingUrl).origin === origin
+    } catch {
+      return false
+    }
+  }
+
   return (
     permission === 'clipboard-sanitized-write' &&
     isMainFrame &&
