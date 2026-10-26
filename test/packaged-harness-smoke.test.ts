@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { fileURLToPath } from 'node:url'
 // @ts-expect-error The build script is JavaScript and has no declaration file.
-import { buildPackagedHarnessArguments, createHarnessSmokeRpc, resolvePackagedHarnessPaths, waitForDesktopModelCatalog } from '../scripts/smoke-packaged-harness.mjs'
+import { buildPackagedHarnessArguments, createHarnessSmokeRpc, probePackagedHarness, resolvePackagedHarnessPaths, waitForDesktopModelCatalog } from '../scripts/smoke-packaged-harness.mjs'
 
 describe('packaged Harness smoke test', () => {
   const runtimeMetadata = {
@@ -74,6 +75,28 @@ describe('desktop model startup readiness', () => {
       await vi.advanceTimersByTimeAsync(30_000)
       await rejection
     } finally { vi.useRealTimers() }
+  })
+})
+
+describe('smoke model credential IPC', () => {
+  it.each([false, true])('supplies catalog credentials and stops the child after validation failure: %s', async fail => {
+    let pid: number | undefined
+    const probe = probePackagedHarness({
+      nodeExecutable: process.execPath,
+      buildArguments: (port: number) => [fileURLToPath(new URL('./fixtures/packaged-harness-smoke.mjs', import.meta.url)), String(port)],
+      workingDirectory: process.cwd(),
+      environment: process.env,
+      startupTimeoutMs: 5_000,
+      afterReady: async (_url: string, rpc: { invoke(method: string, payload: object): Promise<unknown> }) => {
+        const catalog = await waitForDesktopModelCatalog(rpc)
+        pid = catalog.pid
+        if (fail) throw new Error('intentional smoke validation failure')
+      }
+    })
+    if (fail) await expect(probe).rejects.toThrow('intentional smoke validation failure')
+    else await expect(probe).resolves.toEqual({ stdout: '', stderr: '' })
+    expect(pid).toBeTypeOf('number')
+    expect(() => process.kill(pid!, 0)).toThrow()
   })
 })
 

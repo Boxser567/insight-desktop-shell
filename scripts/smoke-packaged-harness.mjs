@@ -191,12 +191,20 @@ export async function probePackagedHarness({
   const child = spawn(nodeExecutable, buildArguments(port), {
     cwd: workingDirectory,
     env: environment,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true
   })
   child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
   child.stderr.on('data', chunk => { stderr += chunk.toString('utf8') })
   const output = () => [stdout, stderr].filter(Boolean).join('\n')
+  const onMessage = message => {
+    if (!child.connected || !message || typeof message !== 'object') return
+    const { type, id } = message
+    if (type !== 'insight:model-token:request' || typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/u.test(id)) return
+    // The catalog resolves credentials without a model request; use an inert smoke-only token.
+    child.send({ type: 'insight:model-token:response', id, token: 'insight-smoke-model-token' }, () => {})
+  }
+  child.on('message', onMessage)
 
   try {
     const rpc = await waitForReady(url, child, output, requiresLaunchToken, startupTimeoutMs)
@@ -213,6 +221,7 @@ export async function probePackagedHarness({
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(redactLaunchTokens(`${message}\n${output()}`))
   } finally {
+    child.off('message', onMessage)
     await stopProcess(child)
   }
 }

@@ -290,6 +290,7 @@ npm run package:mac:arm64
 | Windows 安装时出现 SmartScreen 或“未知发布者” | 确认下载来源、release manifest 哈希和当前 Windows 未签名策略；区分预期信誉提示与文件损坏 | 阶段 10；允许用户明确继续，无法继续或哈希不符立即停止 |
 | Windows 客户端更新时反复提示“因赛AI 无法关闭”或旧文件卸载错误码 2 | 主窗口退出后，安装目录内的 Harness/Node/Electron 子孙进程是否仍存活；旧卸载器是否在执行非原子回退前已被进程检测阻塞 | 阶段 10；不得人工杀进程后写成通过。验证 Shell 对 Harness PID 执行完整进程树终止，并验证 NSIS 在旧卸载器前只清理注册安装目录内的进程；详见 RC7 至 RC9 更新复盘 |
 | Windows 包已生成，但 Harness smoke 在登录接入后等待 endpoint 超时 | 干净 DEV 用户目录按设计停留在登录界面，登录前不会启动 Harness；旧 smoke 把历史启动顺序当作 Runtime 健康条件 | 阶段 9；先验证未登录 Shell 稳定且无 endpoint，再用 `scripts/smoke-packaged-harness.mjs` 独立验证包内 Runtime/RPC，不得绕过登录 |
+| macOS arm64/x64 签名、公证通过，但恢复门禁报 desktop model Gateway 未就绪 | Core 查询模型目录时会请求凭据；独立 smoke 子进程缺少 Main 提供的私有 IPC 通道，导致 `yinsai-gateway` 出现在 catalog failures 中 | 阶段 9；共享 smoke probe 通过私有 IPC 返回固定、无效的测试凭据，只验证离线模型目录和工作区/会话创建，不调用真实模型或读取账号凭据；保留 provider、启动及恢复门禁 |
 | macOS 下载 DMG 提示应用“已损坏” | 先验证 DMG，再检查完整 bundle 签名、Gatekeeper、notarization/stapling 与 quarantine；手动 DEV artifact 默认未签名 | 阶段 9，不能移除 quarantine 后宣称阶段 10 通过 |
 | macOS 检查更新报 `installing` 不能转换到 `check`，且堆栈路径包含 `/AppTranslocation/` 或 `/Volumes/` | 应用并非从持久安装位置运行，同时菜单在更新忙碌阶段重复发起检查 | 阶段 10；先退出并推出 DMG，把应用安装到 `/Applications`。忙碌阶段的手动检查必须复用当前状态，不得重入状态机 |
 | macOS 从旧 Candidate 更新到含过渡修复的新 Candidate 后仍有空白等待 | 安装准备由源版本代码执行；平台更新器接管退出后还要校验、解包和替换完整签名 `.app`，blockmap 只减少下载量 | 阶段 10；先安装含修复的 Candidate，再升级到更高版本验证 Electron 存活阶段。原生退出后的间隔单独计时，1.0 不把它描述为热更新 |
