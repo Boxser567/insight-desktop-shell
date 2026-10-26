@@ -34,11 +34,11 @@
     },
     "win32-x64": {
       "url": "https://github.com/Boxser567/insight-harness-core/releases/download/insight-runtime-v0.2.1-alpha.1-insight.4/insight-harness-runtime-0.2.1-rc.2-win32-x64.tar.gz",
-      "sha256": "b4d860cb371863723f7e373d04baeb9ae8bac1bb6f055833ac498957bc668a01",
+      "sha256": "93284b2dcbaee08d45623ec783cfe244e1cd5b596146f9efa31b2bc429e1d670",
       "core": {
         "repository": "Boxser567/insight-harness-core",
         "version": "0.2.1-rc.2",
-        "commit": "f3b8406d32cf5f5187f66ae1f575ff0b2b012e8d"
+        "commit": "90e7d68e5472883e54affe254eebc2bc0a97f7bc"
       },
       "node": {
         "version": "24.9.0"
