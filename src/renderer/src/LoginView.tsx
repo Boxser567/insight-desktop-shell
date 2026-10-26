@@ -3,6 +3,7 @@ import type { AuthCommandResult, CaptchaView } from '../../shared/auth-contracts
 import brandMark from '../../../build/brand-mark.svg'
 import { canSubmitPassword, canSubmitSms, validatePhone } from './auth-form-model'
 import { DotGrid } from './DotGrid'
+import { LegalDocumentDialog, type LegalDocumentId } from './LegalDocumentDialog'
 
 type LoginMethod = 'sms' | 'password'
 
@@ -18,6 +19,7 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
   const [password, setPassword] = useState('')
   const [imageCode, setImageCode] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentId>()
   const [captcha, setCaptcha] = useState<CaptchaView>()
   const [captchaLoading, setCaptchaLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
@@ -113,7 +115,7 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
             <form onSubmit={(event) => void submitSms(event)}>
               <label>手机号<input inputMode="numeric" autoComplete="tel" maxLength={11} value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/gu, ''))} placeholder="请输入手机号" /></label>
               <label>验证码<span className="field-with-action"><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/gu, ''))} placeholder="请输入验证码" /><button type="button" onClick={() => void sendCode()} disabled={!validatePhone(phone) || countdown > 0}>{countdown > 0 ? `${countdown} 秒` : '获取验证码'}</button></span></label>
-              <Agreement checked={agreed} setChecked={setAgreed} />
+              <Agreement checked={agreed} setChecked={setAgreed} onOpen={setLegalDocument} />
               <button className="primary-button" type="submit" disabled={!canSubmitSms({ phone, code, agreed }) || props.busy}>{props.busy ? '正在登录…' : '登录'}</button>
             </form>
           ) : (
@@ -121,22 +123,28 @@ export function LoginView(props: { busy: boolean; expired: boolean }): React.JSX
               <label>手机号<input inputMode="numeric" autoComplete="tel" maxLength={11} value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/gu, ''))} placeholder="请输入手机号" /></label>
               <label>密码<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入密码" /></label>
               <label>图形验证码<span className="field-with-captcha"><input value={imageCode} onChange={(event) => setImageCode(event.target.value)} placeholder="请输入图形验证码" />{captcha ? <button type="button" className="captcha-button" onClick={() => void loadCaptcha()} aria-label="刷新图形验证码"><img src={captcha.image} alt="图形验证码" /></button> : <button type="button" onClick={() => void loadCaptcha()} disabled={captchaLoading}>{captchaLoading ? '加载中…' : '重新加载'}</button>}</span></label>
-              <Agreement checked={agreed} setChecked={setAgreed} />
+              <Agreement checked={agreed} setChecked={setAgreed} onOpen={setLegalDocument} />
               <button className="primary-button" type="submit" disabled={!captcha || !canSubmitPassword({ phone, password, imageCode, uuid: captcha.uuid, agreed }) || props.busy}>{props.busy ? '正在登录…' : '登录'}</button>
             </form>
           )}
           <p className="form-message" aria-live="polite">{message}</p>
         </div>
       </section>
+      {legalDocument ? <LegalDocumentDialog document={legalDocument} onClose={() => setLegalDocument(undefined)} /> : null}
     </main>
   )
 }
 
-function Agreement(props: { checked: boolean; setChecked: (checked: boolean) => void }): React.JSX.Element {
+function Agreement(props: { checked: boolean; setChecked: (checked: boolean) => void; onOpen: (document: LegalDocumentId) => void }): React.JSX.Element {
   return (
-    <label className="agreement">
-      <input type="checkbox" checked={props.checked} onChange={(event) => props.setChecked(event.target.checked)} />
-      <span>我已阅读并同意用户服务协议和隐私政策</span>
-    </label>
+    <div className="agreement">
+      <input id="login-agreement" type="checkbox" aria-label="我已阅读软件许可及服务协议和隐私政策" checked={props.checked} onChange={(event) => props.setChecked(event.target.checked)} />
+      <span>
+        <label htmlFor="login-agreement">我已阅读</label>
+        <button type="button" className="agreement-link" aria-haspopup="dialog" onClick={() => props.onOpen('service')}>软件许可及服务协议</button>
+        <label htmlFor="login-agreement">和</label>
+        <button type="button" className="agreement-link" aria-haspopup="dialog" onClick={() => props.onOpen('privacy')}>隐私政策</button>
+      </span>
+    </div>
   )
 }
