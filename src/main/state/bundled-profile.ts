@@ -21,8 +21,9 @@ const RETIRED_PACKAGES = [RETIRED_MARKET_PACKAGE, RETIRED_GENUI_PACKAGE, 'dsh-ge
 const COMMUNITY_PLUGIN_SPECS = {
   memory: {
     packageName: 'dsh-memory-evolve',
-    current: 'file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz',
-    managedVersions: ['0.1.0']
+    current: 'file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz',
+    legacy: ['file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz'],
+    managedVersions: ['0.1.0', '0.1.0-insight.1']
   },
   prompt: {
     packageName: 'dsh-prompt-enhance',

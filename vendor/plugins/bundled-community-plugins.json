@@ -3,9 +3,9 @@
   "plugins": [
     {
       "packageName": "dsh-memory-evolve",
-      "version": "0.1.0",
-      "artifact": "vendor/plugins/dsh-memory-evolve-0.1.0.tgz",
-      "sha256": "88fc21d567b7500f8f753fdf88c66241ef7e25541d807a654e96626130940906",
+      "version": "0.1.0-insight.1",
+      "artifact": "vendor/plugins/dsh-memory-evolve-0.1.0-insight.1.tgz",
+      "sha256": "b111b3f9e53a4a55d57fee91eb313fce8287dab2c564c25b9d8a46ed15b97c1b",
       "sourceRepository": "https://github.com/csyangwen/dsh-memory-evolve",
       "sourceRef": "v26091501",
       "sourceCommit": "c337dc1af7b5c8a5578e03150bf5c4d6133f66f9"

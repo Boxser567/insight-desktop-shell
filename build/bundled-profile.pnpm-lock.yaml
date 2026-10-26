@@ -12,8 +12,8 @@ importers:
         specifier: workspace:*
         version: link:packages/insight-desktop-integration
       dsh-memory-evolve:
-        specifier: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
-        version: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz
+        specifier: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz
+        version: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz
       dsh-prompt-enhance:
         specifier: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz
         version: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz
@@ -28,9 +28,11 @@ packages:
   cosmokit@1.8.1:
     resolution: {integrity: sha512-PDBv4l90xZKrUsZ0vtoycgZpO/j4iFsqJXrAxsyBDsnQRI7ZMJXIjgDJsKNjd5L8jnVnnlrDCdhkFbTncgCVjQ==}
 
-  dsh-memory-evolve@file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz:
-    resolution: {integrity: sha512-0ejPX0dImic1/ji5djIuhGCACzoAzR3hFte7RJeYBGe+/DjvcGpBirB6xNEke/5HILDTQw+fUtsV30xogXjXlA==, tarball: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz}
-    version: 0.1.0
+  dsh-memory-evolve@file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz:
+    resolution: {integrity: sha512-GYlslN95yojt5BgLbLLKCfimahvLiQTCfPOa8rayyQFuY71PlaD8BwvSqwgEy5F+IFYL5HwfaTX+gHci/rMKoQ==, tarball: file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz}
+    version: 0.1.0-insight.1
+    peerDependencies:
+      '@deepseek-ai/dsh-tools': 0.2.1-rc.2
 
   dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz:
     resolution: {integrity: sha512-4lsQEB9Kg8OpTmt3ndABr5/UfRnyH5uMFKTL8bmcnzkUhb5KqrNDHQ9CHeZR+48QrmSvp0/B1TzXvi893HGiJg==, tarball: file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz}
@@ -53,7 +55,7 @@ snapshots:
 
   cosmokit@1.8.1: {}
 
-  dsh-memory-evolve@file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0.tgz: {}
+  dsh-memory-evolve@file:.insight-bundled-plugins/dsh-memory-evolve-0.1.0-insight.1.tgz: {}
 
   dsh-prompt-enhance@file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz:
     dependencies:
