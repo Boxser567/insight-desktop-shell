@@ -30,6 +30,12 @@ const COMMUNITY_PLUGIN_SPECS = {
     current: 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.7.tgz',
     legacy: ['file:.insight-bundled-plugins/dsh-prompt-enhance-0.1.9.tgz', 'file:.insight-bundled-plugins/dsh-prompt-enhance-0.2.1.tgz'],
     managedVersions: ['0.1.9', '0.2.1', '0.2.7']
+  },
+  canvas: {
+    packageName: '@insight-ai/desktop-canvas-plugin',
+    current: 'file:.insight-bundled-plugins/insight-ai-desktop-canvas-plugin-0.3.0-alpha.32.tgz',
+    legacy: [],
+    managedVersions: ['0.3.0-alpha.32']
   }
 } as const
 
@@ -166,8 +172,11 @@ async function refreshBundledCommunityPackages(
   destination: string,
   refreshSameVersion = false
 ): Promise<boolean> {
+  const manifest = await readProfileManifest(join(destination, 'package.json'))
   let changed = false
-  for (const plugin of [COMMUNITY_PLUGIN_SPECS.memory, COMMUNITY_PLUGIN_SPECS.prompt]) {
+  for (const plugin of Object.values(COMMUNITY_PLUGIN_SPECS)) {
+    if (plugin.packageName === COMMUNITY_PLUGIN_SPECS.canvas.packageName &&
+      manifest?.dependencies?.[plugin.packageName] !== plugin.current) continue
     const packagePath = join('node_modules', plugin.packageName)
     const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
     if (
@@ -200,10 +209,12 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
   const archiveDirectory = join(destination, '.insight-bundled-plugins')
   let changed = false
 
-  for (const plugin of [COMMUNITY_PLUGIN_SPECS.memory, COMMUNITY_PLUGIN_SPECS.prompt]) {
+  for (const plugin of Object.values(COMMUNITY_PLUGIN_SPECS)) {
+    const dependency = manifest?.dependencies?.[plugin.packageName]
+    if (plugin.packageName === COMMUNITY_PLUGIN_SPECS.canvas.packageName &&
+      dependency !== plugin.current) continue
     const packagePath = join('node_modules', plugin.packageName)
     const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
-    const dependency = manifest?.dependencies?.[plugin.packageName]
     const managed = (installed?.version !== undefined &&
       (plugin.managedVersions as readonly string[]).includes(installed.version)) ||
       dependency === plugin.current ||

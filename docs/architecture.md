@@ -22,7 +22,7 @@ flowchart LR
 
 账号范围的Profile、插件、工作区和会话在安装目录之外，更新不覆盖用户数据。出厂组合与迁移代次以 `scripts/prepare-bundled-profile.mjs`、Profile政策及实际Runtime为准；当前generation8移除退休GenUI/Market声明和旧安装锁，不恢复用户主动卸载的插件。
 
-当前工作区采用Core原生侧栏/文件预览，不再将早期Better Sidebar预装方案当成当前事实。Shell只装配仍由其交付的第一方集成与社区插件；Core原生能力不重复内置。可选画布插件自行维护Host/Client/原生Store桥，与Core及后端业务解耦，见 [画布专题](discussions/canvas-harness-scheme-b/README.md)。
+当前工作区采用Core原生侧栏/文件预览，不再将早期Better Sidebar预装方案当成当前事实。Shell只装配仍由其交付的第一方集成与社区插件；Core原生能力不重复内置。画布插件alpha.32随新Profile默认预装且允许卸载，既有账号不强制补装，保留用户卸载和手动升级的选择；插件自行维护Host/Client/原生Store桥，与Core及后端业务解耦，见 [画布专题](discussions/canvas-harness-scheme-b/README.md)和[制品清单](../vendor/plugins/README.md)。
 
 启动恢复/Safe Mode只处理对应Profile范围，不删除用户工作区或会话。账号变更不得把其他账号的配置、凭据和数据混入当前账号。
 

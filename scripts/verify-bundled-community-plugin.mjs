@@ -14,7 +14,14 @@ const PROFILE = 'web'
 const DESCRIPTOR_PATH = join('vendor', 'plugins', 'bundled-community-plugins.json')
 const REQUIRED_ENTRIES = new Map([
   ['dsh-memory-evolve', ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']],
-  ['dsh-prompt-enhance', ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']]
+  ['dsh-prompt-enhance', ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']],
+  ['@insight-ai/desktop-canvas-plugin', [
+    'lib/index.js', 'lib/client.js', 'cordis.patch.yml',
+    'canvas-app/dist/index.html', 'canvas-app/dist/canvas-service.js',
+    'canvas-app/dist/canvas-service-manifest.json',
+    'lib/guidance/desktop-canvas-workflow/SKILL.md',
+    'lib/guidance/desktop-canvas-workflow/manifest.json'
+  ]]
 ])
 
 function runtimePaths(projectRoot) {

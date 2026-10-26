@@ -23,7 +23,7 @@ describe('bundled community plugin verifier', () => {
     ))
   })
 
-  async function createProject(sha256 = ARCHIVE_SHA256): Promise<string> {
+  async function createProject(sha256 = ARCHIVE_SHA256, packageName = PACKAGE_NAME): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), 'insight-plugin-verifier-test-'))
     temporaryDirectories.push(root)
     const artifact = 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz'
@@ -47,7 +47,7 @@ describe('bundled community plugin verifier', () => {
       `${JSON.stringify({
         schemaVersion: 1,
         plugins: [{
-          packageName: PACKAGE_NAME,
+          packageName,
           version: PACKAGE_VERSION,
           artifact,
           sha256,
@@ -62,22 +62,23 @@ describe('bundled community plugin verifier', () => {
 
   async function writeInstalledProfile(
     home: string,
-    overrides: { name?: string, version?: string, omitClient?: boolean } = {}
+    overrides: { name?: string, version?: string, omitClient?: boolean } = {},
+    packageName = PACKAGE_NAME
   ): Promise<void> {
     const profile = join(home, 'profiles', 'web')
-    const installed = join(profile, 'node_modules', PACKAGE_NAME)
+    const installed = join(profile, 'node_modules', packageName)
     await mkdir(join(installed, 'lib'), { recursive: true })
     await writeFile(
       join(profile, 'package.json'),
       JSON.stringify({
-        dependencies: { [PACKAGE_NAME]: 'file:reviewed.tgz' },
-        dsh: { profile: { bundles: [PACKAGE_NAME] } }
+        dependencies: { [packageName]: 'file:reviewed.tgz' },
+        dsh: { profile: { bundles: [packageName] } }
       })
     )
     await writeFile(
       join(installed, 'package.json'),
       JSON.stringify({
-        name: overrides.name ?? PACKAGE_NAME,
+        name: overrides.name ?? packageName,
         version: overrides.version ?? PACKAGE_VERSION
       })
     )
@@ -149,6 +150,35 @@ describe('bundled community plugin verifier', () => {
       runHarness: async () => {}
     })).rejects.toThrow(`Could not add ${PACKAGE_NAME}: fixture add failure`)
   })
+
+  it.each([undefined, 'canvas-app/dist/canvas-service.js', 'lib/guidance/desktop-canvas-workflow/SKILL.md'])(
+    'checks the Canvas service and guidance assets (omitted: %s)', async (omitted) => {
+      const packageName = '@insight-ai/desktop-canvas-plugin'
+      const root = await createProject(ARCHIVE_SHA256, packageName)
+      let booted = false
+      const verification = verifyBundledCommunityPlugin(root, packageName, {
+        runDsh: async (command) => {
+          if (!command.args.includes('install')) return
+          await writeInstalledProfile(command.home, {}, packageName)
+          for (const entry of [
+            'canvas-app/dist/index.html', 'canvas-app/dist/canvas-service.js',
+            'canvas-app/dist/canvas-service-manifest.json',
+            'lib/guidance/desktop-canvas-workflow/SKILL.md',
+            'lib/guidance/desktop-canvas-workflow/manifest.json'
+          ]) {
+            if (entry === omitted) continue
+            const path = join(command.home, 'profiles/web/node_modules', packageName, entry)
+            await mkdir(dirname(path), { recursive: true })
+            await writeFile(path, '')
+          }
+        },
+        runHarness: async () => { booted = true }
+      })
+      if (omitted) await expect(verification).rejects.toThrow(`${packageName} is missing required entry ${omitted}`)
+      else await expect(verification).resolves.toBeUndefined()
+      expect(booted).toBe(!omitted)
+    }
+  )
 
   it('reports a Harness plugin-load failure', async () => {
     const root = await createProject()

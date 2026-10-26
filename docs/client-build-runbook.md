@@ -134,7 +134,7 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用满足 Profile 版本 7、第一方集成和当前社区插件归档校验的 Profile。它不会下载或重新内置由 Core Runtime 提供的 `dshmarket`、`dsh-genui`。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用满足 Profile 版本 8、第一方集成和当前插件归档校验的 Profile。新 Profile 包含可卸载的 `@insight-ai/desktop-canvas-plugin@0.3.0-alpha.32`；既有账号不强制补装，卸载或手动升级保持原选择。插件版本、来源和归档摘要见 [制品清单](../vendor/plugins/README.md)。它不会下载或重新内置由 Core Runtime 提供的 `dshmarket`、`dsh-genui`。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 

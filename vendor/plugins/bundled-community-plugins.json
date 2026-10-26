@@ -18,6 +18,15 @@
       "sourceRepository": "https://github.com/rongxingda/dsh-prompt-enhance",
       "sourceRef": "v0.2.7",
       "sourceCommit": "4dc6a140d2b6c59305edb8c74aaed639b71d7291"
+    },
+    {
+      "packageName": "@insight-ai/desktop-canvas-plugin",
+      "version": "0.3.0-alpha.32",
+      "artifact": "vendor/plugins/insight-ai-desktop-canvas-plugin-0.3.0-alpha.32.tgz",
+      "sha256": "6426a43a34e42cdae663fec8a76cf0d20c801e3901f0d8b49e6e9fad5380b1fe",
+      "sourceRepository": "https://codeup.aliyun.com/idealead/desktop-canvas-plugin.git",
+      "sourceRef": "working-tree/0.3.0-alpha.32",
+      "sourceCommit": "aeee695cd75230ad82bdb0772125c6ca26cff91e"
     }
   ]
 }

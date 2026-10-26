@@ -11,11 +11,15 @@ Archive hashes prove that builds consume the reviewed bytes. They do not restric
 | `dsh-memory-evolve@0.1.0` | `v26091501` / `c337dc1af7b5c8a5578e03150bf5c4d6133f66f9` | MIT | 1,8 MB | 6,7 MB | 77 | `88fc21d567b7500f8f753fdf88c66241ef7e25541d807a654e96626130940906` |
 | `dsh-memory-evolve@0.1.0-insight.1` | Same upstream input; checked Core rc.2 adaptation | MIT | 1,853,153 B | 6,725,504 B | 78 | `b111b3f9e53a4a55d57fee91eb313fce8287dab2c564c25b9d8a46ed15b97c1b` |
 | `dsh-prompt-enhance@0.2.7` | `v0.2.7` / `4dc6a140d2b6c59305edb8c74aaed639b71d7291` | Apache-2.0 | 821,372 B | 1,144,130 B | 40 | `31b54b6239354c1c6cbda571ffb5dde3e092d1ee7fdebd440df839d107af7b5e` |
+| `@insight-ai/desktop-canvas-plugin@0.3.0-alpha.32` | User-supplied working-tree archive; see provenance below | No license declared in archive | 14,754,229 B | 44,447,606 B | 66 | `6426a43a34e42cdae663fec8a76cf0d20c801e3901f0d8b49e6e9fad5380b1fe` |
 
 Source repositories:
 
 - `dsh-memory-evolve`: <https://github.com/csyangwen/dsh-memory-evolve>
 - `dsh-prompt-enhance`: <https://github.com/rongxingda/dsh-prompt-enhance>
+- `@insight-ai/desktop-canvas-plugin`: <https://codeup.aliyun.com/idealead/desktop-canvas-plugin.git>
+
+Canvas alpha.32 is the user's original archive, retained byte-for-byte. Its source checkout had staged and unstaged changes when admitted. `sourceRef: working-tree/0.3.0-alpha.32` records that fact; `sourceCommit: aeee695cd75230ad82bdb0772125c6ca26cff91e` is the checkout's base HEAD, not a claim that rebuilding that commit reproduces the archive. The SHA-256 identifies the accepted build input. The packaged README still describes alpha.31 and older Core versions; the packaged manifest declares alpha.32 and Core `0.2.1-rc.2` peers. Do not rebuild or rewrite the supplied archive to correct that text.
 
 The pinned Memory Evolve package has no npm `files` allowlist, so its normal archive includes source, tests, TypeScript configuration and upstream developer-machine paths. The original `0.1.0` Shell archive is therefore packed from a fixed staging allowlist containing the upstream `package.json`, license and readmes plus `cordis.patch.yml`, built `lib`, packaged skills, `vendor/mermaid.min.js` and `scripts/sync-worker.mjs`. Those original files remain byte-for-byte identical to the reviewed checkout; only non-runtime files are excluded. Keep that archive as the immutable adaptation input. The active descriptor selects `0.1.0-insight.1`, produced by `scripts/adapt-memory-evolve.mjs` as described below. The other packages retain the files selected by their upstream package manifests. Archive review rejects `.git`, `node_modules`, `.DS_Store`, developer checkout paths, missing built entries, or a manifest that differs from the descriptor.
 
@@ -37,9 +41,17 @@ The pinned Memory Evolve package has no npm `files` allowlist, so its normal arc
 - Browser rendering: injects composer slots, settings scope, and locale; it posts the draft to the local enhancement route and renders text in React components without raw HTML insertion.
 - Startup: the feature is enabled by default and registers its route and composer action. Missing required `llm` or `webServer` services must fail disposable-Profile Host startup.
 
+### @insight-ai/desktop-canvas-plugin
+
+- Host services: requires `webServer`, `connection`, `tools`, `attachments`, `storageDomain`, `sessionQuery`, `skills`, and `systemPrompt`; registers Canvas tools, authenticated local routes, result storage, and packaged workflow guidance.
+- Core dependencies: shared attachment, filesystem, tools, LLM, and storage-domain packages are peers pinned to `0.2.1-rc.2`. `autoInstallPeers: false` keeps the Profile from installing a second Core. The archive's ordinary dependencies are `ali-oss`, `mediabunny`, and `zod`.
+- Account access: this first-party Host uses the existing desktop parent credential channel for business requests; credentials must remain in the Host and never reach the iframe or client bundle. Local routes use Core connection authentication. Business operations still require a logged-in desktop account; a standalone boot probe does not validate cloud operations.
+- Assets: includes the built Canvas page, assets, WASM/fonts, resident `canvas-service.js` and its manifest, and the `desktop-canvas-workflow` skill and references. These assets stay inside the package, not the user's global skill directory.
+- Installation policy: new Profiles preinstall Canvas as an optional, removable plugin. Existing Profiles without it stay unchanged; user removals and user-upgraded versions are preserved. Managed alpha.32 Profiles can repair their retained archive from the shipped copy. This does not add Canvas to installation-owned bundles or change Profile generation 8.
+
 ## Reproduction
 
-All source builds and tests were run against the Shell's locked Core Runtime Node 24.9.0. Replace angle-bracket paths with disposable local paths; never persist them in an archive or descriptor.
+The source-build instructions below describe the earlier community-plugin admissions and their recorded validation, not a source rebuild of the supplied Canvas archive. For this Canvas admission, the locked Core Runtime provides Node 24.9.0. Replace angle-bracket paths with disposable local paths; never persist them in an archive or descriptor.
 
 Memory Evolve:
 
@@ -96,5 +108,14 @@ npm pack --pack-destination <shell-root>/vendor/plugins
 Result: 132 tests passed; typecheck and build completed.
 
 After packing, verify the package manifest and required entries with `tar`, compare the measured digest with `bundled-community-plugins.json`, and run `git diff --check`. Runtime admission remains a separate step: each package must install and boot by itself in a disposable Profile before `prepare-bundled-profile.mjs` combines them.
+
+For Canvas, use the retained alpha.32 archive instead of rebuilding the dirty source checkout. After preparing the locked Runtime and desktop integration, run:
+
+```bash
+node scripts/verify-bundled-community-plugin.mjs @insight-ai/desktop-canvas-plugin
+npm run prepare:bundled-profile
+```
+
+When changing the bundled plugin inputs, generate the Profile lock with the locked Runtime's pnpm in a disposable workspace containing the same relative archive paths and desktop-integration workspace package. Review and save `pnpm-lock.yaml` as `build/bundled-profile.pnpm-lock.yaml`; the normal preparation step must continue to install with `--frozen-lockfile`.
 
 The 0.2.7 Prompt Enhance archive is the upstream npm release, verified against npm SHA-512 and SHA-1 and its matching `v0.2.7` Git commit. Its Host reads the current Core default route through `agentDefaultModel.currentSelection()`. The Shell retains a narrowly checked client adaptation for `attachmentIds`, `configForms`, and the resolved Harness theme. Runtime and browser enhancement checks are recorded in `docs/analysis/2026-10-08-prompt-enhance-upgrade.md` (preserved in the [documentation history archive](../../docs/archive/README.md)).
