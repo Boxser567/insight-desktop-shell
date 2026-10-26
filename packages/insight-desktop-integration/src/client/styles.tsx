@@ -185,6 +185,9 @@ const stylesheet = `
   box-shadow: var(--dsw-shadow-lv2);
 }
 [data-insight-desktop-account-menu] > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   appearance: none;
   min-height: 34px;
   padding: 6px 10px;
@@ -195,6 +198,11 @@ const stylesheet = `
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+[data-insight-desktop-account-menu] [data-insight-desktop-external-link] {
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: .65;
 }
 [data-insight-desktop-account-menu] > button:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);

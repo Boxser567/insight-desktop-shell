@@ -15,6 +15,7 @@ import type { InsightDesktopKey } from './locales'
 
 type ProductLocaleProps = PropsLocale<'insightDesktop'>
 const INSIGHT_DESKTOP_WEBSITE = 'https://desktop.insight-aigc.com/'
+const INSIGHT_DESKTOP_HANDBOOK = 'https://desktop.insight-aigc.com/insight-ai-product-bluebook.html'
 
 function openProductWebsite(): void {
   window.open(INSIGHT_DESKTOP_WEBSITE, '_blank', 'noopener,noreferrer')
@@ -123,7 +124,7 @@ function Avatar({ account }: { account: AccountSummary | undefined }) {
   )
 }
 
-/** Render the current account and its two product-level actions. */
+/** Render the current account and its product-level actions. */
 export function AccountFooter({ wide, t, openSettings, signOut, updates }: PropsRuntime<'sidebar.footer.action'> & ProductLocaleProps & AccountFooterActions) {
   const account = useAccount()
   const [open, setOpen] = useState(false)
@@ -194,6 +195,15 @@ export function AccountFooter({ wide, t, openSettings, signOut, updates }: Props
           role="menu"
           style={menuPosition ?? { left: 0, top: 0, visibility: 'hidden' }}
         >
+          <button type="button" role="menuitem" onClick={() => {
+            setOpen(false)
+            window.open(INSIGHT_DESKTOP_HANDBOOK, '_blank', 'noopener,noreferrer')
+          }}>
+            {t('account.handbook')}
+            <svg data-insight-desktop-external-link aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+            </svg>
+          </button>
           <button type="button" role="menuitem" onClick={() => { setOpen(false); openSettings() }}>
             {t('account.settings')}
           </button>

@@ -8,6 +8,7 @@ export type InsightDesktopKey =
   | 'skill.unavailable'
   | 'skill.historyUnavailable'
   | 'skill.unavailableLabel'
+  | 'account.handbook'
   | 'account.settings'
   | 'account.signOut'
   | 'account.unavailable'
@@ -31,6 +32,7 @@ export const zh: Record<InsightDesktopKey, string> = {
   'skill.unavailable': '技能目录暂不可用',
   'skill.historyUnavailable': '会话历史未成功加载，专家技能暂不可用。请先恢复历史或重新打开会话。',
   'skill.unavailableLabel': '专家技能（暂不可用）',
+  'account.handbook': '客户端使用手册',
   'account.settings': '设置',
   'account.signOut': '退出登录',
   'account.unavailable': '账号信息不可用',
@@ -55,6 +57,7 @@ export const en: Record<InsightDesktopKey, string> = {
   'skill.unavailable': 'Skill catalog unavailable',
   'skill.historyUnavailable': 'Session history failed to load, so expert skills are unavailable. Restore history or reopen the conversation first.',
   'skill.unavailableLabel': 'Expert Skills (unavailable)',
+  'account.handbook': 'User Guide',
   'account.settings': 'Settings',
   'account.signOut': 'Sign Out',
   'account.unavailable': 'Account unavailable',
