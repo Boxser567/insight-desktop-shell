@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { extract } from 'tar'
 import { afterEach, expect, it } from 'vitest'
 import { adaptMemoryEvolvePackage, MEMORY_COMPAT_VERSION } from '../scripts/adapt-memory-evolve.mjs'
 
@@ -14,9 +14,14 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'memory-compatibility-'))
   directories.push(root)
-  execFileSync('tar', ['-xzf', join(process.cwd(), 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz'), '-C', root])
+  await extract({ file: join(process.cwd(), 'vendor/plugins/dsh-memory-evolve-0.1.0.tgz'), cwd: root })
   return { root, directory: join(root, 'package') }
 }
+
+it('extracts the pinned archive with its UTF-8 PAX filename', async () => {
+  const { directory } = await fixture()
+  await expect(readFile(join(directory, 'README-详细说明.md'))).resolves.not.toHaveLength(0)
+})
 
 it('adapts the reviewed client, preserves stores byte for byte, and is repeatable', async () => {
   const { directory } = await fixture()
