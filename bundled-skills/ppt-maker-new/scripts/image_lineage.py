@@ -14,13 +14,16 @@ def demand_hash(spec, blueprint):
         'aspect':spec.get('aspect','16:9')},sort_keys=True,ensure_ascii=False))
 
 
-def lineage_findings(project, blueprint, pages=None):
+def lineage_findings(project, blueprint, pages=None, *, file_hash=None, asset_cache=None):
     """A filename or a ready marker is not evidence of generation ownership."""
     cache_path=project/'reports/image-cache.json'
-    try:
-        cache=json.loads(cache_path.read_text()).get('assets',{}) if cache_path.exists() else {}
-    except (OSError,ValueError,AttributeError):
-        cache={}
+    file_hash = file_hash or sha256_file
+    cache = asset_cache
+    if cache is None:
+        try:
+            cache=json.loads(cache_path.read_text(encoding='utf-8')).get('assets',{}) if cache_path.exists() else {}
+        except (OSError,ValueError,AttributeError):
+            cache={}
     findings=[]
     for page in pages if pages is not None else blueprint.get('pages',[]):
         for spec in page.get('images',[]):
@@ -34,7 +37,7 @@ def lineage_findings(project, blueprint, pages=None):
                     raise ValueError('generated asset is missing')
                 if row.get('demand_sha256') != demand_hash(spec,blueprint):
                     raise ValueError('generated asset has no matching demand receipt; preserve file, run image stage or register an authorized source asset')
-                if row.get('output_sha256') != sha256_file(target):
+                if row.get('output_sha256') != file_hash(target):
                     raise ValueError('generated asset bytes differ from its receipt')
             except (OSError,ValueError,AttributeError) as exc:
                 findings.append({'code':'asset_consumer_error','page_no':page['no'],'page':page['no'],
@@ -45,7 +48,7 @@ def lineage_findings(project, blueprint, pages=None):
 def unresolved_images(project):
     rows=[]
     for path in sorted((project/'reports/image_transactions').glob('*.json')):
-        record=json.loads(path.read_text())
+        record=json.loads(path.read_text(encoding='utf-8'))
         if record.get('status') in {'submitted','outcome_unknown','response_saved'}:
             rows.append({key:record.get(key) for key in
                          ('src','request_id','status','contract_sha256','reason')})
@@ -58,7 +61,7 @@ def acknowledge_image_unknown(project, src, request_id, approval_id):
     if not approval_id or not request_id:
         raise ValueError('explicit approval and exact image request ID required')
     path=project/'reports/image_transactions'/(sha256_text(src)+'.json')
-    record=json.loads(path.read_text())
+    record=json.loads(path.read_text(encoding='utf-8'))
     if record.get('src')!=src or record.get('request_id')!=request_id:
         raise ValueError('image request identity changed; inspect reconciliation report')
     if record.get('status')=='abandoned_unknown' and record.get('approval_id')==approval_id:

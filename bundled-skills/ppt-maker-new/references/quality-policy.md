@@ -7,6 +7,8 @@ repair, approval request or placeholder simply because a report is nonempty.
 Findings retain code, scope/page, measurement/evidence, severity, confidence and
 repair_action. Unknown codes remain blocking, even if their payload says warning.
 Named low-confidence/style findings are warnings, not hidden or silently deleted.
+`plan_text_capacity_risk` is also report-only: an early estimate for explicitly
+sized text, consumed within an existing rendering call, never a new planning stop.
 
 `scope` separates page problems from project dependencies. Conversion and patch
 validation also partition findings. Native image frames preserve rounding and borders;

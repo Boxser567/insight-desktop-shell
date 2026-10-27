@@ -150,7 +150,7 @@ def export_best_effort(project: Path, output: Path, *, run_id: str,
     if preflight_path.exists():
         from asset_preflight import verify_assets
         try:
-            preflight=json.loads(preflight_path.read_text())
+            preflight=json.loads(preflight_path.read_text(encoding='utf-8'))
             asset_issues=list(preflight.get('errors') or [])
             for row in preflight.get('assets',[]):
                 failures=verify_assets([row])
@@ -186,7 +186,7 @@ def export_best_effort(project: Path, output: Path, *, run_id: str,
             if 'legacy_style_text' in cache:
                 style=cache['legacy_style_text']
             else:
-                style=select_style_reference(read(project/'reports/brief.json'),Path(__file__).resolve().parents[1]).read_text()
+                style=select_style_reference(read(project/'reports/brief.json'),Path(__file__).resolve().parents[1]).read_text(encoding='utf-8')
                 for path in (project/'reports/render_checkpoints').glob('*.json'):
                     old=read(path)
                     if old.get('page_no')==page['no'] and 'legacy_style_text' in old:

@@ -12,7 +12,7 @@ def request_key(prompt, kwargs):
 def response_ready(budget, token):
     token=budget.effective_token(token)
     path=budget.path.parent/'request_journal'/f'{token}.json'
-    return path.exists() and json.loads(path.read_text()).get('status')=='response_saved'
+    return path.exists() and json.loads(path.read_text(encoding='utf-8')).get('status')=='response_saved'
 
 
 def saved_result(record):
@@ -39,7 +39,7 @@ def admit(budget, unit, prompt, *, request_kwargs, **admission):
         path = budget.path.parent/'request_journal'/f'{token}.json'
         if not path.exists():
             continue
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
         if (record.get('attempt_id'), record.get('scope'), record.get('stage'), record.get('unit')) != (
                 token, budget.scope, budget.stage, unit):
             raise ValueError('request receipt identity mismatch')
@@ -58,7 +58,7 @@ def settle_error(budget, token, exc, *, remaining=None):
     """A parser error has a known response; a transport exception does not."""
     token=budget.effective_token(token)
     path = budget.path.parent/'request_journal'/f'{token}.json'
-    record = json.loads(path.read_text()) if path.exists() else {}
+    record = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     with budget.connect() as db:
         row = db.execute('SELECT status FROM attempts WHERE id=?', (token,)).fetchone()
     if row != ('in_flight',):
@@ -113,7 +113,7 @@ def _invoke_once(budget, token, prompt, model, *, context=None, preserve_result=
         raise ValueError('request receipt has no matching admitted attempt')
     path=budget.path.parent/'request_journal'/f'{token}.json'
     if path.exists():
-        previous=json.loads(path.read_text())
+        previous=json.loads(path.read_text(encoding='utf-8'))
         if previous.get('status') == 'response_saved':
             if (previous.get('attempt_id'),previous.get('scope'),previous.get('stage'),previous.get('unit'),previous.get('request_key')) != (
                     token,row[0],row[1],row[2],request_key(prompt,kwargs)):
@@ -176,7 +176,7 @@ def _restore(project, record):
         if record['stage']!='render' or record['unit']!='batch:'+key:
             raise ValueError('batch request binding mismatch')
         path=project/'reports/render_responses'/(key+'.json')
-        if path.exists() and json.loads(path.read_text()).get('response') != raw:
+        if path.exists() and json.loads(path.read_text(encoding='utf-8')).get('response') != raw:
             raise ValueError('batch cache conflicts with saved response; preserve both for inspection')
         atomic_write_json(path,{'response':raw})
         return 0
@@ -184,7 +184,7 @@ def _restore(project, record):
         raise ValueError('response has no supported render context')
     from sol_render import _prepare_render_state,_extract_slide,_validate_batch_candidate
     from render_checkpoint import save_draft
-    blueprint=json.loads((project/'reports/blueprint.json').read_text())
+    blueprint=json.loads((project/'reports/blueprint.json').read_text(encoding='utf-8'))
     page=next(p for p in blueprint['pages'] if p['no']==context['page_no'])
     state=_prepare_render_state(project,blueprint,page,context.get('style_text',''),False)
     if state['prompt_hash']!=context['prompt_hash']:
@@ -212,7 +212,7 @@ def _restore(project, record):
                     validate_fn=lambda xml:_validate_batch_candidate(state,xml)[1],
                     expected_run_id=context['run_id'],expected_defect_ids=context['defect_ids'])
                 if result.committed:
-                    candidate,errors=working.read_text(),[]
+                    candidate,errors=working.read_text(encoding='utf-8'),[]
                 elif result.candidate_xml:
                     candidate,errors=result.candidate_xml,result.errors
         except (ValueError,TypeError) as exc:
@@ -237,7 +237,7 @@ def reconcile(project):
             continue
         try:
             if path.exists():
-                record=json.loads(path.read_text())
+                record=json.loads(path.read_text(encoding='utf-8'))
                 if status=='completed' and record.get('materialized'):
                     continue
                 if (record['attempt_id'],record['scope'],record['stage'],record['unit'])!=(token,scope,stage,unit):
@@ -252,7 +252,7 @@ def reconcile(project):
                 key=unit.removeprefix('batch:')
                 import re
                 if not re.fullmatch('[a-f0-9]{64}',key):raise ValueError('legacy batch identity invalid')
-                saved=json.loads((project/'reports/render_responses'/(key+'.json')).read_text())
+                saved=json.loads((project/'reports/render_responses'/(key+'.json')).read_text(encoding='utf-8'))
                 if not isinstance(saved.get('response'),str):raise ValueError('legacy response missing')
                 remaining=0
             else:
@@ -271,8 +271,8 @@ def reconcile(project):
                 # owner. Local execution ended; remote billing remains unknown.
                 companion = (project/'reports/final_repair_candidates'/f'{scope}.json')
                 has_candidate_response = (stage == 'final_repair' and companion.exists()
-                                          and json.loads(companion.read_text()).get('response') is not None)
-                if not (path.exists() and json.loads(path.read_text()).get('response') is not None) and not has_candidate_response:
+                                          and json.loads(companion.read_text(encoding='utf-8')).get('response') is not None)
+                if not (path.exists() and json.loads(path.read_text(encoding='utf-8')).get('response') is not None) and not has_candidate_response:
                     with budget.connect() as db:
                         db.execute("UPDATE attempts SET status='outcome_unknown' WHERE id=? AND status='in_flight'",(token,))
                 result['unresolved'].append({'attempt_id':token,'scope':scope,'stage':stage,'unit':unit,'reason':str(exc)})

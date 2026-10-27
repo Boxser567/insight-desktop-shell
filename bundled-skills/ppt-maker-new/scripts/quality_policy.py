@@ -14,6 +14,7 @@ ADVISORY = frozenset({
     'sparse_slide_content', 'sparse_container_content',
     'img_round_corner_skipped', 'planning_metadata_advisory',
     'fill_approximated', 'decorative_canvas_bleed',
+    'plan_text_capacity_risk',
 })
 
 

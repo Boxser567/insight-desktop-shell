@@ -82,7 +82,7 @@ def obtain_brief(project, *, scope, prepare_prompt, capacity, turns, artifacts,
         # draft. Neither silently adopt them nor buy a fresh generation.
         for raw_path in (reports/'brief_attempts').glob('*.txt'):
             metadata_path=raw_path.with_suffix('.json')
-            metadata=json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
+            metadata=json.loads(metadata_path.read_text(encoding='utf-8')) if metadata_path.exists() else {}
             if not metadata.get('scope'):
                 report('failed',reason='legacy_brief_requires_provenance_review')
                 raise RuntimeError('legacy_brief_requires_provenance_review: retained unbound responses; no automatic regeneration')

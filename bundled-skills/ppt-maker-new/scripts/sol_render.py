@@ -32,6 +32,7 @@ from ppt_contract import DECORATION_CONTRACT, STYLE_POLICY, render_scheduling_co
 from defect_map import classify_action, load_open_defects, merge_defects, resolve_defects
 from sml_patch import (
     PatchRejected, apply_patch_transaction, blueprint_sha256, build_element_inventory, bind_patch_response,
+    prompt_element_inventory,
     preserve_assets_sha256, preserve_text_sha256, sml_sha256, generation_schema_excerpt,
 )
 from stage_runtime import (
@@ -82,6 +83,7 @@ ET.register_namespace("", SML_NS)
 
 
 def build_page_prompt(blueprint: dict, page: dict, style_reference: str) -> str:
+    from blueprint_validation import layout_capacity_findings
     theme = dict(blueprint.get("theme") or {})
     render_contract = theme.pop("render_contract", None)
     context = {
@@ -90,6 +92,7 @@ def build_page_prompt(blueprint: dict, page: dict, style_reference: str) -> str:
         "theme": theme,
         "page_count": blueprint.get("page_count", len(blueprint.get("pages", []))),
         "page": audience_page(page),
+        "layout_advice": layout_capacity_findings(page),
     }
     if isinstance(render_contract, dict) and render_contract:
         style_excerpt = json.dumps(render_contract, ensure_ascii=False, indent=2)
@@ -101,13 +104,13 @@ def build_page_prompt(blueprint: dict, page: dict, style_reference: str) -> str:
         style_label = "设计系统摘录"
     return f"""你是本地 PPTX 的 SML 设计与渲染专家。只渲染下面这一页；不要推测或生成其他页面。
 
+{SML_RULES}
+
 ## 单页蓝图
 {json.dumps(context, ensure_ascii=False, indent=2)}
 
 ## {style_label}
 {style_excerpt}
-
-{SML_RULES}
 
 只输出一个 <slide ...>...</slide> XML，不要解释、不要 Markdown 围栏。
 """
@@ -145,10 +148,12 @@ def build_batch_prompt(blueprint: dict, pages: list[dict], style_reference: str)
         json.dumps(render_contract, ensure_ascii=False, indent=2)
         if isinstance(render_contract, dict) and render_contract else style_reference
     )
+    from blueprint_validation import layout_capacity_findings
     context = {
         "topic": blueprint.get("topic"), "audience": blueprint.get("audience"),
         "theme": theme, "page_count": blueprint.get("page_count", len(blueprint.get("pages", []))),
         "pages": [{"blueprint_hash": blueprint_sha256(page), "page": audience_page(page)} for page in pages],
+        "layout_advice": [finding for page in pages for finding in layout_capacity_findings(page)],
     }
     from design_refinement import design_sequence
     numbers={p['no'] for p in pages}
@@ -156,16 +161,16 @@ def build_batch_prompt(blueprint: dict, pages: list[dict], style_reference: str)
     context['design_sequence']=[p for p in design_sequence(blueprint)
         if any(abs(p['no']-n)<=2 for n in numbers)]
     return f"""ADAPTIVE_BATCH_RENDER
-你是飞书 Slides SML 设计与渲染专家。一次渲染下面 {len(pages)} 页；每页必须独立完整，禁止跨页共享标签。
+你是本地 PPTX 的 SML 设计与渲染专家。一次渲染下面选中的页面；每页必须独立完整，禁止跨页共享标签。
 按页面visual_intent和邻页design_sequence落实信息关系、视觉层级及节奏。只有选中页需要渲染；设计意图/合同/邻页摘要不是正文，不印在页面上。无图页仍用有效图形或有意的字体构图，不把所有内容套进同构卡片。
+
+{SML_RULES}
 
 ## 批量蓝图
 {json.dumps(context, ensure_ascii=False, indent=2)}
 
 ## 锁定渲染合同
 {style_excerpt}
-
-{SML_RULES}
 
 严格按以下格式输出每一页，不要解释或 Markdown：
 <<<SLIDE page="页码" blueprint_hash="对应页面蓝图哈希">>>
@@ -1082,8 +1087,7 @@ def build_patch_prompt(
         "defect_ids": [item.get("defect_id") for item in defects if item.get("defect_id")],
         "operations": [],
     }
-    inventory = [{k:v for k,v in row.items() if k not in {'stable_path','element_fingerprint'}}
-                 for row in build_element_inventory(sml) if row['allowed_operations']]
+    inventory = prompt_element_inventory(sml)
     from recovery_feedback import repair_feedback
     return f"""SML_PATCH_REQUEST
 你是 SML 局部修复专家。判断当前缺陷能否通过保守局部修改解决。
@@ -1108,6 +1112,7 @@ def build_patch_prompt(
 若所需构图调整无法用允许的操作表达，返回 full_rerender，不要压缩文本框掩盖溢出。
 
 ## 可用操作与硬边界
+对象的 rules 引用 rule_profiles；引用的规则完整适用于该对象，不得把其他对象的操作权限借用过来。
 每个目标只允许其 allowed_operations 列出的字段。crop 操作指向现有 crop 子节点，不能把 type 写在 img 上。
 没有可行字段或需要新增节点时返回 full_rerender；不得猜测 CSS 属性。
 {json.dumps({
@@ -1428,7 +1433,7 @@ def render_adaptive_batches(
         prompt = build_batch_prompt(blueprint, batch_pages, style_text)
         calibration_path = project / 'reports/runs' / run_id / 'pilot_calibration.json'
         if stage_name != 'pilot_render' and calibration_path.exists():
-            calibration = json.loads(calibration_path.read_text())
+            calibration = json.loads(calibration_path.read_text(encoding='utf-8'))
             if calibration.get('run_id') == run_id:
                 prompt += '\nPILOT_CALIBRATION（内部诊断，不是正文）：\n' + json.dumps({
                     'observed_codes': calibration.get('observed_codes', {}),
@@ -1463,7 +1468,7 @@ def render_adaptive_batches(
                     raw = invoke(budget,token,prompt,measured_model,context={'kind':'batch'},max_tokens=24000,timeout=1200)
                     token = budget.effective_token(token)
                     record_execution(index,attempt_id=token)
-                    receipt = json.loads((project / 'reports/request_journal' / f'{token}.json').read_text())
+                    receipt = json.loads((project / 'reports/request_journal' / f'{token}.json').read_text(encoding='utf-8'))
                     record_execution(index, **{k: receipt.get(k) for k in
                         ('provider_usage', 'finish_reason', 'response_id', 'model', 'requested_max_tokens')})
                     atomic_write_json(saved, {'response': str(raw)})

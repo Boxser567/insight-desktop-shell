@@ -1,22 +1,15 @@
 import json
-import importlib.util
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_creator_output.py"
 GUARD = ROOT / "scripts" / "tikhub_guard.py"
 CLIENT = ROOT / "scripts" / "tikhub_readonly.py"
-sys.path.insert(0, str(ROOT / "scripts"))
-CLIENT_SPEC = importlib.util.spec_from_file_location("creator_tikhub_readonly", CLIENT)
-CLIENT_MODULE = importlib.util.module_from_spec(CLIENT_SPEC)
-assert CLIENT_SPEC and CLIENT_SPEC.loader
-CLIENT_SPEC.loader.exec_module(CLIENT_MODULE)
 
 
 def run_json_tool(script: Path, payload: dict, *args: str) -> subprocess.CompletedProcess[str]:
@@ -61,6 +54,20 @@ def valid_creator_output() -> dict:
                 },
                 "audience": {"status": "unavailable"},
                 "asset_reuse_evidence": [],
+                "recent_commercial_activity": {
+                    "status": "verified",
+                    "latest_verified_commercial_at": "2026-09-12T12:00:00+08:00",
+                    "checked_at": "2026-09-21T10:00:00+08:00",
+                    "evidence_type": "observed_public",
+                    "evidence_refs": ["douyin:video:90001"],
+                    "evidence": [{
+                        "evidence_ref": "douyin:video:90001", "creator_key": "douyin:70001",
+                        "commercial_at": "2026-09-12T12:00:00+08:00",
+                        "record_kind": "explicit_paid_partnership", "evidence_type": "observed_public",
+                        "source_ref": "douyin:video:90001", "source_field": "paid_partnership_label",
+                        "commercial_marker": "平台标注：付费合作",
+                    }],
+                },
                 "commercial_capability": {
                     "recommendation_fit_score": 82,
                     "commercial_capability_score": None,
@@ -79,11 +86,40 @@ class EndpointContractTests(unittest.TestCase):
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         endpoints = {item["path"]: item for item in contract["endpoints"]}
 
+        # 2026-10-16: the v2 search family broke upstream; discovery runs on search_kol_v2.
         search = endpoints["/api/v1/douyin/xingtu_v2/search_creator"]
         self.assertEqual(search["method"], "GET")
-        self.assertEqual(search["parameters"]["seach_type"]["default"], 3)
+        self.assertEqual(search["status"], "failed")
+        self.assertEqual(search["last_failure_at"], "2026-10-16")
+        # API 默认是 2（昵称）；按内容发现必须显式传 3，这是策略要求而非接口默认值
+        self.assertEqual(search["parameters"]["seach_type"]["default"], 2)
+        self.assertEqual(search["parameters"]["seach_type"]["policy_required_value"], 3)
         self.assertIn("按内容", search["parameters"]["seach_type"]["meaning"])
-        self.assertEqual(search["last_verified_at"], "2026-09-21")
+        self.assertIn("显式", search["parameters"]["seach_type"]["policy_note"])
+
+        discovery = endpoints["/api/v1/douyin/xingtu/search_kol_v2"]
+        self.assertEqual(discovery["status"], "live")
+        self.assertEqual(discovery["last_verified_at"], "2026-10-16")
+        self.assertIn("price_20_60", " ".join(discovery["response_fields"]))
+
+        for path in (
+            "/api/v1/douyin/xingtu_v2/search_anchor",
+            "/api/v1/douyin/xingtu/search_kol_v1",
+        ):
+            self.assertEqual(endpoints[path]["status"], "failed")
+
+        audiences = endpoints["/api/v1/douyin/xingtu_v2/get_author_fans_distribution"]
+        self.assertEqual(audiences["status"], "live")
+        self.assertTrue(audiences["id_contract"]["two_object_canary_required"])
+        self.assertIn("平台模型标签", audiences["evidence_note"])
+
+        spread = endpoints["/api/v1/douyin/xingtu_v2/get_author_spread_info"]
+        self.assertEqual(spread["status"], "live")
+        self.assertTrue(spread["id_contract"]["two_object_canary_required"])
+
+        self.assertEqual(
+            endpoints["/api/v1/douyin/web/encrypt_uid_to_sec_user_id"]["status"], "live"
+        )
 
         audience = endpoints[
             "/api/v1/douyin/xingtu_v2/get_author_audience_distribution"
@@ -101,6 +137,9 @@ class EndpointContractTests(unittest.TestCase):
         self.assertIn("双对象语义健康检查", text)
         self.assertIn("python3 scripts/validate_creator_output.py", text)
         self.assertIn("禁止在执行脚本中读取", text)
+        self.assertIn("search_kol_v2", text)
+        self.assertIn("get_author_fans_distribution", text)
+        self.assertIn("平台模型标签", text)
 
 
 class CreatorValidatorTests(unittest.TestCase):
@@ -128,6 +167,33 @@ class CreatorValidatorTests(unittest.TestCase):
         result = run_json_tool(VALIDATOR, payload)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("asset_reuse_evidence", result.stdout + result.stderr)
+
+    def test_accepts_verified_commercial_activity_from_31_to_90_days(self) -> None:
+        payload = valid_creator_output()
+        payload["creators"][0]["recent_commercial_activity"][
+            "latest_verified_commercial_at"
+        ] = "2026-06-23T10:00:00+08:00"
+        activity = payload["creators"][0]["recent_commercial_activity"]
+        activity["evidence"][0]["commercial_at"] = activity["latest_verified_commercial_at"]
+        activity["selection_reason"] = "该场景缺少同角色近30天合格候选"
+        result = run_json_tool(VALIDATOR, payload)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_rejects_recommended_creator_without_verified_commercial_activity(self) -> None:
+        payload = valid_creator_output()
+        payload["creators"][0].pop("recent_commercial_activity")
+        result = run_json_tool(VALIDATOR, payload)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("recent_commercial_activity", result.stdout + result.stderr)
+
+    def test_rejects_recommended_creator_with_commercial_activity_over_90_days_old(self) -> None:
+        payload = valid_creator_output()
+        payload["creators"][0]["recent_commercial_activity"][
+            "latest_verified_commercial_at"
+        ] = "2026-06-22T10:00:00+08:00"
+        result = run_json_tool(VALIDATOR, payload)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("recent_commercial_activity", result.stdout + result.stderr)
 
     def test_rejects_metric_name_formula_mismatch(self) -> None:
         payload = valid_creator_output()
@@ -184,7 +250,7 @@ class ReadonlyClientTests(unittest.TestCase):
                 "--contract",
                 str(ROOT / "references" / "tikhub-endpoints.json"),
                 "--path",
-                "/api/v1/douyin/xingtu_v2/search_creator",
+                "/api/v1/douyin/xingtu/search_kol_v2",
                 "--query",
                 "keyword=雪糕",
                 "--dry-run",
@@ -195,42 +261,52 @@ class ReadonlyClientTests(unittest.TestCase):
             env={},
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("seach_type=3", result.stdout)
+        self.assertIn("keyword=雪糕", result.stdout)
         self.assertNotIn("config.toml", CLIENT.read_text(encoding="utf-8"))
-        self.assertNotIn("TIKHUB_API_KEY", CLIENT.read_text(encoding="utf-8"))
-        self.assertIn("enterprise_proxy", CLIENT.read_text(encoding="utf-8"))
 
-    def test_live_call_uses_enterprise_proxy_and_sanitizes_output(self) -> None:
-        observed = {}
-
-        def fake_proxy(connection, method, path, **kwargs):
-            observed.update(connection=connection, method=method, path=path, **kwargs)
-            return {
-                "code": 200,
-                "cache_url": "https://example.invalid/cache",
-                "data": {"items": [1], "xsec_token": "secret"},
-            }
-
-        with tempfile.TemporaryDirectory() as tmp:
-            output = Path(tmp) / "response.json"
-            argv = [
-                str(CLIENT),
+    def test_failed_route_is_refused_and_catalog_needs_explicit_flag(self) -> None:
+        failed = subprocess.run(
+            [
+                sys.executable, str(CLIENT),
                 "--contract", str(ROOT / "references" / "tikhub-endpoints.json"),
                 "--path", "/api/v1/douyin/xingtu_v2/search_creator",
-                "--query", "keyword=雪糕",
-                "--output", str(output),
-            ]
-            with patch.object(CLIENT_MODULE, "proxy_request", side_effect=fake_proxy), patch.object(sys, "argv", argv):
-                result = CLIENT_MODULE.main()
-            self.assertEqual(result, 0)
-            cleaned = json.loads(output.read_text(encoding="utf-8"))
+                "--query", "keyword=足球",
+                "--dry-run",
+            ],
+            text=True, capture_output=True, check=False, env={},
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("not callable", failed.stderr + failed.stdout)
 
-        self.assertEqual(observed["connection"], "tikhub")
-        self.assertEqual(observed["method"], "GET")
-        self.assertEqual(observed["query"]["keyword"], "雪糕")
-        serialized = json.dumps(cleaned)
-        self.assertNotIn("cache_url", serialized)
-        self.assertNotIn("xsec_token", serialized)
+        catalog = subprocess.run(
+            [
+                sys.executable, str(CLIENT),
+                "--contract", str(ROOT / "references" / "tikhub-endpoints.json"),
+                "--path", "/api/v1/douyin/xingtu_v2/get_author_convert_ability",
+                "--query", "o_author_id=6690905523996327943",
+                "--dry-run",
+            ],
+            text=True, capture_output=True, check=False, env={},
+        )
+        self.assertNotEqual(catalog.returncode, 0)
+
+        health = subprocess.run(
+            [
+                sys.executable, str(CLIENT),
+                "--contract", str(ROOT / "references" / "tikhub-endpoints.json"),
+                "--path", "/api/v1/douyin/xingtu_v2/get_author_convert_ability",
+                "--query", "o_author_id=6690905523996327943",
+                "--allow-catalog", "--dry-run",
+            ],
+            text=True, capture_output=True, check=False, env={},
+        )
+        self.assertEqual(health.returncode, 0, health.stderr + health.stdout)
+
+    def test_client_uses_gateway_transport(self) -> None:
+        text = CLIENT.read_text(encoding="utf-8")
+        self.assertIn("enterprise_proxy", text)
+        self.assertNotIn("TIKHUB_API_KEY", text)
+        self.assertNotIn("urlopen", text)
 
 
 if __name__ == "__main__":

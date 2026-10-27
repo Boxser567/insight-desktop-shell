@@ -22,7 +22,9 @@
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
+import time
 import urllib.request
 import urllib.error
 from ppt_proxy import request
@@ -119,16 +121,25 @@ def _failure_from_exception(exc):
 
 
 def _generate_with_fallback(
-    prompt, primary, fallback, retries, *, generate_fn=generate, **generation_options,
+    prompt, primary, fallback, retries, *, generate_fn=generate, attempt_records=None, **generation_options,
 ):
     chain = _build_model_chain(primary, fallback, retries)
     last_res = None
     for attempt, mid in enumerate(chain, 1):
+        cancel_file=os.environ.get('PPT_IMAGE_CANCEL_FILE')
+        if cancel_file and Path(cancel_file).exists():
+            return None, None, {'code':-1,'status':'cancelled','message':'cancel_requested'}, attempt-1
+        started = time.monotonic()
         try:
             res = generate_fn(prompt, mid, **generation_options)
         except Exception as exc:  # noqa: BLE001
             res = _failure_from_exception(exc)
         last_res = res
+        if attempt_records is not None:
+            attempt_records.append({'attempt': attempt, 'model': mid,
+                'status': 'success' if _ok(res) else 'failed',
+                'latency_s': round(time.monotonic() - started, 3),
+                'provider_usage': res.get('usage') if isinstance(res.get('usage'), dict) else None})
         if _ok(res):
             print("[INFO] model=%s attempt=%d ok" % (mid, attempt), file=sys.stderr)
             return mid, _first_url(res), res, attempt
@@ -157,8 +168,10 @@ def main():
     ap.add_argument("--timeout", type=int, default=300)
     a = ap.parse_args()
 
+    attempt_records = []
     chosen, used_url, last_res, _ = _generate_with_fallback(
         a.prompt, a.model, a.fallback_model, a.max_retries,
+        attempt_records=attempt_records,
         resolution=a.resolution, aspect_ratio=a.aspect_ratio,
         mime_type=a.mime_type, quality=a.quality,
         gen_count=a.gen_count, timeout=a.timeout,
@@ -166,11 +179,14 @@ def main():
 
     if not chosen:
         print(json.dumps(
-            {"code": -1, "status": "failed", "message": "all models failed",
+            {"code": -1, "status": "cancelled" if (last_res or {}).get('status')=='cancelled' else "failed",
+             "message": "cancel_requested" if (last_res or {}).get('status')=='cancelled' else "all models failed",
+             "provider_attempts": attempt_records,
              "last": str(last_res)[:400]}, ensure_ascii=False))
         sys.exit(1)
 
-    result = {"code": 0, "status": "success", "model": chosen, "url": used_url}
+    result = {"code": 0, "status": "success", "model": chosen, "url": used_url,
+              "provider_attempts": attempt_records}
     if a.out and used_url:
         try:
             _get(used_url, a.out)

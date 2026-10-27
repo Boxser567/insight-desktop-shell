@@ -69,7 +69,7 @@ describe('desktop integration client', () => {
     for (const listener of listeners) listener()
 
     expect(refresh).toHaveBeenCalledOnce()
-    expect(filterSkills(await catalog.list(sessionId), '')).toHaveLength(12)
+    expect(filterSkills(await catalog.list(sessionId), '')).toHaveLength(bundled.length)
     expect(nativeCatalog.list).toHaveBeenCalledTimes(2)
     expect(ctx.get).toHaveBeenCalledWith('skillCatalog')
     expect(remoteList).not.toHaveBeenCalled()

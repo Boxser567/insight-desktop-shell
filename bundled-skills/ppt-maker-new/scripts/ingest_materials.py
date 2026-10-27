@@ -134,8 +134,19 @@ def _pdf_text(path: Path) -> str:
 
 def _html_text(path: Path) -> str:
     parser = _HTMLTextExtractor()
-    parser.feed(path.read_text(encoding="utf-8", errors="replace"))
+    parser.feed(_decode_text(path))
     return "\n".join(parser.parts)
+
+
+def _decode_text(path: Path) -> str:
+    # BOMs are encoding signatures. Ambiguous legacy encodings must be decoded
+    # explicitly by the extracting client, never replaced with unreadable glyphs.
+    data = path.read_bytes()
+    if data.startswith((b'\xff\xfe\x00\x00', b'\x00\x00\xfe\xff')):
+        return data.decode('utf-32')
+    if data.startswith((b'\xff\xfe', b'\xfe\xff')):
+        return data.decode('utf-16')
+    return data.decode('utf-8-sig')
 
 
 def _read_text(path: Path) -> str:
@@ -151,9 +162,9 @@ def _read_text(path: Path) -> str:
     if suffix in {".html", ".htm"}:
         return _html_text(path)
     if suffix == ".json":
-        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        payload = json.loads(_decode_text(path))
         return json.dumps(payload, ensure_ascii=False, indent=2)
-    return path.read_text(encoding="utf-8", errors="replace")
+    return _decode_text(path)
 
 
 def _office_embedded_images(path: Path) -> list[tuple[str, bytes]]:
@@ -279,7 +290,7 @@ def parse_conversation_file(path: Path) -> list[dict]:
     if path.suffix.lower() not in HISTORY_EXTENSIONS:
         raise ValueError(f"unsupported history format: {path.suffix}")
     if path.suffix.lower() == ".json":
-        turns = _json_turns(json.loads(path.read_text(encoding="utf-8", errors="replace")))
+        turns = _json_turns(json.loads(_decode_text(path)))
     else:
         turns = _marked_text_turns(_read_text(path))
     return [{key: value for key, value in turn.items() if key != "_order"} for turn in turns]

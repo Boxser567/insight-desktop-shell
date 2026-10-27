@@ -97,7 +97,7 @@ No response + stopped local process does NOT prove the provider cancelled or did
 not charge. Text recovery is now automatic and bounded under work-budget.md; do not
 ask for duplicate-billing acknowledgement after an ordinary disconnect. The legacy
 text acknowledgement command remains a diagnostic override, not a normal step.
-Generated-image transactions are unchanged: after inspection, an explicitly accepted
+For ambiguous submitted generated-image transactions, after inspection an explicitly accepted
 unknown IMAGE request uses the image-specific acknowledgement below. Neither text
 nor image usage is reset by cancellation:
 
@@ -112,6 +112,16 @@ allowance; normal project/page limits still apply. Image acknowledgement archive
 the exact request and approval before permitting a later explicit resume. Temporary
 filenames are attempt-unique. Neither command sends a new paid request or automatically
 resumes. Saved image output should be recovered, not acknowledged as unknown.
+
+Local preparation is recorded as `preparing`; a proven pre-dispatch cancellation or
+child-launch failure is `not_submitted`. Neither is a remote unknown request. After
+repairing the local dependency, an explicit resume can continue those tasks. Saved
+output/cache/hash commit failures still retain recoverable authoritative evidence.
+`image_transactions` is authoritative; `image_requests` is a diagnostic history copy.
+Failure to write that copy emits a warning and records `history_write_errors` where
+writable, without blocking generation or readiness. Metrics exposes history gaps
+and incomplete coverage. Authority/ownership/hash writes are not optional. Previously
+submitted/unknown records without proof of non-submission are not silently unlocked.
 
 Limitations: no provider-side query/cancel/idempotency adapter; no exactly-once
 billing guarantee. Image-generator-internal bounded retry/fallback is inherited,

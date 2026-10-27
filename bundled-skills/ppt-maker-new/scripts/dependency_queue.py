@@ -29,7 +29,7 @@ def asset_stage_finished(project):
     run_id = os.environ.get('PPT_BUILD_RUN_ID', '')
     path = project/'reports/runs'/run_id/'asset_stage.json'
     try:
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError):
         return False  # An unreadable marker is not proof of completion.
     if not isinstance(record, dict) or record.get('status') == 'running':
@@ -57,8 +57,28 @@ def dependency_batches(project, pages, batch_builder):
 
 def ready_batches(project, batches):
     blueprint_path=project/'reports/blueprint.json'
-    blueprint=json.loads(blueprint_path.read_text()) if blueprint_path.exists() else None
+    blueprint=json.loads(blueprint_path.read_text(encoding='utf-8')) if blueprint_path.exists() else None
     from image_lineage import lineage_findings
+    from stage_runtime import sha256_file
+    # Scope is one scan, not a persistent mtime cache. Revalidate the stamp on
+    # every lookup, discard at the next scan, and retain final consumer hashes.
+    hashes = {}
+    def stamp(path):
+        stat = path.stat()
+        return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+    def file_hash(path):
+        before = stamp(path)
+        if path in hashes and hashes[path][0] == before:
+            return hashes[path][1]
+        digest = sha256_file(path)
+        if stamp(path) != before:
+            raise ValueError('asset changed during readiness scan')
+        hashes[path] = (before, digest)
+        return digest
+    try:
+        asset_cache = json.loads((project/'reports/image-cache.json').read_text(encoding='utf-8')).get('assets',{})
+    except (OSError, ValueError, AttributeError):
+        asset_cache = {}
     def ready(image):
         target = resolve_asset_target(project / 'assets', image['src'])
         if not target.is_file():
@@ -68,10 +88,13 @@ def ready_batches(project, batches):
             marker = project / 'reports/runs' / run_id / 'assets_ready' / (hashlib.sha256(image['src'].encode()).hexdigest() + '.json')
             if not marker.exists():
                 return False
-            return json.loads(marker.read_text()).get('sha256') == hashlib.sha256(target.read_bytes()).hexdigest()
+            try:
+                return json.loads(marker.read_text(encoding='utf-8')).get('sha256') == file_hash(target)
+            except (OSError, ValueError, AttributeError):
+                return False
         return True
     return [index for index, batch in enumerate(batches)
-            if (blueprint is None or not lineage_findings(project,blueprint,batch)) and all(ready(image)
+            if (blueprint is None or not lineage_findings(project,blueprint,batch,file_hash=file_hash,asset_cache=asset_cache)) and all(ready(image)
                    for page in batch for image in page.get('images', []))]
 
 

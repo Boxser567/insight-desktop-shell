@@ -42,6 +42,8 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 from lxml import etree  # python-pptx's XML tree
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
+from platform_runtime import configure_console
+configure_console()
 from quality_policy import partition
 from backend_capabilities import (SHAPE_ENUM_NAMES, CHART_ENUM_NAMES,
                                   POLYLINE_ENUM_NAMES, POLYLINE_PRESETS, AUTO_FIT_ENUM_NAMES,
@@ -59,7 +61,6 @@ TEXT_TYPE_DEFAULT_SIZE = {
     "caption": 12,
 }
 
-DEFAULT_FONT = "思源黑体"
 DEFAULT_TEXT_COLOR = "rgb(31, 35, 41)"
 
 SHAPE_TYPE_MAP = {key: getattr(MSO_SHAPE, name) for key, name in SHAPE_ENUM_NAMES.items()}
@@ -230,9 +231,10 @@ class TextStyle:
 def content_style(content: ET.Element, theme_defaults: dict[str, dict[str, Any]]) -> TextStyle:
     st = TextStyle()
     text_type = attr(content, "textType")
-    td = theme_defaults.get(text_type or "body", {}) if text_type else {}
+    td = theme_defaults.get(text_type or "body", {})
     st.font_size = _num(attr(content, "fontSize"), td.get("fontSize"))
-    st.font_family = attr(content, "fontFamily") or td.get("fontFamily") or DEFAULT_FONT
+    from font_policy import default_font_family
+    st.font_family = attr(content, "fontFamily") or td.get("fontFamily") or default_font_family()
     st.color = attr(content, "color") or td.get("fontColor") or DEFAULT_TEXT_COLOR
     st.bold = _bool(attr(content, "bold"), None)
     st.italic = _bool(attr(content, "italic"), None)
@@ -274,20 +276,22 @@ def span_style(el: ET.Element) -> TextStyle:
     return st
 
 
+def set_font_family(font, family):
+    """Write Latin, East Asian and complex-script faces for every native text sink."""
+    font.name = family
+    for tag in ('a:latin', 'a:ea', 'a:cs'):
+        element = font._element.find(qn(tag))
+        if element is None:
+            element = font._element.makeelement(qn(tag), {})
+            font._element.append(element)
+        element.set('typeface', family)
+
+
 def set_run_font(run, style: TextStyle) -> None:
     if style.font_size is not None:
         run.font.size = pt(style.font_size)
     if style.font_family:
-        run.font.name = style.font_family
-        # East Asian text uses a:ea; set it to the same family so Chinese
-        # characters pick up the intended face instead of the theme default.
-        rPr = run._r.get_or_add_rPr()
-        for tag in ("a:latin", "a:ea", "a:cs"):
-            e = rPr.find(qn(tag))
-            if e is None:
-                e = rPr.makeelement(qn(tag), {})
-                rPr.append(e)
-            e.set("typeface", style.font_family)
+        set_font_family(run.font, style.font_family)
     if style.color:
         spec = parse_color(style.color)
         if spec and spec.rgb:
@@ -1039,7 +1043,7 @@ def _csv_values(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip() != ""]
 
 
-def add_chart(slide, el: ET.Element, warnings: list[dict[str, Any]]) -> None:
+def add_chart(slide, el: ET.Element, warnings: list[dict[str, Any]], style_defaults=None) -> None:
     x, y = px(attr(el, "topLeftX")), px(attr(el, "topLeftY"))
     w, h = px(attr(el, "width")), px(attr(el, "height"))
     plot_area = child(el, "chartPlotArea")
@@ -1184,6 +1188,27 @@ def add_chart(slide, el: ET.Element, warnings: list[dict[str, Any]]) -> None:
                             chart.value_axis.major_gridlines.format.line.color.rgb = spec.rgb
                         except Exception:
                             pass
+    # Chart text otherwise silently inherits Office theme fonts, bypassing the
+    # SML text contract. Chart title/axes/legend/labels share the body family.
+    from font_policy import default_font_family
+    family = ((style_defaults or {}).get('body') or {}).get('fontFamily') or default_font_family()
+    if chart.has_legend:
+        set_font_family(chart.legend.font, family)
+    if chart.has_title:
+        title_family = attr(title_el, 'fontFamily') or family
+        for paragraph in chart.chart_title.text_frame.paragraphs:
+            set_font_family(paragraph.font, title_family)
+            for run in paragraph.runs:
+                set_font_family(run.font, title_family)
+    for plot_item in chart.plots:
+        if plot_item.has_data_labels:
+            set_font_family(plot_item.data_labels.font, family)
+    for axis_name in ('category_axis', 'value_axis'):
+        try:
+            axis = getattr(chart, axis_name)
+        except ValueError:  # Pie/doughnut charts have no axes.
+            continue
+        set_font_family(axis.tick_labels.font, family)
     # donut hole size
     if donut_inner is not None and plots:
         try:
@@ -1242,6 +1267,16 @@ def render_slide(
     icon_renderer,
     warnings: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # Managed single-page/working-deck exports have no presentation-level theme.
+    # Carry the page's explicit body family into native charts as well.
+    if not style_defaults.get('body', {}).get('fontFamily'):
+        from collections import Counter
+        families = [attr(node, 'fontFamily') for node in slide_el.iter()
+                    if local(node.tag) == 'content' and attr(node, 'textType', 'body') == 'body'
+                    and attr(node, 'fontFamily')]
+        if families:
+            style_defaults = dict(style_defaults, body=dict(style_defaults.get('body', {}),
+                                 fontFamily=Counter(families).most_common(1)[0][0]))
     warnings.extend(capability_findings(slide_el))
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
     style_el = child(slide_el, "style")
@@ -1270,7 +1305,7 @@ def render_slide(
             elif tag == "table":
                 add_table(slide, el, style_defaults, warnings)
             elif tag == "chart":
-                add_chart(slide, el, warnings)
+                add_chart(slide, el, warnings, style_defaults)
             elif tag in ("undefined", "embed", "whiteboard"):
                 warnings.append({"code": "element_skipped", "message": f"<{tag}> is server-only and was skipped"})
             else:

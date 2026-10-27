@@ -3,15 +3,15 @@ name: ppt-maker-new-new
 description: Use when creating, rebuilding, or materially editing a PowerPoint, slide deck, PPTX, or presentation, including source materials, exported chat histories, intermediate artifacts, or an existing deck.
 ---
 
-# PPT Maker — 5.5.8-rc13 all-stage text model update
+# PPT Maker — 5.5.8-rc17 GPT-6.1 model-update candidate
 
 ## Enterprise runtime
 
-This distribution uses the logged-in enterprise plugin for every paid model call.
-Do not read local vendor keys, ask the user for API keys, or bypass the proxy.
-Text calls use `ppt-text`; image generation uses `media-generator`. Before
-diagnosing authentication, limits, or uncertain calls, read
-[references/enterprise-proxy.md](references/enterprise-proxy.md).
+This distribution uses the logged-in enterprise plugin and unified API gateway
+for every paid model call. Text calls use `ppt-text`; image generation uses
+`media-generator`. Vendor keys and upstream request signing stay on the server.
+Read [references/enterprise-proxy.md](references/enterprise-proxy.md) before
+diagnosing authentication, limits, or uncertain calls.
 
 Under acceptance testing, not release-certified. This import package contains runtime
 files only; tests, acceptance reports and retired workflows stay outside the ZIP.
@@ -19,7 +19,7 @@ files only; tests, acceptance reports and retired workflows stay outside the ZIP
 
 ## Responsibility and defaults
 
-- **DSH extracts verbatim; gpt-6-sol handles source understanding, Brief,
+- **DSH extracts verbatim; gpt-6.1-sol handles source understanding, Brief,
   planning/design and page SML/patches, including Brief/planning recovery,
   closing repair and managed page revision.** Local code schedules, validates, applies exact transactions,
   rolls back, converts and publishes. Registered asset derivatives/common-font
@@ -50,8 +50,11 @@ python3 <skill>/scripts/ppt.py doctor --project <project>
 ```
 
 Existing input/build/assets cause a conflict, not automatic deletion/adoption.
-Doctor is offline, not proof of gateway access or background-job survival. Discover
+Doctor checks imports, UTF-8 file transactions, cross-process locking and native
+PPTX save/reopen. It is offline, not proof of gateway access or background-job survival. Discover
 actual DSH extraction/job tools; never guess tool names or credentials.
+Windows has a bundled host adapter (native acceptance still required); see the
+runtime reference for the Python environment and dependency setup.
 
 For files/history/intermediate artifacts read [lossless handoff](references/dsh-handoff.md),
 [source authority](references/context-authority.md) and [audience copy](references/audience-copy.md).
@@ -142,8 +145,15 @@ SOL renders `adaptive-batch` frames, normally up to 9/5/3 simple/normal/complex 
 per call; complete siblings survive truncation. First passes precede page repair.
 Do not raise concurrency without checking throttling and actual submission metrics.
 `ppt.py metrics` includes provider-reported usage across stages, including closing repair,
-and checks receipt coverage against the attempt ledger. Missing historical
+and checks text receipt coverage against the attempt ledger. Image attempts/fallbacks,
+latency and reported usage are separate in `image_usage_summary`; unavailable historical
+image attempt details remain unknown. Missing historical
 usage is unknown, not zero; partial token subtotals are not a cost or speed guarantee.
+
+Render requests include advisory `layout_advice` for explicitly sized text regions;
+SOL handles space risks within the existing call. This adds no character quota,
+approval or review stage. Patch objects reference shared `rule_profiles`, preserving
+their exact per-object operations and bounds; the transactional executor is unchanged.
 
 SML details: [local syntax](lark/references/xml/xml-schema-quick-ref.md).
 Image cards use native picture-filled contours: inset, edge-joined or full-background.

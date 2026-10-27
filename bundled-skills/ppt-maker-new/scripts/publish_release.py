@@ -24,9 +24,9 @@ def main() -> int:
     print(json.dumps({
         "published": True,
         "receipt": str(receipt),
-        "status": json.loads(receipt.read_text()).get('status'),
+        "status": json.loads(receipt.read_text(encoding='utf-8')).get('status'),
         "issues_path": str(project/'reports/delivery_issues.md')
-            if json.loads(receipt.read_text()).get('status')=='needs_attention' else None,
+            if json.loads(receipt.read_text(encoding='utf-8')).get('status')=='needs_attention' else None,
     }, ensure_ascii=False))
     return 0
 

@@ -10,16 +10,45 @@ import subprocess
 import sys
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 
-from sol_common import resolve_asset_target
+from sol_common import resolve_asset_target, portable_asset_key, is_safe_asset_src
 from stage_runtime import atomic_write_json, sha256_file, sha256_text, write_stage_metric
 from image_lineage import image_prompt, demand_hash, lineage_findings
 
 
 DEFAULT_GEN = str(Path(__file__).parent / "gen_gpt_image2.py")
 GENERATED_IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
+# rc13/rc14 -> rc15 changes observation/cancellation, not successful image semantics.
+# Remove this compatibility alias when generation semantics change. Custom
+# generators still require an exact file hash; no filename-based cache trust.
+TELEMETRY_COMPATIBLE_GENERATORS = (
+    # The enterprise rc13 adapter has the same success payload and image settings.
+    'c541d9ccaf9169e773a3ab4e09045b7b9376cfdc704f6d5f6f66a494467d1cb0',
+    '788fffe45b0a06ff38c70a58256fcd755813b0238e5a45ef3bebd5258507a884',
+    '18207a4e8fd0b31a93e8e8d9eb5308ef4b2df733fa4fc95df562de48acdf4767',
+)
+
+
+def _save_image_transaction(reports, path, transaction):
+    """Ownership is authoritative; an unavailable telemetry copy cannot veto it."""
+    atomic_write_json(path, transaction)
+    try:
+        atomic_write_json(reports/'image_requests'/(transaction['request_id']+'.json'), transaction)
+    except OSError as exc:
+        # No provider payloads/credentials in diagnostics. Retain the warning in
+        # the authoritative record so status/metrics can expose the coverage gap.
+        transaction.setdefault('history_write_errors', []).append({
+            'status':transaction['status'], 'error_type':type(exc).__name__})
+        print(f"[WARN] {transaction['src']}: image history copy unavailable ({type(exc).__name__})", file=sys.stderr)
+        try:
+            atomic_write_json(path, transaction)
+        except OSError:
+            # The authoritative transition already succeeded above. Failure to
+            # append its diagnostic must not prevent dispatch after 'submitted'.
+            # The next transition carries the warning again; console retains it.
+            print(f"[WARN] {transaction['src']}: history warning persistence unavailable", file=sys.stderr)
 
 
 def collect_specs(blueprint: dict) -> list[dict]:
@@ -81,14 +110,24 @@ def run(
     if workers < 1:
         raise ValueError("workers must be at least 1")
     reports = project / "reports"
+    run_id = os.environ.get('PPT_BUILD_RUN_ID')
+    cancel_file = reports/'cancel'/(run_id+'.json') if run_id else None
+    def cancelled():
+        return cancel_file is not None and cancel_file.exists()
     assets = project / "assets"
     assets.mkdir(parents=True, exist_ok=True)
     blueprint = json.loads((reports / "blueprint.json").read_text(encoding="utf-8"))
     specs = collect_specs(blueprint)
     # Validate the entire deck before filtering pilot pages or buying image work.
     identities = {}
+    spellings = {}
     conflicts = []
     for spec in specs:
+        key = portable_asset_key(spec['src'])
+        if not is_safe_asset_src(spec['src']) or key in spellings and spellings[key] != spec['src']:
+            conflicts.append({'code':'asset_consumer_error','page_no':spec['page_no'],
+                              'src':spec['src'],'message':'unsafe or colliding cross-platform image path'})
+        spellings[key] = spec['src']
         identity = ('asset', spec['asset_id']) if spec.get('asset_id') else ('generated', demand_hash(spec, blueprint))
         if spec['src'] in identities and identities[spec['src']] != identity:
             conflicts.append({'code':'asset_consumer_error','page_no':spec['page_no'],
@@ -201,10 +240,15 @@ def run(
         contract_hash = sha256_text(json.dumps(
             contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         ))
+        compatible_contracts = {contract_hash}
+        if generator_path.resolve() == Path(DEFAULT_GEN).resolve():
+            compatible_contracts.update(sha256_text(json.dumps(dict(contract,generator=identity),
+                ensure_ascii=False,sort_keys=True,separators=(',',':')))
+                for identity in TELEMETRY_COMPATIBLE_GENERATORS)
         cache_entry = cache_assets.get(spec["src"], {})
         transaction_path = reports/'image_transactions'/(sha256_text(spec['src'])+'.json')
-        transaction = json.loads(transaction_path.read_text()) if transaction_path.exists() else {}
-        if transaction.get('contract_sha256') == contract_hash and transaction.get('status') == 'response_saved':
+        transaction = json.loads(transaction_path.read_text(encoding='utf8')) if transaction_path.exists() else {}
+        if transaction.get('contract_sha256') in compatible_contracts and transaction.get('status') == 'response_saved':
             recovered = False
             temporary = resolve_asset_target(assets, transaction['temporary_src'])
             expected = transaction['output_sha256']
@@ -224,9 +268,9 @@ def run(
                 cache_assets[spec['src']] = cache_entry
                 atomic_write_json(cache_path,cache)
                 transaction = dict(transaction,status='committed')
-                atomic_write_json(transaction_path,transaction)
+                _save_image_transaction(reports,transaction_path,transaction)
         cache_matches = False
-        if target.exists() and not overwrite and cache_entry.get("contract_sha256") == contract_hash:
+        if target.exists() and not overwrite and cache_entry.get("contract_sha256") in compatible_contracts:
             try:
                 cache_matches = cache_entry.get("output_sha256") == sha256_file(target)
             except OSError:
@@ -267,25 +311,64 @@ def run(
     def generate_one(item: tuple[dict, Path, Path, list[str], str]) -> tuple[dict, Path, bool, str, str]:
         spec, target, temporary, command, contract_hash = item
         transaction_path=reports/'image_transactions'/(sha256_text(spec['src'])+'.json')
-        transaction={'src':spec['src'],'request_id':uuid.uuid4().hex,'contract_sha256':contract_hash,'status':'submitted',
+        transaction={'src':spec['src'],'request_id':uuid.uuid4().hex,'contract_sha256':contract_hash,'status':'preparing',
             'run_id':os.environ.get('PPT_BUILD_RUN_ID'),
+            'started':time.time(), 'requested_model':model, 'resolution':resolution,
             'temporary_src':str(temporary.relative_to(assets.resolve())),
             'previous_sha256':sha256_file(target) if target.exists() else None}
+        def persist(**changes):
+            transaction.update(changes)
+            _save_image_transaction(reports,transaction_path,transaction)
         try:
+            persist()
             temporary.unlink(missing_ok=True)
-            atomic_write_json(transaction_path,transaction)
-            result = subprocess.run(command, capture_output=True, text=True)
+            if cancelled():
+                persist(status='not_submitted',reason='cancel_requested')
+                return spec, target, False, 'cancelled before dispatch', contract_hash
+            persist(status='submitted')
+            # A cancellation can arrive while persisting the submission intent.
+            if cancelled():
+                persist(status='not_submitted',reason='cancel_requested')
+                return spec, target, False, 'cancelled before dispatch', contract_hash
+            child_env=dict(os.environ, PYTHONIOENCODING='utf-8')
+            child_env.pop('PPT_IMAGE_CANCEL_FILE', None)
+            if cancel_file is not None:
+                child_env['PPT_IMAGE_CANCEL_FILE']=str(cancel_file.resolve())
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8',
+                                        env=child_env)
+            except (FileNotFoundError, PermissionError) as exc:
+                # Python reports these launch failures before the child can run.
+                # Do not apply this classification to a nonzero child exit or to
+                # ambiguous communication errors after launch.
+                persist(status='not_submitted',reason='child_launch_failed',error_type=type(exc).__name__)
+                return spec, target, False, 'child launch failed: '+type(exc).__name__, contract_hash
+            transaction.update(finished=time.time())
+            transaction['latency_s']=round(transaction['finished']-transaction['started'],3)
+            try:
+                payload=json.loads(result.stdout)
+            except (ValueError, TypeError):
+                payload={}
+            # Only structured usage metadata; never signed URLs or auth fields.
+            if isinstance(payload,dict) and isinstance(payload.get('provider_attempts'),list):
+                transaction['provider_attempts']=[{k:row[k] for k in
+                    ('attempt','model','status','latency_s','provider_usage') if k in row}
+                    for row in payload['provider_attempts'] if isinstance(row,dict)]
             if result.returncode != 0 or not temporary.exists() or temporary.stat().st_size == 0:
                 detail = (result.stderr or result.stdout or "generator produced no file")[-500:]
+                # Only our built-in adapter supplies this explicit pre-API proof.
+                if (generator_path.resolve()==Path(DEFAULT_GEN).resolve() and isinstance(payload,dict)
+                        and payload.get('status')=='cancelled' and payload.get('provider_attempts')==[]):
+                    persist(status='not_submitted',reason='cancel_requested')
+                    return spec, target, False, 'cancelled before provider request', contract_hash
                 # A failed process/download does not prove the provider did no work.
-                atomic_write_json(transaction_path,dict(transaction,status='outcome_unknown',reason=detail,
-                    provider_stdout=result.stdout,provider_stderr=result.stderr))
+                persist(status='outcome_unknown',reason=detail,
+                    provider_stdout=result.stdout,provider_stderr=result.stderr)
                 return spec, target, False, detail, contract_hash
             consumer_check(temporary)
             receipt={'contract_sha256':contract_hash,'output_sha256':sha256_file(temporary),
                      'demand_sha256':demand_hash(spec,blueprint)}
-            atomic_write_json(transaction_path,dict(transaction,status='response_saved',
-                              output_sha256=receipt['output_sha256'],receipt=receipt))
+            persist(status='response_saved',output_sha256=receipt['output_sha256'],receipt=receipt)
             if target.exists() and sha256_file(target) != transaction['previous_sha256']:
                 raise ValueError('asset target changed during generation; refusing overwrite')
             os.replace(temporary, target)
@@ -296,26 +379,37 @@ def run(
 
     if pending:
         with ThreadPoolExecutor(max_workers=min(workers, len(pending))) as executor:
-            futures = [executor.submit(generate_one, item) for item in pending]
-            for future in as_completed(futures):
-                spec, target, succeeded, detail, contract_hash = future.result()
-                if succeeded:
-                    transaction_path=reports/'image_transactions'/(sha256_text(spec['src'])+'.json')
-                    transaction=json.loads(transaction_path.read_text())
-                    receipt=transaction['receipt']
-                    if receipt['output_sha256'] != sha256_file(target):
-                        print(f'[FAIL] {target.name}: asset changed before receipt commit',file=sys.stderr)
-                        failures += 1
+            remaining=iter(pending)
+            futures=set()
+            def fill_slots():
+                while len(futures)<workers and not cancelled():
+                    item=next(remaining,None)
+                    if item is None:
+                        break
+                    futures.add(executor.submit(generate_one,item))
+            fill_slots()
+            while futures:
+                done,futures=wait(futures,return_when=FIRST_COMPLETED)
+                for future in done:
+                    spec, target, succeeded, detail, contract_hash = future.result()
+                    if succeeded:
+                        transaction_path=reports/'image_transactions'/(sha256_text(spec['src'])+'.json')
+                        transaction=json.loads(transaction_path.read_text(encoding='utf8'))
+                        receipt=transaction['receipt']
+                        if receipt['output_sha256'] != sha256_file(target):
+                            print(f'[FAIL] {target.name}: asset changed before receipt commit',file=sys.stderr)
+                            failures += 1
+                            continue
+                        print(f"[generated] {target.name} {detail}")
+                        generated_successes += 1
+                        cache_assets[spec['src']] = receipt
+                        atomic_write_json(cache_path, cache)
+                        _save_image_transaction(reports,transaction_path,dict(transaction,status='committed'))
+                        mark_ready(spec, target)
                         continue
-                    print(f"[generated] {target.name} {detail}")
-                    generated_successes += 1
-                    cache_assets[spec['src']] = receipt
-                    atomic_write_json(cache_path, cache)
-                    atomic_write_json(transaction_path,dict(transaction,status='committed'))
-                    mark_ready(spec, target)
-                    continue
-                print(f"[FAIL] {target.name}: {detail}", file=sys.stderr)
-                failures += 1
+                    print(f"[FAIL] {target.name}: {detail}", file=sys.stderr)
+                    failures += 1
+                fill_slots()
     atomic_write_json(cache_path, cache)
     lineage_errors=lineage_findings(project,blueprint,
         [p for p in blueprint.get('pages',[]) if page_numbers is None or p['no'] in page_numbers])
@@ -323,11 +417,11 @@ def run(
     if lineage_errors and not failures:
         failures=len(lineage_errors)
     write_stage_metric(
-        project, "images", started, status="failed" if failures else "success",
+        project, "images", started, status="cancelled" if cancelled() else ("failed" if failures else "success"),
         assets=len(specs), generated=generated_successes, failures=failures, workers=workers,
     )
     print(f"DONE total={len(specs)} failures={failures}")
-    return 1 if failures else 0
+    return 130 if cancelled() else (1 if failures else 0)
 
 
 def main() -> int:

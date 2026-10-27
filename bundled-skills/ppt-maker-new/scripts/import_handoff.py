@@ -46,7 +46,7 @@ def verified_asset_sources(project):
     """Resolve only receipt-bound, exact-byte source relocations."""
     project = Path(project)
     manifest = project / 'reports/assets_manifest.json'
-    rows = json.loads(manifest.read_text()).get('assets', []) if manifest.exists() else []
+    rows = json.loads(manifest.read_text(encoding='utf-8')).get('assets', []) if manifest.exists() else []
     sources = {a['asset_id']: Path(a['staged_path']) for a in rows}
     for row in rows:
         if row.get('sha256') and digest(sources[row['asset_id']]) != row['sha256']:
@@ -55,7 +55,7 @@ def verified_asset_sources(project):
     if not path.exists():
         return sources
     receipt = verify_receipt(project)
-    bindings = json.loads(path.read_text())
+    bindings = json.loads(path.read_text(encoding='utf-8'))
     if (bindings.get('handoff_sha256') != receipt['sha256'] or
             bindings.get('assets_manifest_sha256') != digest(manifest)):
         raise ValueError('asset source bindings do not match the handoff')
@@ -89,7 +89,7 @@ def recover_asset_sources(project):
         manifest = project / 'reports/assets_manifest.json'
         # A bad prior binding is evidence to inspect, not silently replace.
         verified_asset_sources(project)
-        rows = json.loads(manifest.read_text()).get('assets', [])
+        rows = json.loads(manifest.read_text(encoding='utf-8')).get('assets', [])
         bindings = [{'asset_id': a['asset_id'], 'sha256': a['sha256'],
                      'path': str(snapshot_asset(project, Path(a['staged_path']), a['sha256']))}
                     for a in rows]
@@ -167,7 +167,7 @@ def _import_package(package, project):
     reports = project / 'reports'
     key = hashlib.sha256(json.dumps(package, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     receipt_path=reports/'handoff_receipt.json'
-    prior=json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
+    prior=json.loads(receipt_path.read_text(encoding='utf-8')) if receipt_path.exists() else {}
     occupied=any((reports/name).exists() for name in ('blueprint.json','build_state.json','brief.json','dsh_status.json'))
     if (prior and prior.get('sha256') != key) or (occupied and not prior):
         raise ValueError('project_input_conflict: existing project inputs/outputs must not be silently replaced; use a separate project for a new task')
@@ -224,9 +224,9 @@ def _import_package(package, project):
 
 
 def verify_receipt(project):
-    receipt = json.loads((project / 'reports/handoff_receipt.json').read_text())
+    receipt = json.loads((project / 'reports/handoff_receipt.json').read_text(encoding='utf-8'))
     package_path = Path(receipt['package_path'])
-    package = json.loads(package_path.read_text())
+    package = json.loads(package_path.read_text(encoding='utf-8-sig'))
     key = hashlib.sha256(json.dumps(package, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     if key != receipt['sha256']:
         raise ValueError('handoff package hash mismatch')
@@ -242,4 +242,4 @@ if __name__ == '__main__':
     parser.add_argument('--package', required=True)
     parser.add_argument('--project', required=True)
     args = parser.parse_args()
-    print(json.dumps(import_package(json.loads(Path(args.package).read_text()), Path(args.project)), ensure_ascii=False))
+    print(json.dumps(import_package(json.loads(Path(args.package).read_text(encoding='utf-8-sig')), Path(args.project)), ensure_ascii=False))

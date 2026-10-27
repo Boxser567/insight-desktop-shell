@@ -20,7 +20,11 @@
 
 scripts/generate-skill-presentations.mjs 遍历实际 bundled-skills，生成被 Git 忽略的 build/skill-presentations.json。测试、integration 类型检查及构建前生成，新增合法包不改代码名单。
 
-索引分开记录 name 与 entryPath，支持目录 ppt-maker-new 声明 ppt-maker-new-new。它不是执行注册表，不为磁盘缺失包提供可调用项。当前为 12 个平台技能，media-generator 显示“多媒体创作”。现有打包规则完整携带正文、脚本、资源和 ui.json。
+索引分开记录 name 与 entryPath，支持目录 ppt-maker-new 声明 ppt-maker-new-new。它不是执行注册表，不为磁盘缺失包提供可调用项。当前为 14 个平台技能，media-generator 显示“多媒体创作”。现有打包规则完整携带正文、脚本、资源和 ui.json。
+
+随包技能同步自 Codeup insight-desktop-skills 的 master 提交 0fcdf8934c50c13e238de41f0457e539afa0f1d1（2026-10-23），包含“线下活动查询”和“达人深度背调与品牌合作风险”，PPT 包版本为 5.5.8-rc17。保留 Shell 已上线的 media-generator 交付说明修正：远端 URL 不等于本地落盘，接受 URL 的下游可直接交接。
+
+达人背调包另有本地兼容修正：预算台账锁按系统使用 POSIX flock 或 Windows msvcrt，取消启动时对 fcntl 的硬依赖。保持同一台账、原预算规则及请求链路；锁只负责本机进程互斥，详见该包的采集器使用说明。
 
 ## 来源与可用性
 

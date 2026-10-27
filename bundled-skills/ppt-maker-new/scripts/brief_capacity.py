@@ -29,12 +29,12 @@ def source_page_contract(project: Path, source_id: str | None = None) -> dict:
     if not source_id:
         if not path.exists():
             return {}
-        source_id = json.loads(path.read_text())['preserve_source_id']
+        source_id = json.loads(path.read_text(encoding='utf-8'))['preserve_source_id']
     receipt_path = project / 'reports/handoff_receipt.json'
     if not receipt_path.exists():
         raise ValueError('preserve-pages requires a lossless DSH handoff with page locators')
-    receipt = json.loads(receipt_path.read_text())
-    package = json.loads(Path(receipt['package_path']).read_text())
+    receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+    package = json.loads(Path(receipt['package_path']).read_text(encoding='utf-8'))
     sources = [s for s in package['sources'] if s['source_id'] == source_id]
     if len(sources) != 1:
         raise ValueError('preserve source_id is missing or ambiguous')

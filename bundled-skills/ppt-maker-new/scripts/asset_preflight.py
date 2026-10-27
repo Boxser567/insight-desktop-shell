@@ -65,7 +65,7 @@ def materialize(source: Path, target: Path, *, max_edge: int = 4096) -> dict:
             transformed = True
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                 '--normalize', str(source), str(temporary), str(max_edge)],
-                capture_output=True, text=True, timeout=90)
+                capture_output=True, text=True, timeout=90, encoding='utf-8')
             if result.returncode:
                 raise AssetConsumerError('asset normalization failed (no model retry): ' + result.stderr[-1200:])
         info = consumer_check(temporary, max_edge)
@@ -95,7 +95,7 @@ def verify_assets(rows: list[dict]) -> list[str]:
 def preflight_project(project: Path) -> dict:
     from gen_images import collect_specs, _asset_lookup
     from sol_common import resolve_asset_target
-    blueprint = json.loads((project / 'reports/blueprint.json').read_text())
+    blueprint = json.loads((project / 'reports/blueprint.json').read_text(encoding='utf-8'))
     if (project / 'reports/handoff_receipt.json').exists():
         from import_handoff import verify_receipt
         try:
@@ -114,7 +114,7 @@ def preflight_project(project: Path) -> dict:
         return report
     report_path = project / 'reports/asset_preflight.json'
     try:
-        old = json.loads(report_path.read_text()).get('assets', []) if report_path.exists() else []
+        old = json.loads(report_path.read_text(encoding='utf-8')).get('assets', []) if report_path.exists() else []
     except (ValueError, OSError) as exc:
         return {'version': 1, 'status': 'failed', 'assets': [],
                 'errors': [{'code': 'asset_preflight_corrupt', 'message': str(exc)}]}
@@ -133,7 +133,7 @@ def preflight_project(project: Path) -> dict:
             if target.exists() and not prior and sha256_file(target) != sha256_file(source):
                 # Old image-cache lineage permits migration, never an arbitrary overwrite.
                 legacy_path = project / 'reports/image-cache.json'
-                legacy = json.loads(legacy_path.read_text()).get('assets', {}).get(spec['src'], {}) if legacy_path.exists() else {}
+                legacy = json.loads(legacy_path.read_text(encoding='utf-8')).get('assets', {}).get(spec['src'], {}) if legacy_path.exists() else {}
                 if (legacy.get('source_sha256') != sha256_file(source)
                         or legacy.get('output_sha256') != sha256_file(target)):
                     raise AssetConsumerError('untracked reused-asset conflict; preserve user file and inspect lineage')
@@ -180,12 +180,12 @@ def finalize_assets(project: Path):
     from gen_images import collect_specs
     from sol_common import resolve_asset_target
     path = project / 'reports/asset_preflight.json'
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(encoding='utf-8'))
     rows = {r['src']: r for r in report['assets']}
     errors = verify_assets(list(rows.values()))
     if errors:
         raise AssetConsumerError('; '.join(errors))
-    bp = json.loads((project / 'reports/blueprint.json').read_text())
+    bp = json.loads((project / 'reports/blueprint.json').read_text(encoding='utf-8'))
     specs = collect_specs(bp)
     for spec in specs:
         target = resolve_asset_target(project / 'assets', spec['src'])

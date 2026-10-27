@@ -7,27 +7,37 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
 from ppt_proxy import image_data_url, request
+from platform_runtime import configure_console
+
+configure_console()
 
 DEFAULT_BASE = "enterprise-proxy:ppt-text"
-DEFAULT_MODEL = "gpt-6-sol"
+DEFAULT_MODEL = "gpt-6.1-sol"
 PLAN_RENDER_MODEL = DEFAULT_MODEL
 
 
 def is_safe_asset_src(value: str) -> bool:
     """Return whether a model-authored asset path stays relative and local."""
-    raw = str(value or "").strip()
+    raw = str(value or "")
     normalized = raw.replace("\\", "/")
-    if not normalized or "\x00" in normalized:
+    if not normalized or raw != raw.strip() or any(ord(c) < 32 for c in normalized):
         return False
     if normalized.startswith(("/", "@", "http://", "https://")):
         return False
-    if re.match(r"^[A-Za-z]:/", normalized):
+    if re.search(r'[<>:"|?*]', normalized):
         return False
-    return all(part not in {"", ".", ".."} for part in normalized.split("/"))
+    for part in normalized.split('/'):
+        if part in {'', '.', '..'} or part.endswith((' ', '.')):
+            return False
+        stem = part.split('.')[0].upper()
+        if stem in {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'} or re.fullmatch(r'(COM|LPT)[1-9¹²³]', stem):
+            return False
+    return True
 
 
 def resolve_asset_target(assets_dir: Path, value: str) -> Path:
@@ -35,10 +45,24 @@ def resolve_asset_target(assets_dir: Path, value: str) -> Path:
     if not is_safe_asset_src(value):
         raise ValueError(f"unsafe asset path: {value!r}")
     root = assets_dir.resolve()
-    target = (root / value).resolve()
+    target = root.joinpath(*value.replace('\\', '/').split('/')).resolve()
     if not target.is_relative_to(root):
         raise ValueError(f"unsafe asset path: {value!r}")
     return target
+
+
+def portable_asset_key(value):
+    """Collision identity only; never rename/normalize a user's file or model text."""
+    return unicodedata.normalize('NFC', str(value).replace('\\','/')).casefold()
+
+
+def transport_config(endpoint=None):
+    """Describe the configured adapter; local readiness is not upstream verification."""
+    supported = endpoint is None or endpoint == DEFAULT_BASE
+    return {'adapter': 'enterprise-api-gateway-v1', 'scheme': 'enterprise-proxy',
+            'supported': supported,
+            'status': 'not_checked' if supported else 'unsupported_transport',
+            'enterprise_proxy_verified': False}
 
 
 def extract_json(text: str) -> Any:

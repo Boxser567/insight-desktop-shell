@@ -5,10 +5,10 @@ DSH extracts verbatim; only SOL interprets or summarizes. Originals remain archi
 
 ## Allocation, not a character ceiling
 
-The default text model is gpt-6-sol. Per the user's confirmation that this interface
-has the same capacity as the previous model, retain the existing configuration:
-1,050,000 context tokens and 128,000 maximum output tokens. This configuration basis
-is user-confirmed interface compatibility, not a new capacity benchmark by this skill.
+The default text model is gpt-6.1-sol. This model-only update retains the existing
+interface capacity configuration: 1,050,000 context tokens and 128,000 maximum output
+tokens. These retained settings are not a new capacity benchmark or verification
+of this model's current gateway limits.
 Default output reserve is 128,000 and safety margin 72,000, leaving 850,000 input
 tokens for the COMPLETE request. With a 50,000-token authority/instruction envelope,
 800,000 tokens remain for evidence. This is calculated allowance, not a new 800K gate
@@ -64,6 +64,10 @@ extra reading model call. Otherwise split at paragraph boundaries where possible
 preserving every input character and order. SOL receives source IDs and offsets,
 preserves facts/qualifiers/conflicts, and returns compact reading records. Complete
 readings are cached under artifacts/sol_context with input/response hashes.
+Reading uses a bounded rolling window: each completed slot may start the next
+chunk without waiting for a slower sibling. Results are assembled in original
+offset order, not completion order. Worker count and paid-call caps are unchanged;
+failures/cancellation stop new work while completed receipts remain reusable.
 
 An output truncated by length is saved but never treated as complete evidence. Only
 that piece is bisected and reread; successful siblings and the truncated parent

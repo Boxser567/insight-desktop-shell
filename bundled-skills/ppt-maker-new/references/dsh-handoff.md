@@ -2,7 +2,7 @@
 
 Read before any context-package task. DSH is an extraction adapter, not an editor.
 Source understanding/history/Brief, planning, asset selection and page SML/repair
-all use gpt-6-sol. DSH does none of that authoring. Never replace raw content with a DSH summary.
+all use gpt-6.1-sol. DSH does none of that authoring. Never replace raw content with a DSH summary.
 
 ## Extraction
 

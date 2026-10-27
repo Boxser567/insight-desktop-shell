@@ -27,9 +27,21 @@ def _font_dirs() -> list[Path]:
     elif os.name == "nt":
         root = Path(os.environ.get("SystemRoot", "C:/Windows"))
         directories.append(root / "Fonts")
+        local = os.environ.get('LOCALAPPDATA')
+        if local:
+            directories.append(Path(local) / 'Microsoft/Windows/Fonts')
     else:
         directories.extend((Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts"))
     return directories
+
+
+@lru_cache(maxsize=1)
+def default_font_family():
+    """Same common installed family selection used by planning; no ornamental default."""
+    fonts, _ = resolve_font_contract({})
+    # A legacy standalone conversion may have no inspectable CJK installation.
+    # Keep a common portable name, but doctor/preflight reports missing coverage.
+    return fonts.get('zh_body') or fonts.get('latin_body') or 'Arial'
 
 
 @lru_cache(maxsize=1)
@@ -82,7 +94,7 @@ def _font_index(directories):
     cache_path = Path(os.environ['PPT_FONT_INDEX_CACHE']) if os.environ.get('PPT_FONT_INDEX_CACHE') else None
     if cache_path:
         try:
-            cached = json.loads(cache_path.read_text())
+            cached = json.loads(cache_path.read_text(encoding='utf-8'))
             if cached.get('version') == 2 and cached.get('signature') == signature:
                 return cached['index']
         except (OSError, ValueError, KeyError, TypeError):

@@ -12,9 +12,11 @@ import sys
 import time
 import uuid
 import threading
-import fcntl
 import hashlib
 from stage_runtime import atomic_write_json, skill_sha256
+from platform_runtime import (acquire_lock, process_identity, process_alive,
+                              spawn_options, bind_child, stop_child, child_environment,
+                              configure_console, ADAPTER_VERSION)
 
 
 def read_json(path):
@@ -203,24 +205,13 @@ def initialize_project(project):
     finally:handle.close()
 
 
-def process_identity(pid):
-    """OS start identity, never command lines/environment that can contain secrets."""
-    try:
-        result=subprocess.run(['ps','-p',str(int(pid)),'-o','lstart='],capture_output=True,text=True,timeout=2)
-        return result.stdout.strip() if result.returncode==0 and result.stdout.strip() else None
-    except (OSError,ValueError,subprocess.TimeoutExpired):
-        return None
-
-
 def ensure_reconciliation_idle(project):
     state=read_json(project/'reports/dsh_status.json')
     for field in ('child_pid','pid'):
         pid=state.get(field)
         if not pid or int(pid)==os.getpid():
             continue
-        try:
-            os.kill(int(pid),0)
-        except ProcessLookupError:
+        if process_alive(pid) is False:
             continue
         identity=state.get(field+'_identity')
         current=process_identity(pid)
@@ -285,7 +276,7 @@ def start_managed(project, workers, call_budget, stage='build', topic=None, page
         command += ['--preserve-source', preserve_source]
     with log_path.open('ab') as log:
         child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
-                                 stderr=subprocess.STDOUT, start_new_session=True)
+                                 stderr=subprocess.STDOUT, env=child_environment(), **spawn_options())
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         state = read_json(project / 'reports/dsh_status.json')
@@ -300,20 +291,12 @@ def start_managed(project, workers, call_budget, stage='build', topic=None, page
 
 
 def lock_project(project):
-    directory = project / 'reports'
-    directory.mkdir(parents=True, exist_ok=True)
-    handle = (directory / 'dsh.lock').open('a+')
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        handle.close()
-        raise RuntimeError('project already has an active build; use status')
-    return handle
+    return acquire_lock(project / 'reports/dsh.lock')
 
 
 def freeze_skill(root, destination):
     destination.mkdir(parents=True, exist_ok=False)
-    for name in ('SKILL.md', 'scripts', 'lark', 'references', 'contracts', 'VERSION'):
+    for name in ('SKILL.md', 'scripts', 'lark', 'references', 'contracts', 'VERSION', 'requirements.txt'):
         source = root / name
         if source.is_dir():
             shutil.copytree(source, destination / name,
@@ -375,9 +358,10 @@ def run(project, action, workers=4, call_budget=None, stage='build', topic=None,
         raise
     state = {'run_id': run_id, 'parent_run_id': previous.get('run_id'),
              'status': 'running', 'stage': stage, 'pid': os.getpid(), 'pid_identity':process_identity(os.getpid()), 'started_at': time.time(),
-             'snapshot': str(runtime), 'skill_sha256': skill_sha256(runtime)}
+             'snapshot': str(runtime), 'skill_sha256': skill_sha256(runtime),
+             'platform':sys.platform, 'host_adapter':ADAPTER_VERSION}
     atomic_write_json(status_path, state)
-    env = dict(os.environ, PYTHONUNBUFFERED='1', PPT_BUILD_RUN_ID=run_id,
+    env = child_environment(PPT_BUILD_RUN_ID=run_id,
                PPT_FONT_INDEX_CACHE=str(project / 'reports/font_index.json'))
     from work_budget import WorkBudget, summary
     WorkBudget(project, 'project', stage, call_limit=call_budget)
@@ -420,7 +404,7 @@ def run(project, action, workers=4, call_budget=None, stage='build', topic=None,
         nonlocal cancelled
         cancelled = True
         if child is not None and child.poll() is None:
-            os.killpg(child.pid, signal.SIGTERM)
+            stop_child(child)
     try:
         for sig in (signal.SIGINT, signal.SIGTERM):
             old_handlers[sig] = signal.signal(sig, cancel)
@@ -428,7 +412,8 @@ def run(project, action, workers=4, call_budget=None, stage='build', topic=None,
         log_dir.mkdir(parents=True, exist_ok=True)
         with (log_dir / 'console.log').open('ab', buffering=0) as log:
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                     env=env, start_new_session=True)
+                                     env=env, **spawn_options())
+            bind_child(child)
             state['child_pid'] = child.pid
             state['child_pid_identity'] = process_identity(child.pid)
             while child.poll() is None:
@@ -446,7 +431,7 @@ def run(project, action, workers=4, call_budget=None, stage='build', topic=None,
                     try:
                         child.wait(timeout=5)
                     except subprocess.TimeoutExpired:
-                        os.killpg(child.pid, signal.SIGKILL)
+                        stop_child(child, force=True)
                     break
                 time.sleep(2)
             code = child.wait()
@@ -503,6 +488,7 @@ def run(project, action, workers=4, call_budget=None, stage='build', topic=None,
 
 
 def main():
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['doctor', 'build', 'resume', 'status', 'metrics', 'start', 'cancel', 'execute','deliver','wait','capabilities','adopt-plan','revise','reconcile','init','recover-assets'])
     parser.add_argument('--stage', choices=['build', 'brief', 'plan','revise'], default='build')
@@ -602,22 +588,10 @@ def main():
     if args.stage == 'plan' and args.pages is not None and args.pages < 1:
         parser.error('plan stage requires positive --pages')
     if args.action == 'doctor':
-        from ppt_proxy import proxy_environment_ready
-        import importlib.util
-        try:
-            configured = proxy_environment_ready()
-        except (OSError, RuntimeError):
-            configured = False
-        required = ('pptx', 'PIL')
-        dependencies = {name: importlib.util.find_spec(name) is not None for name in required}
-        print(json.dumps({'python': sys.version.split()[0], 'enterprise_proxy_ready': configured,
-                          'server_credentials': 'not_checked',
-                          'blueprint_present': (project / 'reports/blueprint.json').is_file(),
-                          'platform': sys.platform, 'network_checked': False,
-                          'dependencies': dependencies, 'visual_review_supported': False,
-                          'managed_retention': 'requires_client_acceptance_test',
-                          'multimodal_gateway': 'not_checked'}))
-        return 0 if configured and all(dependencies.values()) else 2
+        from runtime_doctor import diagnose
+        result = diagnose(project)
+        print(json.dumps(result,ensure_ascii=False))
+        return 0 if result['local_ready'] and result['enterprise_proxy_ready'] and result['gateway']['supported'] else 2
     if args.action == 'status':
         state = get_status(project)
         print(json.dumps(state, ensure_ascii=False))

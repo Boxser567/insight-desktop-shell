@@ -60,13 +60,17 @@ may need no generated images. An explicit no-generation request takes precedence
 
 ## Runtime improvement, before production
 
-scripts/design_refinement.py looks for consecutive identical multi-text/card block
+scripts/design_refinement.py looks for consecutive near-identical multi-text/card
 geometries (four or more pages) and the same main visual on four or more pages.
+It ignores block list order and small geometry noise (up to 0.01 in normalized
+coordinates). Each run compares against its first page, so gradual drift does not
+merge meaningfully different layouts indefinitely.
 These thresholds select evidence for judgment, not forbidden usage counts. Table
 series, single typographic statements and repeated background/brand motifs are not
 automatically flagged as repeated visuals. Background/decorative images and simple
-divider blocks do not exempt a repeated text/card run. Byte hashes merge known file aliases; crops/near-duplicates
-and semantically similar layouts with different geometries are not fully detected.
+divider blocks do not exempt a repeated text/card run. Byte hashes merge known file
+aliases; visually similar crops and semantic repetition with substantially different
+geometries are not fully detected.
 
 One SOL call receives the shared page contract, compact whole-deck sequence and up
 to six evenly sampled affected pages with exact accepted copy. It can keep an
@@ -97,6 +101,14 @@ with hashes; resumes do not purchase the opportunity again. Already-started buil
 render work and explicit page-repair grants skip automatic design changes.
 
 ## Reports and limits
+
+Explicit text/text-card/card/callout blocks with flat text, font size and area receive read-only capacity
+estimates using the page linter's font/wrapping helpers. Substantial estimated
+space shortages appear as `plan_text_capacity_risk` and in render `layout_advice`.
+Unspecified copy allocation and compound chart labels are not guessed. This is not a character budget or
+pixel proof: no local content/layout changes, extra repair calls or blocking gate.
+SOL can enlarge/recompose the region in its already scheduled render call while
+preserving facts, numbers and qualifiers. Advice and measurements are not slide copy.
 
 reports/design_review.json records signals, selected/changed pages, rejected changes,
 reason and kept/improved/deferred/no_signals. Deferred improvements are not hidden

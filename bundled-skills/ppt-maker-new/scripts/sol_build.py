@@ -128,7 +128,7 @@ def write_build_state(
     payload = {
         "version": 2, "run_id": run_id, "status": status, "branches": branches or {},
         "visual_mode": "off",
-        "delivery_policy": json.loads((project/'reports/runs'/str(run_id)/'workflow_contract.json').read_text()).get('delivery_policy','strict')
+        "delivery_policy": json.loads((project/'reports/runs'/str(run_id)/'workflow_contract.json').read_text(encoding='utf-8')).get('delivery_policy','strict')
             if (project/'reports/runs'/str(run_id)/'workflow_contract.json').exists() else 'strict',
         "blueprint_sha256": _sha256_file(project / "reports/blueprint.json")
         if (project / "reports/blueprint.json").is_file() else None,
@@ -159,13 +159,13 @@ def write_release_manifest(
     integrity_hash = None
     asset_path = project / 'reports/asset_preflight.json'
     asset_hash = _sha256_file(asset_path) if asset_path.exists() else None
-    workflow_version = json.loads(contract_path.read_text()).get('version', 0) if contract_path.exists() else 0
+    workflow_version = json.loads(contract_path.read_text(encoding='utf-8')).get('version', 0) if contract_path.exists() else 0
     if status == 'success' and workflow_version >= 7:
-        if not asset_path.exists() or not json.loads(asset_path.read_text()).get('complete'):
+        if not asset_path.exists() or not json.loads(asset_path.read_text(encoding='utf-8')).get('complete'):
             raise RuntimeError('release requires complete consumer asset evidence')
     if status == 'success' and asset_path.exists():
         from asset_preflight import verify_assets
-        asset_report = json.loads(asset_path.read_text())
+        asset_report = json.loads(asset_path.read_text(encoding='utf-8'))
         if asset_report.get('status') != 'success' or verify_assets(asset_report.get('assets', [])):
             raise RuntimeError('asset preflight missing/stale consumer inputs')
     if status == 'success' and (project / 'reports/handoff_receipt.json').exists():
@@ -249,7 +249,7 @@ def verify_release_manifest(project: Path, output: Path) -> list[str]:
         if not asset_path.exists() or _sha256_file(asset_path) != manifest['asset_preflight_sha256']:
             errors.append('asset preflight changed after release')
         else:
-            errors.extend(verify_assets(json.loads(asset_path.read_text()).get('assets', [])))
+            errors.extend(verify_assets(json.loads(asset_path.read_text(encoding='utf-8')).get('assets', [])))
     if (project / 'reports/handoff_receipt.json').exists():
         try:
             from import_handoff import verify_receipt
@@ -299,7 +299,7 @@ def verify_release_manifest(project: Path, output: Path) -> list[str]:
     if manifest.get('workflow_contract_sha256') and (not contract_path.is_file() or
             manifest['workflow_contract_sha256'] != _sha256_file(contract_path)):
         errors.append('workflow contract changed after release')
-    if contract_path.exists() and json.loads(contract_path.read_text()).get('version', 0) >= 7:
+    if contract_path.exists() and json.loads(contract_path.read_text(encoding='utf-8')).get('version', 0) >= 7:
         if not manifest.get('asset_preflight_sha256'):
             errors.append('release is missing required consumer asset evidence')
     try:
@@ -668,7 +668,7 @@ def run_pipeline(
                 from final_repair import repair_before_delivery
                 result = repair_before_delivery(project, output, run_id=run_id, initial=result,
                     workers=render_workers, extra_findings=(findings or [])+asset_findings)
-                final_report = json.loads((project/'reports/runs'/run_id/'final_repair.json').read_text())
+                final_report = json.loads((project/'reports/runs'/run_id/'final_repair.json').read_text(encoding='utf-8'))
                 orchestration['final_repair'] = {'returncode': 0, 'status': final_report['status'],
                     'calls': final_report['calls'], 'duration_s': final_report['duration_s'],
                     'applied_pages': final_report['applied_pages']}
@@ -700,7 +700,7 @@ def run_pipeline(
                 else {"returncode": 1, "status": "blocked", "duration_s": 0}
             )
             calibration_path = project / 'reports/runs' / run_id / 'pilot_calibration.json'
-            calibration = json.loads(calibration_path.read_text()) if calibration_path.exists() else {}
+            calibration = json.loads(calibration_path.read_text(encoding='utf-8')) if calibration_path.exists() else {}
             if (orchestration['pilot_render'].get('returncode') == 1
                     and calibration.get('run_id') == run_id and calibration.get('first_pass_only')
                     and calibration.get('can_continue')):

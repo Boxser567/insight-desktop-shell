@@ -24,7 +24,7 @@ def proxy_environment_ready():
 def request_slot(wait_seconds=1250):
     # flock coordinates threads AND the independent image/render worker processes.
     # Ten slots shared by all PPT projects under this DSH home, released on crash.
-    import fcntl
+    from platform_runtime import acquire_lock
     if not proxy_environment_ready():
         raise ProxyError('PPT_PROXY_NOT_READY', 503)
     root = Path(os.environ['DSH_HOME']) / 'skill-proxy/ppt-slots'
@@ -33,11 +33,11 @@ def request_slot(wait_seconds=1250):
     handle = None
     while handle is None:
         for slot in range(MAX_CONCURRENT_REQUESTS):
-            candidate = (root / str(slot)).open('a')
             try:
-                fcntl.flock(candidate, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                candidate.close()
+                candidate = acquire_lock(root / str(slot))
+            except RuntimeError as exc:
+                if 'project already has an active build' not in str(exc):
+                    raise
             else:
                 handle = candidate
                 break
@@ -48,7 +48,6 @@ def request_slot(wait_seconds=1250):
     try:
         yield
     finally:
-        fcntl.flock(handle, fcntl.LOCK_UN)
         handle.close()
 
 

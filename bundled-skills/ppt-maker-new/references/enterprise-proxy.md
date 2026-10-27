@@ -9,12 +9,14 @@ The skill does not read user tokens or vendor credentials. No direct-call fallba
 - Image: connection `media-generator`, POST `/v1/proxy`, task `text_to_image`.
 - Backend API: POST `/api/skill-proxy/{connection_id}`; only configured routes allowed.
 - Server keys: TX_CLOUD_API_KEY, MG_API_AK, MG_API_SK. PPT_UPSTREAM_MODEL controls
-  the text/visual model (default gpt-6-sol); this is independent of DeepSeek chat.
+  the text/visual model; this skill requests gpt-6.1-sol by default. A server
+  override can select another model, independently of DeepSeek chat.
 - `doctor` reports local proxy prerequisites only. `server_credentials=not_checked`
   is not evidence of a working login, configured server keys or upstream availability.
 
-All PPT projects in the same DSH home share ten cross-process request slots on
-macOS/Linux. This does not reserve backend capacity against other skills/devices;
+All PPT projects in the same DSH home share ten cross-process request slots using
+the bundled host lock adapter (POSIX flock or Windows byte locks). This does not
+reserve backend capacity against other skills/devices;
 a backend 429 stops the run. Do not bypass limits by changing project/run IDs.
 Requests retain NDJSON heartbeats, not streaming model content. Proxy failures
 are not retried. A managed run records a stop marker after a proxy error, so
@@ -29,8 +31,10 @@ envelope limit; oversized requests fail before sending. Do not split a
 failed/unknown paid call automatically.
 
 PPTX construction, cache, rendering and downloaded assets stay local. Python and
-the existing python-pptx/Pillow dependencies are still required; this adaptation
-does not introduce Windows support or package Python into the desktop installer.
+the dependencies in `requirements.txt` are required; this skill does not package
+Python into the desktop installer. The bundled Windows host/lock adapter still
+requires native client acceptance; macOS offline tests do not establish Windows
+gateway or background-job compatibility.
 Frozen runtimes of already-started projects retain their old code; finish or stop
 the old job before starting a new run from this updated skill. Never hot-patch a
 running project's frozen runtime.

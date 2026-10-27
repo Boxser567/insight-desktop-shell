@@ -10,6 +10,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from platform_runtime import configure_console
+
+configure_console()
 
 
 def sha256_text(value: str) -> str:
@@ -28,7 +31,7 @@ def skill_sha256(skill_root: Path) -> str:
     """Hash executable skill inputs while ignoring generated cache files."""
     digest = hashlib.sha256()
     paths: list[Path] = []
-    for name in ("SKILL.md", "scripts", "lark", "references", "contracts", "VERSION"):
+    for name in ("SKILL.md", "scripts", "lark", "references", "contracts", "VERSION", "requirements.txt"):
         candidate = skill_root / name
         if candidate.is_file():
             paths.append(candidate)

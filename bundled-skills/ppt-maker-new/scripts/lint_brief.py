@@ -23,7 +23,7 @@ def run(root: Path, lint: Path) -> int:
     if not slides:
         blocking.append({"file": None, "code": "empty_authoring", "message": "authoring contains no slide XML files"})
     for slide in slides:
-        result = subprocess.run([sys.executable, str(lint), "--input", str(slide), "--json"], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(lint), "--input", str(slide), "--json"], capture_output=True, text=True, encoding='utf-8')
         raw_logs.append(f"=== {slide} ===\n{result.stdout}\nSTDERR:\n{result.stderr}\n")
         try:
             payload = json.loads(result.stdout)

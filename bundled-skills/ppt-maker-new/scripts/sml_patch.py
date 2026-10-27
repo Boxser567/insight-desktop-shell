@@ -218,6 +218,29 @@ def build_element_inventory(sml: str) -> list[dict]:
     return inventory
 
 
+def prompt_element_inventory(sml: str) -> dict:
+    """Lossless model-facing projection; executor inventory remains authoritative.
+
+    Profiles are keyed by their full values, not just tag: parent-dependent
+    operations and decorative-bleed constraints must remain distinct.
+    """
+    profiles, identities, objects = {}, {}, []
+    shared = {'allowed_operations', 'attribute_constraints', 'coupled_geometry_constraints'}
+    for row in build_element_inventory(sml):
+        if not row['allowed_operations']:
+            continue
+        rules = {key: row[key] for key in sorted(shared)}
+        identity = json.dumps(rules, sort_keys=True, ensure_ascii=False)
+        if identity not in identities:
+            ref = f'r{len(profiles) + 1}'
+            identities[identity] = ref
+            profiles[ref] = rules
+        objects.append(dict({k: v for k, v in row.items()
+                             if k not in shared | {'stable_path', 'element_fingerprint'}},
+                            rules=identities[identity]))
+    return {'rule_profiles': profiles, 'objects': objects}
+
+
 def geometry_bounds(attributes: dict, *, bleed=False) -> dict:
     result = {}
     for key in ('topLeftX','topLeftY','width','height'):

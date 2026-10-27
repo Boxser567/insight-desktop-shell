@@ -21,7 +21,7 @@ def save_draft(state: dict, xml: str, errors: list[dict]):
     # Error count alone cannot rank usability. Retain exact candidates so a
     # two-cosmetic-error page is not lost behind a one-fatal-error page.
     atomic_write_json(path.parent/'candidates'/state['prompt_hash']/(payload['sml_sha256']+'.json'),payload)
-    old = json.loads(path.read_text()) if path.exists() else {}
+    old = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     from recovery_feedback import recovery_rank
     if (old and isinstance(old.get('errors'), list)
             and recovery_rank(old['errors']) <= recovery_rank(errors)):
@@ -32,7 +32,7 @@ def save_draft(state: dict, xml: str, errors: list[dict]):
 def load_draft(state: dict) -> str | None:
     path = state['project'] / 'reports/render_checkpoints' / (state['prompt_hash'] + '.json')
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding='utf-8'))
         if data.get('prompt_hash') == state['prompt_hash'] and data.get('page_no') == state['page_no']:
             if data.get('sml_sha256') and data['sml_sha256'] != sha256_text(data['xml']):
                 return None
@@ -49,7 +49,7 @@ def load_candidates(state: dict) -> list[str]:
     root = state['project']/'reports/render_checkpoints/candidates'/state['prompt_hash']
     for path in sorted(root.glob('*.json')):
         try:
-            row=json.loads(path.read_text())
+            row=json.loads(path.read_text(encoding='utf-8'))
             if (row.get('page_no')==state['page_no'] and row.get('prompt_hash')==state['prompt_hash']
                     and row.get('sml_sha256')==sha256_text(row['xml']) and row['xml'] not in values):
                 values.append(row['xml'])

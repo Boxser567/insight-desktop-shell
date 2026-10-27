@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
@@ -14,6 +15,19 @@ from urllib.parse import parse_qsl, urlsplit
 FORBIDDEN_KEYS = {"cache_url", "xsec_token", "sign", "signature", "cookie", "cookies", "authorization"}
 SENSITIVE_URL_KEYS = {"x-oss-signature", "x-oss-credential", "auth_key", "wssecret", "xsec_token", "sign", "signature", "token"}
 FORMULAS = {"min_max_ratio": "min_views/max_views", "median_max_ratio": "median_views/max_views"}
+COMMERCIAL_EVIDENCE_TYPES = {"observed_public", "authorized_actual"}
+COMMERCIAL_RECORD_KINDS = {"platform_commercial_record", "authorized_cooperation_record", "explicit_paid_partnership"}
+NON_EVENT_FIELDS = {"online_status", "start_time", "end_time", "price", "price_20_60", "price_60", "item_publish_time", "checked_at", "captured_at"}
+NON_RECOMMENDATION_TIERS = {"淘汰/暂缓", "淘汰", "暂缓"}
+
+
+def parse_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def walk(value: Any, path: str = "root") -> list[str]:
@@ -68,6 +82,54 @@ def validate(payload: dict[str, Any]) -> list[str]:
             errors.append(f"{prefix}: audience evidence is required for 优先邀约")
         if tier == "素材复用优先" and not creator.get("asset_reuse_evidence"):
             errors.append(f"{prefix}.asset_reuse_evidence is required for 素材复用优先")
+
+        if tier not in NON_RECOMMENDATION_TIERS:
+            activity = creator.get("recent_commercial_activity") or {}
+            latest = parse_timestamp(activity.get("latest_verified_commercial_at"))
+            checked = parse_timestamp(activity.get("checked_at"))
+            if activity.get("status") != "verified":
+                errors.append(f"{prefix}.recent_commercial_activity requires verified status for recommendation")
+            if latest is None or checked is None:
+                errors.append(f"{prefix}.recent_commercial_activity requires latest_verified_commercial_at and checked_at")
+            elif (checked.date() - latest.date()).days < 0:
+                errors.append(f"{prefix}.recent_commercial_activity cannot be dated after checked_at")
+            elif (checked.date() - latest.date()).days > 90:
+                errors.append(f"{prefix}.recent_commercial_activity is over 90 days old and cannot be recommended")
+            if activity.get("evidence_type") not in COMMERCIAL_EVIDENCE_TYPES:
+                errors.append(f"{prefix}.recent_commercial_activity requires a verified commercial evidence type")
+            if not activity.get("evidence_refs"):
+                errors.append(f"{prefix}.recent_commercial_activity requires evidence_refs")
+            records = activity.get("evidence") or []
+            by_ref = {record.get("evidence_ref"): record for record in records if isinstance(record, dict)}
+            dates = []
+            for ref in activity.get("evidence_refs") or []:
+                record = by_ref.get(ref)
+                label = f"{prefix}.recent_commercial_activity.evidence[{ref}]"
+                if not record:
+                    errors.append(f"{label}: evidence_ref must resolve to a commercial record")
+                    continue
+                if record.get("creator_key") != creator.get("creator_key"):
+                    errors.append(f"{label}: commercial record must match creator_key")
+                if record.get("record_kind") not in COMMERCIAL_RECORD_KINDS:
+                    errors.append(f"{label}: quote availability or ordinary posts are not commercial records")
+                if record.get("evidence_type") not in COMMERCIAL_EVIDENCE_TYPES:
+                    errors.append(f"{label}: estimates cannot prove a commercial event")
+                field = record.get("source_field")
+                if not isinstance(field, str) or field.rsplit(".", 1)[-1] in NON_EVENT_FIELDS:
+                    errors.append(f"{label}: source_field must identify a commercial record or explicit partnership marker")
+                if not record.get("source_ref") or not record.get("commercial_marker"):
+                    errors.append(f"{label}: source_ref and explicit commercial_marker are required")
+                event = parse_timestamp(record.get("commercial_at"))
+                if event is None:
+                    errors.append(f"{label}: commercial_at event date is required")
+                else:
+                    dates.append(event.date())
+                    if checked and event.date() > checked.date():
+                        errors.append(f"{label}: commercial event is after checked_at")
+            if dates and latest and latest.date() != max(dates):
+                errors.append(f"{prefix}.recent_commercial_activity: latest date must match the latest cited commercial event, not capture time")
+            if latest and checked and 30 < (checked.date() - latest.date()).days <= 90 and not activity.get("selection_reason"):
+                errors.append(f"{prefix}.recent_commercial_activity: 31-90 day candidate needs selection_reason")
 
         coverage = capability.get("commercial_evidence_coverage")
         score = capability.get("commercial_capability_score")

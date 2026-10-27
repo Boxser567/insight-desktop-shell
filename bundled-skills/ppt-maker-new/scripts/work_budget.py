@@ -81,7 +81,7 @@ class WorkBudget:
                     legacy = reports / filename
                     if not legacy.exists():
                         continue
-                    with sqlite3.connect('file:' + str(legacy) + '?mode=ro', uri=True) as source:
+                    with sqlite3.connect(legacy.resolve().as_uri() + '?mode=ro', uri=True) as source:
                         tables = {r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                         if table in tables:
                             count = source.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0]
@@ -168,7 +168,7 @@ class WorkBudget:
             raise WorkStopped('stale transport replacement')
         receipt=self.path.parent/'request_journal'/f'{token}.json'
         if receipt.exists():
-            record=json.loads(receipt.read_text())
+            record=json.loads(receipt.read_text(encoding='utf-8'))
             if record.get('response') is not None or record.get('status') == 'response_saved':
                 raise WorkStopped('request_response_available: reconcile saved bytes; corrupt evidence is not a transport retry')
         count=db.execute('SELECT COUNT(*) FROM transport_replacements r JOIN attempts a ON a.id=r.old_id WHERE a.scope=? AND a.stage=? AND a.unit=?',row[:3]).fetchone()[0]
@@ -213,7 +213,7 @@ class WorkBudget:
             while token not in seen:
                 seen.add(token)
                 path=self.path.parent/'request_journal'/f'{token}.json'
-                if path.exists() and json.loads(path.read_text()).get('status') != 'not_submitted': total+=1
+                if path.exists() and json.loads(path.read_text(encoding='utf-8')).get('status') != 'not_submitted': total+=1
                 row=db.execute('SELECT new_id FROM transport_replacements WHERE old_id=?',(token,)).fetchone()
                 if not row: return total
                 token=row[0]
@@ -231,7 +231,7 @@ class WorkBudget:
         path = self.path.parent/'request_journal'/f'{token}.json'
         if path.exists():
             from stage_runtime import atomic_write_json
-            record = json.loads(path.read_text())
+            record = json.loads(path.read_text(encoding='utf-8'))
             if record.get('status') == 'response_saved':
                 atomic_write_json(path, dict(record, consumed=True))
 
@@ -240,7 +240,7 @@ def summary(project):
     path = Path(project) / 'reports/execution_budget.sqlite'
     if not path.is_file():
         return {'attempts': 0, 'policy': 'work_based', 'call_limit': None}
-    with sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True) as db:
+    with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True) as db:
         cap = db.execute('SELECT call_limit FROM policy WHERE id=1').fetchone()
         has_replacements=db.execute("SELECT 1 FROM sqlite_master WHERE name='transport_replacements'").fetchone()
         return {'attempts': db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0],

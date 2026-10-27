@@ -79,6 +79,22 @@ creator:
   historical_evidence:
     brand_posts: [post_evidence]
     competitor_posts: [post_evidence]
+  recent_commercial_activity:
+    status: verified | unavailable | requires_authorization
+    latest_verified_commercial_at: ISO-8601 | null
+    checked_at: ISO-8601 | null
+    evidence_type: observed_public | authorized_actual | missing
+    evidence_refs: [string]
+    selection_reason: string | null  # 31–90天候选的增量价值或无同角色近30天候选
+    evidence:
+      - evidence_ref: string
+        creator_key: string
+        commercial_at: ISO-8601  # 实际合作/商单内容发布时间，不能用抓取时间
+        record_kind: platform_commercial_record | authorized_cooperation_record | explicit_paid_partnership
+        evidence_type: observed_public | authorized_actual
+        source_ref: string  # 可追溯的订单/合作资料/内容ID或URL
+        source_field: string  # 商单记录或明确合作标记所在的原始字段
+        commercial_marker: string  # 明确合作声明/平台商业内容标记/订单记录摘要
   asset_reuse_evidence:
     - content_id: string
       brand: string
@@ -137,11 +153,11 @@ creator:
 
 ## 投放组合输出
 
-> 📖 详见 [`references/handoff-contracts.md`](references/handoff-contracts.md)。**按需读取**。
+> 📖 详见 [`handoff-contracts.md`](handoff-contracts.md)。**按需读取**。
 
 ## 投中监测交接
 
-> 📖 详见 [`references/handoff-contracts.md`](references/handoff-contracts.md)。**按需读取**。
+> 📖 详见 [`handoff-contracts.md`](handoff-contracts.md)。**按需读取**。
 
 ## 字段解释
 
@@ -166,6 +182,8 @@ creator:
 - `title_visible_commercial_density`：标题、标签或可见品牌字段中能识别为品牌/商品合作的作品占比，是保守近似，不能称为“官方商业内容占比”。
 - `direct_category_density`：与本次品类直接相关的作品占比。例如扫地机项目中，扫地机、洗地机、吸尘器等应单列，避免把所有广告混在一起。
 - `historical_evidence`：每条需保留作品 ID、可见品牌、发布时间、播放与互动；区分本品、直接竞品、相邻竞争品类。
+- `recent_commercial_activity`：推荐资格的商单时效证据。`verified` 仅接受平台商业记录、授权后台/MCN/达人提供的订单或合作记录，或有明确付费合作标签、合作声明的公开内容；不能用泛广告密度、推测或普通内容题材代替。非淘汰层级必须有一条距 `checked_at` 不超过 90 天的有效记录，并保留日期、证据类型和可追溯引用。距核验日 30 天内为优先候选，31–90 天为可选候选；超过 90 天或无法验证时只能列入淘汰/暂缓，不得作为推荐、替补或组合成员。
+- `recent_commercial_activity.evidence_refs` 必须解析到同对象 `evidence` 内的商单证据；事件日期取证据的 `commercial_at`，最近日期取所引证据最大值。`online_status`、报价起止时间、普通发帖时间与抓取时间均不构成商单发生证据；平台效果预估也不能证明已发生商单。
 - `audience`：星图/平台模型标签，须保留原始标签与占比，不将兴趣标签等同于真实家庭身份。
 - `comments.status`：没有可访问的逐条评论时必须是 `unavailable` 或 `requires_authorization`，其他评论字段保持空值。
 - `budget_status=closed` 时，所有非空 `budget_lines.amount` 合计不得超过 `total_budget.amount`，且未知交易成本已被明确预留；否则使用 `partial`。

@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 
-FORBIDDEN_KEYS = {"access_token", "authorization", "cache_url", "cookie", "cookies", "request_headers", "sign", "signature", "xsec_token"}
+FORBIDDEN_KEYS = {"token", "access_token", "refresh_token", "api_key", "apikey", "authorization", "cache_url", "cookie", "cookies", "headers", "request_headers", "set_cookie", "set-cookie", "sign", "signature", "xsec_token"}
 SENSITIVE_QUERY_KEYS = {"auth_key", "signature", "sign", "token", "wssecret", "x-oss-credential", "x-oss-signature", "xsec_token"}
 
 

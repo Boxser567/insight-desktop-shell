@@ -5,6 +5,7 @@ One durable opportunity per planning scope; no automatic retry or local design.
 """
 import copy
 import json
+import math
 import os
 import re
 from collections import defaultdict
@@ -67,22 +68,53 @@ def design_sequence(blueprint):
             for p in blueprint.get('pages',[])]
 
 
+def _text_structure(blocks):
+    """Read-only geometry signature; list order is not spatial structure."""
+    result = []
+    for block in blocks:
+        area = block.get('area')
+        if (not isinstance(area, list) or len(area) != 4
+                or any(type(v) not in {int, float} or not math.isfinite(v) for v in area)):
+            return None
+        kind = str(block.get('type', '')).lower().replace('_', '-')
+        result.append((kind, tuple(area)))
+    return result
+
+
+def _similar_structure(left, right):
+    if left is None or right is None or len(left) != len(right):
+        return False
+    unmatched = list(right)
+    for kind, area in left:
+        candidates = [(max(abs(a-b) for a, b in zip(area, other)), i)
+                      for i, (other_kind, other) in enumerate(unmatched) if kind == other_kind]
+        if not candidates:
+            return False
+        distance, index = min(candidates)
+        if distance > .01:
+            return False
+        unmatched.pop(index)
+    return True
+
+
 def design_signals(blueprint,brief):
     signals=[];run=[];previous=None
     def flush():
         if len(run)>=4:
             signals.append({'code':'uniform_text_run','pages':list(run),
-                'evidence':'连续多页使用相同多块文字/卡片几何；可能是合理系列，也可能是未做信息设计。'})
+                'evidence':'连续多页使用近似多块文字/卡片几何（忽略对象顺序和小幅坐标噪声）；可能是合理系列，也可能是未做信息设计。'})
     for p in blueprint.get('pages',[]):
         blocks=[b for b in (p.get('layout') or {}).get('blocks',[])
                 if str(b.get('type','')).lower() not in {'line','divider','background','decoration','decorative','logo'}]
         multi_text=len(blocks)>=2 and all(str(b.get('type','')).lower() in {'text','card','text-card','text_card'} for b in blocks)
         main_images=[im for im in p.get('images',[]) if im.get('role') not in {'background','decorative'}]
-        signature=digest([(b.get('type'),b.get('area')) for b in blocks]) if multi_text and not main_images else None
-        if signature is None or signature!=previous:
+        signature=_text_structure(blocks) if multi_text and not main_images else None
+        if signature is None or not _similar_structure(signature,previous):
             flush();run=[]
+            # Anchor to the first page, not the previous one: gradual layout
+            # drift must not join substantially different layouts indefinitely.
+            previous=signature
         if signature is not None:run.append(p['no'])
-        previous=signature
     flush()
     assets={a.get('asset_id'):a for a in brief.get('available_assets',[])}
     uses=defaultdict(set)
@@ -141,7 +173,7 @@ def refine_design(root,blueprint,brief,scope,model_fn):
         return result,calls
     if receipt.exists():
         try:
-            prior=json.loads(receipt.read_text())
+            prior=json.loads(receipt.read_text(encoding='utf-8'))
             if not isinstance(prior,dict) or prior.get('revision')!=DESIGN_REVIEW_REVISION:
                 raise ValueError('old design receipt requires current guards; retain current plan without rebuying')
             if not isinstance(prior,dict) or before not in {prior.get('input_sha256'),prior.get('result_sha256')} or digest(prior.get('result'))!=prior.get('result_sha256'):
@@ -162,7 +194,7 @@ def refine_design(root,blueprint,brief,scope,model_fn):
     budget=WorkBudget(root,scope,'design_refinement')
     if raw_path.exists():
         try:
-            saved=json.loads(raw_path.read_text())
+            saved=json.loads(raw_path.read_text(encoding='utf-8'))
             if saved.get('input_sha256')!=before:raise ValueError('stale saved response')
             response=saved['response']
         except (ValueError,TypeError,KeyError,AttributeError) as exc:

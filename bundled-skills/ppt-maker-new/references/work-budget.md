@@ -128,6 +128,10 @@ outcomes stay unknown. Proven local adapter failures before submission are
 Legacy unbound responses are not guessed. Metrics join receipts to ledger attempt
 IDs. Missing receipts/usage make coverage incomplete; known tokens are a subtotal,
 not an invoice estimate. requests/ remains readable for legacy diagnostics.
+Malformed JSON, identity, timing or usage fields are isolated in metrics diagnostics;
+valid sibling receipts still contribute known subtotals. `invalid_receipts` means
+coverage is incomplete, not zero cost. This read-only tolerance does not relax
+saved-response recovery or release validation.
 
 ## Scoped rendering recovery
 

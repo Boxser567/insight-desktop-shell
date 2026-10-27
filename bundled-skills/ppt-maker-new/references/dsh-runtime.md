@@ -14,12 +14,45 @@ terminal before advancing; a launcher response does not mean stage completion.
 Native managed jobs can instead run `ppt.py execute --stage brief|plan|build|revise`.
 Build/resume remain available. There is no review stage or visual repair command.
 
-macOS/Linux use fcntl; Windows needs a separate process/lock adapter. Run doctor
-before model work. It is offline; verify remote auth and client process retention
-separately. No Office/PDF/screenshot or visual-model dependency is required for
-quality checking. Never print or bundle credentials.
+macOS/Linux use fcntl/POSIX process groups. The bundled Windows adapter uses
+msvcrt byte locks, CREATE_NEW_PROCESS_GROUP and psutil creation-identity-safe
+process queries/cancellation. It never uses Windows os.kill(pid, 0) as a probe.
+Windows native DSH acceptance is still required; mocked API tests are not that acceptance.
 
-`ppt.py start --project PROJECT` launches a session-separated worker and returns
+Use Python 3.10+ from the same interpreter for installation and execution. On
+Windows the command may be `python` or `py -3`, not `python3`; discover the actual
+DSH interpreter, then use its full path. Missing dependencies are listed by doctor:
+`<python> -m pip install -r <skill>/requirements.txt`. This is a setup command,
+not an automatic runtime install. No Office/PDF/screenshot renderer is required.
+Never print or bundle credentials.
+
+Doctor imports dependencies, reports their versions, tests UTF-8 atomic file
+replacement and lock contention in a temporary project subdirectory, and saves/
+reopens a tiny PPTX. `local_ready` covers these local checks only. Font coverage,
+network access and background-job retention are reported separately; a successful
+local smoke check is not certification of the DSH host or final slide appearance.
+
+This enterprise distribution routes text through the logged-in client's `ppt-text`
+connection and images through `media-generator`. Doctor reports adapter support and
+local proxy prerequisites without reading vendor credentials or contacting the
+upstream. `server_credentials=not_checked` and `enterprise_proxy_verified=false`
+remain explicit until a live integration check. Network/gateway and retention
+compatibility remain client acceptance items. See [enterprise-proxy.md](enterprise-proxy.md).
+
+Internal text/JSON and child streams use UTF-8. External handoff JSON accepts a
+UTF-8 BOM; a legacy extraction helper also accepts explicit UTF-16/32 BOMs. It
+does not guess GBK or silently replace undecodable source characters. Windows
+user-installed fonts are searched as well as system fonts. Native chart text
+uses the page/theme body family; explicit chart-title family remains respected.
+Neither font resolution nor native save/reopen proves identical display on another OS.
+
+Asset paths use portable relative names. Drive-relative paths, reserved device
+names, trailing dots/spaces and case/Unicode-equivalent collisions are reported
+before generation; user files are not renamed. Backslash separators resolve
+consistently. Readiness hashing is deduplicated within one scan, never across
+scans without rechecking; final asset/receipt hashes remain mandatory.
+
+`ppt.py start --project PROJECT` launches a platform-separated worker and returns
 after recorded startup. The worker owns the lock and freezes .ppt-runtime/run-id.
 It uses build for projects without build history and resume for prior build states.
 Brief/plan stage history alone is not build history. It never restarts automatically.
@@ -43,8 +76,14 @@ not confirmed lost calls. Inspect retained requests before retrying an uncertain
 `ppt.py wait --project PROJECT --wait-seconds 20` returns at terminal state or timeout
 (hard maximum 60 seconds); avoid fixed long sleeps and blind start loops.
 `ppt.py cancel` writes a run-specific request; the owner terminates its own child
-process group and marks aborted. Never kill an old PID from a log. User cancellation
+POSIX process group or creation-bound Windows descendant tree and marks aborted.
+It does not terminate the DSH host's process group/job. Never kill an old PID from a log. User cancellation
 does not authorize automatic restart. Console logs: reports/runs/run-id/console.log.
+The image scheduler also observes this marker before dispatch and stops refilling
+its bounded queue. The built-in generator checks before each retry/fallback. Already
+returned images retain their hash-bound receipts; cancellation is not a refund.
+This cooperative path supplements process termination; it cannot retract a request
+already sent. Custom generators must implement their own in-process cancellation.
 No tail pipelines, unmanaged nohup, installed-code or snapshot hotpatching.
 
 New worker records include OS process-start identities for owner and child. Under
