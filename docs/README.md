@@ -11,7 +11,7 @@
 | 变更应验证到什么阶段 | [客户端构建 Runbook](client-build-runbook.md) |
 | Candidate、恢复验收和 Stable | [发布说明](release-runbook.md) · [v2 操作清单](releases/update-v2-operator-checklist.md) |
 | 参考上游的定向采用 | [上游接收规范](upstream-intake.md) |
-| 当前预发布与已交付基线 | [1.0.7 Candidate 发布记录](releases/1.0.7.md) · [1.0.6 正式发布记录](releases/1.0.6.md) |
+| 当前交付基线 | [1.0.9 正式发布记录](releases/1.0.9.md) |
 | Core rc.2 接入进度与验证边界 | [2026-10-23 Runtime 集成记录](analysis/2026-10-23-core-runtime-integration.md) |
 
 ## 能力与专题

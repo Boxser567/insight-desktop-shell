@@ -2,7 +2,7 @@
 
 ## 当前仓库基线
 
-2026-10-27 已投放三平台 `1.0.9` Candidate，Core Runtime 锁为 `insight-runtime-v0.2.1-alpha.1-insight.4`。对外 Stable 仍为 [1.0.6](releases/1.0.6.md)，发布前后签名指针未变化；安装包人工验收待完成，交付范围、下载入口和证据见 [1.0.9 Candidate 发布记录](releases/1.0.9.md)。后续操作前仍须实际查询在线 Candidate/Stable 指针，不把历史记录作为实时状态。
+2026-10-27 已将三平台 `1.0.9` Candidate 同字节推广为 Stable，Core Runtime 锁为 `insight-runtime-v0.2.1-alpha.1-insight.4`。对外 Stable 为 [1.0.9](releases/1.0.9.md)，GitHub Release 已公开并标记为 latest；三个 Candidate 指针保持 `1.0.9`。本次按操作者明确转正指令接受发布，未新增实机人工测试；交付范围、下载入口和证据见 [1.0.9 正式发布记录](releases/1.0.9.md)。后续操作前仍须实际查询在线 Candidate/Stable 指针，不把历史记录作为实时状态。
 
 日常发布使用 v2 流程，权威操作步骤见 [Desktop Update v2 操作清单](releases/update-v2-operator-checklist.md)，构建与人工门禁见 [客户端构建 Runbook](client-build-runbook.md)。当前源码工作流分别为 `.github/workflows/release-v2.yml`（Build desktop v2 installers）和 `publish-update-v2.yml`（Publish desktop v2 updates）。旧 `release.yml` / `publish-update.yml` 仅留作 legacy 桥接，不作为日常最终 SemVer 发布入口。
 
