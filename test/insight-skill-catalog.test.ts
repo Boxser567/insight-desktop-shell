@@ -27,7 +27,7 @@ describe('directory-backed product skills', () => {
     expect(roots.map(root => root.name)).not.toContain('call-insight-api')
     expect(filterSkills(skills, '')).toHaveLength(roots.length)
     expect(filterSkills(skills, '').map(skill => skill.name)).toContain('media-generator')
-    expect(filterSkills(skills, '').map(skill => skill.name)).toEqual(expect.arrayContaining(['activity-search', 'creator-due-diligence']))
+    expect(filterSkills(skills, '').map(skill => skill.name)).toEqual(expect.arrayContaining(['activity-search', 'creator-due-diligence', 'canvas-workflow-builder']))
   })
   it('uses actual discovery and accepts new bundles without updating an enumeration', () => {
     const added = { name: 'new-skill', description: 'new business', bundled: true, modelInvocable: true }
