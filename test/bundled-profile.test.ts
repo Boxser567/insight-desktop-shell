@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initializeBundledProfile } from '../src/main/state/bundled-profile'
+import { repairProfilePackages } from '../src/main/state/profile-startup-repair'
 import { isProfileInstallComplete, markProfileInstallComplete } from '../src/main/state/profile-install-marker'
 
 const communityPlugins = [
@@ -63,6 +64,10 @@ describe('bundled profile initialization', () => {
       'utf8'
     )
     await writeFile(join(profile, 'packages', 'insight-desktop-integration', 'lib', 'client.js'), clientBundle, 'utf8')
+    const integration = join(profile, 'node_modules', '@insight-ai', 'desktop-integration')
+    await mkdir(join(integration, 'lib'), { recursive: true })
+    await writeFile(join(integration, 'package.json'), JSON.stringify({ name: '@insight-ai/desktop-integration' }))
+    await writeFile(join(integration, 'lib', 'client.js'), clientBundle)
     await writeFile(join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\n  - packages/*\n', 'utf8')
   }
 
@@ -142,7 +147,7 @@ describe('bundled profile initialization', () => {
     }
 
     await writeFile(join(profile, 'package.json'), '{"name":"user-profile"}', 'utf8')
-    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
     expect(await readFile(join(profile, 'package.json'), 'utf8')).toContain('user-profile')
   })
 
@@ -205,26 +210,28 @@ describe('bundled profile initialization', () => {
     expect(await isProfileInstallComplete(dshHome)).toBe(true)
   })
 
-  it.each(['absent', 'removed', 'user-upgraded', 'user-local-same-version'] as const)('preserves %s Canvas in existing profiles', async (state) => {
+  it.each(communityPlugins.flatMap(plugin =>
+    (['absent', 'removed', 'user-upgraded', 'user-local-same-version'] as const).map(state => ({ plugin, state }))
+  ))('reconciles $state $plugin.name in existing profiles', async ({ plugin, state }) => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
-    const canvas = communityPlugins[2]
     await writeCurrentTemplate(template)
     if (state === 'absent') await writeLegacyProfile(dshHome)
     else await initializeBundledProfile(template, dshHome)
     const profile = join(dshHome, 'profiles', 'web')
-    const installed = join(profile, 'node_modules', canvas.name)
-    const archive = join(profile, '.insight-bundled-plugins', canvas.archive)
+    const installed = join(profile, 'node_modules', plugin.name)
+    const archive = join(profile, '.insight-bundled-plugins', plugin.archive)
     const manifestPath = join(profile, 'package.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
     const userInstalled = state === 'user-upgraded' || state === 'user-local-same-version'
-    const installedVersion = state === 'user-upgraded' ? '0.3.0-alpha.33' : canvas.version
+    const installedVersion = state === 'user-upgraded' ? '99.0.0' : plugin.version
     if (userInstalled) {
-      manifest.dependencies[canvas.name] = 'file:/missing-download/user-canvas.tgz'
-      await writeFile(join(installed, 'package.json'), JSON.stringify({ name: canvas.name, version: installedVersion }))
+      manifest.dependencies[plugin.name] = 'file:/missing-download/user-plugin.tgz'
+      if (plugin.name === 'dsh-prompt-enhance') await writeFile(join(installed, 'lib', 'client.js'), 'user client')
+      await writeFile(join(installed, 'package.json'), JSON.stringify({ name: plugin.name, version: installedVersion }))
     } else {
-      delete manifest.dependencies[canvas.name]
-      manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) => name !== canvas.name)
+      delete manifest.dependencies[plugin.name]
+      manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) => name !== plugin.name)
       await rm(installed, { recursive: true, force: true })
     }
     await rm(archive, { force: true })
@@ -234,15 +241,121 @@ describe('bundled profile initialization', () => {
 
     await initializeBundledProfile(template, dshHome)
     const refreshed = JSON.parse(await readFile(manifestPath, 'utf8'))
-    expect(refreshed.dependencies[canvas.name]).toBe(manifest.dependencies[canvas.name])
-    expect(refreshed.dsh.profile.bundles.includes(canvas.name)).toBe(userInstalled)
-    await expect(readFile(archive)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(refreshed.dependencies[plugin.name]).toBe(userInstalled
+      ? manifest.dependencies[plugin.name]
+      : `file:.insight-bundled-plugins/${plugin.archive}`)
+    expect(refreshed.dsh.profile.bundles).toContain(plugin.name)
     if (userInstalled) {
       expect(JSON.parse(await readFile(join(installed, 'package.json'), 'utf8')).version).toBe(installedVersion)
+      await expect(readFile(archive)).rejects.toMatchObject({ code: 'ENOENT' })
+      if (plugin.name === 'dsh-prompt-enhance') expect(await readFile(join(installed, 'lib', 'client.js'), 'utf8')).toBe('user client')
     } else {
+      expect(await readFile(archive, 'utf8')).toBe(plugin.name)
       await expect(readFile(join(installed, 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     }
-    if (state !== 'absent') expect(await isProfileInstallComplete(dshHome)).toBe(true)
+    if (state !== 'absent') expect(await isProfileInstallComplete(dshHome)).toBe(userInstalled)
+    const first = await readFile(manifestPath, 'utf8')
+    await initializeBundledProfile(template, dshHome)
+    expect(await readFile(manifestPath, 'utf8')).toBe(first)
+  })
+
+  it.each(['devDependencies', 'optionalDependencies'] as const)('preserves replacement plugins in %s', async (field) => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest[field] = {}
+    for (const plugin of communityPlugins) {
+      delete manifest.dependencies[plugin.name]
+      manifest[field][plugin.name] = 'file:./user-plugin.tgz'
+      await writeFile(join(profile, 'node_modules', plugin.name, 'package.json'), JSON.stringify({ version: plugin.version }))
+    }
+    const contents = JSON.stringify(manifest, null, 2) + '\n'
+    await writeFile(manifestPath, contents)
+    await initializeBundledProfile(template, dshHome)
+    expect(await readFile(manifestPath, 'utf8')).toBe(contents)
+  })
+
+  it('installs a new template default in a custom Profile through startup repair without replacing user data', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    delete manifest.insightDesktop
+    manifest.dependencies['user-plugin'] = '1.2.3'
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'user lock')
+    await writeFile(join(profile, 'cordis.patch.yml'), '# user config\n[]\n')
+    await mkdir(join(dshHome, 'sessions'), { recursive: true })
+    await writeFile(join(dshHome, 'sessions', 'saved.jsonl'), 'user session')
+    await markProfileInstallComplete(dshHome)
+
+    const name = 'new-bundled-plugin'
+    const archive = 'new-bundled-plugin-1.0.0.tgz'
+    const templatePath = join(template, 'web', 'package.json')
+    const defaults = JSON.parse(await readFile(templatePath, 'utf8'))
+    defaults.dependencies[name] = `file:.insight-bundled-plugins/${archive}`
+    defaults.dsh.profile.bundles.push(name)
+    await writeFile(templatePath, JSON.stringify(defaults))
+    await writeFile(join(template, 'web', '.insight-bundled-plugins', archive), 'new archive')
+
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    const updated = JSON.parse(await readFile(manifestPath, 'utf8'))
+    expect(updated.dependencies[name]).toBe(defaults.dependencies[name])
+    expect(updated.dependencies['user-plugin']).toBe('1.2.3')
+    expect(updated.dsh.profile.bundles).toContain(name)
+    expect(await readFile(join(profile, '.insight-bundled-plugins', archive), 'utf8')).toBe('new archive')
+    expect(await readFile(join(profile, 'pnpm-lock.yaml'), 'utf8')).toBe('user lock')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe('# user config\n[]\n')
+    expect(await readFile(join(dshHome, 'sessions', 'saved.jsonl'), 'utf8')).toBe('user session')
+    expect(await isProfileInstallComplete(dshHome)).toBe(false)
+    let installs = 0
+    const install = async () => {
+      installs++
+      await mkdir(join(profile, 'node_modules', name), { recursive: true })
+      await writeFile(join(profile, 'node_modules', name, 'package.json'), JSON.stringify({ name, version: '1.0.0' }))
+      return { ok: true }
+    }
+    expect(await repairProfilePackages({ dshHome, install, note: () => {} })).toEqual({ ok: true })
+    expect(await isProfileInstallComplete(dshHome)).toBe(true)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
+    await repairProfilePackages({ dshHome, install, note: () => {} })
+    expect(installs).toBe(1)
+  })
+
+  it('retries a failed archive copy and detects missing files in an otherwise complete install', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    const plugin = communityPlugins[2]
+    await writeCurrentTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    const manifestPath = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    delete manifest.dependencies[plugin.name]
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) => name !== plugin.name)
+    const contents = JSON.stringify(manifest)
+    await writeFile(manifestPath, contents)
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'user lock')
+    await markProfileInstallComplete(dshHome)
+    const sourceArchive = join(template, 'web', '.insight-bundled-plugins', plugin.archive)
+    await rm(sourceArchive)
+    await expect(initializeBundledProfile(template, dshHome)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await isProfileInstallComplete(dshHome)).toBe(false)
+    expect(await readFile(manifestPath, 'utf8')).toBe(contents)
+    await writeFile(sourceArchive, plugin.name)
+    await initializeBundledProfile(template, dshHome)
+    await markProfileInstallComplete(dshHome)
+    expect(await isProfileInstallComplete(dshHome)).toBe(true)
+    await rm(join(profile, 'node_modules', plugin.name), { recursive: true, force: true })
+    await initializeBundledProfile(template, dshHome)
+    expect(await isProfileInstallComplete(dshHome)).toBe(false)
   })
 
   it.each([7, 8])('upgrades managed prompt-enhance 0.2.1 in Profile generation %s', async (version) => {
@@ -338,6 +451,19 @@ describe('bundled profile initialization', () => {
     await expect(isProfileInstallComplete(dshHome)).resolves.toBe(true)
   })
 
+  it('refuses to replace a corrupt existing Profile with the default template', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    await writeFile(join(profile, 'package.json'), '{"dependencies":')
+    await writeFile(join(profile, 'cordis.patch.yml'), '# user configuration\n')
+    await expect(initializeBundledProfile(template, dshHome)).rejects.toThrow('manifest could not be read')
+    expect(await readFile(join(profile, 'package.json'), 'utf8')).toBe('{"dependencies":')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe('# user configuration\n')
+  })
+
   it('refreshes the installed desktop integration client on a same-version upgrade', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
@@ -398,7 +524,60 @@ describe('bundled profile initialization', () => {
     await expect(isProfileInstallComplete(dshHome)).resolves.toBe(true)
   })
 
-  it('preserves a newer Profile that does not declare the desktop integration', async () => {
+  it('fills missing Canvas in generation nine while preserving replacement plugins and user configuration', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    const canvas = communityPlugins[2]
+    await writeCurrentTemplate(template)
+    await initializeBundledProfile(template, dshHome)
+    const profile = join(dshHome, 'profiles', 'web')
+    const path = join(profile, 'package.json')
+    const manifest = JSON.parse(await readFile(path, 'utf8'))
+    manifest.insightDesktop = { defaultProfileVersion: 9, futureSetting: true }
+    delete manifest.dependencies[canvas.name]
+    manifest.dependencies['dsh-memory-evolve'] = 'file:./user-memory.tgz'
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) =>
+      name !== canvas.name && name !== 'dsh-memory-evolve')
+    await writeFile(path, JSON.stringify(manifest))
+    await rm(join(profile, 'node_modules', canvas.name), { recursive: true, force: true })
+    await rm(join(profile, '.insight-bundled-plugins', canvas.archive))
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'user lock')
+    await writeFile(join(profile, 'cordis.patch.yml'), '# user patch\n[]\n')
+    await markProfileInstallComplete(dshHome)
+    expect(await isProfileInstallComplete(dshHome)).toBe(true)
+
+    await initializeBundledProfile(template, dshHome)
+    const updated = JSON.parse(await readFile(path, 'utf8'))
+    expect(updated.insightDesktop).toEqual(manifest.insightDesktop)
+    expect(updated.dependencies['dsh-memory-evolve']).toBe('file:./user-memory.tgz')
+    expect(updated.dsh.profile.bundles).not.toContain('dsh-memory-evolve')
+    expect(updated.dependencies[canvas.name]).toBe(`file:.insight-bundled-plugins/${canvas.archive}`)
+    expect(updated.dsh.profile.bundles).toContain(canvas.name)
+    expect(await readFile(join(profile, '.insight-bundled-plugins', canvas.archive), 'utf8')).toBe(canvas.name)
+    expect(await readFile(join(profile, 'pnpm-lock.yaml'), 'utf8')).toBe('user lock')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe('# user patch\n[]\n')
+    expect(await isProfileInstallComplete(dshHome)).toBe(false)
+  })
+
+  it('preserves an unknown future Profile without adding older defaults', async () => {
+    const template = join(testDir, 'template')
+    const dshHome = join(testDir, 'harness')
+    await writeCurrentTemplate(template)
+    const profile = join(dshHome, 'profiles/web')
+    await mkdir(profile, { recursive: true })
+    const contents = JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: [] } }, insightDesktop: { defaultProfileVersion: 10 } })
+    await writeFile(join(profile, 'package.json'), contents)
+    await writeFile(join(profile, 'pnpm-lock.yaml'), 'future lock')
+    await writeFile(join(profile, 'cordis.patch.yml'), 'future patch')
+    await markProfileInstallComplete(dshHome)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
+    expect(await readFile(join(profile, 'package.json'), 'utf8')).toBe(contents)
+    expect(await readFile(join(profile, 'pnpm-lock.yaml'), 'utf8')).toBe('future lock')
+    expect(await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).toBe('future patch')
+    expect(await isProfileInstallComplete(dshHome)).toBe(true)
+  })
+
+  it('adds missing defaults to a compatible newer Profile without downgrading its schema', async () => {
     const template = join(testDir, 'template')
     const dshHome = join(testDir, 'harness')
     await writeCurrentTemplate(template)
@@ -406,7 +585,18 @@ describe('bundled profile initialization', () => {
     const path = join(dshHome, 'profiles/web/package.json')
     const contents = JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } }, insightDesktop: { defaultProfileVersion: 9 } })
     await writeFile(path, contents)
-    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(false)
-    expect(await readFile(path, 'utf8')).toBe(contents)
+    await expect(initializeBundledProfile(template, dshHome)).resolves.toBe(true)
+    const updated = JSON.parse(await readFile(path, 'utf8'))
+    expect(updated.insightDesktop.defaultProfileVersion).toBe(9)
+    expect(updated.dependencies['@insight-ai/desktop-integration']).toBe('workspace:*')
+    for (const plugin of communityPlugins) {
+      expect(updated.dependencies[plugin.name]).toBe(`file:.insight-bundled-plugins/${plugin.archive}`)
+      expect(updated.dsh.profile.bundles).toContain(plugin.name)
+      expect(await readFile(join(dshHome, 'profiles/web/.insight-bundled-plugins', plugin.archive), 'utf8')).toBe(plugin.name)
+    }
+    expect(await isProfileInstallComplete(dshHome)).toBe(false)
+    const first = await readFile(path, 'utf8')
+    await initializeBundledProfile(template, dshHome)
+    expect(await readFile(path, 'utf8')).toBe(first)
   })
 })

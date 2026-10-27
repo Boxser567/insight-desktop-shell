@@ -11,6 +11,7 @@ import { DESKTOP_INTEGRATION_PACKAGE } from './installation-owned-bundles'
 
 const PROFILE = 'web'
 const DEFAULT_PROFILE_VERSION = 8
+const BUNDLED_DEFAULTS_MAX_PROFILE_VERSION = 9
 const PRE_MARKET_PROFILE_VERSION = 3
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 const SIDEBAR_PACKAGE = 'dsh-better-sidebar'
@@ -41,6 +42,8 @@ const COMMUNITY_PLUGIN_SPECS = {
 
 interface ProfileManifest {
   dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
   dsh?: { profile?: { bundles?: string[] } }
   insightDesktop?: { defaultProfileVersion?: number }
 }
@@ -52,8 +55,19 @@ interface PackageManifest {
 async function readProfileManifest(path: string): Promise<ProfileManifest | undefined> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as ProfileManifest
-  } catch {
-    return undefined
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw new Error('The web profile manifest could not be read.')
+  }
+}
+
+async function writeProfileManifest(path: string, manifest: ProfileManifest): Promise<void> {
+  const temporaryPath = `${path}.tmp-${randomUUID()}`
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+    await rename(temporaryPath, path)
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined)
   }
 }
 
@@ -145,6 +159,11 @@ async function copyDesktopIntegration(source: string, destination: string): Prom
 }
 
 export async function refreshPromptEnhanceCompatibility(source: string, destination: string): Promise<void> {
+  const manifest = await readProfileManifest(join(destination, 'package.json'))
+  const plugin = COMMUNITY_PLUGIN_SPECS.prompt
+  const dependency = manifest?.dependencies?.[plugin.packageName]
+  if (manifest && dependency !== plugin.current &&
+    !(plugin.legacy as readonly string[]).includes(dependency ?? '')) return
   const packagePath = join('node_modules', 'dsh-prompt-enhance')
   const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
   // Optional plugins stay removed, and user-upgraded versions retain their own client.
@@ -175,8 +194,9 @@ async function refreshBundledCommunityPackages(
   const manifest = await readProfileManifest(join(destination, 'package.json'))
   let changed = false
   for (const plugin of Object.values(COMMUNITY_PLUGIN_SPECS)) {
-    if (plugin.packageName === COMMUNITY_PLUGIN_SPECS.canvas.packageName &&
-      manifest?.dependencies?.[plugin.packageName] !== plugin.current) continue
+    const dependency = manifest?.dependencies?.[plugin.packageName]
+    if (dependency !== plugin.current &&
+      !(plugin.legacy as readonly string[]).includes(dependency ?? '')) continue
     const packagePath = join('node_modules', plugin.packageName)
     const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
     if (
@@ -211,8 +231,8 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
 
   for (const plugin of Object.values(COMMUNITY_PLUGIN_SPECS)) {
     const dependency = manifest?.dependencies?.[plugin.packageName]
-    if (plugin.packageName === COMMUNITY_PLUGIN_SPECS.canvas.packageName &&
-      dependency !== plugin.current) continue
+    if (dependency !== plugin.current &&
+      !(plugin.legacy as readonly string[]).includes(dependency ?? '')) continue
     const packagePath = join('node_modules', plugin.packageName)
     const installed = await readPackageManifest(join(destination, packagePath, 'package.json'))
     const managed = (installed?.version !== undefined &&
@@ -242,6 +262,52 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
   }
 
   return changed
+}
+
+async function installMissingBundledPlugins(source: string, destination: string, dshHome: string): Promise<boolean> {
+  const path = join(destination, 'package.json')
+  const manifest = await readProfileManifest(path)
+  const template = await readProfileManifest(join(source, 'package.json'))
+  if (!manifest || !template) throw new Error('The web profile manifest could not be read.')
+  let changed = false
+  for (const [name, dependency] of Object.entries(template.dependencies ?? {})) {
+    if ([manifest.dependencies, manifest.devDependencies, manifest.optionalDependencies]
+      .some(dependencies => dependencies?.[name] !== undefined)) {
+      if (!existsSync(join(destination, 'node_modules', name, 'package.json'))) {
+        await clearProfileInstallMarker(dshHome)
+      }
+      continue
+    }
+
+    // Invalidate before mutations so an interrupted default install is retried.
+    if (!changed) await clearProfileInstallMarker(dshHome)
+    const prefix = 'file:.insight-bundled-plugins/'
+    if (dependency.startsWith(prefix)) {
+      const archiveName = basename(dependency)
+      if (archiveName !== dependency.slice(prefix.length)) {
+        throw new Error(`The bundled archive declaration for ${name} is invalid.`)
+      }
+      const archiveDirectory = join(destination, '.insight-bundled-plugins')
+      await mkdir(archiveDirectory, { recursive: true })
+      await cp(join(source, '.insight-bundled-plugins', archiveName), join(archiveDirectory, archiveName))
+    }
+    if (name === DESKTOP_INTEGRATION_PACKAGE) {
+      await copyDesktopIntegration(source, destination)
+      await ensureWorkspacePackagePattern(destination)
+    }
+    manifest.dependencies ??= {}
+    manifest.dependencies[name] = dependency
+    if (template.dsh?.profile?.bundles?.includes(name)) {
+      manifest.dsh ??= {}
+      manifest.dsh.profile ??= {}
+      manifest.dsh.profile.bundles ??= []
+      if (!manifest.dsh.profile.bundles.includes(name)) manifest.dsh.profile.bundles.push(name)
+    }
+    changed = true
+  }
+  if (!changed) return false
+  await writeProfileManifest(path, manifest)
+  return true
 }
 
 async function removeRetiredBundledPackages(destination: string): Promise<void> {
@@ -320,7 +386,7 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     defaultProfileVersion: DEFAULT_PROFILE_VERSION
   }
   if (!changed) return false
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  await writeProfileManifest(manifestPath, manifest)
   return true
 }
 
@@ -357,6 +423,7 @@ async function restoreManagedProfile(
   // Retire the installation-owned sidebar; the Core web app supplies the native UI.
   await removeTree(join(destination, 'node_modules', SIDEBAR_PACKAGE))
   await removeRetiredBundledPackages(destination)
+  await installMissingBundledPlugins(source, destination, dshHome)
   const communityPackagesRestored = await refreshBundledCommunityPackages(source, destination, refreshSameVersion)
   const communityArchivesRestored = await refreshBundledCommunityArchives(source, destination)
   const manifestRestored = await restoreManagedProfileManifest(destination)
@@ -388,10 +455,12 @@ export async function initializeBundledProfile(
 
   const generation = current.insightDesktop?.defaultProfileVersion
   if (typeof generation === 'number' && generation > DEFAULT_PROFILE_VERSION) {
-    // A newer Profile owns its schema; refresh only the declared Shell-owned integration.
+    // Add missing defaults without downgrading the newer schema or replacing user packages.
+    const defaultsInstalled = generation <= BUNDLED_DEFAULTS_MAX_PROFILE_VERSION &&
+      await installMissingBundledPlugins(source, destination, dshHome)
     const declaresIntegration = current.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] !== undefined ||
       current.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE)
-    if (!declaresIntegration) return false
+    if (!declaresIntegration) return defaultsInstalled
     await copyDesktopIntegration(source, destination)
     return true
   }
@@ -432,5 +501,5 @@ export async function initializeBundledProfile(
     return true
   }
 
-  return false
+  return installMissingBundledPlugins(source, destination, dshHome)
 }
