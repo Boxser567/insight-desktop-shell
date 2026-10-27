@@ -4,11 +4,15 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 import type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
-import { bundledSkillPresentation, isBundledSkill } from './bundled-skill-presentations'
+import { BUNDLED_SKILL_PRESENTATIONS, bundledSkillPresentation, isBundledSkill } from './bundled-skill-presentations'
 import { parseSkillPresentation, SKILL_UI_MAX_BYTES } from './skill-presentation'
+import { SKILL_INVENTORY_REMOTE, parseInventorySnapshot, type SkillOrigin, type SkillAvailability } from './skill-inventory-contract'
 
 /** Presentation subset of the native session skill summary. */
 export interface InsightSkill {
+  readonly origin?: SkillOrigin
+  readonly availability?: SkillAvailability
+  readonly entryId?: string
   readonly name: string
   readonly description: string
   readonly displayName?: string
@@ -21,6 +25,7 @@ export interface InsightSkill {
 /** The small catalog face consumed by the product-owned picker. */
 export interface SkillCatalog {
   list(sessionId: SessionId): Promise<readonly InsightSkill[]>
+  snapshot?(sessionId: SessionId): Promise<{ skills: readonly InsightSkill[]; complete: boolean; userSupported: boolean }>
   subscribe(sessionId: SessionId, listener: () => void): () => void
 }
 
@@ -33,7 +38,7 @@ interface SharedSkillCatalog {
   subscribe(sessionId: SessionId, listener: () => void): () => void
 }
 
-/** Adapt the Core shared catalog, retaining an alpha.2 Remote fallback. */
+/** Prefer the Shell inventory, retaining the legacy API when dynamic mounting is absent. */
 export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
   const shared = typeof ctx.get === 'function'
     ? ctx.get('skillCatalog') as SharedSkillCatalog | undefined
@@ -46,8 +51,27 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
       }
     })
   }
-  return {
-    async list(sessionId) {
+  let mounted: Promise<() => Promise<void>> | undefined
+  if (typeof ctx.effect === 'function') ctx.effect(() => () => { void mounted?.then(dispose => dispose()).catch(() => {}) }, 'insight-desktop: skill Remote client')
+  const loadSnapshot = async (sessionId: SessionId) => {
+    if (typeof ctx.remote.$mount === 'function') {
+      mounted ??= ctx.remote.$mount(SKILL_INVENTORY_REMOTE)
+      await mounted
+      const remote = ctx.get('remote.desktopSkills')
+      if (!remote) throw new Error('Skill inventory service unavailable')
+      const result = await remote.list({ sessionId })
+      if (!result.ok) throw new Error('Skill inventory unavailable')
+      const snapshot = parseInventorySnapshot(result.value)
+      const skills: InsightSkill[] = snapshot.skills.map(skill => ({
+        ...skill,
+        ...(skill.origin === 'platform' ? { ...BUNDLED_SKILL_PRESENTATIONS[skill.name], ...('displayName' in skill ? { displayName: skill.displayName } : {}), ...('shortDescription' in skill ? { shortDescription: skill.shortDescription } : {}) } : {}),
+        bundled: skill.origin === 'platform'
+      }))
+      return { skills, complete: snapshot.complete, userSupported: true }
+    }
+    return { skills: await readLegacy(sessionId), complete: true, userSupported: false }
+  }
+  const readLegacy = async (sessionId: SessionId) => {
       const skills = shared
         ? await shared.list(sessionId)
         : await ctx.remote.skills.list({ sessionId }).then(result => {
@@ -63,7 +87,19 @@ export function createSkillCatalog(ctx: ClientContext): SkillCatalog {
         bundled: isBundledSkill(skill.name, skill.path),
         pickerVisible: skill.pickerVisible
       })))
-    },
+  }
+  const pending = new Map<SessionId, ReturnType<typeof loadSnapshot>>()
+  const readSnapshot = (sessionId: SessionId) => {
+    let operation = pending.get(sessionId)
+    if (!operation) {
+      operation = loadSnapshot(sessionId).finally(() => { pending.delete(sessionId) })
+      pending.set(sessionId, operation)
+    }
+    return operation
+  }
+  return {
+    list: async sessionId => (await readSnapshot(sessionId)).skills,
+    snapshot: readSnapshot,
     subscribe(sessionId, listener) {
       if (shared) return shared.subscribe(sessionId, listener)
       const sessionListeners = listeners.get(sessionId) ?? new Set<() => void>()
@@ -98,10 +134,15 @@ export function selectedSkillNames(draft: string): readonly string[] {
   return [...new Set([...draft.matchAll(/(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g)].map(match => match[2]!))]
 }
 
-/** Only winning bundled skills enter this product shortcut menu. */
-export function filterSkills(skills: readonly InsightSkill[], query: string): readonly InsightSkill[] {
+/** Filter the selected product source while preserving disabled installation rows. */
+export function filterSkills(skills: readonly InsightSkill[], query: string, group: 'platform' | 'user' = 'platform'): readonly InsightSkill[] {
   const search = query.trim().toLocaleLowerCase()
-  return skills.filter(skill => skill.bundled && skill.pickerVisible !== false &&
+  return skills.filter(skill => (group === 'platform' ? skill.origin === 'platform' || skill.bundled : skill.origin === 'user-account' || skill.origin === 'user-shared') && skill.pickerVisible !== false &&
     `${skill.displayName ?? ''} ${skill.shortDescription ?? ''} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(search))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name))
+}
+
+/** Availability describes current Core resolution, never overrides it. */
+export function isSkillSelectable(skill: InsightSkill): boolean {
+  return skill.availability === undefined || skill.availability === 'callable'
 }

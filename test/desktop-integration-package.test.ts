@@ -22,7 +22,10 @@ describe('desktop integration package', () => {
       '@deepseek-ai/dsh-llm': '0.2.1-rc.2',
       '@deepseek-ai/dsh-llm-deepseek': '0.2.1-rc.2',
       '@deepseek-ai/dsh-llm-pi-ai': '0.2.1-rc.2',
-      '@deepseek-ai/dsh-web-search-deepseek': '0.2.1-rc.2'
+      '@deepseek-ai/dsh-web-search-deepseek': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-skill-filesystem': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-typert-protocol': '0.2.1-rc.2',
+      '@deepseek-ai/dsh-home-paths': '0.2.1-rc.2'
     })
   })
 

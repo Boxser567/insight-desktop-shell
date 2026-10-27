@@ -1,6 +1,7 @@
 // Test-only launcher: actual Shell/Main/preloads with isolated files and fixture authentication.
 const assert = require('node:assert/strict')
-const { mkdirSync, writeFileSync, readFileSync } = require('node:fs')
+const { mkdirSync, writeFileSync, readFileSync, cpSync } = require('node:fs')
+const { createHash } = require('node:crypto')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, Menu, nativeTheme, session, webContents, utilityProcess } = require('electron')
@@ -8,6 +9,19 @@ const root = process.env.INSIGHT_SMOKE_ROOT
 const output = process.env.INSIGHT_SMOKE_OUTPUT
 if (!root || !output) throw new Error('INSIGHT_SMOKE_ROOT and INSIGHT_SMOKE_OUTPUT are required')
 for (const directory of ['app-data', 'logs']) mkdirSync(join(output, directory), { recursive: true })
+let recoveryFixture
+if (process.env.INSIGHT_SMOKE_RECOVER_ACCOUNT_FROM) {
+  const scope = createHash('sha256').update('insight-account-v1\0test\0fixture-1').digest('hex').slice(0, 32)
+  const home = join(output, 'app-data/insight-desktop-dev/insight/accounts', scope, 'harness')
+  mkdirSync(home, { recursive: true })
+  for (const directory of ['profiles/web', 'storages', 'sessions']) cpSync(join(process.env.INSIGHT_SMOKE_RECOVER_ACCOUNT_FROM, directory), join(home, directory), { recursive: true, verbatimSymlinks: true })
+  const workspace = JSON.parse(readFileSync(join(home, 'storages/workspace.json'), 'utf8'))
+  recoveryFixture = { home, workspaces: Object.values(workspace.tables.workspaces) }
+}
+if (process.env.INSIGHT_SMOKE_SKILL_TABS === '1') {
+  process.env.DSH_AGENTS_HOME = join(output, 'agents')
+  require('./skill-picker-desktop-smoke.cjs').prepare(output)
+}
 if (process.env.INSIGHT_SMOKE_PROMPT_ENHANCE === '1') {
   writeFileSync(join(output, 'prompt-enhance-mode'), 'success')
   const fork = utilityProcess.fork.bind(utilityProcess)
@@ -69,6 +83,12 @@ async function inspect(contents) {
 }
 async function save(label, contents) {
   writeFileSync(join(output, `${label}.json`), JSON.stringify(await inspect(contents), null, 2))
+  if (process.env.INSIGHT_SMOKE_SKILL_TABS === '1' || recoveryFixture) {
+    // DOM assertions own acceptance; a hidden WebContentsView may have no capture surface.
+    try { writeFileSync(join(output, `${label}.png`), (await contents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()) }
+    catch (error) { writeFileSync(join(output, `${label}.capture-error`), String(error)) }
+    return
+  }
   writeFileSync(join(output, `${label}.png`), (await contents.capturePage()).toPNG())
 }
 async function run() {
@@ -83,11 +103,38 @@ async function run() {
   assert.equal(login.ok, true)
   const harness = await until('Harness view', () => alive().find(value => /^http:\/\/127\.0\.0\.1:/.test(value.getURL())))
   await until('first account UI', () => harness.executeJavaScript(`document.body?.innerText.includes('验收账号 1') && !!document.querySelector('button[aria-label="收起侧边栏"]')`))
+  if (process.env.INSIGHT_SMOKE_SKILL_TABS === '1' || recoveryFixture) {
+    const main = BrowserWindow.fromWebContents(shell)
+    main?.show()
+    main?.focus()
+    harness.focus()
+  }
   await save('account-one', harness)
   const page = await inspect(harness)
   assert.equal(page.sidebars, 1, JSON.stringify(page))
   assert.match(page.text, /验收账号 1/)
   console.log('CANDIDATE_FIRST_ACCOUNT_RENDERED')
+  if (recoveryFixture) {
+    const { home, workspaces } = recoveryFixture
+    for (const workspace of workspaces) {
+      await until('restored historical workspace', () => harness.executeJavaScript(`document.body.innerText.includes(${JSON.stringify(workspace.title)})`), 10000)
+      const response = await harness.executeJavaScript(`fetch('/api/workspace/create', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'workspace/create',payload:{args:{request:{path:${JSON.stringify(workspace.path)}}}}})}).then(r=>r.json())`)
+      assert.equal(response.result.ok, true, JSON.stringify(response))
+      assert.equal(response.result.value.created, false, 'Existing workspace must be reused')
+      assert.deepEqual(response.result.value.workspace.sessionIds, workspace.sessionIds, 'Historical membership must remain intact')
+    }
+    const log = readFileSync(join(output, 'logs/harness.log'), 'utf8')
+    assert.doesNotMatch(log, /workspace-controller .*pending|session-controller .*pending|disabling profile plugin row "storage-domain"/)
+    await save('historical-workspace-restored', harness)
+    writeFileSync(join(output, 'recovery-passed'), JSON.stringify({ workspaces: workspaces.length, sessions: workspaces.reduce((sum, w) => sum + w.sessionIds.length, 0), home }))
+    console.log('CANDIDATE_HISTORICAL_WORKSPACE_RECOVERY_PASSED')
+    return
+  }
+  if (process.env.INSIGHT_SMOKE_SKILL_TABS === '1') {
+    await require('./skill-picker-desktop-smoke.cjs').run({ harness, output, until, save })
+    assert.deepEqual(messages.filter(message => /slot entry crashed|Uncaught |Failed to fetch dynamically imported module|Native error:/.test(message)), [], 'Renderer errors')
+    return
+  }
   await harness.executeJavaScript(`document.querySelector('[data-insight-desktop-account] button').click()`)
   await until('account menu', () => harness.executeJavaScript(`!!document.querySelector('[data-insight-desktop-account-menu]')`))
   await harness.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(x=>x.textContent==='设置').click()`)

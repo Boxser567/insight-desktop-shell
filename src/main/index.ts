@@ -32,6 +32,7 @@ import {
   removeProfilePluginWithDsh
 } from './runtime/profile-plugin-command'
 import { repairProfilePackages } from './state/profile-startup-repair'
+import { quarantineBlockedRuntimeDependencies } from './state/profile-runtime-repair'
 import {
   clearProfileInstallMarker,
   markProfileInstallComplete
@@ -1025,6 +1026,11 @@ function launchHarness(): Promise<void> {
     // pnpm can replace a repaired managed package with the clean registry copy.
     // Reconcile Shell-owned Profile entries before Harness loads them.
     await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
+    await quarantineBlockedRuntimeDependencies({
+      dshHome,
+      runtimeRoot: coreRuntime().root,
+      note: (line) => runtime.note(line)
+    })
     startupTracker?.transition('auditing-runtime', '正在检查运行环境…')
     await reportProfileConsistency(dshHome)
     await auditInstalledLaunchAgents(dshHome)

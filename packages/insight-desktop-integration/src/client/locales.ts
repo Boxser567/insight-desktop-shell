@@ -1,5 +1,13 @@
 /** Product integration dictionary keys. */
 export type InsightDesktopKey =
+  | 'skill.loading'
+  | 'skill.selectionUnavailable'
+  | 'skill.sources'
+  | 'skill.platform'
+  | 'skill.user'
+  | 'skill.incomplete'
+  | 'skill.unsupported'
+  | 'skill.noUserSkills'
   | 'skill.placeholder'
   | 'skill.title'
   | 'skill.selected'
@@ -24,6 +32,14 @@ export type InsightDesktopKey =
   | 'settings.platform.linux'
 
 export const zh: Record<InsightDesktopKey, string> = {
+  'skill.loading': '正在读取技能…',
+  'skill.selectionUnavailable': '所选技能当前不可用；执行时若仍不可用，将按普通消息处理。',
+  'skill.sources': '技能来源',
+  'skill.platform': '平台预置',
+  'skill.user': '用户自定义',
+  'skill.incomplete': '部分目录暂未确认，请稍后重试。',
+  'skill.unsupported': '当前运行环境不支持用户技能列表。',
+  'skill.noUserSkills': '尚未发现全局安装的用户技能',
   'skill.placeholder': '专家技能',
   'skill.title': 'Skill',
   'skill.selected': '已选技能',
@@ -49,6 +65,14 @@ export const zh: Record<InsightDesktopKey, string> = {
 }
 
 export const en: Record<InsightDesktopKey, string> = {
+  'skill.loading': 'Loading skills…',
+  'skill.selectionUnavailable': 'A selected skill is currently unavailable. If still unavailable at execution, its text is handled as a normal message.',
+  'skill.sources': 'Skill sources',
+  'skill.platform': 'Platform',
+  'skill.user': 'Custom',
+  'skill.incomplete': 'Some skill directories could not be confirmed. Try again.',
+  'skill.unsupported': 'This runtime does not support custom skill inventory.',
+  'skill.noUserSkills': 'No globally installed custom skills found',
   'skill.placeholder': 'Expert Skills',
   'skill.title': 'Skill',
   'skill.selected': 'Selected skills',

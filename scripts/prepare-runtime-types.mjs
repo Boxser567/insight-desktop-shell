@@ -5,6 +5,15 @@ import { resolveRuntimePackages } from './core-runtime-resolution.mjs'
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const specifiers = [
+  '@deepseek-ai/dsh-skill-filesystem',
+  '@deepseek-ai/dsh-skill',
+  '@deepseek-ai/dsh-typert-protocol',
+  '@deepseek-ai/dsh-typert-registry',
+  '@deepseek-ai/dsh-session-query',
+  '@deepseek-ai/dsh-agent-preset-registry',
+  '@deepseek-ai/dsh-api-session-controller',
+  '@deepseek-ai/dsh-home-paths',
+  '@deepseek-ai/dsh-working-directory',
   '@deepseek-ai/dsh-shell-env',
   '@deepseek-ai/dsh-web',
   '@deepseek-ai/dsh-web-search-deepseek',
