@@ -37,6 +37,13 @@ async function main() {
     'APPLE_API_KEY_CONTENT',
     'finalize-windows-release.mjs'
   ]) requireText(workflow, value, 'v2 release workflow')
+  for (const command of [
+    'node scripts/run-stapler.mjs staple "$dmg_path"',
+    'node scripts/run-stapler.mjs validate "$app_path"',
+    'node scripts/run-stapler.mjs validate "$dmg_path"'
+  ]) {
+    if (workflow.split(command).length !== 3) throw new Error(`Both macOS targets must run: ${command}`)
+  }
   if ((workflow.match(/node-version: 24/gu) ?? []).length !== 5) throw new Error('Every v2 build/tooling job must use Node 24.')
   if ((workflow.match(/node scripts\/verify-packaged-recovery.mjs/gu) ?? []).length !== 3) throw new Error('Every native target must verify its actual packaged Runtime and recovery.')
   if ((workflow.match(/runtimeLockPath: 'core-runtime.previous.lock.json'/gu) ?? []).length !== 3) throw new Error('Every native target must prepare the pinned historical Runtime separately.')
