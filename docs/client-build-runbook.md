@@ -134,7 +134,7 @@ npm run build
 npm run prepare:bundled-profile
 ```
 
-`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用满足 Profile 版本 8、第一方集成和当前插件归档校验的 Profile。新老账号均以打包 Profile 的依赖清单补齐缺失的内置插件，包括 `@insight-ai/desktop-canvas-plugin@0.3.0-alpha.32`；已有的用户替换版本和停用状态保留。插件允许卸载，但下次正常启动时缺失的内置插件会自动补装。已确认兼容的 Profile 版本 9 同样补齐缺失插件，但保留其版本号和已有字段，不执行旧版迁移；未知的更高版本仍受降级保护。插件版本、来源和归档摘要见 [制品清单](../vendor/plugins/README.md)。它不会下载或重新内置由 Core Runtime 提供的 `dshmarket`、`dsh-genui`。
+`npm run build` 已准备 Core Runtime；`prepare:bundled-profile` 会复用满足 Profile 版本 8、第一方集成和当前插件归档校验的 Profile。每次完整启动客户端后，每个账号首次启动 Harness 时，均以打包 Profile 的依赖清单安装内置插件，包括 `@insight-ai/desktop-canvas-plugin@0.3.0-alpha.32`；已有的其他版本或安装来源会强制恢复为客户端自带的包，包括降级和同版本不同来源。原有停用状态、插件配置、会话和业务数据保留，非内置插件不受影响。本次客户端运行期间，手动导入的本地包、卸载和替换会保留，Harness 重启不会再次恢复内置版本；完全退出客户端后再启动，才恢复随包版本或补装缺失插件。Dev 的 Main 重载会重启客户端进程并恢复内置插件，Renderer 热更新不会。已确认兼容的 Profile 版本 9 同样执行内置插件同步，但保留其版本号和已有字段，不执行旧版迁移；未知的更高版本仍受降级保护。插件版本、来源和归档摘要见 [制品清单](../vendor/plugins/README.md)。它不会下载或重新内置由 Core Runtime 提供的 `dshmarket`、`dsh-genui`。
 
 Shell、Harness 或辅助窗口的 sandbox preload 发生变化时，必须检查每个 preload 构建产物都是自包含文件：
 

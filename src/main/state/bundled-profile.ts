@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
-import { parse, stringify } from 'yaml'
+import { parse, stringify, YAMLParseError } from 'yaml'
 import { profilePackageJsonPath, pluginDeclaredEntryIds } from './plugin-recovery'
 import { prunePatchLayer } from './patch-layer'
 import { removeTree } from './remove-tree'
@@ -61,10 +61,10 @@ async function readProfileManifest(path: string): Promise<ProfileManifest | unde
   }
 }
 
-async function writeProfileManifest(path: string, manifest: ProfileManifest): Promise<void> {
+async function writeProfileFile(path: string, contents: string): Promise<void> {
   const temporaryPath = `${path}.tmp-${randomUUID()}`
   try {
-    await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+    await writeFile(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 })
     await rename(temporaryPath, path)
   } finally {
     await rm(temporaryPath, { force: true }).catch(() => undefined)
@@ -264,23 +264,66 @@ async function refreshBundledCommunityArchives(source: string, destination: stri
   return changed
 }
 
-async function installMissingBundledPlugins(source: string, destination: string, dshHome: string): Promise<boolean> {
+/** Remove stale local links without changing other dependencies' locked resolutions. */
+async function resetBundledPluginLinks(profileDirectory: string, name: string, dshHome: string): Promise<boolean> {
+  let changed = false
+  for (const path of [join(profileDirectory, 'pnpm-lock.yaml'), join(profileDirectory, 'node_modules', '.pnpm', 'lock.yaml')]) {
+    let contents: string
+    try {
+      contents = await readFile(path, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    let lock: { importers?: Record<string, Record<string, Record<string, { version?: string }>>> } | null
+    try {
+      lock = parse(contents) as typeof lock
+    } catch (error) {
+      if (!(error instanceof YAMLParseError)) throw error
+      await clearProfileInstallMarker(dshHome)
+      await rm(path, { force: true })
+      changed = true
+      continue
+    }
+    const importer = lock?.importers?.['.']
+    let lockChanged = false
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      const dependencies = importer?.[field]
+      const version = dependencies?.[name]?.version
+      if (dependencies && typeof version === 'string' && version.startsWith('link:')) {
+        delete dependencies[name]
+        lockChanged = true
+      }
+    }
+    if (!lockChanged) continue
+    await clearProfileInstallMarker(dshHome)
+    await writeProfileFile(path, stringify(lock))
+    changed = true
+  }
+  return changed
+}
+
+async function reconcileBundledPlugins(source: string, destination: string, dshHome: string): Promise<boolean> {
   const path = join(destination, 'package.json')
   const manifest = await readProfileManifest(path)
   const template = await readProfileManifest(join(source, 'package.json'))
   if (!manifest || !template) throw new Error('The web profile manifest could not be read.')
   let changed = false
+  let needsInstall = false
   for (const [name, dependency] of Object.entries(template.dependencies ?? {})) {
-    if ([manifest.dependencies, manifest.devDependencies, manifest.optionalDependencies]
-      .some(dependencies => dependencies?.[name] !== undefined)) {
-      if (!existsSync(join(destination, 'node_modules', name, 'package.json'))) {
-        await clearProfileInstallMarker(dshHome)
-      }
-      continue
+    const declared = [manifest.dependencies, manifest.devDependencies, manifest.optionalDependencies]
+      .some(dependencies => dependencies?.[name] !== undefined)
+    const declarationChanged = manifest.dependencies?.[name] !== dependency ||
+      manifest.devDependencies?.[name] !== undefined || manifest.optionalDependencies?.[name] !== undefined
+    const packagePath = join('node_modules', name, 'package.json')
+    const installed = await readPackageManifest(join(destination, packagePath))
+    const bundled = await readPackageManifest(join(source, packagePath))
+    const versionChanged = installed?.version !== bundled?.version
+    if (declarationChanged || !installed || versionChanged) {
+      await clearProfileInstallMarker(dshHome)
+      needsInstall = true
     }
 
-    // Invalidate before mutations so an interrupted default install is retried.
-    if (!changed) await clearProfileInstallMarker(dshHome)
     const prefix = 'file:.insight-bundled-plugins/'
     if (dependency.startsWith(prefix)) {
       const archiveName = basename(dependency)
@@ -288,16 +331,37 @@ async function installMissingBundledPlugins(source: string, destination: string,
         throw new Error(`The bundled archive declaration for ${name} is invalid.`)
       }
       const archiveDirectory = join(destination, '.insight-bundled-plugins')
-      await mkdir(archiveDirectory, { recursive: true })
-      await cp(join(source, '.insight-bundled-plugins', archiveName), join(archiveDirectory, archiveName))
+      const sourceArchive = join(source, '.insight-bundled-plugins', archiveName)
+      let archiveMatches = false
+      const contents = await readFile(sourceArchive)
+      try {
+        archiveMatches = contents.equals(await readFile(join(archiveDirectory, archiveName)))
+      } catch {
+        // Restore missing or unreadable archives before pnpm uses the pinned source.
+      }
+      if (!archiveMatches) {
+        await clearProfileInstallMarker(dshHome)
+        needsInstall = true
+        await mkdir(archiveDirectory, { recursive: true })
+        await cp(sourceArchive, join(archiveDirectory, archiveName))
+      }
+      const linksReset = await resetBundledPluginLinks(destination, name, dshHome)
+      if (linksReset) needsInstall = true
+      if (declarationChanged || versionChanged || !archiveMatches || linksReset) {
+        // A same-version file dependency may otherwise leave the old code in place.
+        await removeTree(join(destination, 'node_modules', name))
+      }
     }
+    if (!declarationChanged) continue
     if (name === DESKTOP_INTEGRATION_PACKAGE) {
       await copyDesktopIntegration(source, destination)
       await ensureWorkspacePackagePattern(destination)
     }
     manifest.dependencies ??= {}
     manifest.dependencies[name] = dependency
-    if (template.dsh?.profile?.bundles?.includes(name)) {
+    if (manifest.devDependencies) delete manifest.devDependencies[name]
+    if (manifest.optionalDependencies) delete manifest.optionalDependencies[name]
+    if (!declared && template.dsh?.profile?.bundles?.includes(name)) {
       manifest.dsh ??= {}
       manifest.dsh.profile ??= {}
       manifest.dsh.profile.bundles ??= []
@@ -305,9 +369,11 @@ async function installMissingBundledPlugins(source: string, destination: string,
     }
     changed = true
   }
-  if (!changed) return false
-  await writeProfileManifest(path, manifest)
-  return true
+  if (changed) await writeProfileFile(path, `${JSON.stringify(manifest, null, 2)}\n`)
+  if (template.dependencies?.['dsh-prompt-enhance']) {
+    await refreshPromptEnhanceCompatibility(source, destination)
+  }
+  return changed || needsInstall
 }
 
 async function removeRetiredBundledPackages(destination: string): Promise<void> {
@@ -386,7 +452,7 @@ async function restoreManagedProfileManifest(profileDirectory: string): Promise<
     defaultProfileVersion: DEFAULT_PROFILE_VERSION
   }
   if (!changed) return false
-  await writeProfileManifest(manifestPath, manifest)
+  await writeProfileFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
   return true
 }
 
@@ -423,7 +489,7 @@ async function restoreManagedProfile(
   // Retire the installation-owned sidebar; the Core web app supplies the native UI.
   await removeTree(join(destination, 'node_modules', SIDEBAR_PACKAGE))
   await removeRetiredBundledPackages(destination)
-  await installMissingBundledPlugins(source, destination, dshHome)
+  await reconcileBundledPlugins(source, destination, dshHome)
   const communityPackagesRestored = await refreshBundledCommunityPackages(source, destination, refreshSameVersion)
   const communityArchivesRestored = await refreshBundledCommunityArchives(source, destination)
   const manifestRestored = await restoreManagedProfileManifest(destination)
@@ -433,10 +499,21 @@ async function restoreManagedProfile(
   }
 }
 
-/** Copy the packaged default web profile exactly once for a user data directory. */
+/** Reset each account once per client process, preserving subsequent local imports. */
+export function createBundledProfileInitializer() {
+  const initializedHomes = new Set<string>()
+  return async (templateRoot: string, dshHome: string): Promise<boolean> => {
+    const result = await initializeBundledProfile(templateRoot, dshHome, !initializedHomes.has(dshHome))
+    initializedHomes.add(dshHome)
+    return result
+  }
+}
+
+/** Copy a missing Profile, or reconcile its bundled plugins when requested. */
 export async function initializeBundledProfile(
   templateRoot: string,
-  dshHome: string
+  dshHome: string,
+  resetBundledPlugins = true
 ): Promise<boolean> {
   const destinationManifest = profilePackageJsonPath(dshHome)
   const source = join(templateRoot, PROFILE)
@@ -454,10 +531,17 @@ export async function initializeBundledProfile(
   }
 
   const generation = current.insightDesktop?.defaultProfileVersion
+  if (!resetBundledPlugins) {
+    if ((generation ?? 0) <= BUNDLED_DEFAULTS_MAX_PROFILE_VERSION &&
+      sourceManifest.dependencies?.['dsh-prompt-enhance']) {
+      await refreshPromptEnhanceCompatibility(source, destination)
+    }
+    return false
+  }
   if (typeof generation === 'number' && generation > DEFAULT_PROFILE_VERSION) {
-    // Add missing defaults without downgrading the newer schema or replacing user packages.
+    // Pin bundled packages without downgrading the newer Profile schema.
     const defaultsInstalled = generation <= BUNDLED_DEFAULTS_MAX_PROFILE_VERSION &&
-      await installMissingBundledPlugins(source, destination, dshHome)
+      await reconcileBundledPlugins(source, destination, dshHome)
     const declaresIntegration = current.dependencies?.[DESKTOP_INTEGRATION_PACKAGE] !== undefined ||
       current.dsh?.profile?.bundles?.includes(DESKTOP_INTEGRATION_PACKAGE)
     if (!declaresIntegration) return defaultsInstalled
@@ -501,5 +585,5 @@ export async function initializeBundledProfile(
     return true
   }
 
-  return installMissingBundledPlugins(source, destination, dshHome)
+  return reconcileBundledPlugins(source, destination, dshHome)
 }

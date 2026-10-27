@@ -48,7 +48,7 @@ import { secureWebContents, secureWindow } from './security'
 import { isHarnessUrl } from './security-policy'
 import { ensureLaunchRoot } from './state/launch-root'
 import { insightDataPath } from './state/insight-data'
-import { initializeBundledProfile } from './state/bundled-profile'
+import { createBundledProfileInitializer } from './state/bundled-profile'
 import { resolveLocalPluginImport, stageLocalPluginImport } from './state/local-plugin-import'
 import { readRuntimeManifest } from './state/runtime-manifest'
 import { resolveCoreRuntime } from './state/core-runtime'
@@ -160,6 +160,7 @@ let disposeStartupIpc: (() => void) | undefined
 let startupTracker: StartupTracker | undefined
 let startupLaunchRevision = 0
 const startInSafeMode = shouldStartInSafeMode(process.argv)
+const initializeBundledProfile = createBundledProfileInitializer()
 
 function appendRendererPluginFailureLog(message: string): void {
   const trimmed = message.trim()
@@ -507,6 +508,7 @@ const harnessWorkspaceView = new HarnessWorkspaceView(harnessViewHost, async (co
   electronContents.stop()
   const cache = accountPaths(insightDataPath(app.getPath('userData')), scope).cache
   await mkdir(cache, { recursive: true })
+  if (electronContents.isDestroyed()) return
   await clearStaleLoopbackHttpCache(
     electronContents.session,
     join(cache, 'loopback-origin'),
@@ -902,9 +904,11 @@ async function importLocalPlugin(): Promise<void> {
 
   try {
     const dshHome = requireCurrentDshHome()
-    const plugin = await stageLocalPluginImport(dshHome, await resolveLocalPluginImport(selectedPath))
+    const selectedPlugin = await resolveLocalPluginImport(selectedPath)
     await showSplash()
     await runtime.stop()
+    await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
+    const plugin = await stageLocalPluginImport(dshHome, selectedPlugin)
     const result = await addProfilePluginWithDsh(
       {
         dshHome,
@@ -1023,8 +1027,7 @@ function launchHarness(): Promise<void> {
       })
       return
     }
-    // pnpm can replace a repaired managed package with the clean registry copy.
-    // Reconcile Shell-owned Profile entries before Harness loads them.
+    // Reapply bundled client compatibility patches after dependency installation.
     await initializeBundledProfile(desktopResourcePath('bundled-profile'), dshHome)
     await quarantineBlockedRuntimeDependencies({
       dshHome,

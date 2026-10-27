@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveLocalPluginImport, stageLocalPluginImport } from '../src/main/state/local-plugin-import'
+import { createBundledProfileInitializer } from '../src/main/state/bundled-profile'
 
 describe('local plugin import validation', () => {
   const testDir = join(__dirname, '.temp-local-plugin-import-test')
@@ -50,6 +51,21 @@ describe('local plugin import validation', () => {
     await writeFile(join(directory, 'package.json'), '{"name":"example-plugin"}')
     const plugin = await resolveLocalPluginImport(directory)
     expect(await stageLocalPluginImport(join(testDir, 'home'), plugin)).toEqual(plugin)
+  })
+
+  it('stages an archive after initializing a missing web Profile', async () => {
+    const template = join(testDir, 'template')
+    await mkdir(join(template, 'web'), { recursive: true })
+    await writeFile(join(template, 'web', 'package.json'), '{"name":"default-web"}')
+    const archive = join(testDir, 'development.tgz')
+    await writeFile(archive, 'local plugin contents')
+    const selected = await resolveLocalPluginImport(archive)
+    const home = join(testDir, 'home')
+    const initializeForClient = createBundledProfileInitializer()
+    await initializeForClient(template, home)
+    const staged = await stageLocalPluginImport(home, selected)
+    await initializeForClient(template, home)
+    expect(await readFile(staged.path, 'utf8')).toBe('local plugin contents')
   })
 
   it('does not replace an earlier imported archive when the same filename is selected again', async () => {

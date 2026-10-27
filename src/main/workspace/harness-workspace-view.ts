@@ -86,9 +86,9 @@ export class HarnessWorkspaceView {
     const scope = this.scope
     const isCurrent = () => this.view === view && this.scope === scope && !view.webContents.isDestroyed()
     if (this.url !== url) {
-      await this.beforeLoad?.(view.webContents, scope, url)
-      if (!isCurrent()) return
       try {
+        await this.beforeLoad?.(view.webContents, scope, url)
+        if (!isCurrent()) return
         await view.webContents.loadURL(url)
       } catch (error) {
         if (!isCurrent()) return
