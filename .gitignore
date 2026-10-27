@@ -29,3 +29,6 @@ release-reports/
 
 # Recoverable local snapshot before documentation cleanup.
 /.local-archives/
+
+# Generated from product-owned Skill ui.json files.
+build/skill-presentations.json

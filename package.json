@@ -34,10 +34,10 @@
     "prepare:bundled-profile": "node scripts/prepare-bundled-profile.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "typecheck:desktop-integration": "node scripts/prepare-runtime-types.mjs && tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
-    "test": "node scripts/prepare-runtime-types.mjs && vitest run",
-    "test:watch": "node scripts/prepare-runtime-types.mjs && vitest",
+    "typecheck": "npm run prepare:skill-presentations && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck:desktop-integration": "npm run prepare:skill-presentations && node scripts/prepare-runtime-types.mjs && tsc --noEmit -p packages/insight-desktop-integration/tsconfig.json",
+    "test": "npm run prepare:skill-presentations && node scripts/prepare-runtime-types.mjs && vitest run",
+    "test:watch": "npm run prepare:skill-presentations && node scripts/prepare-runtime-types.mjs && vitest",
     "package:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never",
     "package:dev:dir": "npm run build && npm run prepare:bundled-profile && electron-builder --dir --publish never --config electron-builder.dev.cjs",
     "package:dev:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never --config electron-builder.dev.cjs",
@@ -56,7 +56,8 @@
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never",
     "package:release:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --arm64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version arm64",
     "package:release:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && npm run prepare:bundled-profile && electron-builder --mac dmg zip --x64 --publish never && node scripts/finalize-mac-release.mjs dist stable $npm_package_version x64",
-    "package:release:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never"
+    "package:release:win": "node scripts/verify-target.mjs win32 x64 && npm run build && npm run prepare:bundled-profile && electron-builder --win --x64 --publish never",
+    "prepare:skill-presentations": "node scripts/generate-skill-presentations.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

@@ -9,16 +9,27 @@ const stylesheet = `
 [data-insight-skill-trigger]:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
 [data-insight-skill-trigger]:disabled { color:var(--dsw-alias-label-dimmed); cursor:default; }
 @container (max-width:460px) { [data-insight-skill-label] { display:none; } }
-[data-insight-skill-panel] { position:fixed; z-index:1000; display:flex; flex-direction:column; box-sizing:border-box; border:1px solid var(--dsw-alias-border-primary, #7775); border-radius:14px; background:var(--dsw-alias-bg-layer-2, #202024); color:var(--dsw-alias-label-primary); box-shadow:0 12px 36px #0003; padding:8px; font-size:13px; overflow:hidden; }
+[data-insight-skill-panel] { --insight-skill-active:var(--dsw-alias-label-primary, #fff); position:fixed; z-index:1000; display:flex; flex-direction:column; box-sizing:border-box; border:1px solid var(--dsw-alias-border-primary, #7775); border-radius:14px; background:var(--dsw-alias-bg-layer-2, #202024); color:var(--dsw-alias-label-primary); box-shadow:0 12px 36px #0003; padding:8px; font-size:13px; overflow:hidden; }
 [data-insight-skill-panel] input { box-sizing:border-box; flex:none; width:100%; height:32px; margin-bottom:6px; padding:5px 10px; border:1px solid var(--dsw-alias-border-primary, #7775); border-radius:8px; background:transparent; color:inherit; font:inherit; }
+[data-insight-skill-panel] input:focus { border-color:var(--insight-skill-active); caret-color:var(--insight-skill-active); }
+[data-insight-skill-panel] input:focus-visible { outline:1px solid var(--insight-skill-active); outline-offset:0; }
+[data-insight-skill-tabs] { display:flex; align-self:stretch; gap:12px; flex:none; margin-bottom:6px; border-bottom:1px solid var(--dsw-alias-border-primary, #7775); }
+[data-insight-skill-tabs] button { flex:0 0 auto; white-space:nowrap; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--dsw-alias-label-secondary); padding:7px 8px; cursor:pointer; font:inherit; }
+[data-insight-skill-tabs] button:hover { color:var(--insight-skill-active); }
+[data-insight-skill-tabs] button[aria-selected="true"] { color:var(--insight-skill-active); border-bottom-color:var(--insight-skill-active); }
+[data-insight-skill-tabs] button:focus-visible { outline:2px solid var(--insight-skill-active); outline-offset:-2px; }
+[data-insight-skill-tabpanel] { min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+[data-insight-skill-notice] { font-size:12px; line-height:18px; color:var(--dsw-alias-label-secondary); }
+[data-insight-skill-list] [aria-disabled="true"] { cursor:not-allowed; }
+[data-insight-skill-list] [aria-disabled="true"] [data-insight-skill-description] { opacity:.6; }
 [data-insight-skill-list] { min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
 [data-insight-skill-list] [role="option"] { padding:7px 8px; border-radius:8px; cursor:pointer; transition:background 140ms ease,color 140ms ease; }
 [data-insight-skill-list] [role="option"][data-active="true"] { background:var(--dsw-alias-interactive-bg-hover, #8882); }
-[data-insight-skill-option-title] { display:flex; justify-content:space-between; gap:8px; font-weight:500; line-height:20px; }
-[data-insight-skill-list] [aria-selected="true"] [data-insight-skill-option-title] { color:var(--insight-primary); }
+[data-insight-skill-option-title] { display:flex; justify-content:space-between; gap:8px; color:var(--dsw-alias-label-primary, #fff); font-weight:500; line-height:20px; }
+[data-insight-skill-list] [aria-selected="true"] [data-insight-skill-option-title] { color:var(--insight-skill-active); }
 [data-insight-skill-description] { margin-top:2px; color:var(--dsw-alias-label-secondary); font-size:12px; line-height:18px; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 [data-insight-skill-empty] { padding:8px 6px; color:var(--dsw-alias-label-secondary); font-size:12px; flex:none; }
-[data-insight-skill-panel] :focus-visible, [data-insight-skill-trigger]:focus-visible { outline:2px solid var(--insight-primary); outline-offset:2px; }
+[data-insight-skill-panel] :focus-visible, [data-insight-skill-trigger]:focus-visible { outline:2px solid var(--dsw-alias-label-primary, #fff); outline-offset:2px; }
 @media (prefers-reduced-motion:reduce) { [data-insight-skill-trigger], [data-insight-skill-chevron], [data-insight-skill-list] [role="option"] { transition:none; } }
 
 :root {

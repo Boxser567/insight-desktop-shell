@@ -8,11 +8,15 @@ import { skillProxyServiceBaseUrl } from '../../../src/shared/service-environmen
 import { createSkillProxyRequest } from './skill-proxy-http'
 import { startSkillProxy } from './skill-proxy'
 import { registerSkillProxyEnvironment, skillProxyRuntimePaths } from './skill-proxy-environment'
+import { DesktopSkillCatalog } from './skill-inventory-service'
 
 export const inject = ['llm', 'web']
 
 /** First-party Host bridge: model credentials never pass through the renderer. */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: { agentsHome?: string } = {}): void {
+  ctx.inject(['typert', 'agents', 'sessionQuery', 'workingDirectory'], inventoryCtx => {
+    inventoryCtx.plugin(DesktopSkillCatalog, { agentsHome: config.agentsHome })
+  })
   const credentials = createModelCredentialClient(parentCredentialTransport())
   ctx.effect(() => () => credentials.dispose(), 'insight-desktop: credentials')
   ctx.effect(() => {
